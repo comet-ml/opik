@@ -6,9 +6,9 @@ from opik import Prompt, synchronization, exceptions, id_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.api_objects.experiment import experiment_item
-from . import verifiers
+from .. import verifiers
 from ..conftest import random_chars
-from ..testlib import assert_equal, ANY_BUT_NONE
+from ...testlib import assert_equal, ANY_BUT_NONE
 
 import pytest
 
