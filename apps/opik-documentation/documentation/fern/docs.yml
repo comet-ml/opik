@@ -364,10 +364,10 @@ navigation:
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: LiteLLM Model Support
+          - page: Models for Optimization
             icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
-            slug: litellm_support
+            path: docs/agent_optimization/opik_optimizer/models.mdx
+            slug: models
           - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
@@ -675,4 +675,7 @@ redirects:
     permanent: true
   - source: "docs/agent_optimization/best-practices/prompt_engineering"
     destination: "/docs/agent_optimization/best_practices/prompt_engineering"
+    permanent: true
+  - source: "docs/agent_optimization/opik_optimizer/litellm_support.mdx"
+    destination: "/docs/agent_optimization/opik_optimizer/models"
     permanent: true
