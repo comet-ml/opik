@@ -4138,7 +4138,9 @@ components:
           type: string
     AutomationRuleEvaluator:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4177,6 +4179,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4186,10 +4190,14 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4198,10 +4206,40 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
-    AutomationRuleEvaluatorUserDefinedMetricPython:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
+    AutomationRuleEvaluatorUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4276,6 +4314,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+    TraceThreadUserDefinedMetricPythonCode:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode:
       required:
       - arguments
@@ -4291,8 +4353,10 @@ components:
             type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4301,10 +4365,40 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Write"
-    AutomationRuleEvaluatorUserDefinedMetricPython_Write:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Write"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Write"
+    AutomationRuleEvaluatorUserDefinedMetricPython_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4315,7 +4409,9 @@ components:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4333,6 +4429,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4342,6 +4440,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Write"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
     LlmAsJudgeCode_Write:
       required:
       - messages
@@ -4408,6 +4508,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode_Write:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Write"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Write"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    TraceThreadUserDefinedMetricPythonCode_Write:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode_Write:
       required:
       - arguments
@@ -4436,8 +4560,10 @@ components:
             format: uuid
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4448,7 +4574,9 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeCode_Public"
     AutomationRuleEvaluatorObject_Public:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4487,6 +4615,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4496,6 +4626,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
     AutomationRuleEvaluatorPage_Public:
       type: object
       properties:
@@ -4512,10 +4644,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
-    AutomationRuleEvaluatorUserDefinedMetricPython_Public:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Public"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Public"
+    AutomationRuleEvaluatorUserDefinedMetricPython_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4590,6 +4752,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode_Public:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Public"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Public"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    TraceThreadUserDefinedMetricPythonCode_Public:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode_Public:
       required:
       - arguments
@@ -4605,7 +4791,9 @@ components:
             type: string
     AutomationRuleEvaluator_Public:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4644,6 +4832,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4653,6 +4843,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
     LogItem:
       type: object
       properties:
@@ -4700,7 +4892,9 @@ components:
           format: int64
     AutomationRuleEvaluatorUpdate:
       required:
+      - action
       - name
+      - project_id
       type: object
       properties:
         name:
@@ -4717,6 +4911,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4726,10 +4922,14 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateLlmAsJudge"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateUserDefinedMetricPython"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -4737,10 +4937,38 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
-    AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
+    AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
+    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
+    AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
