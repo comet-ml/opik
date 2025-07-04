@@ -96,11 +96,18 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
     m.content.includes("{{context}}"),
   ).length;
 
-  if (contextCount !== 1) {
+  if (contextCount < 1) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message:
-        "At least and only one message should contain the {{context}} variable",
+      message: "At least one message should contain the {{context}} variable",
+      path: ["messages", data.messages.length - 1, "content"],
+    });
+  }
+
+  if (contextCount > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Only one message can contain the {{context}} variable.",
       path: ["messages", data.messages.length - 1, "content"],
     });
   }
