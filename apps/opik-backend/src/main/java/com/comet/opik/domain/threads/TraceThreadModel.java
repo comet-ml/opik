@@ -28,5 +28,4 @@ public record TraceThreadModel(
         Set<String> tags,
         Map<UUID, Boolean> sampling,
         Instant scoredAt) {
-
 }

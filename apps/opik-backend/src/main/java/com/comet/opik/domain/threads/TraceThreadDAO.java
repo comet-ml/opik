@@ -174,6 +174,38 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND workspace_id = :workspace_id
             ;
             """;
+    private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
+                INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule)
+                SELECT
+                    tt.workspace_id,
+                    tt.project_id,
+                    tt.thread_id,
+                    tt.id,
+                    tt.status,
+                    tt.created_by,
+                    :user_name,
+                    tt.created_at,
+                    now64(6),
+                    tt.tags,
+                    sd.sampling_per_rule
+                FROM trace_threads tt final
+                JOIN (
+                    SELECT
+                        thread_model_id,
+                        sampling_per_rule
+                    FROM (
+                        <items:{item |
+                            SELECT
+                                :thread_model_id<item.index> AS thread_model_id,
+                                mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
+                            <if(item.hasNext)>UNION ALL<endif>
+                        }>
+                    )
+                ) AS sd ON tt.id = sd.thread_model_id
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN :ids
+            """;
 
     private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
                 INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
