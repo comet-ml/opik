@@ -7,12 +7,14 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudgeWrite } from "./AutomationRuleEvaluatorLlmAsJudgeWrite";
 import { AutomationRuleEvaluatorUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorUserDefinedMetricPythonWrite";
+import { AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite";
+import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite";
 
 const _Base = core.serialization.object({
-    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectId: core.serialization.property("project_id", core.serialization.string()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
-    action: core.serialization.stringLiteral("evaluator").optional(),
+    action: core.serialization.stringLiteral("evaluator"),
 });
 export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     serializers.AutomationRuleEvaluatorWrite.Raw,
@@ -21,6 +23,9 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudgeWrite.extend(_Base),
         user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPythonWrite.extend(_Base),
+        trace_thread_llm_as_judge: AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite.extend(_Base),
+        trace_thread_user_defined_metric_python:
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluatorWrite>({
         transform: (value) => value,
@@ -28,7 +33,11 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorWrite {
-    export type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge | AutomationRuleEvaluatorWrite.UserDefinedMetricPython;
+    export type Raw =
+        | AutomationRuleEvaluatorWrite.LlmAsJudge
+        | AutomationRuleEvaluatorWrite.UserDefinedMetricPython
+        | AutomationRuleEvaluatorWrite.TraceThreadLlmAsJudge
+        | AutomationRuleEvaluatorWrite.TraceThreadUserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
         type: "llm_as_judge";
@@ -38,10 +47,20 @@ export declare namespace AutomationRuleEvaluatorWrite {
         type: "user_defined_metric_python";
     }
 
+    export interface TraceThreadLlmAsJudge extends _Base, AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite.Raw {
+        type: "trace_thread_llm_as_judge";
+    }
+
+    export interface TraceThreadUserDefinedMetricPython
+        extends _Base,
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite.Raw {
+        type: "trace_thread_user_defined_metric_python";
+    }
+
     export interface _Base {
-        project_id?: string | null;
+        project_id: string;
         name: string;
         sampling_rate?: number | null;
-        action?: "evaluator" | null;
+        action: "evaluator";
     }
 }
