@@ -1,6 +1,6 @@
 from typing import List
 
-from . import agent_node, subgraph_edges_builders
+from . import nodes, subgraph_edges_builders
 import google.adk.agents
 
 
@@ -10,26 +10,32 @@ class MermaidGraphBuilder:
         self.edges_definitions: List[str] = []
         self.root_name = root_name
 
-    def build_node_graph(self, node: agent_node.AgentNode) -> None:
+    def build_node_graph(self, node: nodes.AgentNode) -> None:
         # 1. Create subgraph for composite nodes or process
         # connections for non-composite nodes with children
-        if node.agent_type in agent_node.SUBGRAPH_NODE_TYPES:
+        if node.agent_type in nodes.SUBGRAPH_NODE_TYPES:
             self._build_subgraph_for_composite_node(node)
-        elif len(node.children_nodes) > 0:
+        elif len(node.children_nodes) > 0 or len(node.tools) > 0:
             self._build_edges_for_non_composite_llm_node(node)
 
-        # 2. Recursively process all children
+        # 2. Recursively process all children agents
         for child in node.children_nodes:
             self.build_node_graph(child)
 
-    def _build_edges_for_non_composite_llm_node(
-        self, node: agent_node.AgentNode
-    ) -> None:
+        # 3. Recursively process all agent tools
+        for tool in node.tools:
+            if tool.agent is not None:
+                self.build_node_graph(tool.agent)
+
+    def _build_edges_for_non_composite_llm_node(self, node: nodes.AgentNode) -> None:
         for child in node.children_nodes:
             self.edges_definitions.append(f"{node.name} --> {child.name}")
 
+        for tool in node.tools:
+            self.edges_definitions.append(f"{node.name} --> {tool.name}")
+
     def _build_subgraph_for_composite_node(
-        self, composite_node: agent_node.AgentNode
+        self, composite_node: nodes.AgentNode
     ) -> None:
         block = [f'subgraph {composite_node.name}["{composite_node.name}"]']
 
@@ -92,7 +98,7 @@ def build_mermaid(root_agent: google.adk.agents.BaseAgent) -> str:
         >>> mermaid_src = build_mermaid(my_agent_tree)
         >>> print(mermaid_src)
     """
-    parsed_agent_tree = agent_node.build_nodes_tree(root_agent)
+    parsed_agent_tree = nodes.build_nodes_tree(root_agent)
 
     graph_builder = MermaidGraphBuilder(root_name=root_agent.name)
     graph_builder.build_node_graph(parsed_agent_tree)

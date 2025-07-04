@@ -1,17 +1,20 @@
 from typing import List, Optional
-from . import agent_node
+from . import nodes
 import itertools
 
 
 def build_edge_definitions_for_parallel_children(
-    children: List[agent_node.AgentNode],
+    children: List[nodes.AgentNode],
 ) -> List[str]:
     return [f'{child.name}["{child.name}"]' for child in children]
 
 
 def build_edge_definitions_for_sequential_children(
-    children: List[agent_node.AgentNode],
+    children: List[nodes.AgentNode],
 ) -> List[str]:
+    if len(children) == 1:
+        return [f"{children[0].name}"]
+
     result: List[str] = []
     for current, next in itertools.pairwise(children):
         edge_definition = f"{current.name} --> {next.name}"
@@ -21,7 +24,7 @@ def build_edge_definitions_for_sequential_children(
 
 
 def build_edge_definitions_for_loop_children(
-    children: List[agent_node.AgentNode],
+    children: List[nodes.AgentNode],
 ) -> List[str]:
     result = build_edge_definitions_for_sequential_children(children)
 
