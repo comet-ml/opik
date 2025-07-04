@@ -482,9 +482,22 @@ class Opik:
         attachments: Optional[List[Attachment]] = None,
     ) -> None:
         """
-        Update the span attributes. It's only safe to use this method if spans are already
-        stored in the backend, otherwise the update will fail.
-        It's not safe to use this method while the spans are created or shortly after.
+        Update the attributes of an existing span.
+
+        This method should only be used after the span has been fully created and stored.
+        If called before or immediately after span creation, the update may silently fail or result in incorrect data.
+
+        This method uses four parameters to identify the span:
+            - `id`
+            - `trace_id`
+            - `parent_span_id`
+            - `project_name`
+
+        These parameters **must match exactly** the values used when the span was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the span.
+        If a parameter is not provided, the existing value will remain unchanged.
 
         Args:
             id: The unique identifier for the span to update.
