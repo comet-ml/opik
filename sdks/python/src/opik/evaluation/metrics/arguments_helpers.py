@@ -36,6 +36,7 @@ def raise_if_score_arguments_are_missing(
         if scoring_key_mapping:
             unused_mapping_arguments = list(
                 set(key for key in scoring_key_mapping.values() if not callable(key))
+                - set(kwargs.keys())
             )
 
         raise exceptions.ScoreMethodMissingArguments(

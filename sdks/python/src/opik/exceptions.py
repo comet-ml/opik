@@ -38,8 +38,8 @@ class ScoreMethodMissingArguments(OpikException):
         message = (
             f"The scoring method {self.score_name} is missing arguments: {self.missing_required_arguments}. "
             f"These keys were not present in either the dataset item or the dictionary returned by the evaluation task. "
-            f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments."
-            f"The available keys found in the dataset item and evaluation task output are: {self.available_keys}."
+            f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments. "
+            f"The available keys found in the dataset item and evaluation task output are: {self.available_keys}. "
         )
         if self.unused_mapping_arguments:
             message += f" Some keys in `scoring_key_mapping` didn't match anything: {self.unused_mapping_arguments}"
