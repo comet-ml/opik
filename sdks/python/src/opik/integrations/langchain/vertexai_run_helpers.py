@@ -46,7 +46,7 @@ def is_vertexai_run(run: "Run") -> bool:
 
         invocation_params = run.extra.get("invocation_params", {})
         provider = invocation_params.get("_type", "").lower()
-        is_vertexai = "vertexai" in provider.lower()
+        is_vertexai = "vertexai" in provider
 
         return is_vertexai
 

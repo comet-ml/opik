@@ -354,7 +354,6 @@ class OpikTracer(BaseTracer):
             span_data = self._span_data_map[run.id]
             usage_info = llm_usage.LLMUsageInfo()
 
-            print("Process end span", vertexai_run_helpers.is_vertexai_run(run))
             if openai_run_helpers.is_openai_run(run):
                 usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):

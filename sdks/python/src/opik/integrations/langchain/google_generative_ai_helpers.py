@@ -23,7 +23,10 @@ def get_llm_usage_info(
 
 
 def map_langchain_usage_fields_to_genai(usage_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Langchain rename genai usage fields https://github.com/langchain-ai/langchain-google/blob/0817f7811a2a8bb4df83c9ad8937348fa86576ee/libs/genai/langchain_google_genai/chat_models.py#L721-L725, rename they back so genai cost can be computed the same across the libraries and frameworks"""
+    """Langchain rename genai usage fields
+    https://github.com/langchain-ai/langchain-google/blob/0817f7811a2a8bb4df83c9ad8937348fa86576ee/libs/genai/langchain_google_genai/chat_models.py#L721-L725,
+    rename them back so genai cost can be computed the same across the
+    libraries and frameworks"""
     mapping = {
         "input_tokens": "prompt_token_count",
         "thought_tokens": "thoughts_token_count",
