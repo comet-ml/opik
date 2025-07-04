@@ -129,11 +129,12 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> updateThreadSampledValueAsync(projectId, threadSamplingPerRules)),
+                Mono.defer(() -> processUpdateThreadSampledValue(projectId, threadSamplingPerRules)),
                 LOCK_DURATION);
     }
 
-    private Mono<Void> updateThreadSampledValueAsync(UUID projectId, List<TraceThreadSampling> threadSamplingPerRules) {
+    private Mono<Void> processUpdateThreadSampledValue(UUID projectId,
+            List<TraceThreadSampling> threadSamplingPerRules) {
         return traceThreadDAO.updateThreadSampledValues(projectId, threadSamplingPerRules)
                 .doOnSuccess(count -> log.info("Updated '{}' trace threads sampled values for projectId: '{}'", count,
                         projectId))
