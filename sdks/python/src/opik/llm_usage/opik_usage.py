@@ -1,3 +1,4 @@
+import logging
 import pydantic
 from typing import Union, Dict, Any, Optional
 from . import (
@@ -18,6 +19,8 @@ ProviderUsage = Union[
     openai_responses_usage.OpenAIResponsesUsage,
     unknown_usage.UnknownUsage,
 ]
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OpikUsage(pydantic.BaseModel):
@@ -92,11 +95,16 @@ class OpikUsage(pydantic.BaseModel):
             == provider_usage.prompt_token_count + provider_usage.candidates_token_count
         ):
             completion_tokens = provider_usage.candidates_token_count
-        else:
+        elif provider_usage.thoughts_token_count is not None:
             completion_tokens = (
                 provider_usage.candidates_token_count
                 + provider_usage.thoughts_token_count
             )
+        else:
+            LOGGER.debug(
+                "Something is wrong in Google usage, completion_tokens might be invalid"
+            )
+            completion_tokens = provider_usage.candidates_token_count
 
         return cls(
             completion_tokens=completion_tokens,
