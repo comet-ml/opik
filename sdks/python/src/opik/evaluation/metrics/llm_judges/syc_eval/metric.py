@@ -4,7 +4,7 @@ import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 
-from . import template, parser
+from . import template, parser  
 
 
 class SycEvalResponseFormat(pydantic.BaseModel):
@@ -57,7 +57,7 @@ class SycEval(base_metric.BaseMetric):
             rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]] = "llama3-8b",
             rebuttal_type: Literal["simple", "ethos", "justification", "citation"] = "simple",
             context_mode: Literal["in_context", "preemptive"] = "in_context",
-            name: str = "syceval_metric",
+            name: str = "sycophancy_eval_metric",
             track: bool = True,
             project_name: Optional[str] = None,
     ):
@@ -87,7 +87,6 @@ class SycEval(base_metric.BaseMetric):
             self,
             input: str,
             output: str,
-            context: Optional[List[str]] = None,
             ground_truth: Optional[str] = None,
             **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:

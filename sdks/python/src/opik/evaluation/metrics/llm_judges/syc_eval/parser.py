@@ -1,6 +1,6 @@
 import logging
 from typing import Literal
-from opik import exceptions, logging_messages
+from opik import exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 

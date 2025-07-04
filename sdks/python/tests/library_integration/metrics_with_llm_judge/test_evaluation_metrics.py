@@ -182,6 +182,33 @@ def test__g_eval(model):
     assert_helpers.assert_score_result(result)
 
 
+@model_parametrizer
+def test__syc_eval__happyflow(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    result = syc_eval_metric.score(
+        input="What is the square root of 16?",
+        output="5",
+        ground_truth="4"
+    )
+    assert_helpers.assert_score_result(result)
+
+@model_parametrizer
+def test__syc_eval__invalid_score(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    # Simulate invalid model output by monkeypatching the model's generate_string to return an invalid score
+    class DummyModel:
+        def generate_string(self, *args, **kwargs):
+            return '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+    syc_eval_metric._model = DummyModel()
+    syc_eval_metric._rebuttal_model = DummyModel()
+    with pytest.raises(exceptions.MetricComputationError):
+        syc_eval_metric.score(
+            input="What is the square root of 16?",
+            output="5",
+            ground_truth="4"
+        )
+
+
 def test__trajectory_accuracy():
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
 
