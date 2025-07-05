@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
+import com.comet.opik.infrastructure.llm.vllm.VllmModelNameChecker;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -89,6 +90,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.VERTEX_AI;
         }
 
+        if (isModelBelongToVllm(model)) {
+            return LlmProvider.VLLM;
+        }
+
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
     }
 
@@ -109,5 +114,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return EnumUtils.getEnumList(enumClass).stream()
                 .map(valueGetter)
                 .anyMatch(model::equals);
+    }
+
+    private boolean isModelBelongToVllm(String model) {
+        return VllmModelNameChecker.isVllmModel(model);
     }
 }
