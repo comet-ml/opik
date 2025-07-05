@@ -261,4 +261,49 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
   },
+  {
+    label: "StructuredOutputCompliance",
+    description: "Check if the output is a valid JSON and respects a given schema",
+    value: LLM_JUDGE.structured_output_compliance,
+    messages: [
+      {
+        id: "kYZITG5",
+        role: LLM_MESSAGE_ROLE.user,
+        content:
+          "You are a strict JSON validator. Your task is to evaluate if the given `OUTPUT` is a valid JSON that complies with the provided `JSON_SCHEMA`. If no schema is provided, you should only validate the JSON format.\n" +
+          "\n" +
+          "`JSON_SCHEMA`:\n" +
+          "```json\n" +
+          "{{json_schema}}\n" +
+          "```\n" +
+          "\n" +
+          "`OUTPUT`:\n" +
+          "```\n" +
+          "{{output}}\n" +
+          "```\n" +
+          "\n" +
+          "Analyze the `OUTPUT` against the `JSON_SCHEMA`.\n" +
+          "\n" +
+          "It is crucial that you provide your answer in the following JSON format:\n" +
+          "{{\n" +
+          '    "score": <0 if it complies, 1 if it does not>,\n' +
+          '    "reason": ["reason 1", "reason 2"]\n' +
+          "}}\n" +
+          "If it complies, the reason should be an empty list. Reasons amount is not restricted. Output must be JSON format only.",
+      },
+    ],
+    variables: {
+      output: "",
+      json_schema: "",
+    },
+    schema: [
+      {
+        name: "Structured output compliance",
+        description:
+          "Structured output compliance score checks if the output is a valid JSON and respects a given schema",
+        type: LLM_SCHEMA_TYPE.INTEGER,
+        unsaved: false,
+      },
+    ],
+  },
 ];
