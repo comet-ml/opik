@@ -1,12 +1,12 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.UserLog;
-import com.comet.opik.domain.pythonevaluator.PythonEvaluatorService;
-import com.comet.opik.domain.pythonevaluator.PythonScoreResult;
+import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
+import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
