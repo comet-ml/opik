@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,8 +43,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -51,6 +54,7 @@ import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -126,9 +130,10 @@ class LlmProviderApiKeyResourceTest {
         checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKey.apiKey());
     }
 
-    @Test
+    @ParameterizedTest
+    @MethodSource
     @DisplayName("Update provider Api Key")
-    void testUpdateProviderApiKey() {
+    void testUpdateProviderApiKey(ProviderApiKeyUpdate update, Function<ProviderApiKey, ProviderApiKey> getExpected) {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -136,23 +141,62 @@ class LlmProviderApiKeyResourceTest {
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+        var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
                 workspaceName, 201);
-
-        var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class);
-        llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
+                
+        llmProviderApiKeyResourceClient.updateProviderApiKey(createdProviderApiKey.id(), update, apiKey,
                 workspaceName, 204);
 
-        var expectedUpdatedProviderApiKey = expectedProviderApiKey.toBuilder()
-                .apiKey(providerApiKeyUpdate.apiKey())
-                .name(providerApiKeyUpdate.name())
-                .baseUrl(providerApiKeyUpdate.baseUrl())
-                .configuration(providerApiKeyUpdate.configuration())
-                .headers(providerApiKeyUpdate.headers())
-                .build();
-        getAndAssertProviderApiKey(expectedUpdatedProviderApiKey, apiKey, workspaceName);
+        getAndAssertProviderApiKey(getExpected.apply(createdProviderApiKey), apiKey, workspaceName);
 
-        checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKeyUpdate.apiKey());
+        checkEncryption(createdProviderApiKey.id(), workspaceId, update.apiKey() == null ? providerApiKey.apiKey() :
+                update.apiKey());
+    }
+
+    private Stream<Arguments> testUpdateProviderApiKey() {
+        var updateAll = factory.manufacturePojo(ProviderApiKeyUpdate.class);
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedAll = (ProviderApiKey original) -> original.toBuilder()
+                .name(updateAll.name())
+                .apiKey(updateAll.apiKey())
+                .headers(updateAll.headers())
+                .configuration(updateAll.configuration())
+                .baseUrl(updateAll.baseUrl())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedName = (ProviderApiKey original) -> original.toBuilder()
+                .name(updateAll.name())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedApiKey = (ProviderApiKey original) -> original.toBuilder()
+                .apiKey(updateAll.apiKey())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedBaseUrl = (ProviderApiKey original) -> original.toBuilder()
+                .baseUrl(updateAll.baseUrl())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedHeaders = (ProviderApiKey original) -> original.toBuilder()
+                .headers(updateAll.headers())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedConfig = (ProviderApiKey original) -> original.toBuilder()
+                .configuration(updateAll.configuration())
+                .build();
+
+        return Stream.of(
+                arguments(named("all fields", updateAll), getExpectedAll),
+                arguments(named("only name", updateAll.toBuilder().apiKey(null).headers(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedName),
+                arguments(named("only apiKey", updateAll.toBuilder().name(null).headers(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedApiKey),
+                arguments(named("only baseUrl", updateAll.toBuilder().apiKey(null).name(null).headers(null)
+                        .configuration(null).build()), getExpectedBaseUrl),
+                arguments(named("only headers", updateAll.toBuilder().name(null).apiKey(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedHeaders),
+                arguments(named("only configuration", updateAll.toBuilder().name(null).apiKey(null).headers(null)
+                        .baseUrl(null).build()), getExpectedConfig)
+        );
     }
 
     @Test
