@@ -1,18 +1,23 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -77,6 +82,15 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
+        if (providerApiKey.provider() != LlmProvider.CUSTOM_LLM &&
+                (providerApiKey.apiKey() == null ||
+                        StringUtils.isBlank(EncryptionUtils.decrypt(providerApiKey.apiKey())))) {
+            throw new WebApplicationException(
+                    "apiKey must not be blank",
+                    Response.status(HttpStatus.SC_UNPROCESSABLE_CONTENT)
+                            .entity(new ErrorMessage(List.of("apiKey must not be blank"))).build());
+        }
+
         UUID apiKeyId = idGenerator.generateId();
 
         var newProviderApiKey = providerApiKey.toBuilder()

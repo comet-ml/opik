@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -33,6 +34,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -292,6 +294,7 @@ class LlmProviderApiKeyResourceTest {
 
     @ParameterizedTest
     @EmptySource
+    @NullSource
     @DisplayName("Create and update provider with empty apiKey is allowed for custom provider")
     void createUpdateCustomProviderWithEmptyApiKeyIsAllowed(String emptyString) {
         String workspaceName = UUID.randomUUID().toString();
@@ -302,6 +305,7 @@ class LlmProviderApiKeyResourceTest {
 
         var testProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
                 .name(CUSTOM_LLM_MODEL_PREFIX + "some_model_name")
+                .provider(LlmProvider.CUSTOM_LLM)
                 .apiKey(emptyString)
                 .build();
         var createdProvider = llmProviderApiKeyResourceClient.createProviderApiKey(testProvider, apiKey, workspaceName,
@@ -338,6 +342,18 @@ class LlmProviderApiKeyResourceTest {
                 arguments(
                         JsonUtils.writeValueAsString(providerApiKey.toBuilder().baseUrl("").build()),
                         "baseUrl must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .provider(LlmProvider.GEMINI)
+                                .apiKey("")
+                                .build()),
+                        "apiKey must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .provider(LlmProvider.GEMINI)
+                                .apiKey(null)
+                                .build()),
+                        "apiKey must not be blank"),
                 arguments(
                         JsonUtils.writeValueAsString(providerApiKey.toBuilder()
                                 .name(RandomStringUtils.secure().nextAlphabetic(200)).build()),
