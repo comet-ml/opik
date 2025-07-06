@@ -22,6 +22,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,10 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -53,6 +57,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -142,10 +147,10 @@ class LlmProviderApiKeyResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
-                workspaceName, 201);
+                workspaceName, HttpStatus.SC_CREATED);
                 
         llmProviderApiKeyResourceClient.updateProviderApiKey(createdProviderApiKey.id(), update, apiKey,
-                workspaceName, 204);
+                workspaceName, HttpStatus.SC_NO_CONTENT);
 
         getAndAssertProviderApiKey(getExpected.apply(createdProviderApiKey), apiKey, workspaceName);
 
@@ -288,6 +293,29 @@ class LlmProviderApiKeyResourceTest {
 
             assertThat(actualError.getMessage()).startsWith(errorMsg);
         }
+    }
+
+    @ParameterizedTest
+    @EmptySource
+    @DisplayName("Create and update provider with empty apiKey is allowed for custom provider")
+    void createUpdateCustomProviderWithEmptyApiKeyIsAllowed(String emptyString) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var testProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .name(CUSTOM_LLM_MODEL_PREFIX + "some_model_name")
+                .apiKey(emptyString)
+                .build();
+        var createdProvider = llmProviderApiKeyResourceClient.createProviderApiKey(testProvider, apiKey, workspaceName,
+                HttpStatus.SC_CREATED);
+
+        var testProviderUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder()
+                .apiKey(emptyString).build();
+        llmProviderApiKeyResourceClient.updateProviderApiKey(createdProvider.id(), testProviderUpdate, apiKey,
+                workspaceName, HttpStatus.SC_NO_CONTENT);
     }
 
     @ParameterizedTest
