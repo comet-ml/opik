@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
 
@@ -49,7 +51,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         return LlmProviderClientApiConfig.builder()
-                .apiKey(EncryptionUtils.decrypt(providerConfig.apiKey()))
+                .apiKey(providerConfig.apiKey() != null ? decrypt(providerConfig.apiKey()) : null)
                 .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
                 .configuration(Optional.ofNullable(providerConfig.configuration()).orElse(Map.of()))
