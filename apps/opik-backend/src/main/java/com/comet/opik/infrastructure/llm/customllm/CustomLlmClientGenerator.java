@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -17,7 +18,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.http.HttpClient;
 import java.util.Optional;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 
 @RequiredArgsConstructor

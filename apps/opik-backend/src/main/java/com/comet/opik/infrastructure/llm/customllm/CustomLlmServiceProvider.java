@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -26,8 +26,8 @@ class CustomLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
-            AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.newCustomProviderChatLanguageModel(config, modelParameters);
+    public ChatModel getLanguageModel(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
+        return clientGenerator.generateChat(config, modelParameters);
     }
 }
