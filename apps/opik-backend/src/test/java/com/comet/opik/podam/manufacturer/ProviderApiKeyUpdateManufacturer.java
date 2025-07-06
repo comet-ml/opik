@@ -14,7 +14,7 @@ public class ProviderApiKeyUpdateManufacturer extends AbstractTypeManufacturer<P
 
     @Override
     public ProviderApiKeyUpdate getType(DataProviderStrategy strategy, AttributeMetadata metadata,
-                                        ManufacturingContext context) {
+            ManufacturingContext context) {
 
         return new ProviderApiKeyUpdate(
                 RandomStringUtils.secure().nextAlphabetic(20),
@@ -31,7 +31,6 @@ public class ProviderApiKeyUpdateManufacturer extends AbstractTypeManufacturer<P
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5)),
-                "http://" + strategy.getTypeValue(metadata, context, String.class) + ".com"
-        );
+                "http://" + strategy.getTypeValue(metadata, context, String.class) + ".com");
     }
 }

@@ -26,7 +26,6 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,8 +33,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -47,7 +44,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -148,14 +144,14 @@ class LlmProviderApiKeyResourceTest {
 
         var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
                 workspaceName, HttpStatus.SC_CREATED);
-                
+
         llmProviderApiKeyResourceClient.updateProviderApiKey(createdProviderApiKey.id(), update, apiKey,
                 workspaceName, HttpStatus.SC_NO_CONTENT);
 
         getAndAssertProviderApiKey(getExpected.apply(createdProviderApiKey), apiKey, workspaceName);
 
-        checkEncryption(createdProviderApiKey.id(), workspaceId, update.apiKey() == null ? providerApiKey.apiKey() :
-                update.apiKey());
+        checkEncryption(createdProviderApiKey.id(), workspaceId,
+                update.apiKey() == null ? providerApiKey.apiKey() : update.apiKey());
     }
 
     private Stream<Arguments> testUpdateProviderApiKey() {
@@ -200,8 +196,7 @@ class LlmProviderApiKeyResourceTest {
                 arguments(named("only headers", updateAll.toBuilder().name(null).apiKey(null).configuration(null)
                         .baseUrl(null).build()), getExpectedHeaders),
                 arguments(named("only configuration", updateAll.toBuilder().name(null).apiKey(null).headers(null)
-                        .baseUrl(null).build()), getExpectedConfig)
-        );
+                        .baseUrl(null).build()), getExpectedConfig));
     }
 
     @Test
