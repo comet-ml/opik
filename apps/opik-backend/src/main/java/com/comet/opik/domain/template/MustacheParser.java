@@ -42,8 +42,8 @@ public class MustacheParser implements TemplateParser {
             collectVariables(codes, variables);
 
             return variables;
-        } catch (MustacheException e) {
-            log.warn("Failed to parse Mustache template for variable extraction: {}", e.getMessage());
+        } catch (MustacheException ex) {
+            log.warn("Failed to parse Mustache template for variable extraction", ex);
             return variables; // Return empty set when parsing fails
         }
     }
@@ -59,7 +59,7 @@ public class MustacheParser implements TemplateParser {
             return renderTemplate(context, mustache);
         } catch (MustacheException ex) {
             log.error("Failed to parse Mustache template for rendering:", ex);
-            throw new IllegalArgumentException("Invalid Mustache template: " + ex.getMessage(), ex);
+            throw new IllegalArgumentException("Invalid Mustache template", ex);
         }
     }
 
