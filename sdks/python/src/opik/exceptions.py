@@ -52,6 +52,12 @@ class MetricComputationError(OpikException):
     pass
 
 
+class EvaluationError(OpikException):
+    """Exception raised when an evaluation fails."""
+
+    pass
+
+
 class JSONParsingError(OpikException):
     """Exception raised when we fail to parse an LLM response to a dictionary"""
 

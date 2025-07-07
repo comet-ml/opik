@@ -1,5 +1,7 @@
 from .aggregated_metric import AggregatedMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
+from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
+from .conversation.user_frustration.metric import UserFrustrationMetric
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
@@ -24,24 +26,26 @@ from opik.exceptions import MetricComputationError
 __all__ = [
     "AggregatedMetric",
     "AnswerRelevance",
+    "BaseMetric",
     "Contains",
     "ContextPrecision",
     "ContextRecall",
+    "ConversationalCoherenceMetric",
+    "CorpusBLEU",
     "Equals",
-    # "Factuality",
     "GEval",
     "Hallucination",
     "IsJson",
     "LevenshteinRatio",
-    "Moderation",
-    "Usefulness",
-    "RegexMatch",
     "MetricComputationError",
-    "BaseMetric",
-    "SentenceBLEU",
-    "CorpusBLEU",
+    "Moderation",
+    "RagasMetricWrapper",
+    "RegexMatch",
     "ROUGE",
+    "SentenceBLEU",
     "Sentiment",
     "SessionCompletenessQuality",
-    "RagasMetricWrapper",
+    "Usefulness",
+    "UserFrustrationMetric",
+    # "Factuality",
 ]
