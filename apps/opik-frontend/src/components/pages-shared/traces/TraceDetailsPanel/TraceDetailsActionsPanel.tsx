@@ -48,8 +48,8 @@ type TraceDetailsActionsPanelProps = {
   setThreadId?: OnChangeFn<string | null | undefined>;
   onClose: () => void;
   isSpansLazyLoading: boolean;
-  search: string;
-  setSearch: OnChangeFn<string>;
+  search?: string;
+  setSearch: OnChangeFn<string | undefined>;
 };
 
 const TraceDetailsActionsPanel: React.FunctionComponent<
@@ -87,7 +87,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     <div ref={ref} className="flex flex-auto items-center justify-between">
       {setThreadId && threadId ? (
         <div className="flex items-center">
-          <Separator orientation="vertical" className="mx-3 h-8" />
+          <Separator orientation="vertical" className="mx-3 h-4" />
           <TooltipWrapper content="Go to thread">
             <Button
               variant="outline"
@@ -101,7 +101,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       ) : (
         <div />
       )}
-      <div className="flex gap-2 pl-6">
+      <div className="flex items-center gap-2 pl-6">
         <div className="flex min-w-44 max-w-56 flex-auto justify-end overflow-hidden">
           <ExpandableSearchInput
             value={search}
@@ -110,7 +110,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             disabled={isSpansLazyLoading}
           />
         </div>
-        <Separator orientation="vertical" className="mx-1 h-8" />
+        <Separator orientation="vertical" className="mx-1 h-4" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon-sm">

@@ -43,6 +43,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
@@ -445,7 +446,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     return (
       <div className="flex flex-auto items-center justify-between">
         <div className="flex items-center">
-          <Separator orientation="vertical" className="mx-3 h-8" />
+          <Separator orientation="vertical" className="mx-3 h-4" />
           <Button
             variant="outline"
             size="sm"
@@ -527,6 +528,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Copy thread ID
                 </DropdownMenuItem>
               </TooltipWrapper>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setPopupOpen(true)}>
                 <Trash className="mr-2 size-4" />
                 Delete

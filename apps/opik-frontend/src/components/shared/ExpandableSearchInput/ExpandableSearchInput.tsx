@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, X } from "lucide-react";
+import isUndefined from "lodash/isUndefined";
+
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
-import { cn } from "@/lib/utils";
 
 type ExpandableSearchInputProps = {
   placeholder?: string;
@@ -14,7 +16,7 @@ type ExpandableSearchInputProps = {
 
 const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   placeholder = "Search...",
-  value = "",
+  value,
   onChange,
   className,
   disabled = false,
@@ -28,6 +30,10 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
       inputRef.current.focus();
     }
   }, [isExpanded]);
+
+  useEffect(() => {
+    setIsExpanded((state) => (isUndefined(value) ? false : state));
+  }, [value]);
 
   const handleExpand = () => {
     if (disabled) return;

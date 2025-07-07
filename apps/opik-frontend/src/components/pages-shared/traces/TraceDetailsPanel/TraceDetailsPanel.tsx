@@ -54,7 +54,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState<string | undefined>();
   const { flattenedTree } = useTreeDetailsStore();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
