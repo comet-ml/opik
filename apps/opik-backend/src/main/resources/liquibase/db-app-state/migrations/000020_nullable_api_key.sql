@@ -3,4 +3,4 @@
 
 ALTER TABLE llm_provider_api_key MODIFY COLUMN api_key TEXT NULL;
 
---rollback ALTER TABLE llm_provider_api_key MODIFY COLUMN api_key TEXT NOT NULL;
+--rollback empty
