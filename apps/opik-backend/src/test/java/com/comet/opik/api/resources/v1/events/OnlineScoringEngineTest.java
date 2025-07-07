@@ -28,7 +28,6 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.dockerjava.api.exception.InternalServerErrorException;
@@ -556,31 +555,33 @@ class OnlineScoringEngineTest {
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
     }
 
-    @Test
+    @ParameterizedTest
+    @MethodSource
     @DisplayName("renderMessages should support keys with dots in their names")
-    void testExtractFromJsonWithDotKey() throws Exception {
-        // Prepare input JSON with a key containing a dot
-        String jsonWithDotKey = "{" +
-                "  \"key.with.dot\": \"dot-value\"," +
-                "  \"regularKey\": \"regular-value\"" +
-                "}";
-        JsonNode input = JsonUtils.MAPPER.readTree(jsonWithDotKey);
-        // Variable mapping: variable 'dotVar' maps to 'input.key.with.dot'
-        var variables = Map.of("dotVar", "input.key.with.dot");
+    void testExtractFromJsonWithDotKey(String key, String jsonBody) throws Exception {
+        // variable mapping: variable 'testVar' maps to 'input.' + key
+        var variables = Map.of("testVar", "input." + key);
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
                 .projectName(PROJECT_NAME)
                 .projectId(UUID.randomUUID())
                 .createdBy(USER_NAME)
-                .input(input)
+                .input(JsonUtils.MAPPER.readTree(jsonBody))
                 .build();
 
         // Render a message using the variable
-        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Dot value: {{dotVar}}"));
+        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Test value: {{testVar}}"));
         var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
         assertThat(rendered).hasSize(1);
         var userMessage = rendered.getFirst();
         assertThat(userMessage).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) userMessage).singleText()).contains("Dot value: dot-value");
+        assertThat(((UserMessage) userMessage).singleText()).contains("Test value: expected-value");
+    }
+
+    private static Stream<Arguments> testExtractFromJsonWithDotKey() {
+        return Stream.of(
+                arguments("key.with.dot", "{\"key.with.dot\":\"expected-value\"}"),
+                arguments("regularKey", "{\"regularKey\":\"expected-value\"}"),
+                arguments("subObject.nestedKey", "{\"subObject\":{\"nestedKey\":\"expected-value\"}}"));
     }
 }
