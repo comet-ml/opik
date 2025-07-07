@@ -175,12 +175,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   });
   const isLLMJudge =
     form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
+  const isThreadScope =
+    form.getValues("scope") === EVALUATORS_RULE_SCOPE.thread;
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
-      const { uiType } = form.getValues();
-
       const applyChange = () => {
+        if (value === EVALUATORS_RULE_SCOPE.thread) {
+          form.setValue("uiType", UI_EVALUATORS_RULE_TYPE.llm_judge);
+        }
+
+        const { uiType } = form.getValues();
         const type = getBackendRuleType(value, uiType);
 
         form.setValue("scope", value);
@@ -443,7 +448,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   )}
                 />
 
-                {!isEdit && (
+                {!isEdit && !isThreadScope && (
                   <FormField
                     control={form.control}
                     name="uiType"
