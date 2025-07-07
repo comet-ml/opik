@@ -1,12 +1,13 @@
 import asyncio
 
 from opik.evaluation.metrics import base_metric, score_result
-from ragas.dataset_schema import SingleTurnSample
-from ragas.metrics.base import SingleTurnMetric
-from ragas.metrics import MetricType
 from opik.exceptions import ScoreMethodMissingArguments
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ragas.metrics import SingleTurnMetric
+    from ragas.dataset_schema import SingleTurnSample
 
 
 def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
@@ -25,6 +26,9 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
     ):
+        from ragas.metrics.base import SingleTurnMetric
+        from ragas.metrics import MetricType
+
         # Provide a better error message if user try to pass a Ragas metric that is not a single turn metric
         if not isinstance(ragas_metric, SingleTurnMetric):
             raise ValueError(
@@ -39,6 +43,8 @@ class RagasMetricWrapper(base_metric.BaseMetric):
     def _create_ragas_single_turn_sample(
         self, input_dict: Dict[str, Any]
     ) -> SingleTurnSample:
+        from ragas.dataset_schema import SingleTurnSample
+
         # Add basic field name mapping between Opik and Ragas
         if "user_input" not in input_dict:
             input_dict["user_input"] = input_dict["input"]
