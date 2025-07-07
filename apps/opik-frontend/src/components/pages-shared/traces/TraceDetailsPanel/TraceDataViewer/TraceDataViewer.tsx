@@ -101,8 +101,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             actionsPanel={(layoutSize) => (
               <TraceDataViewerActionsPanel
                 data={data}
-                traceId={traceId}
-                spanId={spanId}
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
