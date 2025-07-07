@@ -33,6 +33,7 @@ import {
   ColumnData,
   ColumnsStatistic,
   DynamicColumn,
+  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { BaseTraceData, Span, Trace } from "@/types/traces";
@@ -85,6 +86,7 @@ import {
   DetailsActionSectionParam,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import { GuardrailResult } from "@/types/guardrails";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -308,6 +310,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             projectId,
             type,
             placeholder: "Select score",
+          },
+        },
+        [COLUMN_GUARDRAILS_ID]: {
+          keyComponentProps: {
+            options: [
+              { value: GuardrailResult.FAILED, label: "Failed" },
+              { value: GuardrailResult.PASSED, label: "Passed" },
+            ],
+            placeholder: "Status",
           },
         },
       },
@@ -539,7 +550,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
+              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
@@ -587,7 +599,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
             },
           ]
         : []),
