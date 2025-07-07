@@ -22,7 +22,7 @@ def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
 class RagasMetricWrapper(base_metric.BaseMetric):
     def __init__(
         self,
-        ragas_metric: SingleTurnMetric,
+        ragas_metric: "SingleTurnMetric",
         track: bool = True,
         project_name: Optional[str] = None,
     ):
@@ -42,7 +42,7 @@ class RagasMetricWrapper(base_metric.BaseMetric):
 
     def _create_ragas_single_turn_sample(
         self, input_dict: Dict[str, Any]
-    ) -> SingleTurnSample:
+    ) -> "SingleTurnSample":
         from ragas.dataset_schema import SingleTurnSample
 
         # Add basic field name mapping between Opik and Ragas
