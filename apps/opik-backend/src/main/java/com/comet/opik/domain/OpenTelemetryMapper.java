@@ -134,20 +134,34 @@ public class OpenTelemetryMapper {
         }
     }
 
-    private static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
+    static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
         switch (value.getValueCase()) {
             case STRING_VALUE -> {
                 var stringValue = value.getStringValue();
                 // check if string value is actually a string or a stringfied json
                 if (stringValue.startsWith("\"") || stringValue.startsWith("[")
                         || stringValue.startsWith("{")) {
-                    var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
-                    if (jsonNode.isTextual()) {
-                        jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+                    try {
+                        var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
+                        if (jsonNode.isTextual()) {
+                            try {
+                                jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+                            } catch (Exception e) {
+                                log.debug("Failed to parse nested JSON string for key {}: {}. Using as plain text.",
+                                        key, e.getMessage());
+                                node.put(key, jsonNode.asText());
+                                return;
+                            }
+                        }
+                        node.set(key, jsonNode);
+                    } catch (Exception e) {
+                        log.debug("Failed to parse JSON string for key {}: {}. Using as plain text.", key,
+                                e.getMessage());
+                        node.put(key, stringValue);
                     }
-                    node.set(key, jsonNode);
-                } else
+                } else {
                     node.put(key, stringValue);
+                }
             }
             case INT_VALUE -> node.put(key, value.getIntValue());
             case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
@@ -168,19 +182,31 @@ public class OpenTelemetryMapper {
             var actualKey = key.substring(rule.getRule().length());
             usage.put(actualKey, (int) value.getIntValue());
         } else {
-            JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-            if (usageNode.isTextual()) {
-                usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-            }
-
-            // we expect only integers for usage fields
-            usageNode.fields().forEachRemaining(entry -> {
-                if (entry.getValue().isNumber()) {
-                    usage.put(entry.getKey(), entry.getValue().intValue());
-                } else {
-                    log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
+            try {
+                JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+                if (usageNode.isTextual()) {
+                    try {
+                        usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
+                    } catch (Exception e) {
+                        log.debug(
+                                "Failed to parse nested JSON string for usage field {}: {}. Skipping usage extraction.",
+                                key, e.getMessage());
+                        return;
+                    }
                 }
-            });
+
+                // we expect only integers for usage fields
+                usageNode.fields().forEachRemaining(entry -> {
+                    if (entry.getValue().isNumber()) {
+                        usage.put(entry.getKey(), entry.getValue().intValue());
+                    } else {
+                        log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
+                    }
+                });
+            } catch (Exception e) {
+                log.debug("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
+                        e.getMessage());
+            }
         }
     }
 
