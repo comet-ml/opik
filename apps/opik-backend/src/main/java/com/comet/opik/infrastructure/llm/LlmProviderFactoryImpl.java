@@ -6,8 +6,8 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
-import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
@@ -23,6 +23,8 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
@@ -48,7 +50,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         return LlmProviderClientApiConfig.builder()
-                .apiKey(EncryptionUtils.decrypt(providerConfig.apiKey()))
+                .apiKey(providerConfig.apiKey() != null ? decrypt(providerConfig.apiKey()) : null)
                 .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
                 .configuration(Optional.ofNullable(providerConfig.configuration()).orElse(Map.of()))
@@ -87,6 +89,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         if (isModelBelongToProvider(model, VertexAIModelName.class, VertexAIModelName::qualifiedName)) {
             return LlmProvider.VERTEX_AI;
+        }
+
+        if (CustomLlmModelNameChecker.isCustomLlmModel(model)) {
+            return LlmProvider.CUSTOM_LLM;
         }
 
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));

@@ -1,18 +1,22 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -23,6 +27,7 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 @ImplementedBy(LlmProviderApiKeyServiceImpl.class)
 public interface LlmProviderApiKeyService {
@@ -77,6 +82,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
+        validateApiKey(providerApiKey);
+
         UUID apiKeyId = idGenerator.generateId();
 
         var newProviderApiKey = providerApiKey.toBuilder()
@@ -148,5 +155,23 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         log.info(message);
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
+    }
+
+    private void validateApiKey(ProviderApiKey providerApiKey) {
+        // no validation for custom LLM
+        if (providerApiKey.provider() == LlmProvider.CUSTOM_LLM) {
+            return;
+        }
+
+        // if the api key is not empty, do nothing
+        if (providerApiKey.apiKey() != null && isNotBlank(EncryptionUtils.decrypt(providerApiKey.apiKey()))) {
+            return;
+        }
+
+        // if the api key is empty, throw an exception
+        throw new WebApplicationException(
+                "apiKey must not be blank",
+                Response.status(HttpStatus.SC_UNPROCESSABLE_CONTENT)
+                        .entity(new ErrorMessage(List.of("apiKey must not be blank"))).build());
     }
 }

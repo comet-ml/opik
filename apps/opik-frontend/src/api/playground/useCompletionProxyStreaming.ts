@@ -23,7 +23,6 @@ const getNowUtcTimeISOString = (): string => {
 };
 
 interface GetCompletionProxyStreamParams {
-  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   signal: AbortSignal;
@@ -53,14 +52,13 @@ const isProviderError = (
 };
 
 const getCompletionProxyStream = async ({
-  url = `${BASE_API_URL}/v1/private/chat/completions`,
   model,
   messages,
   signal,
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
-  return fetch(url, {
+  return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +77,6 @@ const getCompletionProxyStream = async ({
 };
 
 export interface RunStreamingArgs {
-  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   configs: LLMPromptConfigsType;
@@ -107,7 +104,6 @@ const useCompletionProxyStreaming = ({
 }: UseCompletionProxyStreamingParameters) => {
   return useCallback(
     async ({
-      url,
       model,
       messages,
       configs,
@@ -127,7 +123,6 @@ const useCompletionProxyStreaming = ({
 
       try {
         const response = await getCompletionProxyStream({
-          url,
           model,
           messages,
           configs,

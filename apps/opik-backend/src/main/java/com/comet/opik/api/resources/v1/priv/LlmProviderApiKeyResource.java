@@ -69,7 +69,9 @@ public class LlmProviderApiKeyResource {
                         .content(
                                 providerApiKeyPage.content().stream()
                                         .map(providerApiKey -> providerApiKey.toBuilder()
-                                                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                                                .apiKey(providerApiKey.apiKey() != null
+                                                        ? maskApiKey(decrypt(providerApiKey.apiKey()))
+                                                        : "null")
                                                 .build())
                                         .toList())
                         .build())
@@ -93,7 +95,7 @@ public class LlmProviderApiKeyResource {
         log.info("Got LLM Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
         return Response.ok().entity(providerApiKey.toBuilder()
-                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : "null")
                 .build()).build();
     }
 
