@@ -41,8 +41,8 @@ type TraceTreeViewerProps = {
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
-  search: string;
-  setSearch: OnChangeFn<string>;
+  search?: string;
+  setSearch: OnChangeFn<string | undefined>;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -184,8 +184,8 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       ref={scrollRef}
     >
       <div className="min-w-[400px] max-w-full">
-        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-white pb-2 pl-6 pr-4  pt-4">
-          <div className="flex items-center gap-1">
+        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-white pb-2 pl-6 pr-4 pt-4">
+          <div className="flex h-8 items-center gap-1">
             <div className="comet-title-xs">
               {noSearch ? "Trace spans" : "Search results"}
             </div>
@@ -215,7 +215,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
                 </TooltipWrapper>
               </>
             ) : (
-              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={() => setSearch(undefined)}
+              >
                 Clear
               </Button>
             )}
