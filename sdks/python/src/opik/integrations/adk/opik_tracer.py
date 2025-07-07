@@ -1,7 +1,7 @@
 import contextvars
 import functools
 import logging
-from typing import Any, Dict, List, Optional, Set, Union, Tuple
+from typing import Any, Dict, List, Optional, Set, Union
 
 import google.adk.agents
 from google.adk.agents.callback_context import CallbackContext
@@ -14,38 +14,17 @@ from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
 
-from . import helpers as adk_helpers, litellm_wrappers, llm_response_wrapper
+from . import (
+    helpers as adk_helpers,
+    litellm_wrappers,
+    llm_response_wrapper,
+    callback_context_info_extractors,
+)
 from .graph import mermaid_graph_builder
 
 LOGGER = logging.getLogger(__name__)
 
 SpanOrTraceData = Union[span.SpanData, trace.TraceData]
-
-
-def _get_info_from_adk_session(
-    callback_context: CallbackContext,
-) -> Tuple[Optional[str], Dict[str, Any]]:
-    try:
-        session = callback_context._invocation_context.session
-        return session.id, {"user_id": session.user_id, "app_name": session.app_name}
-    except Exception:
-        LOGGER.error(
-            "Failed to get session information from ADK callback context", exc_info=True
-        )
-        return None, {}
-
-
-def _get_current_agent_instance(
-    callback_context: CallbackContext,
-) -> Optional[google.adk.agents.BaseAgent]:
-    try:
-        invocation_context = callback_context._invocation_context
-        return invocation_context.agent
-    except Exception:
-        LOGGER.error(
-            "Failed to get agent information from ADK callback context", exc_info=True
-        )
-        return None
 
 
 class OpikTracer:
@@ -128,11 +107,15 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
-            thread_id, session_metadata = _get_info_from_adk_session(callback_context)
+            thread_id, session_metadata = (
+                callback_context_info_extractors.try_get_session_info(callback_context)
+            )
 
             trace_metadata = self.metadata.copy()
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
             trace_metadata.update(session_metadata)
+
+            _try_add_agent_graph_to_metadata(trace_metadata, callback_context)
 
             if callback_context.user_content is not None:
                 user_input = adk_helpers.convert_adk_base_model_to_dict(
@@ -144,22 +127,6 @@ class OpikTracer:
 
             current_trace_data = self._context_storage.get_trace_data()
             if current_trace_data is None:  # todo: support distributed headers
-                current_agent: Optional[google.adk.agents.BaseAgent] = (
-                    _get_current_agent_instance(callback_context)
-                )
-                if current_agent is not None:
-                    try:
-                        trace_metadata["_opik_graph_definition"] = {
-                            "format": "mermaid",
-                            "data": mermaid_graph_builder.build_mermaid(
-                                current_agent.root_agent
-                            ),
-                        }
-                    except Exception:
-                        LOGGER.error(
-                            "Failed to build mermaid graph for agent.", exc_info=True
-                        )
-
                 current_trace = trace.TraceData(
                     name=name,
                     project_name=self.project_name,
@@ -372,6 +339,27 @@ class OpikTracer:
     def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._init_internal_attributes()
+
+
+def _try_add_agent_graph_to_metadata(
+    metadata: Dict[str, Any], callback_context: CallbackContext
+) -> None:
+    current_agent: Optional[google.adk.agents.BaseAgent] = (
+        callback_context_info_extractors.try_get_current_agent_instance(
+            callback_context
+        )
+    )
+
+    if current_agent is None:
+        return
+
+    try:
+        metadata["_opik_graph_definition"] = {
+            "format": "mermaid",
+            "data": mermaid_graph_builder.build_mermaid(current_agent.root_agent),
+        }
+    except Exception:
+        LOGGER.error("Failed to build mermaid graph for agent.", exc_info=True)
 
 
 @functools.lru_cache()
