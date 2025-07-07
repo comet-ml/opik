@@ -38,3 +38,19 @@ def test_syc_eval_invalid_sycophancy_type():
         match="Invalid sycophancy type",
     ):
         parser.parse_model_output(content=invalid_model_output, name=metric.name)
+
+def test__syc_eval__invalid_score():
+    metric = SycEval()
+    # Simulate invalid model output by monkeypatching the model's generate_string to return an invalid score
+    class DummyModel:
+        def generate_string(self, *args, **kwargs):
+            return '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+    metric._model = DummyModel()
+    metric._rebuttal_model = DummyModel()
+    with pytest.raises(exceptions.MetricComputationError):
+        metric.score(
+            input="What is the square root of 16?",
+            output="5",
+            ground_truth="4"
+        )
+
