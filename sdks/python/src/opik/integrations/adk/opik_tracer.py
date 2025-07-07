@@ -356,7 +356,9 @@ def _try_add_agent_graph_to_metadata(
     try:
         metadata["_opik_graph_definition"] = {
             "format": "mermaid",
-            "data": mermaid_graph_builder.build_mermaid(current_agent.root_agent),
+            "data": mermaid_graph_builder.build_mermaid_graph_definition(
+                current_agent.root_agent
+            ),
         }
     except Exception:
         LOGGER.error("Failed to build mermaid graph for agent.", exc_info=True)

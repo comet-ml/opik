@@ -1,6 +1,6 @@
 import google.adk.agents
 import google.adk.tools.agent_tool
-from opik.integrations.adk import build_mermaid
+from opik.integrations.adk import build_mermaid_graph_definition
 from opik.integrations.adk.graph import mermaid_graph_builder, nodes
 
 
@@ -12,7 +12,7 @@ def test_build_mermaid__simple_agent():
         description="test description",
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR
@@ -56,7 +56,7 @@ def test_build_mermaid__root_sequential_agent_with_llm_subagents_having_their_ow
         ],
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR
@@ -109,7 +109,7 @@ def test_build_mermaid__root_parallel_agent_with_llm_subagents_having_their_own_
         ],
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR
@@ -141,7 +141,7 @@ def test_build_mermaid__root_loop_agent_with_llm_subagent():
         ],
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR
@@ -234,7 +234,7 @@ def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agen
         ],
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR
@@ -309,7 +309,7 @@ def test_build_mermaid__root_llm_agent_with_subagents_and_tools_and_agent_tools(
         ],
     )
 
-    graph = build_mermaid(agent)
+    graph = build_mermaid_graph_definition(agent)
     assert (
         graph
         == f"""flowchart LR

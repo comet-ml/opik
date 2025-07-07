@@ -99,7 +99,7 @@ class MermaidGraphBuilder:
         )
 
 
-def build_mermaid(root_agent: google.adk.agents.BaseAgent) -> str:
+def build_mermaid_graph_definition(root_agent: google.adk.agents.BaseAgent) -> str:
     """
     Generates a Mermaid 'flowchart LR' diagram for a google-adk
     agent tree and returns the Mermaid source code.
@@ -108,16 +108,13 @@ def build_mermaid(root_agent: google.adk.agents.BaseAgent) -> str:
         root_agent (Agent):
             The root agent node of the google-adk agent tree.
             This should be an instance
-            of SequentialAgent, LoopAgent, ParallelAgent,
-            or a compatible agent class with a
-            `name` attribute and an optional `sub_agents`
-            attribute.
+            of SequentialAgent, LoopAgent, ParallelAgent or LlmAgent.
 
     Returns:
         str: The Mermaid source code as a string.
 
     Example:
-        >>> mermaid_src = build_mermaid(my_agent_tree)
+        >>> mermaid_src = build_mermaid_graph_definition(my_agent_tree)
         >>> print(mermaid_src)
     """
     parsed_agent_tree = nodes.build_nodes_tree(root_agent)
