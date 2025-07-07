@@ -79,7 +79,6 @@ const PromptModelSelect = ({
       configuredProvidersList.map((p) => p.provider),
     );
 
-
     Object.entries(filteredByConfiguredProviders).forEach(
       ([pn, providerModels]) => {
         providerModels.forEach(({ value }) => {
