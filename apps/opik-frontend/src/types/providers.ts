@@ -2,9 +2,9 @@ export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
-  OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  CUSTOM = "custom-llm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -388,15 +388,9 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
-export enum PROVIDER_LOCATION_TYPE {
-  cloud = "cloud",
-  local = "local",
-}
-
-export interface LocalAIProviderData {
-  url: string;
-  models: string;
-  created_at: string;
+export interface ProviderKeyConfiguration {
+  location?: string;
+  models?: string;
 }
 
 export interface ProviderKey {
@@ -404,11 +398,12 @@ export interface ProviderKey {
   keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
+  base_url?: string;
+  configuration: ProviderKeyConfiguration;
 }
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
-  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -449,10 +444,19 @@ export interface LLMVertexAIConfigsType {
   topP: number;
 }
 
+export interface LLMCustomConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexAIConfigsType;
+  | LLMVertexAIConfigsType
+  | LLMCustomConfigsType;

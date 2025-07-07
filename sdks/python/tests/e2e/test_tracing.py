@@ -964,3 +964,57 @@ def test_tracked_function__update_current_span__with_attachments(
         attachments=attachments,
         data_sizes=data_sizes,
     )
+
+
+def test_opik_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
+    opik_client: opik.Opik, data_file
+):
+    root_span_client = opik_client.span(
+        name="root-span-name",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    child_span_client = root_span_client.span(
+        name="child-span-name",
+        input={"input": "original-span-input"},
+        output={"output": "original-span-output"},
+    )
+    opik_client.flush()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
+
+    opik_client.update_span(
+        id=child_span_client.id,
+        trace_id=child_span_client.trace_id,
+        parent_span_id=child_span_client.parent_span_id,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input={"input": "new-span-input"},
+        attachments=attachments.values(),
+    )
+    opik_client.flush()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=child_span_client.id,
+        parent_span_id=root_span_client.id,
+        trace_id=child_span_client.trace_id,
+        input={"input": "new-span-input"},
+        output={"output": "original-span-output"},
+        name="child-span-name",
+    )
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=child_span_client.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )

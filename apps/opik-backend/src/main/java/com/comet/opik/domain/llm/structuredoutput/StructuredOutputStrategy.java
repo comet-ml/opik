@@ -1,7 +1,7 @@
 package com.comet.opik.domain.llm.structuredoutput;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
@@ -43,7 +43,7 @@ public interface StructuredOutputStrategy {
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
             case VERTEX_AI -> VertexAIModelName.byQualifiedName(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
-            case ANTHROPIC -> false;
+            case ANTHROPIC, CUSTOM_LLM -> false;
         };
 
         return isStructuredOutputSupported ? new ToolCallingStrategy() : new InstructionStrategy();

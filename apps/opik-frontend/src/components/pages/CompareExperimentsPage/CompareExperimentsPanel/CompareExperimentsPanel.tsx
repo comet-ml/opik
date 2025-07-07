@@ -113,7 +113,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   const renderHeaderContent = () => {
     return (
-      <div className="flex gap-2">
+      <div className="flex flex-auto justify-end gap-2 pl-6">
         <ShareURLButton />
         <Button size="sm" variant="outline" onClick={copyClickHandler}>
           <Copy className="mr-2 size-4" />
