@@ -18,6 +18,7 @@ NODE_TYPES_TO_BUILD_SUBGRAPHS = [
     nodes.GraphNodeType.PARALLEL_AGENT,
 ]
 
+
 class MermaidGraphBuilder:
     def __init__(self, root_name: str):
         self.subgraphs_definitions: List[str] = []
