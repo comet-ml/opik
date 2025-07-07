@@ -133,4 +133,50 @@ class OpenTelemetryMapperTest {
         assertTrue(testNode.has("testKey"));
         assertEquals("[Analyze this text]", testNode.get("testKey").asText());
     }
+
+    @Test
+    void testExtractToJsonColumn_ExactAnalyzeTokenError() {
+        // Test the exact scenario that caused the original error:
+        // "Unrecognized token 'Analyze': was expecting (JSON String, Number (or 'NaN'/'+INF'/'-INF'), Array, Object or token 'null', 'true' or 'false')"
+        String invalidJson = "Analyze";
+        AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
+
+        // Should not throw exception, should store as plain text
+        assertDoesNotThrow(() -> {
+            OpenTelemetryMapper.extractToJsonColumn(testNode, "testKey", anyValue);
+        });
+
+        assertTrue(testNode.has("testKey"));
+        assertEquals("Analyze", testNode.get("testKey").asText());
+    }
+
+    @Test
+    void testExtractToJsonColumn_StringStartingWithAnalyze() {
+        // Test with string that starts with "Analyze" but is not valid JSON
+        String invalidJson = "Analyze this content";
+        AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
+
+        // Should not throw exception, should store as plain text
+        assertDoesNotThrow(() -> {
+            OpenTelemetryMapper.extractToJsonColumn(testNode, "testKey", anyValue);
+        });
+
+        assertTrue(testNode.has("testKey"));
+        assertEquals("Analyze this content", testNode.get("testKey").asText());
+    }
+
+    @Test
+    void testExtractToJsonColumn_StringThatLooksLikeJsonObjectButStartsWithAnalyze() {
+        // Test with string that looks like JSON object but starts with Analyze
+        String invalidJson = "{Analyze: \"value\"}";
+        AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
+
+        // Should not throw exception, should store as plain text
+        assertDoesNotThrow(() -> {
+            OpenTelemetryMapper.extractToJsonColumn(testNode, "testKey", anyValue);
+        });
+
+        assertTrue(testNode.has("testKey"));
+        assertEquals("{Analyze: \"value\"}", testNode.get("testKey").asText());
+    }
 }

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
+import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -188,7 +189,7 @@ public class OpenTelemetryMapper {
                     try {
                         usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
                     } catch (Exception e) {
-                        log.debug(
+                        log.warn(
                                 "Failed to parse nested JSON string for usage field {}: {}. Skipping usage extraction.",
                                 key, e.getMessage());
                         return;
@@ -196,16 +197,18 @@ public class OpenTelemetryMapper {
                 }
 
                 // we expect only integers for usage fields
-                usageNode.fields().forEachRemaining(entry -> {
+                usageNode.properties().forEach(entry -> {
                     if (entry.getValue().isNumber()) {
                         usage.put(entry.getKey(), entry.getValue().intValue());
                     } else {
                         log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
                     }
                 });
-            } catch (Exception e) {
-                log.debug("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
-                        e.getMessage());
+            } catch (Exception ex) {
+                log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
+                        ex.getMessage());
+                throw new BadRequestException(
+                        "Failed to parse JSON string for usage field " + key + " ->" + ex.getMessage());
             }
         }
     }
