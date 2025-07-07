@@ -14,9 +14,7 @@ def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
     try:
         return asyncio.get_running_loop()
     except RuntimeError:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        return new_loop
+        return asyncio.new_event_loop()
 
 
 class RagasMetricWrapper(base_metric.BaseMetric):
