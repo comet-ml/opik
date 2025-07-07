@@ -59,6 +59,7 @@ jobs:
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt -r ./unit/test_requirements.txt
+          pip list
 
       - name: Running SDK Unit Tests
         run: python -m pytest --cov=src/opik -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml

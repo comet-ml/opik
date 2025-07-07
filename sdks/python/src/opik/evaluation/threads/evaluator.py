@@ -62,7 +62,7 @@ def evaluate_threads(
         >>> # Run the threads evaluation
         >>> results = evaluate_threads(
         >>>     project_name="ai_team",
-        >>>     filter_string="thread_id=0197ad2a-cf5c-75af-be8b-20e8a23304fe",
+        >>>     filter_string='thread_id = "0197ad2a-cf5c-75af-be8b-20e8a23304fe"',
         >>>     eval_project_name="ai_team_evaluation",
         >>>     metrics=[
         >>>         conversation_coherence_metric,

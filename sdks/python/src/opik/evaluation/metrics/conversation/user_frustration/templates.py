@@ -100,6 +100,7 @@ Given the frustration score, which is a 0-1 score indicating how frustrating the
 - You should CONCISELY summarize the user frustrations to justify the score.
 - You should NOT mention concrete frustration in your reason, and make the reason sound convincing.
 - You should mention LLM response instead of `assistant`, and User instead of `user`.
+- You should format <frustration_score> to use 1 decimal place in the reason.
 
 ===== Start OF EXAMPLE ======
 ** Example frustrations: **

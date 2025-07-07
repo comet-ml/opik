@@ -12,6 +12,7 @@ from ..rate_limit import rate_limit
 from ..rest_api.types import (
     feedback_score_batch_item,
     guardrail,
+    feedback_score_batch_item_thread,
 )
 from ..rest_api import core as rest_api_core
 from ..rest_api import client as rest_api_client
@@ -45,6 +46,7 @@ class OpikMessageProcessor(BaseMessageProcessor):
             messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
+            messages.AddThreadsFeedbackScoresBatchMessage: self._process_add_threads_feedback_scores_batch_message,  # type: ignore
             messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
@@ -192,6 +194,37 @@ class OpikMessageProcessor(BaseMessageProcessor):
             scores=scores,
         )
         LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
+
+    def _process_add_threads_feedback_scores_batch_message(
+        self,
+        message: messages.AddThreadsFeedbackScoresBatchMessage,
+    ) -> None:
+        scores = [
+            feedback_score_batch_item_thread.FeedbackScoreBatchItemThread(
+                **score_message.as_payload_dict()
+            )
+            for score_message in message.batch
+        ]
+
+        try:
+            LOGGER.debug("Add threads feedbacks scores request of size %d", len(scores))
+            self._rest_client.traces.score_batch_of_threads(
+                scores=scores,
+            )
+            LOGGER.debug(
+                "Sent batch of threads feedbacks scores of size %d", len(scores)
+            )
+        except rest_api_core.ApiError as exception:
+            # In the case of AddThreadsFeedbackScoresBatchMessage, the backend will reject the request
+            # if thread is not closed which can happen if the user is unaware of this fact.
+            # Thus, we display the warning message.
+            if exception.status_code == 409:
+                LOGGER.warning(
+                    "Threads feedbacks scores batch was rejected by the backend, reason: '%s'",
+                    exception.body,
+                )
+            # propagate further to be handled in a unified error handler
+            raise exception
 
     def _process_create_spans_batch_message(
         self, message: messages.CreateSpansBatchMessage

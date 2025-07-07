@@ -43,6 +43,12 @@ def create_batch_manager(
         flush_callback=queue.put,
     )
 
+    add_threads_feedback_scores_batch_message_batcher = batchers.AddThreadsFeedbackScoresBatchMessageBatcher(
+        flush_interval_seconds=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
+        max_batch_size=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        flush_callback=queue.put,
+    )
+
     guardrail_batch_message_batcher = batchers.GuardrailBatchMessageBatcher(
         flush_interval_seconds=GUARDRAIL_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
         max_batch_size=GUARDRAIL_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
@@ -56,6 +62,7 @@ def create_batch_manager(
         messages.CreateTraceMessage: create_trace_message_batcher_,
         messages.AddSpanFeedbackScoresBatchMessage: add_span_feedback_scores_batch_message_batcher,
         messages.AddTraceFeedbackScoresBatchMessage: add_trace_feedback_scores_batch_message_batcher,
+        messages.AddThreadsFeedbackScoresBatchMessage: add_threads_feedback_scores_batch_message_batcher,
         messages.GuardrailBatchMessage: guardrail_batch_message_batcher,
     }
 
