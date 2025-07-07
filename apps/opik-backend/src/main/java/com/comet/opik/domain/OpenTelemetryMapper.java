@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -147,16 +148,16 @@ public class OpenTelemetryMapper {
                         if (jsonNode.isTextual()) {
                             try {
                                 jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
-                            } catch (Exception e) {
-                                log.debug("Failed to parse nested JSON string for key {}: {}. Using as plain text.",
+                            } catch (UncheckedIOException e) {
+                                log.warn("Failed to parse nested JSON string for key {}: {}. Using as plain text.",
                                         key, e.getMessage());
                                 node.put(key, jsonNode.asText());
                                 return;
                             }
                         }
                         node.set(key, jsonNode);
-                    } catch (Exception e) {
-                        log.debug("Failed to parse JSON string for key {}: {}. Using as plain text.", key,
+                    } catch (UncheckedIOException e) {
+                        log.warn("Failed to parse JSON string for key {}: {}. Using as plain text.", key,
                                 e.getMessage());
                         node.put(key, stringValue);
                     }
@@ -188,7 +189,7 @@ public class OpenTelemetryMapper {
                 if (usageNode.isTextual()) {
                     try {
                         usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-                    } catch (Exception e) {
+                    } catch (UncheckedIOException e) {
                         log.warn(
                                 "Failed to parse nested JSON string for usage field {}: {}. Skipping usage extraction.",
                                 key, e.getMessage());
@@ -204,7 +205,7 @@ public class OpenTelemetryMapper {
                         log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
                     }
                 });
-            } catch (Exception ex) {
+            } catch (UncheckedIOException ex) {
                 log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
                         ex.getMessage());
                 throw new BadRequestException(
