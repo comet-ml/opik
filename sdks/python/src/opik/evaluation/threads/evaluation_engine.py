@@ -5,7 +5,8 @@ from typing import Optional, List, Callable, Dict, Literal
 from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
-from . import context_helper, evaluation_result, helpers
+
+from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
 from ..engine import types as engine_types
 from ..metrics import score_result
@@ -51,6 +52,20 @@ class ThreadsEvaluationEngine:
                 f"No threads found with filter_string: {filter_string}"
             )
 
+        inactive_threads = [thread for thread in threads if thread.status == "inactive"]
+        if len(inactive_threads) == 0:
+            raise exceptions.EvaluationError(
+                f"No closed threads found with filter_string: {filter_string}. Only closed threads can be evaluated."
+            )
+        elif len(inactive_threads) < len(threads):
+            active_threads_ids = [
+                thread.id for thread in threads if thread.status == "active"
+            ]
+            inactive_threads_ids = [thread.id for thread in inactive_threads]
+            LOGGER.warning(
+                f"Some threads are active: {active_threads_ids} with filter_string: {filter_string}. Only closed threads will be evaluated: {inactive_threads_ids}."
+            )
+
         evaluation_tasks: List[
             engine_types.EvaluationTask[evaluation_result.ThreadEvaluationResult]
         ] = [
@@ -63,7 +78,7 @@ class ThreadsEvaluationEngine:
                 trace_output_transform=trace_output_transform,
                 max_traces_per_thread=max_traces_per_thread,
             )
-            for thread in threads
+            for thread in inactive_threads
         ]
 
         results = evaluation_tasks_executor.execute(
@@ -114,7 +129,7 @@ class ThreadsEvaluationEngine:
             project_name=eval_project_name,
         )
 
-        with context_helper.evaluate_llm_conversation_context(
+        with opik_context.trace_context(
             trace_data=trace_data,
             client=self._client.opik_client,
         ):
