@@ -12,6 +12,11 @@ CLASS_STYLES: Dict[nodes.GraphNodeType, str] = {
     nodes.GraphNodeType.TOOL: "fill:#ffcc99,stroke:#ff8000",
 }
 
+NODE_TYPES_TO_BUILD_SUBGRAPHS = [
+    nodes.GraphNodeType.SEQUENTIAL_AGENT,
+    nodes.GraphNodeType.LOOP_AGENT,
+    nodes.GraphNodeType.PARALLEL_AGENT,
+]
 
 class MermaidGraphBuilder:
     def __init__(self, root_name: str):
@@ -23,7 +28,7 @@ class MermaidGraphBuilder:
     def build_node_graph(self, node: nodes.AgentNode) -> None:
         # 1. Create subgraph for composite nodes or process
         # connections for non-composite nodes with subagents
-        if node.type in nodes.NODE_TYPES_TO_BUILD_SUBGRAPHS:
+        if node.type in NODE_TYPES_TO_BUILD_SUBGRAPHS:
             self._build_subgraph_for_composite_node(node)
         elif len(node.subagent_nodes) > 0 or len(node.tools) > 0:
             self._build_edges_for_non_composite_llm_node(node)

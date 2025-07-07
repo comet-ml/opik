@@ -14,13 +14,6 @@ class GraphNodeType(str, Enum):
     TOOL = "tool"
 
 
-NODE_TYPES_TO_BUILD_SUBGRAPHS = [
-    GraphNodeType.SEQUENTIAL_AGENT,
-    GraphNodeType.LOOP_AGENT,
-    GraphNodeType.PARALLEL_AGENT,
-]
-
-
 class AgentNode:
     def __init__(self, agent: google.adk.agents.BaseAgent) -> None:
         self.agent = agent
