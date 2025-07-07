@@ -94,9 +94,6 @@ class MermaidGraphBuilder:
             )
 
     def get_mermaid_source(self) -> str:
-        if not self.root_name:
-            raise ValueError("Root name must be set before generating Mermaid source")
-
         return "\n".join(
             ["flowchart LR", f'{self.root_name}["{self.root_name}"]']
             + self.subgraphs_definitions
