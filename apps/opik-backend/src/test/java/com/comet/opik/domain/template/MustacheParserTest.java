@@ -81,7 +81,7 @@ class MustacheParserTest {
 
         assertThatThrownBy(() -> mustacheParser.render(malformedTemplate, context))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Invalid Mustache template:");
+                .hasMessageContaining("Invalid Mustache template");
     }
 
     @Test
