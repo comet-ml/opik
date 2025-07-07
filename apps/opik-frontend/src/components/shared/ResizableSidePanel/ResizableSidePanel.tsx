@@ -168,7 +168,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
     return (
       <>
-        <Separator orientation="vertical" className="mx-1 h-8" />
+        <Separator orientation="vertical" className="mx-1 h-4" />
         {horizontalNavigation && (
           <div className="flex shrink-0 items-center">
             <TooltipWrapper
@@ -261,7 +261,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             ></div>
             <div className="relative flex size-full">
               <div className="absolute inset-x-0 top-0 flex h-[60px] items-center pl-6 pr-5">
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <TooltipWrapper
                     content={`Close ${entity}`}
                     hotkeys={ESC_HOTKEYS}
