@@ -3,6 +3,7 @@ import functools
 import logging
 from typing import Any, Dict, List, Optional, Set, Union, Tuple
 
+import google.adk.agents
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
 from google.adk.tools.base_tool import BaseTool
@@ -12,7 +13,9 @@ from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
+
 from . import helpers as adk_helpers, litellm_wrappers, llm_response_wrapper
+from .graph import mermaid_graph_builder
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +33,16 @@ def _get_info_from_adk_session(
             "Failed to get session information from ADK callback context", exc_info=True
         )
         return None, {}
+
+def _get_current_agent_instance(callback_context: CallbackContext) -> Optional[google.adk.agents.BaseAgent]:
+    try:
+        invocation_context = callback_context._invocation_context
+        return invocation_context.agent
+    except Exception:
+        LOGGER.error(
+            "Failed to get agent information from ADK callback context", exc_info=True
+        )
+        return None
 
 
 class OpikTracer:
@@ -128,6 +141,16 @@ class OpikTracer:
 
             current_trace_data = self._context_storage.get_trace_data()
             if current_trace_data is None:  # todo: support distributed headers
+                current_agent: Optional[google.adk.agents.BaseAgent] = _get_current_agent_instance(callback_context)
+                if current_agent is not None:
+                    try:
+                        trace_metadata["_opik_graph_definition"] = {
+                            "format": "mermaid",
+                            "data": mermaid_graph_builder.build_mermaid(current_agent.root_agent),
+                        }
+                    except Exception as e:
+                        LOGGER.error(f"Failed to build mermaid graph for agent.", exc_info=True)
+
                 current_trace = trace.TraceData(
                     name=name,
                     project_name=self.project_name,
