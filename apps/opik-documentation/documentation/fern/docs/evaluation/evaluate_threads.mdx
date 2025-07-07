@@ -1,0 +1,96 @@
+---
+subtitle: Step-by-step guide on how to evaluate conversation threads
+---
+When you are running multi-turn conversations using frameworks that support LLM agents, the Opik integration will
+automatically group related traces into conversation threads using parameters suitable for each framework.
+
+This guide will walk you through the process of evaluating and optimizing conversation threads in Opik using
+the `evaluate_threads` function in the Python SDK.
+
+## Using the Python SDK
+
+The Python SDK provides a simple and efficient way to evaluate and optimize conversation threads using the
+`evaluate_threads` function. This function allows you to specify a filter string to select specific threads for
+evaluation, a list of metrics to apply to each thread, and it returns a `ThreadsEvaluationResult` object
+containing the evaluation results and feedback scores.
+
+To run the threads evaluation, you can use the following code:
+
+```python
+from opik.evaluation import evaluate_threads
+from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
+
+# Initialize the evaluation metrics
+conversation_coherence_metric = ConversationalCoherenceMetric()
+user_frustration_metric = UserFrustrationMetric()
+
+# Run the threads evaluation
+results = evaluate_threads(
+    project_name="ai_team",
+    filter_string='id = "0197ad2a"',
+    eval_project_name="ai_team_evaluation",
+    metrics=[
+        conversation_coherence_metric,
+        user_frustration_metric,
+    ],
+    trace_input_transform=lambda x: x["input"],
+    trace_output_transform=lambda x: x["output"],
+)
+```
+
+#### Using filter string
+
+The `evaluate_threads` function takes a filter string as an argument. This string is used to select the threads that
+should be evaluated. For example, if you want to evaluate only threads that have a specific ID, you can use the
+following filter string:
+
+```python
+filter_string='id = "0197ad2a"'
+```
+
+You can combine multiple filter strings using the `AND` operator. For example, if you want to evaluate only threads
+that have a specific ID and have a specific status, you can use the following filter string:
+
+```python
+filter_string='id = "0197ad2a" AND status = "active"'
+```
+
+**Supported filter fields and operators**
+
+The `evaluate_threads` function supports the following filter fields in the `filter_string` and
+operators to be applied to the corresponding fields:
+
+| Field              | Type     | Operators                     |
+|--------------------|----------|-------------------------------|
+| id                 | string   | ``=, contains, not_contains`` |
+| status             | string   | ``=, contains, not_contains`` |
+| start_time         | datetime | ``=, >, <, >=, <=``           |
+| end_time           | datetime | ``=, >, <, >=, <=``           |
+| feedback_scores    | dict     | ``=, >, <, >=, <=``           |
+| tags               | list     | ``contains``                  |
+| duration           | number   | ``=, >, <, >=, <=``           |
+| number_of_messages | number   | ``=, >, <, >=, <=``           |
+| created_by         | string   | ``=, contains, not_contains`` |
+
+The `feedback_scores` field is a dictionary where the keys are the metric names and the values are the metric values.
+You can use it to filter threads based on their feedback scores. For example, if you want to evaluate only threads
+that have a specific user frustration score, you can use the following filter string:
+
+```python
+filter_string='feedback_scores.user_frustration_score >= 0.5'
+```
+
+Where `user_frustration_score` is the name of the user frustration metric and `0.5` is the threshold value to filter by.
+
+#### Using Opik UI to view results
+
+Once the evaluation is complete, you can access the evaluation results in the Opik UI.
+
+<Frame>
+  <img src="/img/evaluation/threads_user_frustration_score.png" />
+</Frame>
+
+## Next steps
+
+For more details on what metrics can be used to score conversational threads, refer to
+the [conversational metrics](/evaluation/metrics/conversation_threads_metrics) page.

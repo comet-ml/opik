@@ -164,7 +164,7 @@ class EvaluationEngine:
             dataset_item_ids=dataset_item_ids,
         )
 
-        evaluation_tasks: List[EvaluationTask] = [
+        evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
                 self._evaluate_llm_task,
                 item=item,
@@ -183,7 +183,7 @@ class EvaluationEngine:
         self,
         test_cases: List[test_case.TestCase],
     ) -> List[test_result.TestResult]:
-        evaluation_tasks: List[EvaluationTask] = [
+        evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
                 self._evaluate_test_case,
                 test_case_=test_case_,
