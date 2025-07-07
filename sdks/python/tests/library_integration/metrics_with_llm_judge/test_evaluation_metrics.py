@@ -4,6 +4,10 @@ from opik import exceptions
 from ...testlib import assert_helpers
 import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
+from ragas.metrics import ExactMatch, LLMContextPrecisionWithoutReference
+from opik.evaluation.metrics import RagasMetricWrapper
+from ragas.llms import LangchainLLMWrapper
+from langchain_openai import ChatOpenAI
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -178,3 +182,34 @@ def test__g_eval(model):
     )
 
     assert_helpers.assert_score_result(result)
+
+
+def test__ragas_exact_match():
+    ragas_exact_match_metric = RagasMetricWrapper(
+        ragas_metric=ExactMatch(), track=False
+    )
+
+    result = ragas_exact_match_metric.score(
+        response="Paris",
+        reference="Paris",
+    )
+
+    assert_helpers.assert_score_result(result, include_reason=False)
+
+
+def test__ragas_llm_context_precision():
+    llm_evaluator = LangchainLLMWrapper(
+        ChatOpenAI(model="gpt-4o"),
+    )
+
+    ragas_context_precision_metric = RagasMetricWrapper(
+        ragas_metric=LLMContextPrecisionWithoutReference(llm=llm_evaluator), track=False
+    )
+
+    result = ragas_context_precision_metric.score(
+        input="Where is the Eiffel Tower located?",
+        output="The Eiffel Tower is located in Paris.",
+        retrieved_contexts=["The Eiffel Tower is located in Paris."],
+    )
+
+    assert_helpers.assert_score_result(result, include_reason=False)

@@ -46,10 +46,10 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         from ragas.dataset_schema import SingleTurnSample
 
         # Add basic field name mapping between Opik and Ragas
-        if "user_input" not in input_dict:
+        if "user_input" not in input_dict and "input" in input_dict:
             input_dict["user_input"] = input_dict["input"]
 
-        if "response" not in input_dict:
+        if "response" not in input_dict and "output" in input_dict:
             input_dict["response"] = input_dict["output"]
 
         sample_dict = {}
