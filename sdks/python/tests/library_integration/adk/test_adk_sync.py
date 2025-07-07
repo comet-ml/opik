@@ -1332,6 +1332,7 @@ def test_adk__agent_with_response_schema__happyflow(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
