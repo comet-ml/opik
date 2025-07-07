@@ -8,8 +8,10 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -28,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.regex.Matcher;
@@ -150,13 +153,27 @@ public class OnlineScoringEngine {
     }
 
     private static String extractFromJson(JsonNode json, String path) {
+        Map<String, Object> forcedObject;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
-            var forcedObject = OBJECT_MAPPER.convertValue(json, Map.class);
+            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
+            });
+        } catch (InvalidArgumentException e) {
+            log.debug("failed to parse json, json={}, exception={}", json, e.getMessage());
+            return null;
+        }
+
+        try {
             return JsonPath.parse(forcedObject).read(path);
         } catch (Exception e) {
-            log.debug("Couldn't find path '{}' inside json {}: {}", path, json, e.getMessage());
-            return null;
+            log.debug("Couldn't find path inside json, trying flat structure, path={}, json={}, exception={}", path,
+                    json, e.getMessage());
+            return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
+                    .map(Object::toString)
+                    .orElseGet(() -> {
+                        log.debug("Couldn't find flat or nested path in json, path={}, json={}", path, json);
+                        return null;
+                    });
         }
     }
 

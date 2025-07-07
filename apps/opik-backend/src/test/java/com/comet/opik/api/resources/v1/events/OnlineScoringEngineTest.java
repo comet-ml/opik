@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -27,6 +28,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.dockerjava.api.exception.InternalServerErrorException;
@@ -34,6 +36,7 @@ import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
@@ -67,6 +70,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -550,5 +554,33 @@ class OnlineScoringEngineTest {
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @Test
+    @DisplayName("renderMessages should support keys with dots in their names")
+    void testExtractFromJsonWithDotKey() throws Exception {
+        // Prepare input JSON with a key containing a dot
+        String jsonWithDotKey = "{" +
+                "  \"key.with.dot\": \"dot-value\"," +
+                "  \"regularKey\": \"regular-value\"" +
+                "}";
+        JsonNode input = JsonUtils.MAPPER.readTree(jsonWithDotKey);
+        // Variable mapping: variable 'dotVar' maps to 'input.key.with.dot'
+        var variables = Map.of("dotVar", "input.key.with.dot");
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .createdBy(USER_NAME)
+                .input(input)
+                .build();
+
+        // Render a message using the variable
+        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Dot value: {{dotVar}}"));
+        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
+        assertThat(rendered).hasSize(1);
+        var userMessage = rendered.getFirst();
+        assertThat(userMessage).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains("Dot value: dot-value");
     }
 }
