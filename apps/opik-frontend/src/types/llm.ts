@@ -1,4 +1,3 @@
-import { LLMJudgeSchema } from "@/types/automations";
 import { DropdownOption } from "@/types/shared";
 import {
   LLMPromptConfigsType,
@@ -18,6 +17,13 @@ export enum LLM_SCHEMA_TYPE {
   INTEGER = "INTEGER",
   DOUBLE = "DOUBLE",
   BOOLEAN = "BOOLEAN",
+}
+
+export interface LLMJudgeSchema {
+  name: string;
+  type: LLM_SCHEMA_TYPE;
+  description: string;
+  unsaved: boolean;
 }
 
 export interface LLMMessage {
@@ -58,3 +64,16 @@ export interface LLMChatType {
   provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
 }
+
+export type ScoresValidationError =
+  | {
+      name?: {
+        message: string;
+      };
+      unsaved?: {
+        message: string;
+      };
+    }[]
+  | {
+      message: string;
+    };

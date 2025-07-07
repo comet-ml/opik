@@ -4,9 +4,11 @@ import {
   LLMPromptTemplate,
   LLM_SCHEMA_TYPE,
 } from "@/types/llm";
-import { PythonCodeDetailsThreadFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
-import { PythonCodeDetailsTraceFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import {
+  EVALUATORS_RULE_SCOPE,
+  PythonCodeDetailsThreadForm,
+  PythonCodeDetailsTraceForm,
+} from "@/types/automations";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
@@ -458,7 +460,7 @@ export const LLM_PROMPT_TEMPLATES: Record<
   [EVALUATORS_RULE_SCOPE.thread]: LLM_PROMPT_THREAD_TEMPLATES,
 };
 
-export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceFormType = {
+export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
   metric:
     "from typing import Any\n" +
     "from opik.evaluation.metrics import base_metric, score_result\n" +
@@ -481,17 +483,16 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceFormType = {
   },
 };
 
-export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadFormType =
-  {
-    metric:
-      "from typing import Union, List, Any\n" +
-      "from . import types\n" +
-      "from .. import base_metric, score_result\n" +
-      "class ConversationThreadMetric(base_metric.BaseMetric):\n" +
-      '    """Abstract base class for all conversation thread metrics."""\n' +
-      "\n" +
-      "    def score(self, conversation: types.Conversation, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
-      "        raise NotImplementedError(\n" +
-      '            "Please use concrete metric classes instead of this one."\n' +
-      "        )",
-  };
+export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
+  metric:
+    "from typing import Union, List, Any\n" +
+    "from . import types\n" +
+    "from .. import base_metric, score_result\n" +
+    "class ConversationThreadMetric(base_metric.BaseMetric):\n" +
+    '    """Abstract base class for all conversation thread metrics."""\n' +
+    "\n" +
+    "    def score(self, conversation: types.Conversation, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
+    "        raise NotImplementedError(\n" +
+    '            "Please use concrete metric classes instead of this one."\n' +
+    "        )",
+};

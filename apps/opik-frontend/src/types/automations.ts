@@ -1,8 +1,4 @@
-import {
-  PythonCodeDetailsThreadFormType,
-  PythonCodeDetailsTraceFormType,
-} from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
-import { LLM_SCHEMA_TYPE, ProviderMessageType } from "@/types/llm";
+import { LLMJudgeSchema, ProviderMessageType } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export enum EVALUATORS_RULE_TYPE {
@@ -27,13 +23,6 @@ export interface LLMJudgeModel {
   temperature: number;
 }
 
-export interface LLMJudgeSchema {
-  name: string;
-  type: LLM_SCHEMA_TYPE;
-  description: string;
-  unsaved: boolean;
-}
-
 export interface LLMJudgeObject {
   model: LLMJudgeModel;
   messages: ProviderMessageType[];
@@ -46,9 +35,19 @@ export interface LLMJudgeDetails {
   code: LLMJudgeObject;
 }
 
+export interface PythonCodeDetailsTraceForm {
+  metric: string;
+  arguments: Record<string, string>;
+  parsingArgumentsError?: boolean;
+}
+
+export interface PythonCodeDetailsThreadForm {
+  metric: string;
+}
+
 export type PythonCodeObject =
-  | PythonCodeDetailsTraceFormType
-  | PythonCodeDetailsThreadFormType;
+  | PythonCodeDetailsTraceForm
+  | PythonCodeDetailsThreadForm;
 
 export interface PythonCodeDetails {
   type:

@@ -200,14 +200,6 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
   typeof LLMJudgeDetailsThreadFormSchema
 >;
 
-export type PythonCodeDetailsTraceFormType = z.infer<
-  typeof PythonCodeDetailsTraceFormSchema
->;
-
-export type PythonCodeDetailsThreadFormType = z.infer<
-  typeof PythonCodeDetailsThreadFormSchema
->;
-
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
