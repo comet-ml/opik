@@ -6,7 +6,10 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -40,7 +43,7 @@ import static java.util.stream.Collectors.toMap;
 public interface PromptService {
     Prompt create(Prompt promptRequest);
 
-    PromptPage find(String name, int page, int size, List<SortingField> sortingFields);
+    PromptPage find(String name, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     PromptVersion createPromptVersion(CreatePromptVersion promptVersion);
 
@@ -77,6 +80,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -155,19 +159,24 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptPage find(String name, int page, int size, List<SortingField> sortingFields) {
+    public PromptPage find(String name, int page, int size, List<SortingField> sortingFields,
+            List<? extends Filter> filters) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
+        String filtersSql = filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.PROMPT).orElse(null);
+        String stateFiltersSQL = Optional.ofNullable(filtersSql)
+                .map(sql -> filterQueryBuilder.toStateSQL(sql, filters))
+                .orElse(null);
 
         return transactionTemplate.inTransaction(handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            long total = promptDAO.count(name, workspaceId);
+            long total = promptDAO.count(name, workspaceId, stateFiltersSQL);
 
             var offset = (page - 1) * size;
 
-            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql);
+            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql, stateFiltersSQL);
 
             return PromptPage.builder()
                     .page(page)

@@ -9,6 +9,8 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
@@ -60,6 +62,7 @@ public class PromptResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PromptService promptService;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull FiltersFactory filtersFactory;
 
     @POST
     @Operation(operationId = "createPrompt", summary = "Create prompt", description = "Create prompt", responses = {
@@ -96,7 +99,8 @@ public class PromptResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") String name,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -104,7 +108,8 @@ public class PromptResource {
                 size);
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
-        PromptPage promptPage = promptService.find(name, page, size, sortingFields);
+        var promptFilters = filtersFactory.newFilters(filters, PromptFilter.LIST_TYPE_REFERENCE);
+        PromptPage promptPage = promptService.find(name, page, size, sortingFields, promptFilters);
 
         log.info("Got prompts by name '{}', count '{}' on workspace_id '{}', count '{}'", name, promptPage.size(),
                 workspaceId, promptPage.size());
