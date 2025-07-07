@@ -18,12 +18,6 @@ providers:
         enabled: true
         test_playground: true
         test_online_scoring: true
-      # Easy to add new models - just uncomment and update when GPT-5 is released
-      # - name: "GPT 5"
-      #   ui_selector: "GPT 5"
-      #   enabled: true
-      #   test_playground: true
-      #   test_online_scoring: true
 
   anthropic:
     display_name: "Anthropic"
@@ -40,47 +34,16 @@ providers:
         test_playground: true
         test_online_scoring: true
 
-  # groq:
-  #   display_name: "Groq"
-  #   api_key_env_var: "GROQ_API_KEY"
-  #   models:
-  #     - name: "Llama 3.1 8B"
-  #       ui_selector: "Llama 3.1 8B"
-  #       enabled: true
-  #       test_playground: true
-  #       test_online_scoring: true
-  #     - name: "Llama 3.1 70B"
-  #       ui_selector: "Llama 3.1 70B"
-  #       enabled: true
-  #       test_playground: true
-  #       test_online_scoring: true
+  openrouter:
+    display_name: "OpenRouter"
+    api_key_env_var: "OPENROUTER_API_KEY"
+    models:
+      - name: "phi4"
+        ui_selector: "microsoft/phi-4"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
 
-  # google:
-  #   display_name: "Gemini"
-  #   api_key_env_var: "GOOGLE_API_KEY"
-  #   models:
-  #     - name: "Gemini 1.5 Pro"
-  #       ui_selector: "Gemini 1.5 Pro"
-  #       enabled: true
-  #       test_playground: true
-  #       test_online_scoring: true
-  #     - name: "Gemini 2.0 Flash"
-  #       ui_selector: "Gemini 2.0 Flash"
-  #       enabled: true
-  #       test_playground: true
-  #       test_online_scoring: true
-
-  # azure_openai:
-  #   display_name: "Azure OpenAI"
-  #   api_key_env_var: "AZURE_OPENAI_API_KEY"
-  #   additional_env_vars:
-  #     - "AZURE_OPENAI_ENDPOINT"
-  #   models:
-  #     - name: "GPT-4"
-  #       ui_selector: "GPT-4"
-  #       enabled: false  # Disabled by default, enable when Azure is configured
-  #       test_playground: true
-  #       test_online_scoring: true
 
 # Test configuration
 test_config:
@@ -90,7 +53,5 @@ test_config:
   response_timeout: 30
   # Test prompt for playground tests
   test_prompt: "Explain what is an LLM in one paragraph."
-  # Whether to run tests in parallel for different models
-  parallel_execution: false
   # Only test models that are explicitly enabled
   only_test_enabled: true

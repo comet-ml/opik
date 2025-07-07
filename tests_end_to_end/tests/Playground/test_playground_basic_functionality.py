@@ -22,15 +22,15 @@ def pytest_generate_tests(metafunc):
         models = model_config_loader.get_enabled_models_for_playground()
         if not models:
             pytest.skip("No enabled models found for playground testing")
-        
+
         # Create test parameters with meaningful IDs
         test_params = []
         test_ids = []
-        
+
         for provider_name, model_config, provider_config in models:
             test_params.append((provider_name, model_config, provider_config))
             test_ids.append(f"{provider_name}-{model_config.name.replace(' ', '_')}")
-        
+
         metafunc.parametrize("model_config", test_params, ids=test_ids)
 
 
@@ -54,26 +54,56 @@ def test_playground_basic_functionality(page, model_config, caplog):
     caplog.set_level(logging.INFO)
 
     playground_page = PlaygroundPage(page)
-    
-    logger.info(f"Testing playground with {provider_cfg.display_name} - {model_cfg.name}")
-    
+
+    logger.info(
+        f"Testing playground with {provider_cfg.display_name} - {model_cfg.name}"
+    )
+
     # Set up AI provider and test playground functionality
     playground_page.setup_ai_provider(provider_name, provider_cfg)
     playground_page.go_to_page()
     playground_page.select_model(provider_cfg.display_name, model_cfg.ui_selector)
-    
+
     test_prompt = model_config_loader.get_test_prompt()
-    playground_page.enter_prompt(test_prompt)
+    playground_page.enter_prompt(test_prompt, message_type="user")
     playground_page.run_prompt()
-    
+
+    # Wait for response or error with better timeout handling
+    response_received = playground_page.wait_for_response_or_error(timeout=30)
+    assert response_received, "No response received within timeout or error occurred"
+
+    # Validate that no errors are present
+    assert (
+        not playground_page.has_error()
+    ), "Error message was displayed during response generation"
+
+    # Get and validate the response
     response = playground_page.get_response()
     logger.info(f"Response received (excerpt): {response[:100]}...")
-    
-    assert response, "No response was generated"
-    assert not playground_page.has_error(), "Error message was displayed"
-    assert len(response) > 50, "Response is too short to be valid"
-    
-    logger.info(f"Playground test completed successfully for {provider_cfg.display_name} - {model_cfg.name}")
-    
+
+    # Perform comprehensive response validation
+    validation = playground_page.validate_response_quality(response)
+
+    # Core assertions
+    assert validation[
+        "has_content"
+    ], f"Response is empty or contains only whitespace, full response: '{response}'"
+    assert validation[
+        "min_length"
+    ], f"Response is too short ({validation['response_length']} chars, minimum 25), full response: '{response}'"
+
+    # LLM-specific validation for this prompt
+    assert validation[
+        "contains_llm_info"
+    ], "Response does not contain expected LLM-related information"
+
+    logger.info(
+        f"Response validation passed: {validation['response_length']} chars, {validation['sentence_count']} sentences"
+    )
+
+    logger.info(
+        f"Playground test completed successfully for {provider_cfg.display_name} - {model_cfg.name}"
+    )
+
     # Clean up
     playground_page.cleanup_ai_provider(provider_cfg)

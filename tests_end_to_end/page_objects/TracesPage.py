@@ -142,12 +142,12 @@ class TracesPage:
     def navigate_to_project(self, project_name: str):
         """
         Navigate to a specific project's traces page.
-        
+
         Args:
             project_name: The project name to navigate to
         """
         from page_objects.ProjectsPage import ProjectsPage
-        
+
         logger.info(f"Navigating to traces page for project {project_name}")
         projects_page = ProjectsPage(self.page)
         try:
