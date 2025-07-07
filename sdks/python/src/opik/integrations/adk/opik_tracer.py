@@ -34,7 +34,10 @@ def _get_info_from_adk_session(
         )
         return None, {}
 
-def _get_current_agent_instance(callback_context: CallbackContext) -> Optional[google.adk.agents.BaseAgent]:
+
+def _get_current_agent_instance(
+    callback_context: CallbackContext,
+) -> Optional[google.adk.agents.BaseAgent]:
     try:
         invocation_context = callback_context._invocation_context
         return invocation_context.agent
@@ -141,15 +144,21 @@ class OpikTracer:
 
             current_trace_data = self._context_storage.get_trace_data()
             if current_trace_data is None:  # todo: support distributed headers
-                current_agent: Optional[google.adk.agents.BaseAgent] = _get_current_agent_instance(callback_context)
+                current_agent: Optional[google.adk.agents.BaseAgent] = (
+                    _get_current_agent_instance(callback_context)
+                )
                 if current_agent is not None:
                     try:
                         trace_metadata["_opik_graph_definition"] = {
                             "format": "mermaid",
-                            "data": mermaid_graph_builder.build_mermaid(current_agent.root_agent),
+                            "data": mermaid_graph_builder.build_mermaid(
+                                current_agent.root_agent
+                            ),
                         }
-                    except Exception as e:
-                        LOGGER.error(f"Failed to build mermaid graph for agent.", exc_info=True)
+                    except Exception:
+                        LOGGER.error(
+                            "Failed to build mermaid graph for agent.", exc_info=True
+                        )
 
                 current_trace = trace.TraceData(
                     name=name,
