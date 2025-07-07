@@ -80,8 +80,8 @@ class MustacheParserTest {
         Map<String, Object> context = Map.of("name", "John");
 
         assertThatThrownBy(() -> mustacheParser.render(malformedTemplate, context))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Failed to parse Mustache template for rendering");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid Mustache template:");
     }
 
     @Test

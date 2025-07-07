@@ -7,6 +7,7 @@ import com.github.mustachejava.MustacheException;
 import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -28,7 +29,7 @@ public class MustacheParser implements TemplateParser {
     public Set<String> extractVariables(String template) {
         Set<String> variables = new HashSet<>();
 
-        if (template == null || template.trim().isEmpty()) {
+        if (StringUtils.isBlank(template)) {
             return variables;
         }
 
@@ -55,16 +56,19 @@ public class MustacheParser implements TemplateParser {
 
         try {
             Mustache mustache = MF.compile(new StringReader(template), "template");
+            return renderTemplate(context, mustache);
+        } catch (MustacheException ex) {
+            log.error("Failed to parse Mustache template for rendering:", ex);
+            throw new IllegalArgumentException("Invalid Mustache template: " + ex.getMessage(), ex);
+        }
+    }
 
-            try (Writer writer = mustache.execute(new StringWriter(), context)) {
-                writer.flush();
-                return writer.toString();
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to render template", e);
-            }
-        } catch (MustacheException e) {
-            log.error("Failed to parse Mustache template for rendering: {}", e.getMessage());
-            throw new RuntimeException("Failed to parse Mustache template for rendering", e);
+    private String renderTemplate(Map<String, ?> context, Mustache mustache) {
+        try (Writer writer = mustache.execute(new StringWriter(), context)) {
+            writer.flush();
+            return writer.toString();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to render template", e);
         }
     }
 
