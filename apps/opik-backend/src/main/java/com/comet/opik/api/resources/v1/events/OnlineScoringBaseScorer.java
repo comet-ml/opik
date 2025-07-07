@@ -49,6 +49,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
  */
 public abstract class OnlineScoringBaseScorer<M> implements Managed {
 
+    public static final int TRACE_PAGE_LIMIT = 2000;
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
@@ -284,7 +285,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     protected Flux<Trace> retrieveFullThreadContext(@NotNull String threadId,
             @NotNull AtomicReference<UUID> lastReceivedIdRef, @NotNull UUID projectId) {
 
-        return Flux.defer(() -> traceService.search(2000, TraceSearchCriteria.builder()
+        return Flux.defer(() -> traceService.search(TRACE_PAGE_LIMIT, TraceSearchCriteria.builder()
                 .projectId(projectId)
                 .filters(List.of(TraceFilter.builder()
                         .field(TraceField.THREAD_ID)

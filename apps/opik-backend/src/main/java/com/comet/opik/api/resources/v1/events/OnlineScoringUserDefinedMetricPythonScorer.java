@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
@@ -43,7 +44,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull TraceService traceService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
         super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
-                "python_user_defined_metric");
+                Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);

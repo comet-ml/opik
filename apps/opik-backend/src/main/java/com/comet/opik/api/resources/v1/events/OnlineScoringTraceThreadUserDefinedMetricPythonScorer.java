@@ -31,12 +31,14 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
 
@@ -65,7 +67,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
-                "trace_thread_python_user_defined_metric");
+                Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
@@ -111,6 +113,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
     private Mono<Void> processThreadScores(TraceThreadToScoreUserDefinedMetricPython message, String currentThreadId) {
         return retrieveFullThreadContext(currentThreadId, new AtomicReference<>(null), message.projectId())
+                .sort(Comparator.comparing(Trace::id))
                 .collectList()
                 .flatMap(traces -> traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
                         .flatMap(threadModelId -> Mono.fromCallable(() -> {
