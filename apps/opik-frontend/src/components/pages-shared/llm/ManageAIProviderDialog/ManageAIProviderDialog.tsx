@@ -73,7 +73,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       provider: providerKey?.provider || "",
       apiKey: "",
       // @ts-expect-error not to trigger type error when we have different schemas to different providers
-      location: providerKey?.location ?? "",
+      location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
       models: convertCustomProviderModels(
         providerKey?.configuration?.models ?? "",
