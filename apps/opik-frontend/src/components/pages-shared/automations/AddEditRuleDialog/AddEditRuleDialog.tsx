@@ -161,6 +161,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
       uiType: formUIRuleType,
       scope: formScope,
+      type: getBackendRuleType(formScope, formUIRuleType),
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
@@ -173,10 +174,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
     },
   });
+
   const isLLMJudge =
     form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
-  const isThreadScope =
-    form.getValues("scope") === EVALUATORS_RULE_SCOPE.thread;
+  const scope = form.getValues("scope");
+  const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -224,10 +226,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
 
   const onRuleCreatedEdited = useCallback(() => {
-    const explainer =
-      EXPLAINERS_MAP[
-        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what
-      ];
+    const expainerIdMap = {
+      [EVALUATORS_RULE_SCOPE.trace]:
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what,
+      [EVALUATORS_RULE_SCOPE.thread]:
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
+    };
+    const explainer = EXPLAINERS_MAP[expainerIdMap[scope]];
 
     toast({
       title: explainer.title,
@@ -246,6 +251,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 projectId: form.getValues("projectId"),
                 workspaceName,
               },
+              search: {
+                type: {
+                  [EVALUATORS_RULE_SCOPE.trace]: "traces",
+                  [EVALUATORS_RULE_SCOPE.thread]: "threads",
+                }[scope],
+              },
             });
           }}
         >
@@ -253,7 +264,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         </ToastAction>,
       ],
     });
-  }, [form, navigate, toast, workspaceName]);
+  }, [form, navigate, toast, workspaceName, scope]);
 
   const getRule = useCallback(() => {
     const formData = form.getValues();
