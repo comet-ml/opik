@@ -2,10 +2,11 @@ from typing import List, Dict
 
 from . import nodes, subgraph_edges_builders
 import google.adk.agents
+import functools
 
 CLASS_STYLES: Dict[nodes.GraphNodeType, str] = {
     nodes.GraphNodeType.SEQUENTIAL_AGENT: "fill:#d9f2d9,stroke:#339933",
-    nodes.GraphNodeType.LOOG_AGENT: "fill:#e6ccff,stroke:#6600cc",
+    nodes.GraphNodeType.LOOP_AGENT: "fill:#e6ccff,stroke:#6600cc",
     nodes.GraphNodeType.PARALLEL_AGENT: "fill:#ffcccc,stroke:#cc0000",
     nodes.GraphNodeType.LLM_AGENT: "fill:#b3e0ff,stroke:#0077b3",
     nodes.GraphNodeType.TOOL: "fill:#ffcc99,stroke:#ff8000",
@@ -21,24 +22,23 @@ class MermaidGraphBuilder:
 
     def build_node_graph(self, node: nodes.AgentNode) -> None:
         # 1. Create subgraph for composite nodes or process
-        # connections for non-composite nodes with children
+        # connections for non-composite nodes with subagents
         if node.type in nodes.NODE_TYPES_TO_BUILD_SUBGRAPHS:
             self._build_subgraph_for_composite_node(node)
         elif len(node.subagent_nodes) > 0 or len(node.tools) > 0:
             self._build_edges_for_non_composite_llm_node(node)
-            
-        # Add style for this node
+
         self._add_style(node.name, node.type)
 
-        # 2. Recursively process all children agents
+        # 2. Recursively process all subagents
         for child in node.subagent_nodes:
             self.build_node_graph(child)
 
-        # 3. Recursively process all agent tools
+        # 3. Recursively process all tools
         for tool in node.tools:
-            # Add style for tool
             self._add_style(tool.name, nodes.GraphNodeType.TOOL)
             if tool.agent is not None:
+                self.edges_definitions.append(f"{tool.name} --> {tool.agent.name}")
                 self.build_node_graph(tool.agent)
 
     def _build_edges_for_non_composite_llm_node(self, node: nodes.AgentNode) -> None:
@@ -61,7 +61,7 @@ class MermaidGraphBuilder:
             )
             block.extend([f"  {edge}" for edge in edge_definitions])
 
-        elif composite_node.type == nodes.GraphNodeType.LOOG_AGENT:
+        elif composite_node.type == nodes.GraphNodeType.LOOP_AGENT:
             edge_definitions = (
                 subgraph_edges_builders.build_edge_definitions_for_loop_subagents(
                     composite_node.subagent_nodes
@@ -80,11 +80,13 @@ class MermaidGraphBuilder:
         block.append("end")
         self.subgraphs_definitions.append("\n".join(block))
 
+    @functools.lru_cache
     def _add_style(self, node_name: str, node_type: nodes.GraphNodeType) -> None:
-        """Add style for a node based on its type"""
         if node_type in CLASS_STYLES:
-            self.style_definitions.append(f"style {node_name} {CLASS_STYLES[node_type]}")
-            
+            self.style_definitions.append(
+                f"style {node_name} {CLASS_STYLES[node_type]}"
+            )
+
     def get_mermaid_source(self) -> str:
         if not self.root_name:
             raise ValueError("Root name must be set before generating Mermaid source")
@@ -121,8 +123,6 @@ def build_mermaid(root_agent: google.adk.agents.BaseAgent) -> str:
     parsed_agent_tree = nodes.build_nodes_tree(root_agent)
 
     graph_builder = MermaidGraphBuilder(root_name=root_agent.name)
-    # Add style for root node
-    graph_builder._add_style(root_agent.name, nodes.GraphNodeType.LLM_AGENT)
     graph_builder.build_node_graph(parsed_agent_tree)
 
     return graph_builder.get_mermaid_source()

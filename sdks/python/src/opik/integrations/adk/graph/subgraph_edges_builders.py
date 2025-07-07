@@ -30,9 +30,7 @@ def build_edge_definitions_for_loop_subagents(
 
     loop_back_edge_definition: Optional[str] = None
     if len(children) == 1:
-        loop_back_edge_definition = (
-            f"{children[0].name} ==>|repeat| {children[0].name}"
-        )
+        loop_back_edge_definition = f"{children[0].name} ==>|repeat| {children[0].name}"
     elif len(children) > 1:
         loop_back_edge_definition = (
             f"{children[-1].name} ==>|repeat| {children[0].name}"

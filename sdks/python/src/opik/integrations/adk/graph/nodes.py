@@ -1,5 +1,5 @@
 from typing import List, Optional, Any
-from enum import Enum, auto
+from enum import Enum
 
 import google.adk.agents
 import google.adk.tools.agent_tool
@@ -8,7 +8,7 @@ import inspect
 
 class GraphNodeType(str, Enum):
     SEQUENTIAL_AGENT = "sequential_agent"
-    LOOG_AGENT = "loop_agent"
+    LOOP_AGENT = "loop_agent"
     PARALLEL_AGENT = "parallel_agent"
     LLM_AGENT = "llm_agent"
     TOOL = "tool"
@@ -16,7 +16,7 @@ class GraphNodeType(str, Enum):
 
 NODE_TYPES_TO_BUILD_SUBGRAPHS = [
     GraphNodeType.SEQUENTIAL_AGENT,
-    GraphNodeType.LOOG_AGENT,
+    GraphNodeType.LOOP_AGENT,
     GraphNodeType.PARALLEL_AGENT,
 ]
 
@@ -24,7 +24,7 @@ NODE_TYPES_TO_BUILD_SUBGRAPHS = [
 class AgentNode:
     def __init__(self, agent: google.adk.agents.BaseAgent) -> None:
         self.agent = agent
-        self.name = agent.name
+        self.name = _to_mermaid_compatible_name(agent.name)
         self.subagent_nodes: List[AgentNode] = []
         self.type = _determine_agent_type(agent)
         self.tools: List[ToolNode] = []
@@ -60,11 +60,15 @@ def _determine_agent_type(agent: google.adk.agents.BaseAgent) -> GraphNodeType:
     if isinstance(agent, google.adk.agents.SequentialAgent):
         return GraphNodeType.SEQUENTIAL_AGENT
     elif isinstance(agent, google.adk.agents.LoopAgent):
-        return GraphNodeType.LOOG_AGENT
+        return GraphNodeType.LOOP_AGENT
     elif isinstance(agent, google.adk.agents.ParallelAgent):
         return GraphNodeType.PARALLEL_AGENT
     else:
         return GraphNodeType.LLM_AGENT
+
+
+def _to_mermaid_compatible_name(name: str) -> str:
+    return name.replace(" ", "_")
 
 
 def build_nodes_tree(agent: google.adk.agents.BaseAgent) -> AgentNode:
@@ -89,13 +93,16 @@ def build_nodes_tree(agent: google.adk.agents.BaseAgent) -> AgentNode:
 
 
 def _extract_tool_name(tool: Any) -> str:
-    if hasattr(tool, "name") and isinstance(tool.name, str):
-        return tool.name
+    if isinstance(tool, google.adk.tools.agent_tool.AgentTool):
+        return _to_mermaid_compatible_name(f"AgentTool:{tool.name}")
 
     if inspect.isfunction(tool):
         return tool.__name__
 
+    if hasattr(tool, "name") and isinstance(tool.name, str):
+        return _to_mermaid_compatible_name(tool.name)
+
     if hasattr(tool, "__class__"):
         return tool.__class__.__name__
 
-    return str(tool)
+    return _to_mermaid_compatible_name(str(tool))
