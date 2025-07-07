@@ -17,7 +17,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
     """
     Represents the Session Completeness Quality metric for a conversation thread.
 
-    This class is a specific implementation of the ConversationThreadMetric that
+    This class is a specific implementation of the ``ConversationThreadMetric`` that
     evaluates the completeness of a session within a conversation thread. The
     metric is used to judge how well a session addresses the intended context or
     purpose of the conversation.
@@ -25,7 +25,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
     The process begins by using an LLM to extract a list of high-level user
     intentions from the conversation turns. The same LLM is then used to assess
     whether each intention was addressed and/or fulfilled over the course of
-    the conversation. It returns a score between 0.0 and 1.0, where higher values
+    the conversation. It returns a score between `0.0` and `1.0`, where higher values
     indicate better session completeness.
 
     Args:

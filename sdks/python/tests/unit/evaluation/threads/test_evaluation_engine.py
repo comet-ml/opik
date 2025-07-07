@@ -141,7 +141,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
                 for message in log_context.output
             )
         )
-
+  
     def test_evaluate_threads__with_empty_traces__warning_logged(self):
         """Test evaluate_threads when no traces are found."""
         # Mock an empty traces list

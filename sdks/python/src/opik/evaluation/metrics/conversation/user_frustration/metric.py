@@ -24,14 +24,15 @@ class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric)
     or disengagement during the session — due to repetition, lack of adaptation, ignored
     intent signals, or failure to smoothly conclude.
 
-    The ``UserFrustrationMetric`` class integrates with machine learning models to analyze
+    The ``UserFrustrationMetric`` class integrates with LLM models to analyze
     conversation data in sliding windows and produce a numerical score along with an optional
     reason for the calculated score. It provides both synchronous and asynchronous methods for
     calculation and supports customization through attributes like window size and reason inclusion.
 
     This metric can be used to monitor and track user frustration levels during conversations, enabling
-    insights into user experience. The metric makes use of machine learning models to score conversational
-    windows and summarize results. The higher the score, the more frustrated the user is likely to be.
+    insights into user experience. The metric makes use of LLM models to score conversational
+    windows and summarize results. It returns a score between `0.0` and `1.0`. The higher the score,
+    the more frustrated the user is likely to be.
 
     Args:
         model: The model to use for evaluating the conversation. If a string is provided, it will be used to

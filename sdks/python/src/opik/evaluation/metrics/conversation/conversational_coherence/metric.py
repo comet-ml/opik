@@ -30,11 +30,12 @@ class ConversationalCoherenceMetric(
 
     The ``ConversationalCoherenceMetric`` builds a sliding window of dialogue turns for
     each turn in the conversation. It then uses a language model to evaluate whether
-    the final “assistant” message within each window is relevant and coherent in
+    the final `assistant` message within each window is relevant and coherent in
     relation to the preceding conversational context.
 
     It supports both synchronous and asynchronous operations to
-    accommodate the model's operation type.
+    accommodate the model's operation type. It returns a score between `0.0` and `1.0`,
+    where `0.0` indicates a low coherence score and `1.0` indicates a high coherence score.
 
     Args:
         model: The model to use for

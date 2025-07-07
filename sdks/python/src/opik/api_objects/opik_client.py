@@ -480,6 +480,87 @@ class Opik:
             attachments=attachments,
         )
 
+    def update_span(
+        self,
+        id: str,
+        trace_id: str,
+        parent_span_id: Optional[str],
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+    ) -> None:
+        """
+        Update the attributes of an existing span.
+
+        This method should only be used after the span has been fully created and stored.
+        If called before or immediately after span creation, the update may silently fail or result in incorrect data.
+
+        This method uses four parameters to identify the span:
+            - `id`
+            - `trace_id`
+            - `parent_span_id`
+            - `project_name`
+
+        These parameters **must match exactly** the values used when the span was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the span.
+        If a parameter is not provided, the existing value will remain unchanged.
+
+        Args:
+            id: The unique identifier for the span to update.
+            trace_id: The unique identifier for the trace to which the span belongs.
+            parent_span_id: The unique identifier for the parent span.
+            project_name: The project name to which the span belongs.
+            end_time: The new end time of the span.
+            metadata: The new metadata to be associated with the span.
+            input: The new input data for the span.
+            output: The new output data for the span.
+            tags: A new list of tags to be associated with the span.
+            usage: The new usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
+            model: The new name of LLM.
+            provider: The new provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
+            error_info: The new dictionary with error information (typically used when the span function has failed).
+            total_cost: The new cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The new list of attachments to be uploaded to the span.
+
+        Returns:
+            None
+        """
+        span.span_client.update_span(
+            id=id,
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            project_name=project_name,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
+        )
+
     def log_spans_feedback_scores(
         self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
