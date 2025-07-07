@@ -441,118 +441,115 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     );
   };
 
-  const renderNavigationContent = () => {
-    return (
-      <>
-        <Separator orientation="vertical" className="mx-2 h-8" />
-        <Button
-          variant="outline"
-          size="sm"
-          key="Go to project"
-          onClick={() => {
-            navigate({
-              to: "/$workspaceName/projects/$projectId/traces",
-              params: {
-                projectId,
-                workspaceName,
-              },
-              search: {
-                traces_filters: [
-                  {
-                    id: "thread_id_filter",
-                    field: "thread_id",
-                    type: COLUMN_TYPE.string,
-                    operator: "=",
-                    value: threadId,
-                  },
-                ],
-              },
-            });
-          }}
-        >
-          View all traces
-        </Button>
-      </>
-    );
-  };
-
   const renderHeaderContent = () => {
     return (
-      <div className="flex gap-2">
-        <DetailsActionSectionToggle
-          activeSection={currentActiveSection}
-          setActiveSection={setActiveSection}
-          layoutSize={ButtonLayoutSize.Large}
-          count={commentsCount}
-          type={DetailsActionSection.Comments}
-          disabled={!isInactiveThread}
-          tooltipContent={disabledCommentsExplainer}
-        />
+      <div className="flex flex-auto items-center justify-between">
+        <div className="flex items-center">
+          <Separator orientation="vertical" className="mx-3 h-8" />
+          <Button
+            variant="outline"
+            size="sm"
+            key="Go to project"
+            onClick={() => {
+              navigate({
+                to: "/$workspaceName/projects/$projectId/traces",
+                params: {
+                  projectId,
+                  workspaceName,
+                },
+                search: {
+                  traces_filters: [
+                    {
+                      id: "thread_id_filter",
+                      field: "thread_id",
+                      type: COLUMN_TYPE.string,
+                      operator: "=",
+                      value: threadId,
+                    },
+                  ],
+                },
+              });
+            }}
+          >
+            View all traces
+          </Button>
+        </div>
+        <div className="flex gap-2 pl-6">
+          <DetailsActionSectionToggle
+            activeSection={currentActiveSection}
+            setActiveSection={setActiveSection}
+            layoutSize={ButtonLayoutSize.Large}
+            count={commentsCount}
+            type={DetailsActionSection.Comments}
+            disabled={!isInactiveThread}
+            tooltipContent={disabledCommentsExplainer}
+          />
 
-        <DetailsActionSectionToggle
-          activeSection={currentActiveSection}
-          setActiveSection={setActiveSection}
-          layoutSize={ButtonLayoutSize.Large}
-          count={annotationCount}
-          type={DetailsActionSection.Annotations}
-          disabled={!isInactiveThread}
-          tooltipContent={disabledAnnotationExplainer}
-        />
+          <DetailsActionSectionToggle
+            activeSection={currentActiveSection}
+            setActiveSection={setActiveSection}
+            layoutSize={ButtonLayoutSize.Large}
+            count={annotationCount}
+            type={DetailsActionSection.Annotations}
+            disabled={!isInactiveThread}
+            tooltipContent={disabledAnnotationExplainer}
+          />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-sm">
-              <span className="sr-only">Actions menu</span>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem
-              onClick={() => {
-                toast({
-                  description: "URL successfully copied to clipboard",
-                });
-                copy(window.location.href);
-              }}
-            >
-              <Share className="mr-2 size-4" />
-              Share
-            </DropdownMenuItem>
-            <TooltipWrapper content={threadId} side="left">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm">
+                <span className="sr-only">Actions menu</span>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem
                 onClick={() => {
                   toast({
-                    description: `Thread ID successfully copied to clipboard`,
+                    description: "URL successfully copied to clipboard",
                   });
-                  copy(threadId);
+                  copy(window.location.href);
                 }}
               >
-                <Copy className="mr-2 size-4" />
-                Copy thread ID
+                <Share className="mr-2 size-4" />
+                Share
               </DropdownMenuItem>
-            </TooltipWrapper>
-            <DropdownMenuItem onClick={() => setPopupOpen(true)}>
-              <Trash className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <ConfirmDialog
-          open={popupOpen}
-          setOpen={setPopupOpen}
-          onConfirm={handleThreadDelete}
-          title="Delete thread"
-          description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
-          confirmText="Delete thread"
-          confirmButtonVariant="destructive"
-        />
+              <TooltipWrapper content={threadId} side="left">
+                <DropdownMenuItem
+                  onClick={() => {
+                    toast({
+                      description: `Thread ID successfully copied to clipboard`,
+                    });
+                    copy(threadId);
+                  }}
+                >
+                  <Copy className="mr-2 size-4" />
+                  Copy thread ID
+                </DropdownMenuItem>
+              </TooltipWrapper>
+              <DropdownMenuItem onClick={() => setPopupOpen(true)}>
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ConfirmDialog
+            open={popupOpen}
+            setOpen={setPopupOpen}
+            onConfirm={handleThreadDelete}
+            title="Delete thread"
+            description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
+            confirmText="Delete thread"
+            confirmButtonVariant="destructive"
+          />
 
-        <SetInactiveConfirmDialog
-          open={setInactiveOpen}
-          setOpen={changeSetInactiveOpen}
-          threadId={threadId}
-          projectId={projectId}
-        />
+          <SetInactiveConfirmDialog
+            open={setInactiveOpen}
+            setOpen={changeSetInactiveOpen}
+            threadId={threadId}
+            projectId={projectId}
+          />
+        </div>
       </div>
     );
   };
@@ -563,7 +560,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       entity="thread"
       open={open}
       headerContent={renderHeaderContent()}
-      navigationContent={renderNavigationContent()}
       onClose={onClose}
       initialWidth={0.5}
       horizontalNavigation={horizontalNavigation}

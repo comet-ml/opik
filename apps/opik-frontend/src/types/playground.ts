@@ -80,6 +80,8 @@ export interface LogSpan {
   input: { messages: ProviderMessageType[] };
   output: { choices: ChatCompletionMessageChoiceType[] };
   usage?: UsageType | null;
+  model?: string;
+  provider?: string;
   metadata: {
     created_from: string;
     usage: UsageType | null;

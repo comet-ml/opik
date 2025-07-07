@@ -103,6 +103,8 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     input: { messages: run.providerMessages },
     output: { choices: run.choices ? run.choices : [] },
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
+    model: run.model,
+    provider: run.provider,
     metadata: {
       created_from: run.provider,
       usage: run.usage,
