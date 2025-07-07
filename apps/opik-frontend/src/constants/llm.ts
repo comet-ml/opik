@@ -385,9 +385,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "===== END OF EXAMPLE ======\n" +
           "\n" +
           "** Turns: **\n" +
-          "{{context}}\n" +
-          "\n" +
-          "** JSON: **",
+          "{{context}}",
       },
     ],
     variables: {
@@ -506,9 +504,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "===== END OF EXAMPLE ======\n" +
           "\n" +
           "** Turns: **\n" +
-          "{{context}}\n" +
-          "\n" +
-          "** JSON: **",
+          "{{context}}",
       },
     ],
     variables: {
