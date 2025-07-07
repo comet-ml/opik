@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -137,8 +138,17 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private void processScoring(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
             UUID threadModelId, String threadId) {
 
-        AutomationRuleEvaluator<?> rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
-                message.workspaceId());
+        final AutomationRuleEvaluator<?> rule;
+
+        try {
+            rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
+                    message.workspaceId());
+        } catch (NotFoundException ex) {
+            log.warn(
+                    "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
+                    message.ruleId(), message.projectId(), message.workspaceId(), threadId);
+            return;
+        }
 
         // This is crucial for logging purposes to identify the rule and trace
         userFacingLogger.info("Evaluating threadId: '{}' sampled by ruleName: '{}'", threadId, rule.getName());

@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -98,7 +99,16 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
 
     public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName) {
-        AutomationRuleEvaluator<?> rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);
+
+        AutomationRuleEvaluator<?> rule;
+
+        try {
+            rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);
+        } catch (NotFoundException ex) {
+            log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
+                    workspaceId, ex);
+            return;
+        }
 
         switch (rule) {
             case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> {

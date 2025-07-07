@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -143,8 +144,17 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private void processScoring(TraceThreadToScoreUserDefinedMetricPython message, List<Trace> traces,
             UUID threadModelId, String threadId) {
 
-        AutomationRuleEvaluator<?> rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
-                message.workspaceId());
+        final AutomationRuleEvaluator<?> rule;
+
+        try {
+            rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
+                    message.workspaceId());
+        } catch (NotFoundException ex) {
+            log.warn(
+                    "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
+                    message.ruleId(), message.projectId(), message.workspaceId(), threadId);
+            return;
+        }
 
         Project project = projectService.get(message.projectId(), message.workspaceId());
 
