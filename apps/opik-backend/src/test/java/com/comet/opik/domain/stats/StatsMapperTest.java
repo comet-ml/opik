@@ -96,6 +96,7 @@ class StatsMapperTest {
                 .collect(Collectors.toMap(ProjectStats.ProjectStatItem::getName,
                         ProjectStats.ProjectStatItem::getValue));
 
+        assertThat(mapped.get(StatsMapper.LLM_SPAN_COUNT)).isEqualTo(2.0);
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST)).isEqualTo(1.25);
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST_SUM)).isEqualTo(2.50);
     }
