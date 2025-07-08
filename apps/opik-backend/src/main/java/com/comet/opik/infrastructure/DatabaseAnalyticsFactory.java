@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.validation.constraints.NotBlank;
@@ -20,6 +21,8 @@ public class DatabaseAnalyticsFactory {
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
+    private @NotNull ReplicationConfig replication;
+
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
@@ -35,5 +38,11 @@ public class DatabaseAnalyticsFactory {
         ;
 
         private final String value;
+    }
+
+    @Data
+    public static class ReplicationConfig {
+        @JsonProperty
+        private boolean enabled;
     }
 }

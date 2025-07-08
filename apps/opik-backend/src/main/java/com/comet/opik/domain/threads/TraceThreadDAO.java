@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -167,6 +168,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             )
             <endif>
             <if(thread_id)>AND tt.thread_id = :thread_id<endif>
+            <if(enforce_consistent_read)>
+            SETTINGS
+                insert_quorum_parallel = 0,
+                insert_quorum = 'auto'
+            <endif>
             ;
             """;
 
@@ -242,10 +248,14 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 AND project_id = :project_id
                 AND status = 'inactive'
                 AND scored_at IS NULL
+                <if(enforce_consistent_read)>
+                SETTINGS select_sequential_consistency = 1
+                <endif>
                 ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<Long> save(@NonNull List<TraceThreadModel> traceThreads) {
@@ -359,6 +369,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull Duration timeoutToMarkThreadAsInactive) {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
+
+            if (shouldEnforceConsistentRead()) {
+                closureThreadsSql.add("enforce_consistent_read", true);
+            }
+
             closureThreadsSql.add("last_updated_at", true);
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
@@ -372,11 +387,19 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    private boolean shouldEnforceConsistentRead() {
+        return configuration.getDatabaseAnalytics().getReplication().isEnabled();
+    }
+
     @Override
     public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
         return asyncTemplate.nonTransaction(connection -> {
             ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             openThreadsSql.add("thread_id", threadId);
+
+            if (shouldEnforceConsistentRead()) {
+                openThreadsSql.add("enforce_consistent_read", true);
+            }
 
             var statement = connection.createStatement(openThreadsSql.render())
                     .bind("project_id", projectId)
@@ -393,6 +416,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             closureThreadsSql.add("thread_id", threadId);
+
+            if (shouldEnforceConsistentRead()) {
+                closureThreadsSql.add("enforce_consistent_read", true);
+            }
 
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
@@ -518,7 +545,13 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     @Override
     public Flux<TraceThreadModel> streamClosedThreads(@NonNull UUID projectId) {
         return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(GET_RECENT_CLOSED_THREADS_PER_PROJECT)
+            ST closedThreadsPerProject = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
+
+            if (shouldEnforceConsistentRead()) {
+                closedThreadsPerProject.add("enforce_consistent_read", true);
+            }
+
+            var statement = connection.createStatement(closedThreadsPerProject.render())
                     .bind("project_id", projectId);
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
