@@ -13,7 +13,6 @@ import {
   LLMMessage,
   ProviderMessageType,
 } from "@/types/llm";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { generateRandomString } from "@/lib/utils";
 
 const RuleNameSchema = z
@@ -34,10 +33,10 @@ const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
 
 const LLMJudgeBaseSchema = z.object({
   model: z
-    .union([z.nativeEnum(PROVIDER_MODEL_TYPE), z.string().length(0)], {
+    .string({
       required_error: "Model is required",
     })
-    .refine((model) => model.length >= 1, { message: "Model is required" }),
+    .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number(),
   }),

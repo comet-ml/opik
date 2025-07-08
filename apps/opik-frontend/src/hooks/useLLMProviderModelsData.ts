@@ -1,14 +1,13 @@
 import { useCallback } from "react";
-import first from "lodash/first";
 import {
-  PROVIDER_LOCATION_TYPE,
   PROVIDER_MODEL_TYPE,
   PROVIDER_MODELS_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
-import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
+import useCustomProviderModels from "@/hooks/useCustomProviderModels";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
+import first from "lodash/first";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -1492,17 +1491,17 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
   ],
 
-  [PROVIDER_TYPE.OLLAMA]: [
-    // the list will be full filled base on data in localstorage
+  [PROVIDER_TYPE.CUSTOM]: [
+    // the list will be full filled base on provider config response
   ],
 };
 
 const useLLMProviderModelsData = () => {
-  const { localModels, getLocalAIProviderData } = useLocalAIProviderData();
+  const customProviderModels = useCustomProviderModels();
 
   const getProviderModels = useCallback(() => {
-    return { ...PROVIDER_MODELS, ...localModels };
-  }, [localModels]);
+    return { ...PROVIDER_MODELS, ...customProviderModels };
+  }, [customProviderModels]);
 
   const calculateModelProvider = useCallback(
     (modelName?: PROVIDER_MODEL_TYPE | ""): PROVIDER_TYPE | "" => {
@@ -1551,22 +1550,16 @@ const useLLMProviderModelsData = () => {
         preferredProvider ?? getDefaultProviderKey(setupProviders);
 
       if (provider) {
-        if (PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.local) {
-          return (
-            (first(
-              (getLocalAIProviderData(provider)?.models || "").split(","),
-            )?.trim() as PROVIDER_MODEL_TYPE) ?? ""
-          );
-        } else if (
-          PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.cloud
-        ) {
+        if (PROVIDERS[provider].defaultModel) {
           return PROVIDERS[provider].defaultModel;
+        } else {
+          return first(getProviderModels()[provider])?.value ?? "";
         }
       }
 
       return "";
     },
-    [calculateModelProvider, getLocalAIProviderData],
+    [calculateModelProvider, getProviderModels],
   );
 
   return {

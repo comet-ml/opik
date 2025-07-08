@@ -3,8 +3,8 @@ import os
 import certifi
 import pytest
 
-from opik.evaluation.metrics.conversation.session_completeness.metric import (
-    SessionCompletenessQuality,
+from opik.evaluation.metrics.conversation.session_completeness import (
+    metric as session_completeness,
 )
 
 from ...testlib import assert_helpers
@@ -38,7 +38,9 @@ def test__session_completeness_quality__with_real_model__happy_path(
     ensure_openai_configured, real_model_conversation
 ):
     """Integration test with a real model."""
-    metric = SessionCompletenessQuality(track=True)  # Uses default model
+    metric = session_completeness.SessionCompletenessQuality(
+        track=False
+    )  # Uses default model
     result = metric.score(real_model_conversation)
 
     assert_helpers.assert_score_result(result)
@@ -52,7 +54,9 @@ async def test__session_completeness_quality__with_real_model_async__happy_path(
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
     """Integration test with a real model asyncio mode."""
-    metric = SessionCompletenessQuality(track=True)  # Uses default model
+    metric = session_completeness.SessionCompletenessQuality(
+        track=False
+    )  # Uses default model
     result = await metric.ascore(real_model_conversation)
 
     assert_helpers.assert_score_result(result)

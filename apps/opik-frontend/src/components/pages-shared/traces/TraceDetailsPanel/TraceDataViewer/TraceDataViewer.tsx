@@ -83,7 +83,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
 
   return (
-    <div className="size-full max-w-full overflow-auto p-6">
+    <div className="size-full max-w-full overflow-auto p-4">
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="mb-6 flex flex-col gap-1">
           <TraceDataViewerHeader
@@ -92,7 +92,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 <BaseTraceDataTypeIcon type={type} />
                 <div
                   data-testid="data-viewer-title"
-                  className="comet-title-s truncate"
+                  className="comet-title-xs truncate"
                 >
                   {data?.name}
                 </div>
@@ -101,8 +101,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             actionsPanel={(layoutSize) => (
               <TraceDataViewerActionsPanel
                 data={data}
-                traceId={traceId}
-                spanId={spanId}
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
