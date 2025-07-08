@@ -88,6 +88,7 @@ Call opik api on http://localhost:5173/api
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| affinity | object | `{}` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
@@ -333,6 +334,7 @@ Call opik api on http://localhost:5173/api
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
 | nameOverride | string | `"opik"` |  |
+| nodeSelector | object | `{}` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
 | redis.enabled | bool | `true` |  |
@@ -361,6 +363,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.create | bool | `false` |  |
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
+| tolerations | list | `[]` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
