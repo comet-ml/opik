@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 public enum FieldType {
     STRING("string"),
-    MYSQL_STRING("mysql_string"),
+    STRING_STATE_DB("string_state_db"),
     DATE_TIME("date_time"),
     NUMBER("number"),
     FEEDBACK_SCORES_NUMBER("feedback_scores_number"),

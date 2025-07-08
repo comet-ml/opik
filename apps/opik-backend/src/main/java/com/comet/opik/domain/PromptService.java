@@ -164,8 +164,9 @@ class PromptServiceImpl implements PromptService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
-        String filtersSql = filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.PROMPT).orElse(null);
-        String stateFiltersSQL = Optional.ofNullable(filtersSql)
+
+        String stateFiltersSQL = Optional.ofNullable(filters)
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.PROMPT))
                 .map(sql -> filterQueryBuilder.toStateSQL(sql, filters))
                 .orElse(null);
 

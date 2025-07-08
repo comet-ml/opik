@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum PromptField implements Field {
-    TAGS(TAGS_QUERY_PARAM, FieldType.MYSQL_STRING),
+    TAGS(TAGS_QUERY_PARAM, FieldType.STRING_STATE_DB),
     ;
 
     private final String queryParamField;

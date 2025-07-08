@@ -70,23 +70,23 @@ public class FilterQueryBuilder {
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
-                            FieldType.MYSQL_STRING, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                             FieldType.DICTIONARY,
                             "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
-                            FieldType.MYSQL_STRING, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.MYSQL_STRING, "%1$s LIKE CONCAT(:filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.MYSQL_STRING, "%1$s LIKE CONCAT('%%', :filter%2$d)")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
-                            FieldType.MYSQL_STRING, "lower(%1$s) = lower(:filter%2$d)",
+                            FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.NUMBER, "%1$s = :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
@@ -96,7 +96,7 @@ public class FilterQueryBuilder {
                             FieldType.ENUM, "%1$s = :filter%2$d")))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
-                            FieldType.MYSQL_STRING, "lower(%1$s) != lower(:filter%2$d)",
+                            FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.NUMBER, "%1$s != :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,

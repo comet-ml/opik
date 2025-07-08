@@ -4624,7 +4624,7 @@ class TracesResourceTest {
 
     private String getValidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, LIST, DICTIONARY, ENUM, MYSQL_STRING -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case STRING, LIST, DICTIONARY, ENUM, STRING_STATE_DB -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
             case ERROR_CONTAINER -> "";
@@ -4633,14 +4633,14 @@ class TracesResourceTest {
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, MYSQL_STRING -> null;
+            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER, MYSQL_STRING -> " ";
+            case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
