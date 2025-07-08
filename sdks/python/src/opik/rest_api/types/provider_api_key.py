@@ -11,7 +11,7 @@ from .provider_api_key_provider import ProviderApiKeyProvider
 class ProviderApiKey(UniversalBaseModel):
     id: typing.Optional[str] = None
     provider: ProviderApiKeyProvider
-    api_key: str
+    api_key: typing.Optional[str] = None
     name: typing.Optional[str] = None
     headers: typing.Optional[typing.Dict[str, str]] = None
     configuration: typing.Optional[typing.Dict[str, str]] = None
