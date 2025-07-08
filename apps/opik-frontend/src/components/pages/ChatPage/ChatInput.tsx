@@ -12,7 +12,6 @@ import { useUpdateChat, useUpdateMessage } from "@/store/ChatStore";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
-import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 
@@ -40,7 +39,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const isDisabledButton = !value && !isRunning;
 
-  const { getLocalIAProviderURL } = useLocalAIProviderData();
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
   });
@@ -66,7 +64,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
     try {
       const run = await runStreaming({
-        url: getLocalIAProviderURL(chat.provider),
         model: chat.model,
         messages,
         configs: chat.configs,
@@ -102,9 +99,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     chat.configs,
     chat.messages,
     chat.model,
-    chat.provider,
     chat.value,
-    getLocalIAProviderURL,
     runStreaming,
     toast,
     updateChat,

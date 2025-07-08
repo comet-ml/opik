@@ -54,6 +54,14 @@ export const DEFAULT_VERTEX_AI_CONFIGS = {
   TOP_P: 1,
 };
 
+export const DEFAULT_CUSTOM_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_COMPLETION_TOKENS: 1024,
+  TOP_P: 1,
+  FREQUENCY_PENALTY: 0,
+  PRESENCE_PENALTY: 0,
+};
+
 export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
   description:
