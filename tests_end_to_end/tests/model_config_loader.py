@@ -2,7 +2,7 @@ import yaml
 import os
 import logging
 from typing import Dict, List, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +21,14 @@ class ProviderConfig:
     display_name: str
     api_key_env_var: str
     models: List[ModelConfig]
-    additional_env_vars: List[str] = []
+    additional_env_vars: List[str] = field(default_factory=list)
 
 
 class ModelConfigLoader:
     """Loads and manages model configurations for testing"""
 
     def __init__(self, config_path: str = ""):
-        if config_path is None:
+        if not config_path:
             # Default to models_config.yaml in the same directory as this file
             config_path = os.path.join(
                 os.path.dirname(__file__), "..", "models_config.yaml"

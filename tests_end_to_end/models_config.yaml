@@ -34,15 +34,15 @@ providers:
         test_playground: true
         test_online_scoring: true
 
-  openrouter:
-    display_name: "OpenRouter"
-    api_key_env_var: "OPENROUTER_API_KEY"
-    models:
-      - name: "phi4"
-        ui_selector: "microsoft/phi-4"
-        enabled: true
-        test_playground: true
-        test_online_scoring: true
+  # openrouter:
+  #   display_name: "OpenRouter"
+  #   api_key_env_var: "OPENROUTER_API_KEY"
+  #   models:
+  #     - name: "phi4"
+  #       ui_selector: "microsoft/phi-4"
+  #       enabled: true
+  #       test_playground: true
+  #       test_online_scoring: true
 
 
 # Test configuration
