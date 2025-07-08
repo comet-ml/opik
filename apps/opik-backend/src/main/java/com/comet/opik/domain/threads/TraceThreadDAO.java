@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -166,6 +167,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             )
             <endif>
             <if(thread_id)>AND tt.thread_id = :thread_id<endif>
+            ;
             """;
 
     private static final String SELECT_PROJECT_ID_FROM_THREAD = """
@@ -240,6 +242,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 AND project_id = :project_id
                 AND status = 'inactive'
                 AND scored_at IS NULL
+                ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -282,8 +285,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 }
 
                 if (item.sampling() != null) {
-                    statement.bind("rule_ids" + i, item.sampling().keySet().toArray(UUID[]::new));
-                    statement.bind("sampling" + i, item.sampling().values().toArray(Boolean[]::new));
+                    UUID[] ruleIds = item.sampling().keySet().toArray(UUID[]::new);
+                    statement.bind("rule_ids" + i, ruleIds);
+                    statement.bind("sampling" + i,
+                            Arrays.stream(ruleIds).map(ruleId -> item.sampling().get(ruleId)).toArray(Boolean[]::new));
                 } else {
                     statement.bind("rule_ids" + i, new UUID[]{});
                     statement.bind("sampling" + i, new Boolean[]{});
@@ -434,7 +439,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-
     public Mono<Long> updateThreadSampledValues(@NonNull UUID projectId,
             @NonNull List<TraceThreadSampling> threadSamplingPerRules) {
         return asyncTemplate.nonTransaction(connection -> {
@@ -455,9 +459,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             int i = 0;
             for (TraceThreadSampling sampling : threadSamplingPerRules) {
                 UUID threadModelId = sampling.threadModelId();
-                UUID[] ruleIds = sampling.samplingPerRule().keySet().toArray(UUID[]::new);
-                Boolean[] samplingValues = sampling.samplingPerRule().keySet().stream()
-                        .map(ruleId -> sampling.samplingPerRule().get(ruleId)).toArray(Boolean[]::new);
+                UUID[] ruleIds = sampling.samplingPerRule().keySet()
+                        .toArray(UUID[]::new);
+
+                Boolean[] samplingValues = Arrays.stream(ruleIds)
+                        .map(ruleId -> sampling.samplingPerRule().get(ruleId))
+                        .toArray(Boolean[]::new);
 
                 statement.bind("thread_model_id" + i, threadModelId);
                 statement.bind("rule_ids" + i, ruleIds);
