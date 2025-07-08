@@ -18,6 +18,7 @@ from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.usefulness.metric import Usefulness
 from .base_metric import BaseMetric
+from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError
 
 # from .llm_judges.factuality.metric import Factuality
@@ -25,25 +26,26 @@ from opik.exceptions import MetricComputationError
 __all__ = [
     "AggregatedMetric",
     "AnswerRelevance",
+    "BaseMetric",
     "Contains",
     "ContextPrecision",
     "ContextRecall",
     "ConversationalCoherenceMetric",
+    "CorpusBLEU",
     "Equals",
-    # "Factuality",
     "GEval",
     "Hallucination",
     "IsJson",
     "LevenshteinRatio",
-    "Moderation",
-    "Usefulness",
-    "RegexMatch",
     "MetricComputationError",
-    "BaseMetric",
-    "SentenceBLEU",
-    "CorpusBLEU",
+    "Moderation",
+    "RagasMetricWrapper",
+    "RegexMatch",
     "ROUGE",
+    "SentenceBLEU",
     "Sentiment",
     "SessionCompletenessQuality",
+    "Usefulness",
     "UserFrustrationMetric",
+    # "Factuality",
 ]
