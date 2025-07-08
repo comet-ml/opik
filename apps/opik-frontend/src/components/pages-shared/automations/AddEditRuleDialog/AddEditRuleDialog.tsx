@@ -563,7 +563,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         onCancel={cancel}
         onConfirm={confirm}
         title="Reset your changes?"
-        description="Changing the evaluation type or scope will reset all your current configuration. Your custom prompts, messages, and settings will be lost. Do you want to continue?"
+        description="Changing the evaluation scope will reset all your current changes. Do you want to continue?"
         cancelText="Keep editing"
         confirmText="Reset and continue"
       />
