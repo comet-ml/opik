@@ -303,7 +303,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.just(count);
         }
 
-        return getClosedThreadsByProject(projectId, count)
+        return getClosedThreadsByProject(projectId)
                 .flatMap(closedThreads -> {
                     if (!closedThreads.isEmpty()) {
                         // Publish closed threads for online scoring
@@ -311,17 +311,15 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 .thenReturn(count);
                     }
 
+                    log.info("No closed threads found for projectId: '{}'. Skipping online scoring.", projectId);
                     return Mono.just(count);
                 });
     }
 
-    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId, Long count) {
-        return traceThreadDAO.findThreadsByProject(1, count.intValue(),
-                TraceThreadCriteria.builder()
-                        .projectId(projectId)
-                        .status(TraceThreadStatus.INACTIVE)
-                        .scoredAtEmpty(true)
-                        .build());
+    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId) {
+        return traceThreadDAO.streamClosedThreads(projectId)
+                .collectList()
+                .switchIfEmpty(Mono.just(List.of()));
     }
 
     @Override

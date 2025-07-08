@@ -84,8 +84,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     @Override
     protected void score(@NonNull TraceThreadToScoreLlmAsJudge message) {
 
-        log.info("Message received with projectId '{}', ruleId '{}' for workspace '{}'",
-                message.projectId(), message.ruleId(), message.workspaceId());
+        log.info("Message received with projectId '{}', ruleId '{}', threads: '{}' for workspace '{}'",
+                message.projectId(), message.ruleId(), message.threadIds(), message.workspaceId());
 
         Flux.fromIterable(message.threadIds())
                 .flatMap(threadId -> processThreadScores(message, threadId))
@@ -110,6 +110,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         return retrieveFullThreadContext(currentThreadId, new AtomicReference<>(null), message.projectId())
                 .sort(Comparator.comparing(Trace::id))
                 .collectList()
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("No traces found for threadId '{}' in projectId '{}'. Skipping scoring.",
+                            currentThreadId, message.projectId());
+                    return Mono.empty();
+                }))
                 .flatMap(traces -> traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
                         .flatMap(threadModelId -> Mono.fromCallable(() -> {
                             try (var logContext = LogContextAware.wrapWithMdc(Map.of(
@@ -152,6 +157,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
         // This is crucial for logging purposes to identify the rule and trace
         userFacingLogger.info("Evaluating threadId: '{}' sampled by ruleName: '{}'", threadId, rule.getName());
+        log.info("Evaluating threadId: '{}' sampled by ruleName: '{}'", threadId, rule.getName());
 
         Project project = projectService.get(message.projectId(), message.workspaceId());
 
@@ -169,6 +175,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
         userFacingLogger.info("Sending threadId: '{}' to LLM using the following input:\n\n{}",
                 threadId, scoreRequest);
+        log.info("Sending threadId: '{}' to LLM using the following input:\n\n{}", threadId, scoreRequest);
 
         ChatResponse chatResponse;
         try {
