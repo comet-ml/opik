@@ -7495,7 +7495,6 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7511,8 +7510,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7545,7 +7544,6 @@ components:
           readOnly: true
     ProviderApiKey:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7561,8 +7559,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7595,7 +7593,6 @@ components:
           readOnly: true
     ProviderApiKey_Write:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7607,8 +7604,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7626,16 +7623,23 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProviderApiKeyUpdate:
-      required:
-      - api_key
       type: object
       properties:
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
           type: string
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
