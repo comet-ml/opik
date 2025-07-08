@@ -12,7 +12,8 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
-    google_run_helpers,
+    vertexai_run_helpers,
+    google_generative_ai_helpers,
     openai_run_helpers,
     anthropic_run_helpers,
     anthropic_vertexai_run_helpers,
@@ -357,8 +358,10 @@ class OpikTracer(BaseTracer):
                 usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
                 usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif google_run_helpers.is_google_run(run):
-                usage_info = google_run_helpers.get_llm_usage_info(run_dict)
+            elif vertexai_run_helpers.is_vertexai_run(run):
+                usage_info = vertexai_run_helpers.get_llm_usage_info(run_dict)
+            elif google_generative_ai_helpers.is_google_generative_ai_run(run):
+                usage_info = google_generative_ai_helpers.get_llm_usage_info(run_dict)
             elif anthropic_run_helpers.is_anthropic_run(run):
                 usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
 
@@ -377,7 +380,7 @@ class OpikTracer(BaseTracer):
 
             self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
-            LOGGER.debug(f"Failed during _process_end_span: {e}")
+            LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
             self._opik_context_storage.trim_span_data_stack_to_certain_span(
                 span_id=span_data.id
