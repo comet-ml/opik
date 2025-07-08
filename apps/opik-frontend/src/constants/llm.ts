@@ -119,11 +119,22 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "- Always quote WHICH MESSAGE and the INFORMATION in the reason in your final reason.\n" +
         "- You should CONCISELY summarize the information to justify the score.\n" +
         "\n" +
-        "- Example default schema:\n" +
-        "  {\n" +
-        '    "verdict": "yes or no",\n' +
-        '    "reason": "optional, include verdict"\n' +
-        "  }\n" +
+        "** Guidelines for 'results' JSON: **\n" +
+        "- Always quote WHICH MESSAGE and the INFORMATION in the reason in your final reason.\n" +
+        "- Be confident in your reasoning, as if you're aware of the `assistant` messages from the messages in a conversation that led to the irrelevancies.\n" +
+        "- You should CONCISELY summarize the irrelevancies to justify the score.\n" +
+        "- You should NOT mention irrelevancy in your reason, and make the reason sound convincing.\n" +
+        "- You should mention LLM response instead of `assistant`, and User instead of `user`.\n" +
+        "- You should format <name_score> to use 1 decimal place in the reason.\n" +
+        "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score_value' key providing the relevancy score.\n" +
+        "- You MUST only return the 'results' JSON object in the final result.\n" +
+        "- You MUST provide a 'reason' for the final result score in the format: 'The score is <name_score> because <your_reason>.'.\n" +
+        "\n" +
+        "** Example 'results' JSON: **\n" +
+        "{\n" +
+        '    "score_value": <relevancy_score>,\n' +
+        '    "reason": "The score is <relevancy_score> because <your_reason>."\n' +
+        "}\n" +
         "{{context}}",
     },
   ],
