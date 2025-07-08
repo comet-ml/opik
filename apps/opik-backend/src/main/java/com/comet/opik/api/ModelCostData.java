@@ -10,5 +10,10 @@ public record ModelCostData(String litellmProvider,
         String inputCostPerToken,
         String outputCostPerToken,
         String cacheCreationInputTokenCost,
-        String cacheReadInputTokenCost) {
+        String cacheReadInputTokenCost,
+        String inputCostPerAudioToken,
+        String outputCostPerAudioToken,
+        String inputCostPerImage,
+        String inputCostPerVideoPerSecond,
+        String inputCostPerAudioPerSecond) {
 }
