@@ -11,7 +11,7 @@ export const ProviderApiKey: core.serialization.ObjectSchema<serializers.Provide
     core.serialization.object({
         id: core.serialization.string().optional(),
         provider: ProviderApiKeyProvider,
-        apiKey: core.serialization.property("api_key", core.serialization.string()),
+        apiKey: core.serialization.property("api_key", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
         configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
@@ -26,7 +26,7 @@ export declare namespace ProviderApiKey {
     export interface Raw {
         id?: string | null;
         provider: ProviderApiKeyProvider.Raw;
-        api_key: string;
+        api_key?: string | null;
         name?: string | null;
         headers?: Record<string, string> | null;
         configuration?: Record<string, string> | null;
