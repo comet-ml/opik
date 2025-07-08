@@ -25,6 +25,7 @@ COLUMNS = {
     "number_of_messages": "number",
     "created_by": "string",
     "thread_id": "string",
+    "total_estimated_cost": "number",
 }
 
 SUPPORTED_OPERATORS = {
@@ -45,6 +46,7 @@ SUPPORTED_OPERATORS = {
     "number_of_messages": ["=", ">", "<", ">=", "<="],
     "created_by": ["=", "contains", "not_contains"],
     "thread_id": ["=", "contains", "not_contains"],
+    "total_estimated_cost": ["=", ">", "<", ">=", "<="],
 }
 
 
