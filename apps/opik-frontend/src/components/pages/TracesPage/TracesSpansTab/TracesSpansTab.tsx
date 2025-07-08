@@ -565,6 +565,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Thread ID",
               type: COLUMN_TYPE.string,
             },
+            {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+            },
           ]
         : []),
       {

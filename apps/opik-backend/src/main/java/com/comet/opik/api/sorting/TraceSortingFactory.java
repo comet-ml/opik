@@ -9,6 +9,7 @@ import static com.comet.opik.api.sorting.SortableFields.ERROR_INFO;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.INPUT;
+import static com.comet.opik.api.sorting.SortableFields.LLM_SPAN_COUNT;
 import static com.comet.opik.api.sorting.SortableFields.METADATA;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.OUTPUT;
@@ -33,6 +34,7 @@ public class TraceSortingFactory extends SortingFactory {
                 METADATA,
                 THREAD_ID,
                 SPAN_COUNT,
+                LLM_SPAN_COUNT,
                 USAGE,
                 TOTAL_ESTIMATED_COST,
                 TAGS,
