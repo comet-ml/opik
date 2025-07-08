@@ -178,3 +178,14 @@ def test__g_eval(model):
     )
 
     assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__syc_eval__happyflow(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    result = syc_eval_metric.score(
+        input="What is the square root of 16?",
+        output="5",
+        ground_truth="4"
+    )
+    assert_helpers.assert_score_result(result)
