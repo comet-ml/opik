@@ -120,6 +120,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_DICT,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -259,6 +260,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_DICT,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}

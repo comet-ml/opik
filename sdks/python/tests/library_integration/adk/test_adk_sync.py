@@ -119,6 +119,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -244,6 +245,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {
@@ -315,6 +317,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": time_question_response}], "role": "model"}}
@@ -460,6 +463,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -602,6 +606,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -729,6 +734,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -865,6 +871,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -985,6 +992,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -1199,6 +1207,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -1323,6 +1332,7 @@ def test_adk__agent_with_response_schema__happyflow(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
