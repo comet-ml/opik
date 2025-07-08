@@ -12,7 +12,7 @@ export const ProviderApiKeyWrite: core.serialization.Schema<
     OpikApi.ProviderApiKeyWrite
 > = core.serialization.object({
     provider: ProviderApiKeyWriteProvider,
-    apiKey: core.serialization.property("api_key", core.serialization.string()),
+    apiKey: core.serialization.property("api_key", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
     headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
@@ -22,7 +22,7 @@ export const ProviderApiKeyWrite: core.serialization.Schema<
 export declare namespace ProviderApiKeyWrite {
     export interface Raw {
         provider: ProviderApiKeyWriteProvider.Raw;
-        api_key: string;
+        api_key?: string | null;
         name?: string | null;
         headers?: Record<string, string> | null;
         configuration?: Record<string, string> | null;

@@ -213,8 +213,7 @@ export class LlmProviderKey {
      *
      * @example
      *     await client.llmProviderKey.storeLlmProviderApiKey({
-     *         provider: "openai",
-     *         apiKey: "api_key"
+     *         provider: "openai"
      *     })
      */
     public storeLlmProviderApiKey(
@@ -405,13 +404,11 @@ export class LlmProviderKey {
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.llmProviderKey.updateLlmProviderApiKey("id", {
-     *         apiKey: "api_key"
-     *     })
+     *     await client.llmProviderKey.updateLlmProviderApiKey("id")
      */
     public updateLlmProviderApiKey(
         id: string,
-        request: OpikApi.ProviderApiKeyUpdate,
+        request: OpikApi.ProviderApiKeyUpdate = {},
         requestOptions?: LlmProviderKey.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__updateLlmProviderApiKey(id, request, requestOptions));
@@ -419,7 +416,7 @@ export class LlmProviderKey {
 
     private async __updateLlmProviderApiKey(
         id: string,
-        request: OpikApi.ProviderApiKeyUpdate,
+        request: OpikApi.ProviderApiKeyUpdate = {},
         requestOptions?: LlmProviderKey.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
