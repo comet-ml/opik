@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -14,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 import static dev.langchain4j.model.googleai.GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder;
 
 @RequiredArgsConstructor

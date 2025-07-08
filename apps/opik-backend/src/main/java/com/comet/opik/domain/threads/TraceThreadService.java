@@ -1,10 +1,12 @@
 package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
+import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -19,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
 
 import java.time.Duration;
@@ -27,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
@@ -56,6 +60,8 @@ public interface TraceThreadService {
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
+
+    Mono<Void> updateThreadSampledValue(UUID projectId, List<TraceThreadSampling> threadSamplingPerRule);
 
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 }
@@ -111,6 +117,26 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
+    public Mono<Void> updateThreadSampledValue(@NonNull UUID projectId,
+            @NonNull List<TraceThreadSampling> threadSamplingPerRules) {
+        if (threadSamplingPerRules.isEmpty()) {
+            log.info("No thread sampling data provided for projectId: '{}'. Skipping update.", projectId);
+            return Mono.empty();
+        }
+
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> updateThreadSampledValueAsync(projectId, threadSamplingPerRules)),
+                LOCK_DURATION);
+    }
+
+    private Mono<Void> updateThreadSampledValueAsync(UUID projectId, List<TraceThreadSampling> threadSamplingPerRules) {
+        return traceThreadDAO.updateThreadSampledValues(projectId, threadSamplingPerRules)
+                .doOnSuccess(count -> log.info("Updated '{}' trace threads sampled values for projectId: '{}'", count,
+                        projectId))
+                .then();
+    }
+
     public Mono<Void> update(@NonNull UUID threadModelId, @NonNull TraceThreadUpdate threadUpdate) {
         return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
@@ -138,9 +164,28 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .build();
 
         return Mono.deferContextual(context -> getReopenedThreads(traceThreads, criteria)
-                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
+                .flatMap(reopenedThreads -> saveThreads(traceThreads, reopenedThreads)
                         .doOnSuccess(
-                                count -> log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId))
+                                count -> {
+
+                                    Set<UUID> reopenedThreadModelIds = reopenedThreads.stream()
+                                            .map(TraceThreadModel::id)
+                                            .collect(Collectors.toSet());
+
+                                    List<UUID> createdThreadIds = traceThreads
+                                            .stream()
+                                            .map(TraceThreadModel::id)
+                                            .filter(id -> !reopenedThreadModelIds.contains(id))
+                                            .toList();
+
+                                    if (!createdThreadIds.isEmpty()) {
+                                        eventBus.post(new TraceThreadsCreated(createdThreadIds, projectId,
+                                                context.get(RequestContext.WORKSPACE_ID),
+                                                context.get(RequestContext.USER_NAME)));
+                                    }
+
+                                    log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
+                                })
                         .flatMap(count -> Mono.fromCallable(() -> {
                             if (reopenedThreads.isEmpty()) {
                                 return Mono.empty();
@@ -149,23 +194,45 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     projectId);
 
                             eventBus.post(new ThreadsReopened(
-                                    reopenedThreads,
+                                    reopenedThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
                                     projectId,
                                     context.get(RequestContext.WORKSPACE_ID),
                                     context.get(RequestContext.USER_NAME)));
 
                             return null;
-                        })))
+                        }).subscribeOn(Schedulers.boundedElastic())))
                 .then());
     }
 
-    private Mono<Set<UUID>> getReopenedThreads(List<TraceThreadModel> traceThreads,
+    private Mono<Long> saveThreads(List<TraceThreadModel> traceThreads, List<TraceThreadModel> reopenedThreads) {
+        Map<UUID, TraceThreadModel> threadModelMap = reopenedThreads.stream()
+                .collect(Collectors.toMap(TraceThreadModel::id, Function.identity()));
+
+        List<TraceThreadModel> threadsToSave = traceThreads.stream()
+                .map(thread -> {
+                    TraceThreadModel existingThread = threadModelMap.get(thread.id());
+
+                    if (existingThread != null) {
+                        // Update existing thread with new values
+                        return existingThread.toBuilder()
+                                .status(thread.status())
+                                .lastUpdatedBy(thread.lastUpdatedBy())
+                                .lastUpdatedAt(thread.lastUpdatedAt())
+                                .build();
+                    }
+
+                    return thread;
+                })
+                .toList();
+
+        return traceThreadDAO.save(threadsToSave);
+    }
+
+    private Mono<List<TraceThreadModel>> getReopenedThreads(List<TraceThreadModel> traceThreads,
             TraceThreadCriteria criteria) {
         return traceThreadDAO.findThreadsByProject(1, traceThreads.size(), criteria)
-                .map(existingThreads -> existingThreads
-                        .stream()
-                        .map(TraceThreadModel::id)
-                        .collect(Collectors.toSet()));
+                .switchIfEmpty(Mono.just(List.of()));
+
     }
 
     @Override
@@ -255,12 +322,23 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 traceThread.threadModelId(), threadId, projectId);
 
         return traceThreadDAO
-                .save(List.of(
-                        new TraceThreadModel(projectId, threadId, traceThread.threadModelId(), TraceThreadStatus.ACTIVE,
-                                traceThread.createdBy(), userName, traceThread.createdAt(), Instant.now())))
+                .save(List.of(TraceThreadModel.builder()
+                        .projectId(projectId)
+                        .threadId(threadId)
+                        .id(traceThread.threadModelId())
+                        .status(TraceThreadStatus.ACTIVE)
+                        .createdBy(traceThread.createdBy())
+                        .lastUpdatedBy(userName)
+                        .createdAt(traceThread.createdAt())
+                        .lastUpdatedAt(Instant.now())
+                        .build()))
                 .thenReturn(traceThread.threadModelId())
                 .doOnSuccess(
-                        id -> log.info("Created new trace thread with id '{}' for threadId '{}' and projectId: '{}'",
-                                id, threadId, projectId));
+                        id -> {
+                            eventBus.post(new TraceThreadsCreated(List.of(id), projectId, traceThread.workspaceId(),
+                                    userName));
+                            log.info("Created new trace thread with id '{}' for threadId '{}' and projectId: '{}'",
+                                    id, threadId, projectId);
+                        });
     }
 }

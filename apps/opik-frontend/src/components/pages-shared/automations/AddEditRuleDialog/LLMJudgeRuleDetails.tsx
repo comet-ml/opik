@@ -131,7 +131,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     workspaceName={workspaceName}
                     onAddProvider={handleAddProvider}
                     onDeleteProvider={handleDeleteProvider}
-                    onlyCloudBase
                   />
 
                   <FormField

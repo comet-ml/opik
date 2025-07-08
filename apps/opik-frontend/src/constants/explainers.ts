@@ -282,7 +282,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.why_do_i_need_an_ai_provider]: {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,
     description:
-      "Connect AI providers to send prompts and receive responses from different LLMs . Set up a provider to test prompts live and preview model behavior in the Playground, and to automatically score traces using online evaluation rules.",
+      "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
   },
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,

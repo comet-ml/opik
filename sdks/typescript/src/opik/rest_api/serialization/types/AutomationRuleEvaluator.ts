@@ -7,10 +7,12 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudge } from "./AutomationRuleEvaluatorLlmAsJudge";
 import { AutomationRuleEvaluatorUserDefinedMetricPython } from "./AutomationRuleEvaluatorUserDefinedMetricPython";
+import { AutomationRuleEvaluatorTraceThreadLlmAsJudge } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudge";
+import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
-    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectId: core.serialization.property("project_id", core.serialization.string()),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
@@ -18,7 +20,7 @@ const _Base = core.serialization.object({
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
-    action: core.serialization.stringLiteral("evaluator").optional(),
+    action: core.serialization.stringLiteral("evaluator"),
 });
 export const AutomationRuleEvaluator: core.serialization.Schema<
     serializers.AutomationRuleEvaluator.Raw,
@@ -27,6 +29,9 @@ export const AutomationRuleEvaluator: core.serialization.Schema<
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudge.extend(_Base),
         user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPython.extend(_Base),
+        trace_thread_llm_as_judge: AutomationRuleEvaluatorTraceThreadLlmAsJudge.extend(_Base),
+        trace_thread_user_defined_metric_python:
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluator>({
         transform: (value) => value,
@@ -34,7 +39,11 @@ export const AutomationRuleEvaluator: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluator {
-    export type Raw = AutomationRuleEvaluator.LlmAsJudge | AutomationRuleEvaluator.UserDefinedMetricPython;
+    export type Raw =
+        | AutomationRuleEvaluator.LlmAsJudge
+        | AutomationRuleEvaluator.UserDefinedMetricPython
+        | AutomationRuleEvaluator.TraceThreadLlmAsJudge
+        | AutomationRuleEvaluator.TraceThreadUserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudge.Raw {
         type: "llm_as_judge";
@@ -44,9 +53,19 @@ export declare namespace AutomationRuleEvaluator {
         type: "user_defined_metric_python";
     }
 
+    export interface TraceThreadLlmAsJudge extends _Base, AutomationRuleEvaluatorTraceThreadLlmAsJudge.Raw {
+        type: "trace_thread_llm_as_judge";
+    }
+
+    export interface TraceThreadUserDefinedMetricPython
+        extends _Base,
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.Raw {
+        type: "trace_thread_user_defined_metric_python";
+    }
+
     export interface _Base {
         id?: string | null;
-        project_id?: string | null;
+        project_id: string;
         project_name?: string | null;
         name: string;
         sampling_rate?: number | null;
@@ -54,6 +73,6 @@ export declare namespace AutomationRuleEvaluator {
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
-        action?: "evaluator" | null;
+        action: "evaluator";
     }
 }
