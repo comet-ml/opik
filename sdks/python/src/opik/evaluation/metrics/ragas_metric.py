@@ -1,13 +1,13 @@
 import asyncio
 
 from opik.evaluation.metrics import base_metric, score_result
-from opik.exceptions import ScoreMethodMissingArguments
+from opik import exceptions
 
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ragas.metrics import SingleTurnMetric
-    from ragas.dataset_schema import SingleTurnSample
+    from ragas import metrics as ragas_metrics
+    from ragas import dataset_schema as ragas_dataset_schema
 
 
 def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
@@ -20,28 +20,27 @@ def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
 class RagasMetricWrapper(base_metric.BaseMetric):
     def __init__(
         self,
-        ragas_metric: "SingleTurnMetric",
+        ragas_metric: "ragas_metrics.SingleTurnMetric",
         track: bool = True,
         project_name: Optional[str] = None,
     ):
-        from ragas.metrics.base import SingleTurnMetric
-        from ragas.metrics import MetricType
+        from ragas import metrics as ragas_metrics
 
         # Provide a better error message if user try to pass a Ragas metric that is not a single turn metric
-        if not isinstance(ragas_metric, SingleTurnMetric):
+        if not isinstance(ragas_metric, ragas_metrics.SingleTurnMetric):
             raise ValueError(
                 f"ragas_metric {type(ragas_metric)} is not a SingleTurnMetric Ragas Metric"
             )
         super().__init__(name=ragas_metric.name, track=track, project_name=project_name)
         self.ragas_metric = ragas_metric
         self._required_fields = ragas_metric.required_columns[
-            MetricType.SINGLE_TURN.name
+            ragas_metrics.MetricType.SINGLE_TURN.name
         ]
 
     def _create_ragas_single_turn_sample(
         self, input_dict: Dict[str, Any]
-    ) -> "SingleTurnSample":
-        from ragas.dataset_schema import SingleTurnSample
+    ) -> "ragas_dataset_schema.SingleTurnSample":
+        from ragas import dataset_schema as ragas_dataset_schema
 
         # Add basic field name mapping between Opik and Ragas
         if "user_input" not in input_dict and "input" in input_dict:
@@ -59,13 +58,13 @@ class RagasMetricWrapper(base_metric.BaseMetric):
                 missing_arguments.append(field)
 
         if len(missing_arguments) > 0:
-            raise ScoreMethodMissingArguments(
+            raise exceptions.ScoreMethodMissingArguments(
                 self.name,
                 missing_arguments,
                 list(input_dict.keys()),
             )
 
-        sample = SingleTurnSample(**sample_dict)
+        sample = ragas_dataset_schema.SingleTurnSample(**sample_dict)
         return sample
 
     async def ascore(self, **kwargs: Any) -> score_result.ScoreResult:
