@@ -63,6 +63,8 @@ public interface TraceThreadDAO {
     Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
 
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
+
+    Flux<TraceThreadModel> streamClosedThreads(UUID projectId);
 }
 
 @Singleton
@@ -228,6 +230,16 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND thread_id IN :thread_ids
+            """;
+
+    public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
+                SELECT
+                    *
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND status = 'inactive'
+                AND scored_at IS NULL
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -493,6 +505,16 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Flux<TraceThreadModel> streamClosedThreads(@NonNull UUID projectId) {
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(GET_RECENT_CLOSED_THREADS_PER_PROJECT)
+                    .bind("project_id", projectId);
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
         });
     }
 

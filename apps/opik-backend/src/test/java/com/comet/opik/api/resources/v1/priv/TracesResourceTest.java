@@ -89,6 +89,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
@@ -9772,6 +9773,12 @@ class TracesResourceTest {
 
         traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
         var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+        //Wait for the thread to be created
+        Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            TraceThread traceThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+            Assertions.assertThat(traceThread.threadModelId()).isNotNull();
+        });
 
         return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
     }
