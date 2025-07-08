@@ -23,7 +23,6 @@ public class DatabaseAnalyticsFactory {
     private String queryParameters;
     private @NotNull ReplicationConfig replication;
 
-
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
         var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
