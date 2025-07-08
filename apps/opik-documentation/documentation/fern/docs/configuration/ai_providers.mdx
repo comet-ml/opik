@@ -210,15 +210,15 @@ Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, e
   <img src="/img/configuration/vllm_configuration.png" alt="New Custom AI Provider Modal" />
 </Frame>
 
-For the URL section, enter your model URL, for example: `http://host.docker.internal:8000/v1`.
+For the URL section, enter your server URL, for example: `http://host.docker.internal:8000/v1`.
 
 <Tip>
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
 
-If your model access is authenticated by an api key, fill in the Api Key field with it. Otherwise, leave it blank.
+If your model access requires authentication via an API key, enter it in the API Key field. Otherwise, you can leave this field blank.
 
-In the Models section, provide all the models that are available in your server. You can select one of them later on.
+In the Models section, list all models available on your server. You’ll be able to select one of them for use later.
 
 ## API Key Security
 
