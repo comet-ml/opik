@@ -20,6 +20,11 @@ from .llm_judges.usefulness.metric import Usefulness
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError
+from .conversation.response_specificity.metric import ResponseSpecificityMetric
+from .conversation.engagement_score.metric import EngagementScoreMetric
+from .conversation.topic_consistency.metric import TopicConsistencyMetric
+from .conversation.response_helpfulness.metric import ResponseHelpfulnessMetric
+
 
 # from .llm_judges.factuality.metric import Factuality
 
@@ -47,5 +52,9 @@ __all__ = [
     "SessionCompletenessQuality",
     "Usefulness",
     "UserFrustrationMetric",
+    "ResponseSpecificityMetric",
+    "EngagementScoreMetric",
+    "TopicConsistencyMetric",
+    "ResponseHelpfulnessMetric",
     # "Factuality",
 ]
