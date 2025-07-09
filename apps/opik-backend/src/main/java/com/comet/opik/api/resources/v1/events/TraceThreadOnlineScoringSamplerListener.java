@@ -93,7 +93,7 @@ public class TraceThreadOnlineScoringSamplerListener {
 
         if (rules.isEmpty()) {
             log.info(
-                    "No supported automation rule evaluators found for projectId: '{}', workspaceId: '{}'. Skipping online scoring sampling.",
+                    "No automation rule evaluators found for projectId: '{}', workspaceId: '{}'. Skipping online scoring sampling.",
                     projectId, workspaceId);
             return;
         }
