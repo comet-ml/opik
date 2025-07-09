@@ -168,7 +168,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
 | component.backend.service.ports[0].targetPort | int | `8080` |  |
-| component.backend.service.ports[1].name | string | `"backend"` |  |
+| component.backend.service.ports[1].name | string | `"swagger"` |  |
 | component.backend.service.ports[1].port | int | `3003` |  |
 | component.backend.service.ports[1].protocol | string | `"TCP"` |  |
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
