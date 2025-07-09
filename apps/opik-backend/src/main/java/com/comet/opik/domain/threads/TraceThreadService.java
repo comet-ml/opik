@@ -182,23 +182,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         var criteria = TraceThreadCriteria.builder()
                 .projectId(projectId)
-                .status(TraceThreadStatus.INACTIVE)
                 .ids(ids)
                 .build();
 
-        return Mono.deferContextual(context -> getReopenedThreads(traceThreads, criteria)
-                .flatMap(reopenedThreads -> saveThreads(traceThreads, reopenedThreads)
+        return Mono.deferContextual(context -> getThreadsByIds(traceThreads, criteria)
+                .flatMap(existingThreads -> saveThreads(traceThreads, existingThreads)
                         .doOnSuccess(
                                 count -> {
 
-                                    Set<UUID> reopenedThreadModelIds = reopenedThreads.stream()
+                                    Set<UUID> existingThreadModelIds = existingThreads.stream()
                                             .map(TraceThreadModel::id)
                                             .collect(Collectors.toSet());
 
                                     List<UUID> createdThreadIds = traceThreads
                                             .stream()
                                             .map(TraceThreadModel::id)
-                                            .filter(id -> !reopenedThreadModelIds.contains(id))
+                                            .filter(id -> !existingThreadModelIds.contains(id))
                                             .toList();
 
                                     if (!createdThreadIds.isEmpty()) {
@@ -210,6 +209,10 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
                                 })
                         .flatMap(count -> Mono.fromCallable(() -> {
+                            List<TraceThreadModel> reopenedThreads = existingThreads.stream()
+                                    .filter(TraceThreadModel::isInactive)
+                                    .toList();
+
                             if (reopenedThreads.isEmpty()) {
                                 return Mono.empty();
                             }
@@ -227,8 +230,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .then());
     }
 
-    private Mono<Long> saveThreads(List<TraceThreadModel> traceThreads, List<TraceThreadModel> reopenedThreads) {
-        Map<UUID, TraceThreadModel> threadModelMap = reopenedThreads.stream()
+    private Mono<Long> saveThreads(List<TraceThreadModel> traceThreads, List<TraceThreadModel> existingThreads) {
+        Map<UUID, TraceThreadModel> threadModelMap = existingThreads.stream()
                 .collect(Collectors.toMap(TraceThreadModel::id, Function.identity()));
 
         List<TraceThreadModel> threadsToSave = traceThreads.stream()
@@ -251,7 +254,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadDAO.save(threadsToSave);
     }
 
-    private Mono<List<TraceThreadModel>> getReopenedThreads(List<TraceThreadModel> traceThreads,
+    private Mono<List<TraceThreadModel>> getThreadsByIds(List<TraceThreadModel> traceThreads,
             TraceThreadCriteria criteria) {
         return traceThreadDAO.findThreadsByProject(1, traceThreads.size(), criteria)
                 .switchIfEmpty(Mono.just(List.of()));
@@ -303,7 +306,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.just(count);
         }
 
-        return getClosedThreadsByProject(projectId, count)
+        return getClosedThreadsByProject(projectId)
                 .flatMap(closedThreads -> {
                     if (!closedThreads.isEmpty()) {
                         // Publish closed threads for online scoring
@@ -311,17 +314,15 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 .thenReturn(count);
                     }
 
+                    log.info("No closed threads found for projectId: '{}'. Skipping online scoring.", projectId);
                     return Mono.just(count);
                 });
     }
 
-    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId, Long count) {
-        return traceThreadDAO.findThreadsByProject(1, count.intValue(),
-                TraceThreadCriteria.builder()
-                        .projectId(projectId)
-                        .status(TraceThreadStatus.INACTIVE)
-                        .scoredAtEmpty(true)
-                        .build());
+    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId) {
+        return traceThreadDAO.streamClosedThreads(projectId)
+                .collectList()
+                .switchIfEmpty(Mono.just(List.of()));
     }
 
     @Override
