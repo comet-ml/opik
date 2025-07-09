@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 export interface CreateDashboardRequest {
   name: string;
   description?: string;
+  skipDefaultSection?: boolean;
 }
 
 export interface CreateDashboardResponse {

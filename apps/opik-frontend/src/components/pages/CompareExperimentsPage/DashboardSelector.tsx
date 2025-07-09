@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Settings, Copy, Trash2, Download, Upload, Edit } from "lucide-react";
+import { Plus, Settings, Copy, Trash2, Download, Upload, Edit, Layers } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,10 @@ import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutat
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import useDashboardDeleteMutation from "@/api/dashboards/useDashboardDeleteMutation";
 import useExperimentDashboardAssociateMutation from "@/api/dashboards/useExperimentDashboardAssociateMutation";
+import useDashboardTemplates from "@/api/dashboardTemplates/useDashboardTemplates";
+import useDashboardTemplatesById from "@/api/dashboardTemplates/useDashboardTemplatesById";
+import useDashboardSectionCreateMutation from "@/api/dashboards/useDashboardSectionCreateMutation";
+import useDashboardPanelCreateMutation from "@/api/dashboards/useDashboardPanelCreateMutation";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DropdownOption } from "@/types/shared";
@@ -49,6 +53,9 @@ const dashboardFormSchema = z.object({
     .string()
     .max(500, "Description must be less than 500 characters")
     .optional(),
+  templateId: z
+    .string()
+    .optional(),
 });
 
 type DashboardFormData = z.infer<typeof dashboardFormSchema>;
@@ -77,10 +84,19 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
       staleTime: 5 * 60 * 1000,
     }
   );
+  const { data: dashboardTemplates, isLoading: templatesLoading } = useDashboardTemplates(
+    {},
+    {
+      retry: 1,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
   const createDashboardMutation = useDashboardCreateMutation();
   const updateDashboardMutation = useDashboardUpdateMutation();
   const deleteDashboardMutation = useDashboardDeleteMutation();
   const associateDashboardMutation = useExperimentDashboardAssociateMutation();
+  const createSectionMutation = useDashboardSectionCreateMutation();
+  const createPanelMutation = useDashboardPanelCreateMutation();
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -88,6 +104,7 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingDashboard, setEditingDashboard] = useState<any>(null);
   const [deletingDashboard, setDeletingDashboard] = useState<any>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   // Forms
   const createForm = useForm<DashboardFormData>({
@@ -95,6 +112,7 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
     defaultValues: {
       name: "",
       description: "",
+      templateId: "",
     },
   });
 
@@ -112,16 +130,62 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
     label: dashboard.name,
   })) || [];
 
+  // Convert templates to dropdown options
+  const templateOptions: DropdownOption<string>[] = [
+    { value: "", label: "Create Empty Dashboard" },
+    ...(dashboardTemplates?.map((template) => ({
+      value: template.id,
+      label: template.name,
+    })) || [])
+  ];
+
   const handleCreateDashboard = async (data: DashboardFormData) => {
     try {
+      // Create the dashboard first (without sections)
       const newDashboard = await createDashboardMutation.mutateAsync({
         dashboard: {
           name: data.name.trim(),
           description: data.description?.trim() || "",
+          skipDefaultSection: !!data.templateId, // Skip default section when creating from template
         }
       });
       
       if (newDashboard?.id) {
+        // If creating from template, populate the dashboard with template content
+        if (data.templateId) {
+          const template = dashboardTemplates?.find(t => t.id === data.templateId);
+          if (template?.configuration?.sections && template.configuration.sections.length > 0) {
+            // Create sections and panels from template
+            for (const sectionTemplate of template.configuration.sections) {
+              const newSection = await createSectionMutation.mutateAsync({
+                dashboardId: newDashboard.id,
+                section: {
+                  title: sectionTemplate.title,
+                  position_order: sectionTemplate.position_order,
+                }
+              });
+              
+              if (newSection?.id && sectionTemplate.panels) {
+                // Create panels for this section
+                for (const panelTemplate of sectionTemplate.panels) {
+                  await createPanelMutation.mutateAsync({
+                    dashboardId: newDashboard.id,
+                    sectionId: newSection.id,
+                    panel: {
+                      name: panelTemplate.name,
+                      type: panelTemplate.type.toUpperCase() as "PYTHON" | "CHART" | "TEXT" | "METRIC" | "HTML",
+                      configuration: panelTemplate.configuration,
+                      layout: panelTemplate.layout,
+                      templateId: panelTemplate.template_id,
+                    }
+                  });
+                }
+              }
+            }
+          }
+        }
+        
+        // Associate with experiment
         await associateDashboardMutation.mutateAsync({
           experimentId,
           dashboardId: newDashboard.id
@@ -129,6 +193,7 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
         
         setCurrentDashboard(newDashboard.id);
         createForm.reset();
+        setSelectedTemplateId("");
         setShowCreateModal(false);
       }
     } catch (error) {
@@ -283,7 +348,11 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
         </div>
         
         <Button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => {
+            setShowCreateModal(true);
+            createForm.reset();
+            setSelectedTemplateId("");
+          }}
           size="sm"
           variant="outline"
         >
@@ -328,13 +397,58 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
       </div>
 
       {/* Create Dashboard Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog 
+        open={showCreateModal} 
+        onOpenChange={(open) => {
+          setShowCreateModal(open);
+          if (!open) {
+            createForm.reset();
+            setSelectedTemplateId("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Create New Dashboard</DialogTitle>
           </DialogHeader>
           <Form {...createForm}>
             <form onSubmit={createForm.handleSubmit(handleCreateDashboard)} className="space-y-4">
+              <FormField
+                control={createForm.control}
+                name="templateId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Template</FormLabel>
+                    <FormControl>
+                      <LoadableSelectBox
+                        value={field.value || ""}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          setSelectedTemplateId(value);
+                        }}
+                        options={templateOptions}
+                        placeholder="Choose a template..."
+                        isLoading={templatesLoading}
+                        disabled={templatesLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              {selectedTemplateId && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Layers className="size-4" />
+                    <span>
+                      {dashboardTemplates?.find(t => t.id === selectedTemplateId)?.description || 
+                       "This template will be used to create your dashboard with pre-configured sections and panels."}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               <FormField
                 control={createForm.control}
                 name="name"
@@ -373,7 +487,12 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
                   type="submit" 
                   disabled={createDashboardMutation.isPending}
                 >
-                  {createDashboardMutation.isPending ? "Creating..." : "Create Dashboard"}
+                  {createDashboardMutation.isPending 
+                    ? "Creating..." 
+                    : selectedTemplateId 
+                      ? "Create from Template" 
+                      : "Create Dashboard"
+                  }
                 </Button>
               </DialogFooter>
             </form>

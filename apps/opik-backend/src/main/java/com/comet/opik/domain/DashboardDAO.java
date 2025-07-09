@@ -28,7 +28,7 @@ import java.util.UUID;
 public interface DashboardDAO {
 
     @SqlUpdate("""
-            INSERT INTO dashboard_templates (id, name, description, workspace_id, created_by, last_updated_by)
+            INSERT INTO experiment_dashboard_templates (id, name, description, workspace_id, created_by, last_updated_by)
             VALUES (:id, :name, :description, :workspaceId, :userName, :userName)
             """)
     void insert(@Bind("id") UUID id,
@@ -38,7 +38,7 @@ public interface DashboardDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            UPDATE dashboard_templates
+            UPDATE experiment_dashboard_templates
             SET name = :name, description = :description, last_updated_by = :userName
             WHERE id = :id AND workspace_id = :workspaceId
             """)
@@ -49,27 +49,27 @@ public interface DashboardDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            DELETE FROM dashboard_templates
+            DELETE FROM experiment_dashboard_templates
             WHERE id = :id AND workspace_id = :workspaceId
             """)
     int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
-            DELETE FROM dashboard_templates
+            DELETE FROM experiment_dashboard_templates
             WHERE id IN (<ids>) AND workspace_id = :workspaceId
             """)
     int delete(@Bind("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
             SELECT id, name, description, workspace_id, created_at, created_by, last_updated_at, last_updated_by
-            FROM dashboard_templates
+            FROM experiment_dashboard_templates
             WHERE id = :id AND workspace_id = :workspaceId
             """)
     Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
             SELECT id, name, description, workspace_id, created_at, created_by, last_updated_at, last_updated_by
-            FROM dashboard_templates
+            FROM experiment_dashboard_templates
             WHERE workspace_id = :workspaceId
             ORDER BY created_at DESC
             """)
@@ -77,7 +77,7 @@ public interface DashboardDAO {
 
     // Dashboard Sections
     @SqlUpdate("""
-            INSERT INTO dashboard_sections (id, dashboard_id, title, position_order, created_by, last_updated_by)
+            INSERT INTO experiment_dashboard_sections (id, dashboard_id, title, position_order, created_by, last_updated_by)
             VALUES (:id, :dashboardId, :title, :positionOrder, :userName, :userName)
             """)
     void insertSection(@Bind("id") UUID id,
@@ -87,7 +87,7 @@ public interface DashboardDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            UPDATE dashboard_sections
+            UPDATE experiment_dashboard_sections
             SET title = :title, position_order = :positionOrder, last_updated_by = :userName, last_updated_at = CURRENT_TIMESTAMP(6)
             WHERE id = :id
             """)
@@ -97,20 +97,20 @@ public interface DashboardDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            DELETE FROM dashboard_sections
+            DELETE FROM experiment_dashboard_sections
             WHERE id IN (<sectionIds>)
             """)
     void deleteSectionsByIds(@BindList("sectionIds") List<UUID> sectionIds);
 
     @SqlUpdate("""
-            DELETE FROM dashboard_sections
+            DELETE FROM experiment_dashboard_sections
             WHERE dashboard_id = :dashboardId
             """)
     void deleteSectionsByDashboardId(@Bind("dashboardId") UUID dashboardId);
 
     @SqlQuery("""
             SELECT id, dashboard_id, title, position_order, created_at, created_by, last_updated_at, last_updated_by
-            FROM dashboard_sections
+            FROM experiment_dashboard_sections
             WHERE dashboard_id = :dashboardId
             ORDER BY position_order
             """)
@@ -118,8 +118,8 @@ public interface DashboardDAO {
 
     // Dashboard Panels
     @SqlUpdate("""
-            INSERT INTO dashboard_panels (id, section_id, name, type, configuration, layout, created_by, last_updated_by)
-            VALUES (:id, :sectionId, :name, :type, :configuration, :layout, :userName, :userName)
+            INSERT INTO experiment_dashboard_panels (id, section_id, name, type, configuration, layout, template_id, created_by, last_updated_by)
+            VALUES (:id, :sectionId, :name, :type, :configuration, :layout, :templateId, :userName, :userName)
             """)
     void insertPanel(@Bind("id") UUID id,
             @Bind("sectionId") UUID sectionId,
@@ -127,11 +127,12 @@ public interface DashboardDAO {
             @Bind("type") String type,
             @Bind("configuration") JsonNode configuration,
             @Bind("layout") JsonNode layout,
+            @Bind("templateId") UUID templateId,
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            UPDATE dashboard_panels
-            SET name = :name, type = :type, configuration = :configuration, layout = :layout, last_updated_by = :userName, last_updated_at = CURRENT_TIMESTAMP(6)
+            UPDATE experiment_dashboard_panels
+            SET name = :name, type = :type, configuration = :configuration, layout = :layout, template_id = :templateId, last_updated_by = :userName, last_updated_at = CURRENT_TIMESTAMP(6)
             WHERE id = :id
             """)
     int updatePanel(@Bind("id") UUID id,
@@ -139,24 +140,25 @@ public interface DashboardDAO {
             @Bind("type") String type,
             @Bind("configuration") JsonNode configuration,
             @Bind("layout") JsonNode layout,
+            @Bind("templateId") UUID templateId,
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            DELETE FROM dashboard_panels
+            DELETE FROM experiment_dashboard_panels
             WHERE id IN (<panelIds>)
             """)
     void deletePanelsByIds(@BindList("panelIds") List<UUID> panelIds);
 
     @SqlQuery("""
-            SELECT id, section_id, name, type, configuration, layout, created_at, created_by, last_updated_at, last_updated_by
-            FROM dashboard_panels
+            SELECT id, section_id, name, type, configuration, layout, template_id, created_at, created_by, last_updated_at, last_updated_by
+            FROM experiment_dashboard_panels
             WHERE section_id IN (<sectionIds>)
             """)
     List<DashboardPanel> findPanelsBySectionIds(@BindList("sectionIds") List<UUID> sectionIds);
 
     @SqlQuery("""
-            SELECT id, section_id, name, type, configuration, layout, created_at, created_by, last_updated_at, last_updated_by
-            FROM dashboard_panels
+            SELECT id, section_id, name, type, configuration, layout, template_id, created_at, created_by, last_updated_at, last_updated_by
+            FROM experiment_dashboard_panels
             WHERE section_id IS NULL
             """)
     List<DashboardPanel> findOrphanedPanels();
@@ -248,6 +250,9 @@ public interface DashboardDAO {
                         .type(DashboardPanel.PanelType.valueOf(rs.getString("type").toUpperCase()))
                         .configuration(configuration)
                         .layout(layout)
+                        .templateId(rs.getString("template_id") != null
+                                ? UUID.fromString(rs.getString("template_id"))
+                                : null)
                         .createdAt(rs.getTimestamp("created_at").toInstant())
                         .createdBy(rs.getString("created_by"))
                         .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())

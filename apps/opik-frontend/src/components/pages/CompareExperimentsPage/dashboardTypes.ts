@@ -32,6 +32,7 @@ export interface DashboardPanel {
   type: 'PYTHON' | 'CHART' | 'TEXT' | 'METRIC' | 'HTML';
   configuration: any;
   layout: PanelLayoutItem;
+  template_id?: string;
   created_at: string;
   created_by: string;
   last_updated_at: string;

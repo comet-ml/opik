@@ -30,6 +30,8 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
+import PanelTemplatesPage from "@/components/pages/PanelTemplatesPage/PanelTemplatesPage";
+import DashboardTemplatesPage from "@/components/pages/DashboardTemplatesPage/DashboardTemplatesPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
@@ -303,6 +305,54 @@ const promptRoute = createRoute({
   },
 });
 
+// ----------- panel templates
+const panelTemplatesRoute = createRoute({
+  path: "/panel-templates",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Panel templates",
+  },
+});
+
+const panelTemplatesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => panelTemplatesRoute,
+  component: PanelTemplatesPage,
+});
+
+const panelTemplateRoute = createRoute({
+  path: "/$panelTemplateId",
+  getParentRoute: () => panelTemplatesRoute,
+  component: PanelTemplatesPage,
+  staticData: {
+    param: "panelTemplateId",
+  },
+});
+
+// ----------- dashboard templates
+const dashboardTemplatesRoute = createRoute({
+  path: "/dashboard-templates",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Dashboard templates",
+  },
+});
+
+const dashboardTemplatesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardTemplatesRoute,
+  component: DashboardTemplatesPage,
+});
+
+const dashboardTemplateRoute = createRoute({
+  path: "/$dashboardTemplateId",
+  getParentRoute: () => dashboardTemplatesRoute,
+  component: DashboardTemplatesPage,
+  staticData: {
+    param: "dashboardTemplateId",
+  },
+});
+
 // ----------- redirect
 const redirectRoute = createRoute({
   path: "/redirect",
@@ -401,6 +451,8 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
+      panelTemplatesRoute.addChildren([panelTemplatesListRoute, panelTemplateRoute]),
+      dashboardTemplatesRoute.addChildren([dashboardTemplatesListRoute, dashboardTemplateRoute]),
       redirectRoute.addChildren([
         homeRedirectRoute,
         redirectProjectsRoute,

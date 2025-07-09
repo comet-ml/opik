@@ -7,11 +7,15 @@ import TextPanelComponent from "./TextPanel";
 import MetricPanelComponent from "./MetricPanel";
 import HtmlPanelComponent from "./HtmlPanel";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import usePanelTemplates from "@/api/panelTemplates/usePanelTemplates";
+import { ReusablePanelTemplate } from "@/api/panelTemplates/usePanelTemplatesById";
 
 interface PanelModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (panel: Panel) => void;
+  onSave: (panel: Panel, templateId?: string) => void;
   sectionId: string;
   panel?: Panel; // For editing existing panels
 }
@@ -88,6 +92,19 @@ if (ctx && typeof Chart !== 'undefined') {
 const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionId, panel }) => {
   const [name, setName] = useState("New Panel");
   const [panelType, setPanelType] = useState<"python" | "chart" | "text" | "metric" | "html">("python");
+  
+  // Template selection state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  
+  // Fetch panel templates
+  const { data: allTemplates = [] } = usePanelTemplates({});
+  
+  // Filter templates by current panel type
+  const availableTemplates = useMemo(() => {
+    return allTemplates.filter(template => 
+      template.type.toLowerCase() === panelType
+    );
+  }, [allTemplates, panelType]);
   
   // Resizable splitter state
   const [configWidth, setConfigWidth] = useState(60); // percentage
@@ -267,7 +284,7 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
         break;
     }
     
-    onSave(panelData);
+    onSave(panelData, selectedTemplateId || undefined);
     onClose();
   }, [
     panelType, 
@@ -290,6 +307,7 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
     htmlHeight, 
     cssIncludes, 
     jsIncludes, 
+    selectedTemplateId,
     onSave, 
     onClose
   ]);
@@ -787,40 +805,103 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 ${open ? '' : 'hidden'}`}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[95vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h3 className="comet-title-m">
-            {isEditing ? "Edit Panel" : "Create new panel"}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl font-bold w-8 h-8 flex items-center justify-center"
-          >
-            ×
-          </button>
+        <div className="p-4 border-b bg-gray-50 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="comet-title-m">
+              {isEditing ? "Edit Panel" : "Create new panel"}
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-xl font-bold w-8 h-8 flex items-center justify-center"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Template Selection Section */}
+          {!isEditing && (
+            <div className="flex items-center gap-4 p-3 bg-white rounded-lg border">
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                From panel template (optional):
+              </Label>
+              
+              <div className="flex-1 max-w-xs">
+                <Select
+                  value={selectedTemplateId}
+                  onValueChange={setSelectedTemplateId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose a template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTemplates.map(template => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedTemplateId && (
+                <Button
+                  onClick={() => {
+                    const template: ReusablePanelTemplate | undefined = allTemplates.find((t: ReusablePanelTemplate) => t.id === selectedTemplateId);
+                    if (template) {
+                      setName(template.name);
+                      setPanelType(template.type.toLowerCase() as any);
+                      setPythonCode(template.configuration.code || DEFAULT_PYTHON_CODE);
+                      setChartType(template.configuration.chartType || "line");
+                      setDataSource(template.configuration.dataSource || "");
+                      setXAxis(template.configuration.xAxis || "");
+                      setYAxis(template.configuration.yAxis || "");
+                      setChartTitle(template.configuration.title || "");
+                      setTextContent(template.configuration.content || DEFAULT_TEXT_CONTENT);
+                      setTextFormat(template.configuration.format || "markdown");
+                      setMetricName(template.configuration.metricName || "");
+                      setAggregation(template.configuration.aggregation || "avg");
+                      setTimeRange(template.configuration.timeRange || "24h");
+                      setDisplayFormat(template.configuration.displayFormat || "number");
+                      setHtmlContent(template.configuration.htmlContent || DEFAULT_HTML_CONTENT);
+                      setAllowScripts(template.configuration.allowScripts || true);
+                      setHtmlHeight(template.configuration.height || 400);
+                      setCssIncludes(template.configuration.cssIncludes || []);
+                      setJsIncludes(template.configuration.jsIncludes || []);
+                    }
+                  }}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                >
+                  Apply Template
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Content */}
-        <div ref={containerRef} className="flex flex-1 min-h-0">
+        <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
           {/* Left Sidebar - Panel Types */}
-          <div className="w-64 border-r bg-gray-50 p-4">
-            <div className="mb-4">
+          <div className="w-56 border-r bg-gray-50 p-3 overflow-y-auto flex-shrink-0">
+            <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">Panel Type</label>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {panelTypes.map((type) => (
                   <button
                     key={type.value}
                     onClick={() => setPanelType(type.value as any)}
                     disabled={isEditing}
-                    className={`w-full text-left p-3 rounded-lg border transition-all ${
+                    className={`w-full text-left p-2 rounded-lg border transition-all text-sm ${
                       panelType === type.value
                         ? 'bg-primary-100 border-primary text-primary'
                         : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                     } ${isEditing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{type.icon}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{type.icon}</span>
                       <span className="font-medium">{type.label}</span>
                     </div>
                   </button>
@@ -831,16 +912,16 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
 
           {/* Configuration Panel */}
           <div
-            className="flex flex-col border-r bg-white"
+            className="flex flex-col border-r bg-white min-w-0"
             style={{ width: `${configWidth}%` }}
           >
-            <div className="p-4 border-b">
-              <h4 className="font-medium text-gray-900 mb-4">Panel Configuration</h4>
+            <div className="p-3 border-b flex-shrink-0">
+              <h4 className="font-medium text-gray-900 mb-3">Panel Configuration</h4>
               
-              <div className="mb-4">
-                <label className="block mb-1 font-medium">Panel Name</label>
+              <div className="mb-3">
+                <label className="block mb-1 font-medium text-sm">Panel Name</label>
                 <input
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border rounded px-3 py-2 text-sm"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter panel name"
@@ -848,14 +929,14 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
               </div>
             </div>
 
-            <div className="flex-1 p-4 overflow-auto">
+            <div className="flex-1 p-3 overflow-auto min-h-0">
               {renderPanelTypeConfig()}
             </div>
           </div>
 
           {/* Resizable handle */}
           <div
-            className="w-1 bg-gray-200 hover:bg-gray-300 cursor-col-resize relative"
+            className="w-1 bg-gray-200 hover:bg-gray-300 cursor-col-resize relative flex-shrink-0"
             onMouseDown={handleMouseDown}
           >
             <div className="absolute inset-y-0 -left-1 -right-1" />
@@ -863,30 +944,32 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
 
           {/* Preview Panel */}
           <div
-            className="flex flex-col bg-gray-50"
+            className="flex flex-col bg-gray-50 min-w-0"
             style={{ width: `${100 - configWidth}%` }}
           >
-            <div className="flex-1 p-4">
+            <div className="flex-1 p-3 overflow-auto">
               {renderPreview()}
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
-          <div className="text-sm text-gray-500">
+        <div className="flex items-center justify-between p-4 border-t bg-gray-50 flex-shrink-0">
+          <div className="text-xs text-gray-500">
             Configure your panel settings on the left and see a live preview on the right
           </div>
           <div className="flex gap-3">
             <Button
               onClick={onClose}
               variant="outline"
+              size="sm"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSave}
               variant="default"
+              size="sm"
             >
               {isEditing ? "Update Panel" : "Create Panel"}
             </Button>

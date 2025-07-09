@@ -82,7 +82,7 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
     }));
   }, [dashboard.sections, expandedSections]);
 
-  const handleSavePanel = useCallback(async (panel: Panel) => {
+  const handleSavePanel = useCallback(async (panel: Panel, templateId?: string) => {
     try {
       // Find the section to get its layout for positioning
       const section = frontendSections.find(s => s.id === modalSectionId);
@@ -91,11 +91,12 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
       await createPanelMutation.mutateAsync({
         dashboardId: dashboard.id,
         sectionId: modalSectionId,
-        panel: {
+                  panel: {
           name: panel.name,
           type: panel.data.type.toUpperCase() as any,
           configuration: panel.data.config,
           layout: nextPosition,
+          templateId: templateId,
         }
       });
       

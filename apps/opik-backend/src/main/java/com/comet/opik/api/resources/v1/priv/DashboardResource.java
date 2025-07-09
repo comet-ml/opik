@@ -269,7 +269,7 @@ public class DashboardResource {
                 workspaceId);
 
         DashboardPanel createdPanel = service.createPanel(dashboardId, sectionId, request.name, request.type,
-                request.configuration, request.layout);
+                request.configuration, request.layout, request.templateId);
 
         log.info("Created panel with id '{}' for section '{}' in dashboard '{}' on workspace_id '{}'",
                 createdPanel.id(), sectionId, dashboardId, workspaceId);
@@ -289,6 +289,7 @@ public class DashboardResource {
         public String type;
         public Object configuration;
         public PanelLayout layout;
+        public UUID templateId;
 
         public static class PanelLayout {
             public int x;

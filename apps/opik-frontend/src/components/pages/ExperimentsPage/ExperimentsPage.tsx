@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Info, RotateCw } from "lucide-react";
+import { Info, RotateCw, Layers3, ChevronDown } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -53,10 +53,14 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import NoData from "@/components/shared/NoData/NoData";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import useDashboardTemplates from "@/api/dashboardTemplates/useDashboardTemplates";
+import useDashboardTemplatesById from "@/api/dashboardTemplates/useDashboardTemplatesById";
 import {
   checkIsMoreRowId,
   generateGroupedNameColumDef,
@@ -78,6 +82,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import { DropdownOption } from "@/types/shared";
 import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
@@ -227,6 +232,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  
+  // Dashboard template state
+  const [selectedDashboardTemplateId, setSelectedDashboardTemplateId] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"table" | "dashboard">("table");
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
@@ -480,7 +489,235 @@ const ExperimentsPage: React.FunctionComponent = () => {
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending || isFeedbackScoresPending) {
+  const { data: dashboardTemplates, isLoading: templatesLoading } = useDashboardTemplates(
+    {},
+    {
+      retry: 1,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+
+  const { data: selectedTemplate, isLoading: selectedTemplateLoading } = useDashboardTemplatesById(
+    { dashboardTemplateId: selectedDashboardTemplateId },
+    { 
+      enabled: !!selectedDashboardTemplateId,
+      retry: 1,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+
+  // Dashboard template dropdown options
+  const dashboardTemplateOptions: DropdownOption<string>[] = useMemo(() => {
+    if (!dashboardTemplates) return [];
+    return [
+      { value: "", label: "None (Show table view)" },
+      ...dashboardTemplates.map((template) => ({
+        value: template.id,
+        label: template.name,
+      })),
+    ];
+  }, [dashboardTemplates]);
+
+  const handleDashboardTemplateChange = useCallback((templateId: string) => {
+    setSelectedDashboardTemplateId(templateId);
+    setViewMode(templateId ? "dashboard" : "table");
+  }, []);
+
+  const renderDashboardView = useCallback(() => {
+    if (!selectedTemplate) return null;
+
+    // Convert template sections to display format
+    const displaySections = selectedTemplate.configuration.sections.map(section => ({
+      ...section,
+      isExpanded: true, // Show all sections expanded by default
+    }));
+
+    const renderPanelContent = (panel: any) => {
+      switch (panel.type.toLowerCase()) {
+        case "python":
+          return (
+            <div className="h-full p-4 font-mono text-sm">
+              <div className="bg-gray-50 rounded p-3 h-full overflow-auto">
+                <pre className="whitespace-pre-wrap text-xs">
+                  {panel.configuration?.code || "# Python code will be executed here"}
+                </pre>
+              </div>
+            </div>
+          );
+        case "metric":
+          return (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-blue-600 mb-2">
+                  {panel.configuration?.value || "0"}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {panel.configuration?.metricName || "Metric"}
+                </div>
+              </div>
+            </div>
+          );
+        case "chart":
+          return (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center text-gray-500">
+                <div className="text-4xl mb-2">📊</div>
+                <div className="text-sm">Chart Panel</div>
+                <div className="text-xs mt-1">
+                  {panel.configuration?.chartType || "Chart"}
+                </div>
+              </div>
+            </div>
+          );
+        case "text":
+          return (
+            <div className="h-full p-4">
+              <div className="prose prose-sm max-w-none">
+                {panel.configuration?.content || "Text content will be displayed here"}
+              </div>
+            </div>
+          );
+        case "html":
+          return (
+            <div className="h-full p-4">
+              <div className="text-sm text-gray-600">
+                <div className="text-4xl mb-2">🌐</div>
+                <div>HTML Panel</div>
+              </div>
+            </div>
+          );
+        default:
+          return (
+            <div className="h-full flex items-center justify-center text-red-500">
+              <div className="text-center">
+                <div className="text-4xl mb-2">⚠️</div>
+                <p>Unsupported panel type: {panel.type}</p>
+              </div>
+            </div>
+          );
+      }
+    };
+
+    const renderPanelHeader = (panel: any) => (
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+        <div className="flex items-center gap-3">
+          <span className="comet-body-s font-medium text-foreground">{panel.name}</span>
+          <span className="comet-body-xs bg-muted text-muted-foreground px-2 py-1 rounded-sm">
+            {panel.type}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="comet-body-xs text-muted-foreground">
+            Preview
+          </span>
+        </div>
+      </div>
+    );
+
+    const renderSectionHeader = (section: any) => (
+      <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
+        <div className="flex items-center gap-2">
+          <button
+            className="p-1 hover:bg-muted/50 rounded transition-colors"
+            disabled
+          >
+            <ChevronDown size={16} />
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <h3 className="comet-title-m">{section.title}</h3>
+            <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+              {section.panels.length} panel{section.panels.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Template Preview</span>
+        </div>
+      </div>
+    );
+
+    const renderSectionContent = (section: any) => {
+      if (section.panels.length === 0) {
+        return (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-4xl mb-2">📊</div>
+            <p>No panels in this section.</p>
+          </div>
+        );
+      }
+
+      // Create a simple grid layout for panels
+      const gridCols = section.panels.length === 1 ? 1 : Math.min(2, section.panels.length);
+      const gridClass = gridCols === 1 ? "grid-cols-1" : "grid-cols-2";
+
+      return (
+        <div className={`grid ${gridClass} gap-4`}>
+          {section.panels.map((panel: any) => (
+            <div 
+              key={panel.id} 
+              className="bg-card rounded-md border shadow-sm overflow-hidden"
+              style={{ minHeight: "300px" }}
+            >
+              {renderPanelHeader(panel)}
+              
+              {/* Panel Content */}
+              <div className="h-[calc(300px-65px)]">
+                {renderPanelContent(panel)}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Template Header */}
+        <div className="flex items-center justify-between px-6 py-6 border-b bg-background">
+          <div>
+            <h2 className="comet-title-l">{selectedTemplate.name}</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              {selectedTemplate.description || "Template Preview"}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setViewMode("table")}
+          >
+            Back to Table
+          </Button>
+        </div>
+
+        {/* Dashboard Sections */}
+        <div>
+          {displaySections.length === 0 ? (
+            <div className="mx-6">
+              <NoData
+                icon={<Layers3 className="size-16 text-muted-slate" />}
+                title="Empty Template"
+                message="This dashboard template doesn't have any sections yet."
+                className="rounded-lg border bg-card"
+              />
+            </div>
+          ) : (
+            displaySections.map((section) => (
+              <div key={section.id} className="border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow mb-6 mx-6">
+                {renderSectionHeader(section)}
+                
+                <div className="p-4">
+                  {renderSectionContent(section)}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }, [selectedTemplate]);
+
+  if (isPending || isFeedbackScoresPending || (selectedTemplateLoading && selectedDashboardTemplateId)) {
     return <Loader />;
   }
 
@@ -493,90 +730,134 @@ const ExperimentsPage: React.FunctionComponent = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
       />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            config={filtersConfig as never}
-            filters={filters}
-            onChange={setFilters}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
+      
+      {/* Dashboard Template Selector */}
+      <div className="mb-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-1 max-w-sm">
+            <LoadableSelectBox
+              isLoading={templatesLoading}
+              options={dashboardTemplateOptions}
+              placeholder="Select a dashboard template..."
+              value={selectedDashboardTemplateId}
+              onChange={handleDashboardTemplateChange}
+              disabled={templatesLoading}
+            />
+          </div>
+          {selectedDashboardTemplateId && (
             <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
+              variant={viewMode === "dashboard" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("dashboard")}
             >
-              <RotateCw />
+              <Layers3 className="mr-2 size-4" />
+              Dashboard View
             </Button>
-          </TooltipWrapper>
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-          ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-2 size-3.5" />
-            Create new experiment
-          </Button>
+          )}
+          {selectedDashboardTemplateId && (
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+            >
+              Table View
+            </Button>
+          )}
         </div>
       </div>
-      {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
-      )}
-      <DataTable
-        columns={columns}
-        data={experiments}
-        onRowClick={handleRowClick}
-        renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        expandingConfig={expandingConfig}
-        groupingConfig={GROUPING_CONFIG}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
+
+      {/* Render Dashboard View or Table View */}
+      {viewMode === "dashboard" && selectedTemplate ? (
+        renderDashboardView()
+      ) : (
+        <>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                config={filtersConfig as never}
+                filters={filters}
+                onChange={setFilters}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <ExperimentsActionsPanel experiments={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+              <TooltipWrapper content="Refresh experiments list">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="shrink-0"
+                  onClick={() => refetch()}
+                >
+                  <RotateCw />
+                </Button>
+              </TooltipWrapper>
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+                sections={columnSections}
+              ></ColumnsButton>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewExperimentClick}
+              >
+                <Info className="mr-2 size-3.5" />
                 Create new experiment
               </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page!}
-          pageChange={setPage}
-          size={DEFAULT_GROUPS_PER_PAGE}
-          total={total}
-        ></DataTablePagination>
-      </div>
+            </div>
+          </div>
+          {Boolean(experiments.length) && (
+            <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
+          )}
+          <DataTable
+            columns={columns}
+            data={experiments}
+            onRowClick={handleRowClick}
+            renderCustomRow={renderCustomRowCallback}
+            getIsCustomRow={getIsCustomRow}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            expandingConfig={expandingConfig}
+            groupingConfig={GROUPING_CONFIG}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={
+              <DataTableNoData title={noDataText}>
+                {noData && (
+                  <Button variant="link" onClick={handleNewExperimentClick}>
+                    Create new experiment
+                  </Button>
+                )}
+              </DataTableNoData>
+            }
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page!}
+              pageChange={setPage}
+              size={DEFAULT_GROUPS_PER_PAGE}
+              total={total}
+            ></DataTablePagination>
+          </div>
+        </>
+      )}
+      
       <AddExperimentDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

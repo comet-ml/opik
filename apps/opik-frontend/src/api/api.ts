@@ -15,6 +15,8 @@ export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
 export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
 export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
+export const PANEL_TEMPLATES_REST_ENDPOINT = "/v1/private/panel-templates/";
+export const DASHBOARD_TEMPLATES_REST_ENDPOINT = "/v1/private/dashboard-templates/";
 export const FEEDBACK_DEFINITIONS_REST_ENDPOINT =
   "/v1/private/feedback-definitions/";
 export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
@@ -41,6 +43,8 @@ export const DATASET_ITEMS_KEY = "dataset-items";
 export const DATASET_ITEMS_OUTPUT_COLUMNS_KEY = "dataset-items-output-columns";
 export const EXPERIMENTS_KEY = "experiments";
 export const DASHBOARDS_KEY = "dashboards";
+export const PANEL_TEMPLATES_KEY = "panel-templates";
+export const DASHBOARD_TEMPLATES_KEY = "dashboard-templates";
 export const EXPERIMENT_DASHBOARD_KEY = "experiment-dashboard";
 export const FEEDBACK_DEFINITIONS_KEY = "feedback-definitions";
 export const OPTIMIZATIONS_KEY = "optimizations";

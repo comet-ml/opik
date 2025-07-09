@@ -23,6 +23,7 @@ public record DashboardPanel(
         @JsonView({Dashboard.View.Public.class, Dashboard.View.Write.class}) @NotNull PanelType type,
         @JsonView({Dashboard.View.Public.class, Dashboard.View.Write.class}) JsonNode configuration,
         @JsonView({Dashboard.View.Public.class, Dashboard.View.Write.class}) JsonNode layout,
+        @JsonView({Dashboard.View.Public.class, Dashboard.View.Write.class}) UUID templateId,
         @JsonView({Dashboard.View.Public.class}) Instant createdAt,
         @JsonView({Dashboard.View.Public.class}) String createdBy,
         @JsonView({Dashboard.View.Public.class}) Instant lastUpdatedAt,

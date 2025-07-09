@@ -13,6 +13,7 @@ interface BackendDashboardPanel {
     w: number;
     h: number;
   };
+  template_id?: string;
   created_at: string;
   created_by: string;
   last_updated_at: string;
@@ -76,6 +77,7 @@ export interface DashboardPanel {
     w: number;
     h: number;
   };
+  template_id?: string;
   created_at: string;
   created_by: string;
   last_updated_at: string;

@@ -14,6 +14,7 @@ export interface CreateDashboardPanelRequest {
     w: number;
     h: number;
   };
+  templateId?: string;
 }
 
 export interface CreateDashboardPanelResponse {

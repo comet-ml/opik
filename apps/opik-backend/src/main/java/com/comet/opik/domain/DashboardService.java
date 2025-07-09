@@ -61,7 +61,7 @@ public interface DashboardService {
     DashboardSection createSection(UUID dashboardId, String title, Integer positionOrder);
 
     DashboardPanel createPanel(UUID dashboardId, UUID sectionId, String name, String type, Object configuration,
-            Object layout);
+            Object layout, UUID templateId);
 }
 
 @Singleton
@@ -92,9 +92,11 @@ class DashboardServiceImpl implements DashboardService {
                 // Insert sections and panels if provided, or create a default section
                 List<DashboardSection> sectionsToCreate = dashboard.sections();
                 if (ListUtils.emptyIfNull(sectionsToCreate).isEmpty()) {
-                    // Create a default section
-                    UUID defaultSectionId = idGenerator.generateId();
-                    dao.insertSection(defaultSectionId, id, "Default Section", 0, userName);
+                    // Create a default section only if not explicitly skipped
+                    if (!Boolean.TRUE.equals(dashboard.skipDefaultSection())) {
+                        UUID defaultSectionId = idGenerator.generateId();
+                        dao.insertSection(defaultSectionId, id, "Default Section", 0, userName);
+                    }
                 } else {
                     // Insert provided sections and panels
                     for (int i = 0; i < sectionsToCreate.size(); i++) {
@@ -111,7 +113,7 @@ class DashboardServiceImpl implements DashboardService {
                                 UUID panelId = idGenerator.generateId();
                                 dao.insertPanel(panelId, sectionId, panel.name(),
                                         panel.type().name().toLowerCase(),
-                                        panel.configuration(), panel.layout(), userName);
+                                        panel.configuration(), panel.layout(), panel.templateId(), userName);
                             }
                         }
                     }
@@ -280,7 +282,7 @@ class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DashboardPanel createPanel(UUID dashboardId, UUID sectionId, String name, String type, Object configuration,
-            Object layout) {
+            Object layout, UUID templateId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -305,7 +307,7 @@ class DashboardServiceImpl implements DashboardService {
                         e);
             }
 
-            dao.insertPanel(panelId, sectionId, name, type, configJson, layoutJson, userName);
+            dao.insertPanel(panelId, sectionId, name, type, configJson, layoutJson, templateId, userName);
 
             return DashboardPanel.builder()
                     .id(panelId)
@@ -314,6 +316,7 @@ class DashboardServiceImpl implements DashboardService {
                     .type(DashboardPanel.PanelType.valueOf(type.toUpperCase()))
                     .configuration(configJson)
                     .layout(layoutJson)
+                    .templateId(templateId)
                     .createdBy(userName)
                     .lastUpdatedBy(userName)
                     .build();
@@ -363,14 +366,16 @@ class DashboardServiceImpl implements DashboardService {
                     if (panelId != null && existingPanelMap.containsKey(panelId)) {
                         // Update existing panel
                         dao.updatePanel(panelId, updatedPanel.name(), updatedPanel.type().name().toLowerCase(),
-                                updatedPanel.configuration(), updatedPanel.layout(), userName);
+                                updatedPanel.configuration(), updatedPanel.layout(), updatedPanel.templateId(),
+                                userName);
                         panelsToKeep.add(panelId);
                     } else {
                         // Insert new panel
                         panelId = idGenerator.generateId();
                         dao.insertPanel(panelId, sectionId, updatedPanel.name(),
                                 updatedPanel.type().name().toLowerCase(),
-                                updatedPanel.configuration(), updatedPanel.layout(), userName);
+                                updatedPanel.configuration(), updatedPanel.layout(), updatedPanel.templateId(),
+                                userName);
                         panelsToKeep.add(panelId);
                     }
                 }
