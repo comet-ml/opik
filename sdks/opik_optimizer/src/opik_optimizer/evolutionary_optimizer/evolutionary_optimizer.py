@@ -1533,26 +1533,26 @@ Return only the new prompt list object.
         """
         total_items = len(dataset.get_items())
 
+        new_prompt = prompt.copy()
+        new_prompt.set_messages(messages)
+
         experiment_config = experiment_config or {}
         experiment_config["project_name"] = self.agent_class.project_name
         experiment_config = {
             **experiment_config,
             "optimizer": self.__class__.__name__,
             "agent_class": self.agent_class.__name__,
-            "agent_config": prompt.to_dict(),
+            "agent_config": new_prompt.to_dict(),
             "metric": metric.__name__,
             "dataset": dataset.name,
             "configuration": {
-                "prompt": prompt.get_messages(),
+                "prompt": new_prompt.get_messages(),
                 "n_samples_for_eval": (
                     len(dataset_item_ids) if dataset_item_ids is not None else n_samples
                 ),
                 "total_dataset_items": total_items,
             },
         }
-
-        new_prompt = prompt.copy()
-        new_prompt.set_messages(messages)
         try:
             agent = self.agent_class(new_prompt)
         except Exception:
