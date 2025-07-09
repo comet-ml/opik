@@ -41,6 +41,7 @@ interface TraceThreadMapper {
                                 .map(entry -> Map.entry(UUID.fromString(entry.getKey()), entry.getValue()))
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
                         .orElse(Map.of()))
+                .scoredAt(row.get("scored_at", Instant.class))
                 .build();
     }
 

@@ -11,5 +11,6 @@ public record TraceThreadCriteria(
         List<UUID> ids,
         UUID projectId,
         List<String> threadIds,
-        TraceThreadStatus status) {
+        TraceThreadStatus status,
+        boolean scoredAtEmpty) {
 }
