@@ -14,11 +14,13 @@ import Loader from "@/components/shared/Loader/Loader";
 type InputOutputTabProps = {
   data: Trace | Span;
   isLoading: boolean;
+  search?: string;
 };
 
 const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   data,
   isLoading,
+  search,
 }) => {
   const { images, formattedData } = useMemo(
     () => processInputData(data.input),
@@ -64,6 +66,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               data={formattedData as object}
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-trace-sidebar-input"
+              search={search}
             />
           )}
         </AccordionContent>
@@ -81,6 +84,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               data={data.output}
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-trace-sidebar-output"
+              search={search}
             />
           )}
         </AccordionContent>

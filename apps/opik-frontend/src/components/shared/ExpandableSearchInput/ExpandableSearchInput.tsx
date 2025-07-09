@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
+import { Separator } from "@/components/ui/separator";
 
 type ExpandableSearchInputProps = {
   placeholder?: string;
@@ -12,6 +13,12 @@ type ExpandableSearchInputProps = {
   onChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
+  buttonClassName?: string;
+  inputClassName?: string;
+  onPrev?: () => void;
+  onNext?: () => void;
+  currentMatchIndex?: number;
+  totalMatches?: number;
 };
 
 const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
@@ -19,7 +26,13 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   value,
   onChange,
   className,
+  buttonClassName,
+  inputClassName,
   disabled = false,
+  onPrev,
+  onNext,
+  currentMatchIndex,
+  totalMatches,
 }) => {
   const [isExpanded, setIsExpanded] = useState(Boolean(value) && !disabled);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,7 +66,15 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
     if (e.key === "Escape") {
       handleCollapse();
     }
+    if (e.key === "ArrowUp" && onPrev) {
+      onPrev();
+    }
+    if (e.key === "ArrowDown" && onNext) {
+      onNext();
+    }
   };
+
+  const hasMatches = Boolean(totalMatches && totalMatches > 1);
 
   return (
     <div
@@ -70,6 +91,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
           size="icon-sm"
           onClick={handleExpand}
           disabled={disabled}
+          className={buttonClassName}
         >
           <Search />
         </Button>
@@ -85,16 +107,48 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
               onValueChange={(value) => handleInputChange(value as string)}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className="h-8 px-8"
+              className={cn("h-8 px-8", inputClassName, {
+                "pr-[100px]": hasMatches,
+              })}
             />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleCollapse}
-              className="absolute right-1 top-1/2 size-6 -translate-y-1/2 text-light-slate"
-            >
-              <X />
-            </Button>
+            <div className="absolute inset-y-0 right-1 flex h-full items-center justify-center gap-0.5">
+              {hasMatches && (
+                <>
+                  {
+                    <span className="text-xs text-light-slate">
+                      {currentMatchIndex}/{totalMatches}
+                    </span>
+                  }
+                  <Separator orientation="vertical" className="mx-2 h-3" />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onPrev}
+                    className="w-4 text-light-slate"
+                  >
+                    <ChevronUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onNext}
+                    className="w-4 text-light-slate"
+                  >
+                    <ChevronDown />
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleCollapse}
+                className={cn("text-light-slate", {
+                  "w-4 mr-1": hasMatches,
+                })}
+              >
+                <X />
+              </Button>
+            </div>
           </div>
         </div>
       )}

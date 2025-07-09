@@ -9,10 +9,17 @@ export const useSearchPanelTheme = () => {
       ".cm-activeLine": {
         backgroundColor: "transparent",
       }, // Active line highlight
+      ".cm-searchMatch": {
+        backgroundColor: "#FFDF20",
+      },
+      ".cm-searchMatch.cm-searchMatch-selected": {
+        backgroundColor: "#FF8904",
+      },
 
       // Flattened styles for the search panel
-      ".cm-panels": {
+      "& .cm-panels": {
         backgroundColor: "hsl(var(--primary-foreground))",
+        border: "none",
       },
     });
   }, []);
