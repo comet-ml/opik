@@ -388,7 +388,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     private boolean shouldEnforceConsistentRead() {
-        return configuration.getDatabaseAnalytics().getReplication().isEnabled();
+        return configuration.getDatabaseAnalytics().hasReplicationEnabled();
     }
 
     @Override
