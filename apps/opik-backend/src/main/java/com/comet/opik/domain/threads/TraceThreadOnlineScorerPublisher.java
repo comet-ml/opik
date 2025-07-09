@@ -24,7 +24,7 @@ class TraceThreadOnlineScorerPublisher {
 
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
 
-    public Mono<Void> publish(UUID projectId, List<TraceThreadModel> closeThreads) {
+    public Mono<Void> publish(@NonNull UUID projectId, @NonNull List<TraceThreadModel> closeThreads) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -50,8 +50,9 @@ class TraceThreadOnlineScorerPublisher {
                         UUID ruleId = ruleIdToThreadIds.getKey();
                         Set<String> threadIds = ruleIdToThreadIds.getValue();
 
-                        log.info("Enqueuing '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds.size(), ruleId, projectId, workspaceId);
+                        log.info(
+                                "Enqueuing threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
+                                threadIds, ruleId, projectId, workspaceId);
 
                         onlineScorePublisher.enqueueThreadMessage(
                                 List.copyOf(threadIds),
@@ -60,8 +61,9 @@ class TraceThreadOnlineScorerPublisher {
                                 workspaceId,
                                 userName);
 
-                        log.info("Enqueued '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds.size(), ruleId, projectId, workspaceId);
+                        log.info(
+                                "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
+                                threadIds, ruleId, projectId, workspaceId);
 
                         return ruleId;
                     }).subscribeOn(Schedulers.boundedElastic()))

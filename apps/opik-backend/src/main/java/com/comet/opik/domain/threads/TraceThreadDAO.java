@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -24,6 +25,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -63,6 +65,8 @@ public interface TraceThreadDAO {
     Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
 
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
+
+    Flux<TraceThreadModel> streamClosedThreads(UUID projectId);
 }
 
 @Singleton
@@ -164,6 +168,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             )
             <endif>
             <if(thread_id)>AND tt.thread_id = :thread_id<endif>
+            <if(enforce_consistent_read)>
+            SETTINGS
+                insert_quorum_parallel = 0,
+                insert_quorum = 'auto'
+            <endif>
+            ;
             """;
 
     private static final String SELECT_PROJECT_ID_FROM_THREAD = """
@@ -230,7 +240,22 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND thread_id IN :thread_ids
             """;
 
+    public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
+                SELECT
+                    *
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND status = 'inactive'
+                AND scored_at IS NULL
+                <if(enforce_consistent_read)>
+                SETTINGS select_sequential_consistency = 1
+                <endif>
+                ;
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<Long> save(@NonNull List<TraceThreadModel> traceThreads) {
@@ -270,8 +295,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 }
 
                 if (item.sampling() != null) {
-                    statement.bind("rule_ids" + i, item.sampling().keySet().toArray(UUID[]::new));
-                    statement.bind("sampling" + i, item.sampling().values().toArray(Boolean[]::new));
+                    UUID[] ruleIds = item.sampling().keySet().toArray(UUID[]::new);
+                    statement.bind("rule_ids" + i, ruleIds);
+                    statement.bind("sampling" + i,
+                            Arrays.stream(ruleIds).map(ruleId -> item.sampling().get(ruleId)).toArray(Boolean[]::new));
                 } else {
                     statement.bind("rule_ids" + i, new UUID[]{});
                     statement.bind("sampling" + i, new Boolean[]{});
@@ -342,6 +369,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull Duration timeoutToMarkThreadAsInactive) {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
+
+            if (shouldEnforceConsistentRead()) {
+                closureThreadsSql.add("enforce_consistent_read", true);
+            }
+
             closureThreadsSql.add("last_updated_at", true);
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
@@ -355,11 +387,19 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    private boolean shouldEnforceConsistentRead() {
+        return configuration.getDatabaseAnalytics().hasReplicationEnabled();
+    }
+
     @Override
     public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
         return asyncTemplate.nonTransaction(connection -> {
             ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             openThreadsSql.add("thread_id", threadId);
+
+            if (shouldEnforceConsistentRead()) {
+                openThreadsSql.add("enforce_consistent_read", true);
+            }
 
             var statement = connection.createStatement(openThreadsSql.render())
                     .bind("project_id", projectId)
@@ -376,6 +416,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             closureThreadsSql.add("thread_id", threadId);
+
+            if (shouldEnforceConsistentRead()) {
+                closureThreadsSql.add("enforce_consistent_read", true);
+            }
 
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
@@ -422,7 +466,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-
     public Mono<Long> updateThreadSampledValues(@NonNull UUID projectId,
             @NonNull List<TraceThreadSampling> threadSamplingPerRules) {
         return asyncTemplate.nonTransaction(connection -> {
@@ -443,9 +486,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             int i = 0;
             for (TraceThreadSampling sampling : threadSamplingPerRules) {
                 UUID threadModelId = sampling.threadModelId();
-                UUID[] ruleIds = sampling.samplingPerRule().keySet().toArray(UUID[]::new);
-                Boolean[] samplingValues = sampling.samplingPerRule().keySet().stream()
-                        .map(ruleId -> sampling.samplingPerRule().get(ruleId)).toArray(Boolean[]::new);
+                UUID[] ruleIds = sampling.samplingPerRule().keySet()
+                        .toArray(UUID[]::new);
+
+                Boolean[] samplingValues = Arrays.stream(ruleIds)
+                        .map(ruleId -> sampling.samplingPerRule().get(ruleId))
+                        .toArray(Boolean[]::new);
 
                 statement.bind("thread_model_id" + i, threadModelId);
                 statement.bind("rule_ids" + i, ruleIds);
@@ -493,6 +539,22 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Flux<TraceThreadModel> streamClosedThreads(@NonNull UUID projectId) {
+        return asyncTemplate.stream(connection -> {
+            ST closedThreadsPerProject = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
+
+            if (shouldEnforceConsistentRead()) {
+                closedThreadsPerProject.add("enforce_consistent_read", true);
+            }
+
+            var statement = connection.createStatement(closedThreadsPerProject.render())
+                    .bind("project_id", projectId);
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
         });
     }
 
