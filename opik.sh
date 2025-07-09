@@ -1,7 +1,7 @@
 #!/bin/bash
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1" "opik-zookeeper-1")
+REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1" "opik-zookeeper-1" "opik-python-panel-engine-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import usePanelTemplates from "@/api/panelTemplates/usePanelTemplates";
 import { ReusablePanelTemplate } from "@/api/panelTemplates/usePanelTemplatesById";
+import { usePythonPanelPreview } from "@/hooks/usePythonPanelPreview";
 
 interface PanelModalProps {
   open: boolean;
@@ -113,6 +114,22 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
   
   // Python panel state
   const [pythonCode, setPythonCode] = useState(DEFAULT_PYTHON_CODE);
+  // Live preview state for Python panel
+  const { url: previewUrl, loading: previewLoading, error: previewError, getPreviewUrl } = usePythonPanelPreview();
+  const [debouncedCode, setDebouncedCode] = useState(pythonCode);
+
+  // Debounce code changes
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedCode(pythonCode), 600);
+    return () => clearTimeout(handler);
+  }, [pythonCode]);
+
+  // Fetch preview URL when debounced code changes (only for python panel)
+  useEffect(() => {
+    if (panelType === "python" && debouncedCode) {
+      getPreviewUrl(debouncedCode);
+    }
+  }, [debouncedCode, panelType, getPreviewUrl]);
   
   // Chart panel state
   const [chartType, setChartType] = useState<"line" | "bar" | "scatter" | "histogram">("line");
@@ -453,26 +470,35 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
           <h5 className="text-sm font-medium text-gray-700">Preview</h5>
           <p className="text-xs text-gray-500">Live preview of your panel</p>
         </div>
-        <div className="bg-white rounded border h-full min-h-[300px] overflow-hidden">
-          {panelType === "python" && (
-            <PythonPanelComponent config={previewPanel.data.config as any} id="preview" />
-          )}
-          {panelType === "chart" && (
+        <div className="bg-white rounded border h-full min-h-[300px] overflow-hidden flex items-center justify-center">
+          {panelType === "python" ? (
+            previewLoading ? (
+              <div className="w-full text-center py-8 text-gray-400">Loading Streamlit preview...</div>
+            ) : previewError ? (
+              <div className="w-full text-center py-8 text-red-500">{previewError}</div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                style={{ width: "100%", height: 400, border: "none" }}
+                title="Python Panel Preview"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+              />
+            ) : (
+              <div className="w-full text-center py-8 text-gray-400">No preview available</div>
+            )
+          ) : panelType === "chart" ? (
             <ChartPanelComponent config={previewPanel.data.config as any} id="preview" />
-          )}
-          {panelType === "text" && (
+          ) : panelType === "text" ? (
             <TextPanelComponent config={previewPanel.data.config as any} id="preview" />
-          )}
-          {panelType === "metric" && (
+          ) : panelType === "metric" ? (
             <MetricPanelComponent config={previewPanel.data.config as any} id="preview" />
-          )}
-          {panelType === "html" && (
+          ) : panelType === "html" ? (
             <HtmlPanelComponent config={previewPanel.data.config as any} />
-          )}
+          ) : null}
         </div>
       </div>
     );
-  }, [panelType, previewPanel]);
+  }, [panelType, previewPanel, previewLoading, previewError, previewUrl]);
 
   const renderPanelTypeConfig = useCallback(() => {
     switch (panelType) {
