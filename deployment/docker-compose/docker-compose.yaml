@@ -250,6 +250,33 @@ services:
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
 
+  # Python Panel Engine - Executes Python code via Streamlit
+  python-panel-engine:
+    image: code-panels-python-panel-engine:latest
+    pull_policy: never
+    ports:
+      - "9080:9080"  # Main web interface
+      - "8501:8501"  # Streamlit port
+      - "5000:5000"  # Flask API port
+    environment:
+      - EXTERNAL_URL=http://localhost:9080
+      - STREAMLIT_PORT=8501
+      - FLASK_PORT=5000
+      - NGINX_PORT=9080
+      - SHOULD_AUTHENTICATE=0  # Disable auth for local development
+      - CORS=true
+      - XSRF=false
+      - COMPUTE_ENGINE_DEBUG=TRUE
+      - ALLOWED_DOMAINS=http://localhost:80,http://localhost:8080,http://localhost:9080,http://localhost:5174
+    # volumes:
+    #   - .:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 networks:
   default:
 
@@ -259,3 +286,5 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
+  # panel_data:
+  #   driver: local

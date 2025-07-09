@@ -14,6 +14,11 @@ import Loader from "@/components/shared/Loader/Loader";
 import useDashboardTemplates from "@/api/dashboardTemplates/useDashboardTemplates";
 import useDashboardTemplatesById from "@/api/dashboardTemplates/useDashboardTemplatesById";
 import { DropdownOption } from "@/types/shared";
+import PythonPanel from "../CompareExperimentsPage/PythonPanel";
+import ChartPanel from "../CompareExperimentsPage/ChartPanel";
+import TextPanel from "../CompareExperimentsPage/TextPanel";
+import MetricPanel from "../CompareExperimentsPage/MetricPanel";
+import HtmlPanel from "../CompareExperimentsPage/HtmlPanel";
 
 const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
 
@@ -74,55 +79,57 @@ const HomePage = () => {
       switch (panel.type.toLowerCase()) {
         case "python":
           return (
-            <div className="h-full p-4 font-mono text-sm">
-              <div className="bg-gray-50 rounded p-3 h-full overflow-auto">
-                <pre className="whitespace-pre-wrap text-xs">
-                  {panel.configuration?.code || "# Python code will be executed here"}
-                </pre>
-              </div>
-            </div>
+            <PythonPanel 
+              config={{ code: panel.configuration?.code || "# Python code will be executed here" }} 
+              id={panel.id} 
+            />
           );
         case "metric":
           return (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-2">
-                  {panel.configuration?.value || "0"}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {panel.configuration?.metricName || "Metric"}
-                </div>
-              </div>
-            </div>
+            <MetricPanel 
+              config={{
+                metricName: panel.configuration?.metricName || "Metric",
+                aggregation: panel.configuration?.aggregation || "avg",
+                timeRange: panel.configuration?.timeRange || "24h",
+                displayFormat: panel.configuration?.displayFormat || "number"
+              }} 
+              id={panel.id} 
+            />
           );
         case "chart":
           return (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <div className="text-4xl mb-2">📊</div>
-                <div className="text-sm">Chart Panel</div>
-                <div className="text-xs mt-1">
-                  {panel.configuration?.chartType || "Chart"}
-                </div>
-              </div>
-            </div>
+            <ChartPanel 
+              config={{
+                chartType: panel.configuration?.chartType || "line",
+                dataSource: panel.configuration?.dataSource || "",
+                xAxis: panel.configuration?.xAxis || "",
+                yAxis: panel.configuration?.yAxis || "",
+                title: panel.configuration?.title || "Chart"
+              }} 
+              id={panel.id} 
+            />
           );
         case "text":
           return (
-            <div className="h-full p-4">
-              <div className="prose prose-sm max-w-none">
-                {panel.configuration?.content || "Text content will be displayed here"}
-              </div>
-            </div>
+            <TextPanel 
+              config={{
+                content: panel.configuration?.content || "Text content will be displayed here",
+                format: panel.configuration?.format || "markdown"
+              }} 
+              id={panel.id} 
+            />
           );
         case "html":
           return (
-            <div className="h-full p-4">
-              <div className="text-sm text-gray-600">
-                <div className="text-4xl mb-2">🌐</div>
-                <div>HTML Panel</div>
-              </div>
-            </div>
+            <HtmlPanel 
+              config={{
+                htmlContent: panel.configuration?.htmlContent || "<div>HTML content</div>",
+                allowScripts: panel.configuration?.allowScripts || true,
+                height: panel.configuration?.height || 400,
+                cssIncludes: panel.configuration?.cssIncludes || [],
+                jsIncludes: panel.configuration?.jsIncludes || []
+              }} 
+            />
           );
         default:
           return (
