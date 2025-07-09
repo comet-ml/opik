@@ -84,7 +84,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     @Override
     protected void score(@NonNull TraceThreadToScoreLlmAsJudge message) {
 
-        log.info("Message received with projectId '{}', ruleId '{}', threads: '{}' for workspace '{}'",
+        log.info("Message received with projectId '{}', ruleId '{}', threadIds: '{}' for workspace '{}'",
                 message.projectId(), message.ruleId(), message.threadIds(), message.workspaceId());
 
         Flux.fromIterable(message.threadIds())

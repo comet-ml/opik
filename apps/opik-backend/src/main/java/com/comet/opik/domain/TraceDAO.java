@@ -327,7 +327,7 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
-                countIf(s.type = 'llm') AS llm_span_count,
+                toInt64(countIf(s.type = 'llm')) AS llm_span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -496,7 +496,7 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
-                    countIf(type = 'llm') as llm_span_count
+                    toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -683,6 +683,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(trace_aggregation_filters)>
                     ,sumMap(s.usage) as usage
                     ,sum(s.total_estimated_cost) as total_estimated_cost
+                    ,toInt64(countIf(s.type = 'llm')) as llm_span_count
                     <endif>
                 FROM (
                     SELECT
@@ -727,7 +728,8 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT
                         trace_id,
                         usage,
-                        total_estimated_cost
+                        total_estimated_cost,
+                        type
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -904,7 +906,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -1040,6 +1043,7 @@ class TraceDAOImpl implements TraceDAO {
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
+                avg(s.llm_span_count) AS llm_span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
@@ -1962,6 +1966,7 @@ class TraceDAOImpl implements TraceDAO {
         }
         return sortFields.contains("usage")
                 || sortFields.contains("span_count")
+                || sortFields.contains("llm_span_count")
                 || sortFields.contains("total_estimated_cost");
     }
 
