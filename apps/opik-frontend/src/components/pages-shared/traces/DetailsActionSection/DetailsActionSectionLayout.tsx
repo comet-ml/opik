@@ -2,7 +2,7 @@ import React from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { DetailsActionSectionValue } from "@/components/pages-shared/traces/DetailsActionSection";
+import { DetailsActionSectionValue } from "./types";
 import { Explainer } from "@/types/shared";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 

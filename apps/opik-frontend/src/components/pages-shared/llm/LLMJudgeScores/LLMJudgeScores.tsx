@@ -2,24 +2,11 @@ import React, { useCallback } from "react";
 import { Plus } from "lucide-react";
 import get from "lodash/get";
 
-import { LLMJudgeSchema } from "@/types/automations";
-import { LLM_SCHEMA_TYPE } from "@/types/llm";
+import { LLMJudgeSchema } from "@/types/llm";
+import { LLM_SCHEMA_TYPE, ScoresValidationError } from "@/types/llm";
 import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import LLMJudgeScore from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScore";
-
-export type ScoresValidationError =
-  | {
-      name?: {
-        message: string;
-      };
-      unsaved?: {
-        message: string;
-      };
-    }[]
-  | {
-      message: string;
-    };
 
 interface LLMJudgeScoresProps {
   validationErrors?: ScoresValidationError;
