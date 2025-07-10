@@ -3,8 +3,11 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ include "opik.name" $ }}-clickhouse-backup
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
 spec:
   schedule: "{{ .Values.clickhouse.backup.schedule }}"
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
@@ -16,26 +19,23 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
         spec:
-          {{- if .Values.clickhouse.backup.serviceAccount.enabled }}
-          serviceAccountName: {{ .Values.clickhouse.backup.serviceAccount.name | default "clickhouse-backup" }}
-          {{- end }}
+          serviceAccountName: {{ include "clickhouse.backup.serviceAccountName" . }}
           containers:
           - name: clickhouse-backup-job
-            image: {{ .Values.clickhouse.image }}
+            image: {{ .Values.clickhouse.backup.image | default .Values.clickhouse.image }}
             {{- with .Values.clickhouse.imagePullSecrets }}
             imagePullSecrets:
               {{- toYaml . | nindent 8 }}
             {{- end }}
             command:
-              - "/bin/bash"
-              - "-c"
-            args:
-              - export backupname=backup$(date +'%Y%m%d%H%M'); echo "BACKUP ALL EXCEPT DATABASE system TO S3('{{ include "common.tplvalues.render" (dict "value" .Values.clickhouse.backup.bucketURL "context" $) }}/$backupname/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql; clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql;
+            {{- .Values.clickhouse.backup.command | toYaml | nindent 14 }}
             {{- with .Values.clickhouse.backup.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
             env:
+            - name: CLICKHOUSE_BACKUP_BUCKET
+              value: {{ include "common.tplvalues.render" (dict "value" .Values.clickhouse.backup.bucketURL "context" $) }}
             - name: CLICKHOUSE_USER
               value: {{ .Values.clickhouse.adminUser.username }}
             - name: CLICKHOUSE_PASSWORD
@@ -47,16 +47,16 @@ spec:
             {{- else }}
               value: {{ .Values.clickhouse.adminUser.password }}
             {{- end }}
-            {{- if not .Values.clickhouse.backup.serviceAccount.enabled }}
+            {{- if .Values.clickhouse.backup.secretName }}
             - name: ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.clickhouse.backup.secretName}}
+                  name: {{ .Values.clickhouse.backup.secretName }}
                   key: {{ .Values.clickhouse.backup.accessKey | default "access_key_id" }}
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.clickhouse.backup.secretName}}
+                  name: {{ .Values.clickhouse.backup.secretName }}
                   key: {{ .Values.clickhouse.backup.secretKey | default "access_key_secret" }}
             {{- else }}
             - name: ACCESS_KEY
@@ -74,5 +74,5 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           restartPolicy: Never
-      backoffLimit:
-{{end}}
+      backoffLimit: 0
+{{- end }}

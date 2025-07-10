@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -16,6 +16,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -138,5 +139,88 @@ public class AutomationRuleEvaluatorResourceClient {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
         return actualResponse;
+    }
+
+    // Session token authentication methods
+
+    public Response createEvaluatorWithSessionToken(
+            AutomationRuleEvaluator<?> evaluator, String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(evaluator));
+    }
+
+    public Response findEvaluatorWithSessionToken(
+            UUID projectId, Integer size, String sessionToken, String workspaceName) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI));
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+        if (size != null) {
+            target = target.queryParam("size", size);
+        }
+        return target
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response getEvaluatorWithSessionToken(
+            UUID id, UUID projectId, String sessionToken, String workspaceName) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString());
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+        return target
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response updateEvaluatorWithSessionToken(
+            UUID evaluatorId, AutomationRuleEvaluatorUpdate<?> updatedEvaluator,
+            String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(evaluatorId.toString())
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(updatedEvaluator));
+    }
+
+    public Response deleteWithSessionToken(
+            UUID projectId, BatchDelete request, String sessionToken, String workspaceName) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete");
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+        return target
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public Response getLogsWithSessionToken(
+            UUID evaluatorId, String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(evaluatorId.toString())
+                .path("logs")
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 }

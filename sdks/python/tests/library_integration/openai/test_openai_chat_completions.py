@@ -18,7 +18,7 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
-
+from opik import semantic_version
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -37,6 +37,9 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
+OPENAI_OLDER_THAN_1_92_0 = (
+    semantic_version.SemanticVersion.parse(openai.__version__) < "1.92.0"
+)
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
@@ -484,6 +487,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -491,7 +495,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         ("openai-integration-test", "openai-integration-test"),
     ],
 )
-def test_openai_client_beta_chat_completions_parse__happyflow(
+def test_openai_client_chat_completions_parse__happyflow(
     fake_backend, project_name, expected_project_name
 ):
     client = openai.OpenAI()
@@ -510,7 +514,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
         },
     ]
 
-    _ = wrapped_client.beta.chat.completions.parse(
+    _ = wrapped_client.chat.completions.parse(
         model="gpt-4o",
         messages=messages,
         max_tokens=100,
@@ -559,7 +563,8 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend):
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
+def test_async_openai_client_chat_completions_parse__happyflow(fake_backend):
     client = openai.AsyncOpenAI()
     wrapped_client = track_openai(client)
 
@@ -577,7 +582,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
     ]
 
     asyncio.run(
-        wrapped_client.beta.chat.completions.parse(
+        wrapped_client.chat.completions.parse(
             model="gpt-4o",
             messages=messages,
             response_format=CalendarEvent,
@@ -625,6 +630,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_openai_chat_completion_stream__generator_tracked_correctly(
     fake_backend,
 ):
@@ -641,7 +647,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -690,6 +696,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_logged(
     fake_backend,
 ):
@@ -706,7 +713,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -754,11 +761,12 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked_correctly(
     fake_backend,
 ):
     def run_stream(messages):
-        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
@@ -857,6 +865,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
     _assert_metadata_contains_required_keys(llm_joke_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_openai_chat_completion_stream__get_final_completion_called__generator_tracked_correctly(
     fake_backend,
 ):
@@ -873,7 +882,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
@@ -920,6 +929,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_openai_chat_completion_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
     fake_backend,
 ):
@@ -936,7 +946,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
@@ -985,6 +995,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_async_openai_chat_completion_stream__data_tracked_correctly(
     fake_backend,
 ):
@@ -1002,7 +1013,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
     ]
 
     async def async_f():
-        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
@@ -1052,6 +1063,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
 def test_async_openai_chat_completion_stream__get_final_completion_called_twice__data_tracked_correctly_once(
     fake_backend,
 ):
@@ -1068,8 +1080,21 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
         },
     ]
 
+    # async def async_f0():
+    #     chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+    #         model=MODEL_FOR_TESTS,
+    #         messages=messages,
+    #         max_tokens=10,
+    #         stream_options={"include_usage": True},
+    #     )
+    #     async with chat_completion_stream_manager as stream:
+    #         async for _ in stream:
+    #             pass
+
+    # asyncio.run(async_f0())
+
     async def async_f():
-        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones

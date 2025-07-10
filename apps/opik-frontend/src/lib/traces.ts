@@ -201,24 +201,10 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
-    if (
-      lastMessage &&
-      isArray(lastMessage) &&
-      lastMessage.length === 2 &&
-      isString(lastMessage[1])
-    ) {
-      return lastMessage[1];
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages) &&
-    message.messages.every((m) => isObject(m))
-  ) {
+    // Find the first human message
     const humanMessages = message.messages.filter(
       (m) =>
+        isObject(m) &&
         "type" in m &&
         m.type === "human" &&
         "content" in m &&
@@ -227,7 +213,107 @@ const prettifyLangGraphLogic = (
     );
 
     if (humanMessages.length > 0) {
-      return humanMessages.map((m) => m.content).join(MESSAGES_DIVIDER);
+      return humanMessages[0].content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    // Get the last AI message, and extract the string output from the various supported formats
+    const aiMessages = [];
+
+    // Iterate on all AI messages
+    for (const m of message.messages) {
+      if (isObject(m) && "type" in m && m.type === "ai" && "content" in m) {
+        // The message can either contains a string attribute named `content`
+        if (isString(m.content)) {
+          aiMessages.push(m.content);
+        }
+        // Or content can be an array with text content. For example when using OpenAI chat model with the Responses API
+        // https://python.langchain.com/docs/integrations/chat/openai/#responses-api
+        else if (isArray(m.content)) {
+          const textItems = m.content.filter(
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text) &&
+              c.text !== "",
+          );
+
+          // Check that there is only one text item
+          if (textItems.length === 1) {
+            aiMessages.push(textItems[0].text);
+          }
+        }
+      }
+    }
+
+    if (aiMessages.length > 0) {
+      return last(aiMessages);
+    }
+  }
+};
+
+const prettifyLangChainLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  // Some older models can return multiple generations, and Langchain can be
+  // called with several prompts at the same time. When that happens, there is
+  // no clear way to "know" which generation or prompt the user wants to see.
+  // Given that it's not the common case, we should only prettify when there
+  // is a single prompt and generation.
+  if (
+    config.type === "input" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages) &&
+    message.messages.length == 1 &&
+    isArray(message.messages[0])
+  ) {
+    // Find the first human message
+    const humanMessages = message.messages[0].filter(
+      (m) =>
+        isObject(m) &&
+        "type" in m &&
+        m.type === "human" &&
+        "content" in m &&
+        isString(m.content) &&
+        m.content !== "",
+    );
+
+    if (humanMessages.length > 0) {
+      return humanMessages[0].content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "generations" in message &&
+    isArray(message.generations) &&
+    message.generations.length == 1 &&
+    isArray(message.generations[0])
+  ) {
+    // Get the last AI message
+    const aiMessages = message.generations[0].filter(
+      (m) =>
+        isObject(m) &&
+        "message" in m &&
+        isObject(m.message) &&
+        "kwargs" in m.message &&
+        isObject(m.message.kwargs) &&
+        "type" in m.message.kwargs &&
+        m.message.kwargs.type === "ai" &&
+        "text" in m &&
+        isString(m.text) &&
+        m.text !== "",
+    );
+
+    if (aiMessages.length > 0) {
+      return last(aiMessages).text;
     }
   }
 };
@@ -237,7 +323,15 @@ const prettifyGenericLogic = (
   config: PrettifyMessageConfig,
 ): string | undefined => {
   const PREDEFINED_KEYS_MAP = {
-    input: ["question", "messages", "user_input", "query", "input_prompt"],
+    input: [
+      "question",
+      "messages",
+      "user_input",
+      "query",
+      "input_prompt",
+      "prompt",
+      "sys.query", // Dify
+    ],
     output: ["answer", "output", "response"],
   };
 
@@ -294,6 +388,10 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyLangGraphLogic(message, config);
+    }
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyLangChainLogic(message, config);
     }
 
     if (!isString(processedMessage)) {

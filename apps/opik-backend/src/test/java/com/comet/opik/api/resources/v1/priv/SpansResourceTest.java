@@ -5,8 +5,8 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -133,11 +133,13 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
-import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
@@ -565,13 +567,14 @@ class SpansResourceTest {
 
             var spanId = spanResourceClient.createSpan(span, okApikey, workspaceName);
 
-            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+            List<FeedbackScoreBatchItem> items = PodamFactoryUtils
+                    .manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .projectName(span.projectName())
                             .id(spanId)
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             var feedbackScoreBatch = FeedbackScoreBatch.builder()
                     .scores(items)
@@ -946,13 +949,14 @@ class SpansResourceTest {
 
             var spanId = spanResourceClient.createSpan(span, API_KEY, workspaceName);
 
-            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+            List<FeedbackScoreBatchItem> items = PodamFactoryUtils
+                    .manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .projectName(span.projectName())
                             .id(spanId)
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             var feedbackScoreBatch = FeedbackScoreBatch.builder()
                     .scores(items)
@@ -1327,7 +1331,43 @@ class SpansResourceTest {
                             SpanField.PROVIDER,
                             Operator.EQUAL,
                             null,
-                            spansTestAssertion));
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            statsTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            spanStreamTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            statsTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            spanStreamTestAssertion));
         }
 
         @Test
@@ -1834,6 +1874,7 @@ class SpansResourceTest {
             String apiKey = UUID.randomUUID().toString();
             String model = "gpt-3.5-turbo-1106";
             String provider = "openai";
+            SpanType spanType = SpanType.general;
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -1842,6 +1883,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .type(SpanType.llm)
                             .projectName(projectName)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
@@ -1852,6 +1894,7 @@ class SpansResourceTest {
 
             var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
+                    .type(spanType)
                     .projectName(projectName)
                     .endTime(Instant.now().plusMillis(randomNumber()))
                     .provider(provider)
@@ -4474,7 +4517,7 @@ class SpansResourceTest {
                             .projectName(finalSpans.get(i).projectName())
                             .id(finalSpans.get(i).id())
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             spanResourceClient.feedbackScores(scoreForSpan, apiKey, workspaceName);
 
@@ -6244,28 +6287,32 @@ class SpansResourceTest {
                     arguments(FeedbackScoreBatch.builder().scores(
                             IntStream.range(0, 1001)
                                     .mapToObj(
-                                            __ -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            __ -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).build())
-                                    .toList())
+                                    .collect(Collectors.toList()))
                             .build(), "scores size must be between 1 and 1000"),
                     arguments(
                             FeedbackScoreBatch.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).name(null).build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).name("").build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).value(null).build()))
                                     .build(),
                             "scores[0].value must not be null"),
@@ -6281,7 +6328,8 @@ class SpansResourceTest {
                     arguments(
                             FeedbackScoreBatch.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT)
                                                     .value(new BigDecimal(MAX_FEEDBACK_SCORE_VALUE).add(BigDecimal.ONE))
                                                     .build()))
@@ -6327,7 +6375,8 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score, score2, score3))))) {
+                    .put(Entity.json(
+                            FeedbackScoreBatch.builder().scores(List.of(score, score2, score3)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6389,7 +6438,8 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score, score2, score3))))) {
+                    .put(Entity.json(
+                            FeedbackScoreBatch.builder().scores(List.of(score, score2, score3)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6409,7 +6459,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("invalidRequestBodyParams")
         @DisplayName("when batch request is invalid, then return bad request")
-        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatch batch, String errorMessage) {
+        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatchContainer batch,
+                String errorMessage) {
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("feedback-scores")
@@ -6446,7 +6497,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6479,7 +6530,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6512,7 +6563,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6524,7 +6575,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(newScore))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(newScore)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6551,7 +6602,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6573,7 +6624,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -6592,12 +6643,12 @@ class SpansResourceTest {
 
             var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var scores = IntStream.range(0, 1000)
+            List<FeedbackScoreBatchItem> scores = IntStream.range(0, 1000)
                     .mapToObj(__ -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                             .projectName(DEFAULT_PROJECT)
                             .id(id)
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             spanResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
         }
@@ -6621,18 +6672,18 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
 
-            var scores = spans.stream()
+            List<FeedbackScoreBatchItem> scores = spans.stream()
                     .map(span -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                             .id(span.id())
                             .projectName(projectNameModifier.apply(projectName))
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             spanResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
 
             var expectedSpansWithScores = spans.stream()
                     .map(span -> {
-                        FeedbackScoreBatchItem feedbackScoreBatchItem = scores.stream()
+                        FeedbackScoreItem feedbackScoreBatchItem = scores.stream()
                                 .filter(score -> score.id().equals(span.id()))
                                 .findFirst()
                                 .orElseThrow();
@@ -6651,7 +6702,7 @@ class SpansResourceTest {
         }
     }
 
-    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
+    private FeedbackScore mapFeedbackScore(FeedbackScoreItem feedbackScoreBatchItem) {
         return FeedbackScore.builder()
                 .name(feedbackScoreBatchItem.name())
                 .value(feedbackScoreBatchItem.value())
@@ -6682,7 +6733,7 @@ class SpansResourceTest {
             // Get created comment by id and assert
             Comment actualComment = spanResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
                     TEST_WORKSPACE, 200);
-            assertTraceComment(expectedComment, actualComment);
+            assertComment(expectedComment, actualComment);
         }
 
         @Test
@@ -6884,7 +6935,7 @@ class SpansResourceTest {
                                     .projectName(project.name())
                                     .id(span.id())
                                     .build())
-                            .toList();
+                            .collect(Collectors.toList());
 
                     spanResourceClient.feedbackScores(scores, apiKey, workspaceName);
 

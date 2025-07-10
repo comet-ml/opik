@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
@@ -17,15 +17,18 @@ import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
-import ErrorTab from "./ErrorTab";
 import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
-import { LastSectionValue } from "../TraceDetailsPanel";
+import {
+  DetailsActionSection,
+  DetailsActionSectionValue,
+} from "@/components/pages-shared/traces/DetailsActionSection";
 import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -33,8 +36,8 @@ type TraceDataViewerProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
-  lastSection?: LastSectionValue | null;
-  setLastSection: (v: LastSectionValue) => void;
+  activeSection: DetailsActionSectionValue | null;
+  setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
 };
 
@@ -44,8 +47,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   projectId,
   traceId,
   spanId,
-  lastSection,
-  setLastSection,
+  activeSection,
+  setActiveSection,
   isSpansLazyLoading,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
@@ -55,22 +58,32 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     get(data, ["metadata", METADATA_AGENT_GRAPH_KEY], null) ||
     get(trace, ["metadata", METADATA_AGENT_GRAPH_KEY], null);
   const hasAgentGraph = Boolean(agentGraphData);
-  const hasError = Boolean(data.error_info);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab =
-    (tab === "graph" && !hasAgentGraph) || (tab === "error" && !hasError)
-      ? "input"
-      : tab;
+  const selectedTab = tab === "graph" && !hasAgentGraph ? "input" : tab;
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
+  const entityName = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+
+  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
+
+  const onDeleteFeedbackScore = useCallback(
+    (name: string) => {
+      feedbackScoreDeleteMutation.mutate({
+        traceId,
+        spanId,
+        name,
+      });
+    },
+    [traceId, spanId, feedbackScoreDeleteMutation],
+  );
 
   return (
-    <div className="size-full max-w-full overflow-auto p-6">
+    <div className="size-full max-w-full overflow-auto p-4">
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="mb-6 flex flex-col gap-1">
           <TraceDataViewerHeader
@@ -79,7 +92,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 <BaseTraceDataTypeIcon type={type} />
                 <div
                   data-testid="data-viewer-title"
-                  className="comet-title-s truncate"
+                  className="comet-title-xs truncate"
                 >
                   {data?.name}
                 </div>
@@ -88,10 +101,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             actionsPanel={(layoutSize) => (
               <TraceDataViewerActionsPanel
                 data={data}
-                traceId={traceId}
-                spanId={spanId}
-                lastSection={lastSection}
-                setLastSection={setLastSection}
+                activeSection={activeSection}
+                setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
               />
             )}
@@ -169,17 +180,20 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 Agent graph
               </TabsTrigger>
             )}
-            {hasError && (
-              <TabsTrigger variant="underline" value="error">
-                Error
-              </TabsTrigger>
-            )}
           </TabsList>
           <TabsContent value="input">
             <InputOutputTab data={data} isLoading={isSpanInputOutputLoading} />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <FeedbackScoreTab data={data} traceId={traceId} spanId={spanId} />
+            <FeedbackScoreTab
+              feedbackScores={data.feedback_scores}
+              onDeleteFeedbackScore={onDeleteFeedbackScore}
+              entityName={entityName}
+              onAddHumanReview={() =>
+                setActiveSection(DetailsActionSection.Annotations)
+              }
+              entityType="trace"
+            />
           </TabsContent>
           <TabsContent value="metadata">
             <MetadataTab data={data} />
@@ -187,11 +201,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {hasAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
-            </TabsContent>
-          )}
-          {hasError && (
-            <TabsContent value="error">
-              <ErrorTab data={data} />
             </TabsContent>
           )}
         </Tabs>

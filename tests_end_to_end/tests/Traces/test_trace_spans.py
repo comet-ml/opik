@@ -5,6 +5,7 @@ from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 import logging
 import allure
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ class TestTraceSpans:
         "traces_fixture",
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @pytest.mark.sanity
     @allure.title("Span creation and verification - {traces_fixture}")
     def test_spans_of_traces(self, page, request, create_project_api, traces_fixture):
@@ -105,6 +108,8 @@ class TestTraceSpans:
         "traces_fixture",
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @pytest.mark.sanity
     @allure.title("Span details and metadata - {traces_fixture}")
     def test_trace_and_span_details(
@@ -154,12 +159,12 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-
         # Verify details for each trace
         for trace in trace_names:
             logger.info(f"Checking details for trace '{trace}'")
             try:
                 traces_page.click_first_trace_that_has_name(trace)
+                time.sleep(0.5)
                 spans_menu = TracesPageSpansMenu(page)
 
                 # Check each span's details
@@ -175,6 +180,7 @@ class TestTraceSpans:
                     logger.info("Checking feedback scores")
                     try:
                         spans_menu.get_feedback_scores_tab().click()
+                        time.sleep(0.25)
                         for score in span_config["feedback_scores"]:
                             expect(
                                 page.get_by_role("cell", name=score["name"], exact=True)

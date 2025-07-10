@@ -32,13 +32,9 @@ const GetStartedSection = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-8 pb-4 pt-2">
-        <div className="flex items-center gap-2">
-          <h2 className="comet-body-accented truncate break-words">
-            Get started
-          </h2>
-        </div>
-      </div>
+      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
+        Get started
+      </h2>
       <div className="flex gap-x-4">
         <div
           onClick={openLogTraceDialog}

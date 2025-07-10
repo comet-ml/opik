@@ -14,6 +14,7 @@ export enum EXPLAINER_ID {
   hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
   whats_that_prompt_select = "whats_that_prompt_select",
   i_added_edited_a_new_online_evaluation_rule_now_what = "i_added_edited_a_new_online_evaluation_rule_now_what",
+  i_added_edited_a_new_online_evaluation_thread_level_rule_now_what = "i_added_edited_a_new_online_evaluation_thread_level_rule_now_what",
   what_are_these_elements_in_the_tree = "what_are_these_elements_in_the_tree",
   what_is_human_review = "what_is_human_review",
   whats_an_experiment = "whats_an_experiment",
@@ -51,6 +52,21 @@ export enum EXPLAINER_ID {
   whats_the_optimizer = "whats_the_optimizer",
   what_are_trial_items = "what_are_trial_items",
   whats_the_evaluation_run_configuration = "whats_the_evaluation_run_configuration",
+  metric_equals = "metric_equals",
+  metric_contains = "metric_contains",
+  metric_regex_match = "metric_regex_match",
+  metric_is_json = "metric_is_json",
+  metric_levenshtein = "metric_levenshtein",
+  metric_sentence_bleu = "metric_sentence_bleu",
+  metric_corpus_bleu = "metric_corpus_bleu",
+  metric_rouge = "metric_rouge",
+  metric_hallucination = "metric_hallucination",
+  metric_g_eval = "metric_g_eval",
+  metric_moderation = "metric_moderation",
+  metric_usefulness = "metric_usefulness",
+  metric_answer_relevance = "metric_answer_relevance",
+  metric_context_precision = "metric_context_precision",
+  metric_context_recall = "metric_context_recall",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -136,6 +152,13 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "All new traces will now be automatically scored using this rule. You can view the results in the Traces table, the Metrics tab, and in each trace's detail view.",
   },
+  [EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what]:
+    {
+      id: EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
+      title: "Evaluation rule set",
+      description:
+        "All new threads will now be automatically scored using this rule. You can view the results in the Threads table, the Metrics tab, and in each thread's detail view.",
+    },
   [EXPLAINER_ID.what_are_these_elements_in_the_tree]: {
     id: EXPLAINER_ID.what_are_these_elements_in_the_tree,
     description:
@@ -259,7 +282,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.why_do_i_need_an_ai_provider]: {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,
     description:
-      "Connect AI providers to send prompts and receive responses from different LLMs . Set up a provider to test prompts live and preview model behavior in the Playground, and to automatically score traces using online evaluation rules.",
+      "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
   },
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,
@@ -353,5 +376,102 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_the_evaluation_run_configuration,
     description:
       "The evaluation run configuration captures key settings - like the metric, and optimizer - to keep evaluation runs reproducible and easy to analyze.",
+  },
+  [EXPLAINER_ID.metric_equals]: {
+    id: EXPLAINER_ID.metric_equals,
+    description:
+      "Checks if the output exactly matches an expected string. Use this for strict equality checks.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#equals",
+  },
+  [EXPLAINER_ID.metric_contains]: {
+    id: EXPLAINER_ID.metric_contains,
+    description:
+      "Checks if the output contains a specific substring, can be both case sensitive or case insensitive.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#contains",
+  },
+  [EXPLAINER_ID.metric_regex_match]: {
+    id: EXPLAINER_ID.metric_regex_match,
+    description:
+      "Checks if the output matches a specified regular expression pattern.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#regexmatch",
+  },
+  [EXPLAINER_ID.metric_is_json]: {
+    id: EXPLAINER_ID.metric_is_json,
+    description: "Checks if the output is a valid JSON object.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#isjson",
+  },
+  [EXPLAINER_ID.metric_levenshtein]: {
+    id: EXPLAINER_ID.metric_levenshtein,
+    description:
+      "Calculates the Levenshtein distance between the output and an expected string.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#levenshteinratio",
+  },
+  [EXPLAINER_ID.metric_sentence_bleu]: {
+    id: EXPLAINER_ID.metric_sentence_bleu,
+    description:
+      "Calculates a single-sentence BLEU score for a candidate vs. one or more references.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#bleu",
+  },
+  [EXPLAINER_ID.metric_corpus_bleu]: {
+    id: EXPLAINER_ID.metric_corpus_bleu,
+    description:
+      "Calculates a corpus-level BLEU score for multiple candidates vs. their references.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#bleu",
+  },
+  [EXPLAINER_ID.metric_rouge]: {
+    id: EXPLAINER_ID.metric_rouge,
+    description:
+      "Calculates the ROUGE score for a candidate vs. one or more references.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#rouge",
+  },
+  [EXPLAINER_ID.metric_hallucination]: {
+    id: EXPLAINER_ID.metric_hallucination,
+    description:
+      "The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output. If the context is provided, this will also be used to check for hallucinations.",
+    docLink: "/evaluation/metrics/hallucination",
+  },
+  [EXPLAINER_ID.metric_g_eval]: {
+    id: EXPLAINER_ID.metric_g_eval,
+    description:
+      "G-Eval is a task agnostic LLM as a Judge metric that allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.",
+    docLink: "/evaluation/metrics/g_eval",
+  },
+  [EXPLAINER_ID.metric_moderation]: {
+    id: EXPLAINER_ID.metric_moderation,
+    description:
+      "The Moderation metric allows you to evaluate the appropriateness of the LLM’s response to the given LLM output. It does this by asking the LLM to rate the appropriateness of the response on a scale of 1 to 10, where 1 is the least appropriate and 10 is the most appropriate.",
+    docLink: "/evaluation/metrics/moderation",
+  },
+  [EXPLAINER_ID.metric_usefulness]: {
+    id: EXPLAINER_ID.metric_usefulness,
+    description:
+      "The usefulness metric allows you to evaluate how useful an LLM response is given an input. It uses a language model to assess the usefulness and provides a score between 0.0 and 1.0, where higher values indicate higher usefulness. Along with the score, it provides a detailed explanation of why that score was assigned.",
+    docLink: "/evaluation/metrics/usefulness",
+  },
+  [EXPLAINER_ID.metric_answer_relevance]: {
+    id: EXPLAINER_ID.metric_answer_relevance,
+    description:
+      "The Answer Relevance metric allows you to evaluate how relevant and appropriate the LLM’s response is to the given input question or prompt. To assess the relevance of the answer, you will need to provide the LLM input (question or prompt) and the LLM output (generated answer). Unlike the Hallucination metric, the Answer Relevance metric focuses on the appropriateness and pertinence of the response rather than factual accuracy.",
+    docLink: "/evaluation/metrics/answer_relevance",
+  },
+  [EXPLAINER_ID.metric_context_precision]: {
+    id: EXPLAINER_ID.metric_context_precision,
+    description:
+      "The context precision metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
+    docLink: "/evaluation/metrics/context_precision",
+  },
+  [EXPLAINER_ID.metric_context_recall]: {
+    id: EXPLAINER_ID.metric_context_recall,
+    description:
+      "The context recall metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
+    docLink: "/evaluation/metrics/context_recall",
   },
 };

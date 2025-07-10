@@ -18,11 +18,14 @@ import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 
 import {
+  COLUMN_COMMENTS_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   COLUMN_USAGE_ID,
   ColumnData,
+  DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
@@ -58,6 +61,13 @@ import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
+import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -90,6 +100,12 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
+  },
+  {
+    id: "status",
+    label: "Status",
+    type: COLUMN_TYPE.threadStatus,
+    cell: ThreadStatusCell as never,
   },
   {
     id: `${COLUMN_USAGE_ID}.total_tokens`,
@@ -148,6 +164,19 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     label: "Created by",
     type: COLUMN_TYPE.string,
   },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.string,
+    cell: CommentsCell as never,
+  },
+  // TODO: move to shared once filters BE are implemented
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
+  },
 ];
 
 const FILTER_COLUMNS: ColumnData<Thread>[] = [
@@ -157,6 +186,11 @@ const FILTER_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.string,
   },
   ...SHARED_COLUMNS,
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -171,12 +205,14 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "last_updated_at",
   "duration",
+  "status",
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
 const COLUMNS_SORT_KEY = "threads-columns-sort";
+const COLUMNS_SCORES_ORDER_KEY = "threads-columns-scores-order";
 const PAGINATION_SIZE_KEY = "threads-pagination-size";
 const ROW_HEIGHT_KEY = "threads-row-height";
 
@@ -196,6 +232,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       updateType: "replaceIn",
     },
   );
+
+  const { data: feedbackScoresNames, isPending: isFeedbackScoresNamesPending } =
+    useThreadsFeedbackScoresNames({
+      projectId,
+    });
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -250,6 +291,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     queryParamConfig: JsonParam,
   });
 
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_SCORES_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending, refetch } = useThreadList(
@@ -270,6 +317,49 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no threads yet` : "No search results";
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_FEEDBACK_SCORES_ID]: {
+          keyComponent: ThreadsFeedbackScoresSelect,
+          keyComponentProps: {
+            projectId,
+            placeholder: "Select score",
+          },
+        },
+      },
+    }),
+    [projectId],
+  );
+
+  const dynamicScoresColumns = useMemo(() => {
+    return (feedbackScoresNames?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
+  }, [feedbackScoresNames]);
+
+  const scoresColumnsData = useMemo(() => {
+    return [
+      ...dynamicScoresColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              row.feedback_scores?.find((f) => f.name === label),
+            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          }) as ColumnData<Thread>,
+      ),
+    ];
+  }, [dynamicScoresColumns]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
@@ -329,8 +419,20 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         selectedColumns,
         sortableColumns: sortableBy,
       }),
+      ...convertColumnDataToColumn<Thread, Thread>(scoresColumnsData, {
+        columnsOrder: scoresColumnsOrder,
+        selectedColumns,
+        sortableColumns: sortableBy,
+      }),
     ];
-  }, [handleRowClick, sortableBy, columnsOrder, selectedColumns]);
+  }, [
+    handleRowClick,
+    sortableBy,
+    columnsOrder,
+    selectedColumns,
+    scoresColumnsData,
+    scoresColumnsOrder,
+  ]);
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -378,7 +480,18 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  if (isPending) {
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
+  if (isPending || isFeedbackScoresNamesPending) {
     return <Loader />;
   }
 
@@ -411,6 +524,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            config={filtersConfig as never}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -443,6 +557,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            sections={columnSections}
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
@@ -488,6 +603,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       />
       <ThreadDetailsPanel
         projectId={projectId}
+        projectName={projectName}
         traceId={traceId!}
         setTraceId={setTraceId}
         threadId={threadId!}

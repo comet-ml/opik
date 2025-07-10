@@ -19,7 +19,7 @@ def test_metaprompt_optimizer() -> None:
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
     prompt = chat_prompt.ChatPrompt(
-        system="Provide an answer to the question.", prompt="{text}"
+        system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing

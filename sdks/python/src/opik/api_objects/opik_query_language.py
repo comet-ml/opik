@@ -8,7 +8,9 @@ import json
 from typing import Any, Dict, Optional, Tuple, List
 
 COLUMNS = {
+    "id": "string",
     "name": "string",
+    "status": "string",
     "start_time": "date_time",
     "end_time": "date_time",
     "input": "string",
@@ -19,10 +21,16 @@ COLUMNS = {
     "usage.total_tokens": "number",
     "usage.prompt_tokens": "number",
     "usage.completion_tokens": "number",
+    "duration": "number",
+    "number_of_messages": "number",
+    "created_by": "string",
+    "thread_id": "string",
 }
 
 SUPPORTED_OPERATORS = {
+    "id": ["=", "contains", "not_contains"],
     "name": ["=", "contains", "not_contains"],
+    "status": ["=", "contains", "not_contains"],
     "start_time": ["=", ">", "<", ">=", "<="],
     "end_time": ["=", ">", "<", ">=", "<="],
     "input": ["=", "contains", "not_contains"],
@@ -33,6 +41,10 @@ SUPPORTED_OPERATORS = {
     "usage.total_tokens": ["=", ">", "<", ">=", "<="],
     "usage.prompt_tokens": ["=", ">", "<", ">=", "<="],
     "usage.completion_tokens": ["=", ">", "<", ">=", "<="],
+    "duration": ["=", ">", "<", ">=", "<="],
+    "number_of_messages": ["=", ">", "<", ">=", "<="],
+    "created_by": ["=", "contains", "not_contains"],
+    "thread_id": ["=", "contains", "not_contains"],
 }
 
 

@@ -50,10 +50,10 @@ Opik supports integration with various AI providers, including:
 - OpenAI
 - Anthropic
 - OpenRouter
-- Ollama (experimental)
 - Gemini
 - VertexAI
 - LM Studio (coming soon)
+- vLLM / Ollama / any other OpenAI API-compliant provider
 
 <Tip>
   If you would like us to support additional LLM providers, please let us know by opening an issue on
@@ -87,53 +87,6 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key
 4. Copy your API key
 5. In Opik, select "OpenRouter" as the provider and paste your key
-
-#### Ollama
-
-If you are using Ollama, you will need to ensure that Ollama's security configuration is set up correctly to avoid CORS issues. If you are running Ollama
-in production, we recommend reviewing the [Ollama documentation](https://github.com/ollama/ollama/blob/main/docs/faq.md#faq) for advice on best practices.
-
-If you are simply looking at using Ollama in the Oplik playground, we have released a utility to help you access Ollama from your browser. The Python
-SDK includes a simple reverse proxy that you can run on your local machine to proxy requests to Ollama:
-
-<Steps>
-  <Step title="Install the Python SDK">
-```bash
-# Install the latest version of the SDK
-pip install opik -U
-
-````
-</Step>
-
-  <Step title="Run the reverse proxy">
-```bash
-# Run the reverse proxy
-opik proxy --ollama
-````
-
-Once the server is running, you should see the output:
-
-<Frame>
-  <img src="/img/prompt_engineering/ollama_proxy.png" />
-</Frame>
-
-</Step>
-<Step>
-You can then configure the AI providers using the `URL` and `models` parameters returned by the proxy server in the console:
-
-<Frame>
-  <img src="/img/prompt_engineering/ollama_config.png" />
-</Frame>
-
-_Don't forget to update the model list with the models supported by your proxy server!_
-
-<Note>
-  You will need to keep the proxy server running for the playground to work. If it is not running, you will see the
-  error: `Unexpected error`.
-</Note>
-
-</Step>
-</Steps>
 
 #### Gemini
 
@@ -248,6 +201,24 @@ Step 4: Create and Download the Key
 - **Vertex AI API Key**: **Paste the full contents of the `opik-key.json` file here**
 
 4. Click **Add configuration**
+
+#### vLLM / Custom Provider
+
+Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc.
+
+<Frame>
+  <img src="/img/configuration/vllm_configuration.png" alt="New Custom AI Provider Modal" />
+</Frame>
+
+For the URL section, enter your server URL, for example: `http://host.docker.internal:8000/v1`.
+
+<Tip>
+  If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
+</Tip>
+
+If your model access requires authentication via an API key, enter it in the API Key field. Otherwise, you can leave this field blank.
+
+In the Models section, list all models available on your server. You’ll be able to select one of them for use later.
 
 ## API Key Security
 

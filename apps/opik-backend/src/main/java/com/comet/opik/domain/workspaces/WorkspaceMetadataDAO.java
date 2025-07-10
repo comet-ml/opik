@@ -22,9 +22,9 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                 query_result AS (
                     SELECT AVG(query_size) AS query_size
                     FROM (
-                        SELECT OCTET_LENGTH(input) +
-                                OCTET_LENGTH(output) +
-                                OCTET_LENGTH(metadata) +
+                        SELECT input_length +
+                                output_length +
+                                metadata_length +
                                 OCTET_LENGTH(error_info) +
                                 (OCTET_LENGTH(tags) * 10) +
                                 OCTET_LENGTH(toJSONString(usage)) as query_size

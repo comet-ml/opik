@@ -13,13 +13,17 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 demoDataJob: true
 
 component:
   backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-backend
     metrics:
@@ -87,7 +91,7 @@ component:
         port:  8080
         protocol: TCP
         targetPort:  8080
-      - name: backend
+      - name: swagger
         port:  3003
         protocol: TCP
         targetPort:  3003
@@ -105,7 +109,6 @@ component:
   python-backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-python-backend
     metrics:
@@ -172,7 +175,6 @@ component:
   frontend:
     enabled: true
     serviceAccount:
-      enabled: true
       create: true
       name: opik-frontend
     metrics:
@@ -333,6 +335,7 @@ altinity-clickhouse-operator:
     enabled: false
   serviceMonitor:
     enabled: false
+    interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
 clickhouse:
   enabled: true
@@ -348,19 +351,31 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
-        enabled: false
-        create: true
-        annotations: {}
-    # bucketURL: ""
+      annotations: {}
+      create: false
+      name: ""
+    # bucketURL: "s3://opik-clickhouse-backup"
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
+    command:
+      - /bin/bash
+      - '-cx'
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   monitoring:
     enabled: false
     username: opikmon # readonly user

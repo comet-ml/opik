@@ -45,6 +45,8 @@ public class FilterQueryBuilder {
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
+    private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
+    private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_ANALYTICS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
@@ -61,6 +63,7 @@ public class FilterQueryBuilder {
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
+    private static final String STATUS_DB = "status";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -140,6 +143,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
+                    .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
                     .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
                     .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
@@ -161,6 +165,9 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceThreadField.STATUS, STATUS_DB)
+                    .put(TraceThreadField.TAGS, TAGS_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -182,6 +189,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -216,6 +224,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.USAGE_PROMPT_TOKENS)
                     .add(TraceField.USAGE_TOTAL_TOKENS)
                     .add(TraceField.TOTAL_ESTIMATED_COST)
+                    .add(TraceField.LLM_SPAN_COUNT)
                     .build()),
             FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)
@@ -234,11 +243,13 @@ public class FilterQueryBuilder {
                     .add(SpanField.USAGE_TOTAL_TOKENS)
                     .add(SpanField.DURATION)
                     .add(SpanField.ERROR_INFO)
+                    .add(SpanField.TYPE)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
                     .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
+                    .add(TraceThreadField.FEEDBACK_SCORES)
                     .build(),
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
@@ -254,6 +265,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.STATUS)
+                    .add(TraceThreadField.TAGS)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -309,7 +322,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedBackScore(Filter filter) {
-        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
+        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
     }
 
