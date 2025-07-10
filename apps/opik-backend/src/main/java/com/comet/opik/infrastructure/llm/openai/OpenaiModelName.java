@@ -20,6 +20,8 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_4O_2024_11_20("gpt-4o-2024-11-20", true),
     GPT_4O_MINI("gpt-4o-mini", true),
     GPT_4O_MINI_2024_07_18("gpt-4o-mini-2024-07-18", true),
+    GPT_4_1("gpt-4.1", true),
+    GPT_4_1_MINI("gpt-4.1-mini", true),
     GPT_3_5_TURBO("gpt-3.5-turbo", false),
     GPT_3_5_TURBO_1106("gpt-3.5-turbo-1106", false),
     GPT_3_5_TURBO_0125("gpt-3.5-turbo-0125", false),
