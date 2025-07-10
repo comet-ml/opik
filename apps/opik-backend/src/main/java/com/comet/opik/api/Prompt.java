@@ -13,6 +13,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.PromptType.MUSTACHE;
@@ -35,6 +36,10 @@ public record Prompt(
         @JsonView({Prompt.View.Write.class}) @Nullable JsonNode metadata,
         @JsonView({Prompt.View.Write.class}) @Nullable String changeDescription,
         @JsonView({Prompt.View.Write.class}) @Nullable PromptType type,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Write.class,
+                Prompt.View.Detail.class,
+                Prompt.View.Updatable.class}) @Nullable Set<String> tags,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Public.class,
