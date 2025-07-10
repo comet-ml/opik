@@ -19,6 +19,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -400,14 +401,14 @@ public class FilterQueryBuilder {
         return statement;
     }
 
-    public String toStateSQL(@NonNull String stateSQL,
-            @NonNull List<? extends Filter> filters) {
+    public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters) {
+        Map<String, Object> stateSQLMapping = new HashMap<>();
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            stateSQL = stateSQL.replace(":filter%d".formatted(i), "'%s'".formatted(filter.value()));
+            stateSQLMapping.put("filter%d".formatted(i), filter.value());
         }
 
-        return stateSQL;
+        return stateSQLMapping;
     }
 
     private String getKey(Filter filter) {

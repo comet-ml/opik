@@ -165,19 +165,23 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
-        String stateFiltersSQL = Optional.ofNullable(filters)
+        String filtersSQL = Optional.ofNullable(filters)
                 .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.PROMPT))
-                .map(sql -> filterQueryBuilder.toStateSQL(sql, filters))
                 .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(filters)
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
 
         return transactionTemplate.inTransaction(handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            long total = promptDAO.count(name, workspaceId, stateFiltersSQL);
+            long total = promptDAO.count(name, workspaceId, filtersSQL, filterMapping);
 
             var offset = (page - 1) * size;
 
-            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql, stateFiltersSQL);
+            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql, filtersSQL,
+                    filterMapping);
 
             return PromptPage.builder()
                     .page(page)

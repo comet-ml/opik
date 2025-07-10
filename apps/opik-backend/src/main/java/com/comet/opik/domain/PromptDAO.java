@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMap;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -17,6 +18,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -82,7 +84,8 @@ interface PromptDAO {
     List<Prompt> find(@Define("name") @Bind("name") String name, @Bind("workspace_id") String workspaceId,
             @Bind("offset") int offset, @Bind("limit") int limit,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
-            @Define("filters") String filters);
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT COUNT(id) FROM prompts " +
             " WHERE workspace_id = :workspace_id " +
@@ -91,7 +94,8 @@ interface PromptDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long count(@Define("name") @Bind("name") String name, @Bind("workspace_id") String workspaceId,
-            @Define("filters") String filters);
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id")
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
