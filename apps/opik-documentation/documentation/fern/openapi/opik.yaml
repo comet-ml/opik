@@ -8750,9 +8750,12 @@ components:
       required:
       - guardrailsEnabled
       - pythonEvaluatorEnabled
+      - traceThreadPythonEvaluatorEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
+          type: boolean
+        traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean
