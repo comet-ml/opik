@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -34,6 +35,7 @@ import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
@@ -638,5 +640,35 @@ class OnlineScoringEngineTest {
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("renderMessages should support keys with dots in their names")
+    void testExtractFromJsonWithDotKey(String key, String jsonBody) throws Exception {
+        // variable mapping: variable 'testVar' maps to 'input.' + key
+        var variables = Map.of("testVar", "input." + key);
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .createdBy(USER_NAME)
+                .input(JsonUtils.MAPPER.readTree(jsonBody))
+                .build();
+
+        // Render a message using the variable
+        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Test value: {{testVar}}"));
+        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
+        assertThat(rendered).hasSize(1);
+        var userMessage = rendered.getFirst();
+        assertThat(userMessage).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains("Test value: expected-value");
+    }
+
+    private static Stream<Arguments> testExtractFromJsonWithDotKey() {
+        return Stream.of(
+                arguments("key.with.dot", "{\"key.with.dot\":\"expected-value\"}"),
+                arguments("regularKey", "{\"regularKey\":\"expected-value\"}"),
+                arguments("subObject.nestedKey", "{\"subObject\":{\"nestedKey\":\"expected-value\"}}"));
     }
 }
