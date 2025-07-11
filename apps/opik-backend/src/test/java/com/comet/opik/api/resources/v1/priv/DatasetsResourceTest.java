@@ -2555,6 +2555,7 @@ class DatasetsResourceTest {
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
+                    .tags(datasetUpdate.tags())
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
@@ -2615,6 +2616,7 @@ class DatasetsResourceTest {
                     .toBuilder()
                     .description(null)
                     .visibility(null)
+                    .tags(null)
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))

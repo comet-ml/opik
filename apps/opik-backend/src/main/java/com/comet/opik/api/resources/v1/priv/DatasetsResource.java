@@ -118,13 +118,17 @@ public class DatasetsResource {
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") String name,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+
+        var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
                 .withExperimentsOnly(withExperimentsOnly)
                 .promptId(promptId)
                 .withOptimizationsOnly(withOptimizationsOnly)
+                .filters(queryFilters)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
