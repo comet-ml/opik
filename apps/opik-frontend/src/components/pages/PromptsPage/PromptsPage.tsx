@@ -7,6 +7,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,8 +21,13 @@ import {
   ColumnData,
 } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
@@ -31,16 +37,23 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 
 export const getRowId = (p: Prompt) => p.id;
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
 const COLUMNS_ORDER_KEY = "prompts-columns-order";
+const COLUMNS_SORT_KEY = "prompts-columns-sort";
 const PAGINATION_SIZE_KEY = "prompts-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
@@ -54,6 +67,12 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
   },
   {
     id: "last_updated_at",
@@ -91,7 +110,23 @@ const PromptsPage: React.FunctionComponent = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const [search, setSearch] = useState("");
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [filters = [], setFilters] = useQueryParam(`filters`, JsonParam, {
+    updateType: "replaceIn",
+  });
+
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: COLUMNS_SORT_KEY,
+    queryKey: `sorting`,
+    defaultValue: [],
+    queryParamConfig: JsonParam,
+  });
+
   const [page, setPage] = useState(1);
   const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
     defaultValue: 10,
@@ -102,7 +137,9 @@ const PromptsPage: React.FunctionComponent = () => {
   const { data, isPending } = usePromptsList(
     {
       workspaceName,
-      search,
+      filters,
+      sorting: sortedColumns,
+      search: search!,
       page,
       size,
     },
@@ -113,8 +150,12 @@ const PromptsPage: React.FunctionComponent = () => {
   );
 
   const prompts = useMemo(() => data?.content ?? [], [data?.content]);
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? ["tags"], // TODO lala need to fix default sortable_by
+    [data?.sortable_by],
+  );
   const total = data?.total ?? 0;
-  const noData = !search;
+  const noData = !search && filters.length === 0;
   const noDataText = noData ? "There are no prompts yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -154,16 +195,27 @@ const PromptsPage: React.FunctionComponent = () => {
           idKey: "id",
           resource: RESOURCE_TYPE.prompt,
         },
+        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
       }),
       ...convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
+        sortableColumns: sortableBy,
       }),
       generateActionsColumDef({
         cell: PromptRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder]);
+  }, [sortableBy, columnsOrder, selectedColumns]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -205,14 +257,21 @@ const PromptsPage: React.FunctionComponent = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
       />
-      <div className="mb-4 flex items-center justify-between gap-8">
-        <SearchInput
-          searchText={search}
-          setSearchText={setSearch}
-          placeholder="Search by name"
-          className="w-[320px]"
-          dimension="sm"
-        ></SearchInput>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+        <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search!}
+            setSearchText={setSearch}
+            placeholder="Search by name"
+            className="w-[320px]"
+            dimension="sm"
+          ></SearchInput>
+          <FiltersButton
+            columns={DEFAULT_COLUMNS}
+            filters={filters}
+            onChange={setFilters}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <PromptsActionsPanel prompts={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />
@@ -232,6 +291,7 @@ const PromptsPage: React.FunctionComponent = () => {
         columns={columns}
         data={prompts}
         onRowClick={handleRowClick}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

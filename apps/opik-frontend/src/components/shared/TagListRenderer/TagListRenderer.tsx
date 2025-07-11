@@ -14,12 +14,14 @@ export type TagListRendererProps = {
   tags: string[];
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
+  align?: "start" | "end";
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
   tags = [],
   onAddTag,
   onDeleteTag,
+  align = "end",
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -66,7 +68,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
             <Plus />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[420px] p-6" align="end">
+        <PopoverContent className="w-[420px] p-6" align={align}>
           <div className="flex gap-2">
             <Input
               placeholder="New tag"
