@@ -28,9 +28,9 @@ const getPromptsList = async (
   const { data } = await api.get(PROMPTS_REST_ENDPOINT, {
     signal,
     params: {
-      ...(search && { name: search }),
       ...processFilters(filters),
       ...processSorting(sorting),
+      ...(search && { name: search }),
       size,
       page,
     },
