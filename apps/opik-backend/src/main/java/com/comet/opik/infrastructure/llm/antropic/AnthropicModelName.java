@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RequiredArgsConstructor
 public enum AnthropicModelName implements StructuredOutputSupported {
+    CLAUDE_4_SONNET("claude-4-sonnet"),
     CLAUDE_3_5_SONNET_LATEST("claude-3-5-sonnet-latest"),
     CLAUDE_3_5_SONNET_20241022("claude-3-5-sonnet-20241022"),
     CLAUDE_3_5_HAIKU_LATEST("claude-3-5-haiku-latest"),

@@ -28,6 +28,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
 
   //  <----- anthropic
+  CLAUDE_4_SONNET = "claude-4-sonnet",
   CLAUDE_3_5_SONNET_LATEST = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_SONNET_20241022 = "claude-3-5-sonnet-20241022",
   CLAUDE_3_5_HAIKU_LATEST = "claude-3-5-haiku-latest",

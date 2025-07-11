@@ -100,6 +100,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_4_SONNET,
+      label: "Claude 4 Sonnet",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
       label: "Claude 3.5 Sonnet 2024-10-22",
     },
