@@ -99,7 +99,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (p50)",
+        label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
