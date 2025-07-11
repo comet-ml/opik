@@ -46,6 +46,7 @@ export enum EXPLAINER_ID {
   whats_the_best_score = "whats_the_best_score",
   what_happens_if_i_edit_an_ai_provider = "what_happens_if_i_edit_an_ai_provider",
   what_happens_if_i_edit_a_rule = "what_happens_if_i_edit_a_rule",
+  what_happens_if_i_edit_a_thread_rule = "what_happens_if_i_edit_a_thread_rule",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
@@ -341,6 +342,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Editing an existing rule",
     description:
       "Changes will only apply to new traces. Existing traces won't be affected.",
+  },
+  [EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule]: {
+    id: EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule,
+    title: "Editing a thread-level rule",
+    description:
+      "Changes will only apply to new threads. Existing threads won't be affected.",
   },
   [EXPLAINER_ID.why_would_i_want_to_create_a_new_project]: {
     id: EXPLAINER_ID.why_would_i_want_to_create_a_new_project,
