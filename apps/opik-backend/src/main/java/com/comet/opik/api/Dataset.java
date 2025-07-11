@@ -12,6 +12,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -24,6 +25,7 @@ public record Dataset(
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
+        @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Set<String> tags,
         @JsonView({Dataset.View.Public.class,
                 Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

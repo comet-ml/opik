@@ -12,6 +12,8 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -107,6 +109,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
@@ -369,6 +372,14 @@ class DatasetServiceImpl implements DatasetService {
 
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
+        String filtersSQL = Optional.ofNullable(criteria.filters())
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.DATASET))
+                .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(criteria.filters())
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
+
         // withExperimentsOnly refers to Regular experiments only
         if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
@@ -387,10 +398,11 @@ class DatasetServiceImpl implements DatasetService {
                     return Mono.just(DatasetPage.empty(page));
                 } else {
                     if (ids.size() <= maxExperimentInClauseSize) {
-                        return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFieldsSql, visibility);
+                        return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFieldsSql, visibility,
+                                filtersSQL, filterMapping);
                     } else {
                         return fetchUsingTempTable(page, size, criteria, ids, workspaceId, sortingFieldsSql,
-                                visibility);
+                                visibility, filtersSQL, filterMapping);
                     }
                 }
             }).subscribeOn(Schedulers.boundedElastic()).block();
@@ -410,19 +422,20 @@ class DatasetServiceImpl implements DatasetService {
             int offset = (page - 1) * size;
 
             long count = repository.findCount(workspaceId, criteria.name(), criteria.withExperimentsOnly(),
-                    criteria.withOptimizationsOnly(), visibility);
+                    criteria.withOptimizationsOnly(), visibility, filtersSQL, filterMapping);
 
             List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
                     repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly(),
                             criteria.withOptimizationsOnly(),
-                            sortingFieldsSql, visibility));
+                            sortingFieldsSql, visibility, filtersSQL, filterMapping));
 
             return new DatasetPage(datasets, page, datasets.size(), count);
         });
     }
 
     private Mono<DatasetPage> fetchUsingTempTable(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
-            String workspaceId, String sortingFields, Visibility visibility) {
+            String workspaceId, String sortingFields, Visibility visibility, String filters,
+            Map<String, Object> filterMapping) {
 
         String tableName = idGenerator.generateId().toString().replace("-", "_");
         int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().getMaxExperimentInClauseSize();
@@ -446,10 +459,11 @@ class DatasetServiceImpl implements DatasetService {
 
             return template.inTransaction(READ_ONLY, handle -> {
                 var repository = handle.attach(DatasetDAO.class);
-                long count = repository.findCountByTempTable(workspaceId, tableName, criteria.name(), visibility);
+                long count = repository.findCountByTempTable(workspaceId, tableName, criteria.name(), visibility,
+                        filters, filterMapping);
                 int offset = (page - 1) * size;
                 List<Dataset> datasets = repository.findByTempTable(workspaceId, tableName, criteria.name(), size,
-                        offset, sortingFields, visibility);
+                        offset, sortingFields, visibility, filters, filterMapping);
                 return new DatasetPage(datasets, page, datasets.size(), count);
             });
         }).doFinally(signalType -> {
@@ -462,13 +476,15 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     private Mono<DatasetPage> fetchUsingMemory(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
-            String workspaceId, String sortingFields, Visibility visibility) {
+            String workspaceId, String sortingFields, Visibility visibility, String filters,
+            Map<String, Object> filterMapping) {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(DatasetDAO.class);
-            long count = repository.findCountByIds(workspaceId, ids, criteria.name(), visibility);
+            long count = repository.findCountByIds(workspaceId, ids, criteria.name(), visibility, filters,
+                    filterMapping);
             int offset = (page - 1) * size;
             List<Dataset> datasets = repository.findByIds(workspaceId, ids, criteria.name(), size, offset,
-                    sortingFields, visibility);
+                    sortingFields, visibility, filters, filterMapping);
             return new DatasetPage(datasets, page, datasets.size(), count);
         }));
     }

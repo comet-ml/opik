@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
@@ -66,6 +67,13 @@ public class FilterQueryBuilder {
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
+
+    // Dataset fields
+    private static final String DATASET_ID_DB = "id";
+    private static final String DATASET_NAME_DB = "name";
+    private static final String DATASET_VISIBILITY_MODE_DB = "visibility";
+    private static final String DATASET_CREATED_AT_DB = "created_at";
+    private static final String DATASET_LAST_UPDATED_AT_DB = "last_updated_at";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -210,6 +218,11 @@ public class FilterQueryBuilder {
                     .put(PromptField.TAGS, TAGS_DB)
                     .build());
 
+    private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.TAGS, TAGS_DB)
+                    .build());
+
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
@@ -273,6 +286,9 @@ public class FilterQueryBuilder {
             FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.TAGS)
                     .build(),
+            FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .add(DatasetField.TAGS)
+                    .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -362,6 +378,7 @@ public class FilterQueryBuilder {
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

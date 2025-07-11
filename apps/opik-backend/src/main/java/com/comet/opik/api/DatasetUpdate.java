@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
+import java.util.Set;
+
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -14,5 +16,6 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetUpdate(@NotBlank String name,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
-        Visibility visibility) {
+        Visibility visibility,
+        Set<String> tags) {
 }
