@@ -40,6 +40,7 @@ interface PromptDAO {
                     SELECT COUNT(pv.id)
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
+                    AND pv.workspace_id = p.workspace_id
                 ) AS version_count,
                 (
                     SELECT JSON_OBJECT(
@@ -57,6 +58,7 @@ interface PromptDAO {
                     )
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
+                    AND pv.workspace_id = p.workspace_id
                     ORDER BY pv.id DESC
                     LIMIT 1
                 ) AS latest_version
