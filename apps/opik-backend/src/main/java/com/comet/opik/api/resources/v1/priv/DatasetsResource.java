@@ -12,6 +12,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.filter.DatasetFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -121,7 +122,7 @@ public class DatasetsResource {
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
-        var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+        var queryFilters = filtersFactory.newFilters(filters, DatasetFilter.LIST_TYPE_REFERENCE);
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
