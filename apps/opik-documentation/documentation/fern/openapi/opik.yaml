@@ -2138,6 +2138,14 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -8432,6 +8440,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8523,6 +8536,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     JsonNode_Detail:
       type: object
     PromptVersion_Detail:
@@ -8604,6 +8622,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8707,6 +8730,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8746,6 +8774,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
