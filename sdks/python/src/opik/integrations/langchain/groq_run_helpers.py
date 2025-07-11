@@ -93,10 +93,10 @@ def _get_provider_and_model(
     """
     Fetches the provider and model information from a given run dictionary.
     """
-    model = None
+    model: Optional[str] = None
     provider = LLMProvider.GROQ
     model = run_dict["extra"].get("metadata", {}).get("ls_model_name")
     if model is not None:
         model = model.split("/")[-1]
 
-    return provider, model
+    return provider, model  # type: ignore

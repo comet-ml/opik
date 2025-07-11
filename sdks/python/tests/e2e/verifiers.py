@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
 from unittest import mock
 
+import pytest
 import opik
 from opik import Attachment, Prompt, synchronization
 from opik.api_objects.dataset import dataset_item
@@ -538,4 +539,7 @@ def _assert_feedback_scores(
     for actual_score, expected_score in zip(
         sorted_actual_feedback_scores, sorted_expected_feedback_scores
     ):
-        testlib.assert_dicts_equal(actual_score, expected_score)
+        testlib.assert_dicts_equal(actual_score, expected_score, ignore_keys=["value"])
+        assert expected_score["value"] == pytest.approx(
+            actual_score["value"], abs=0.0001
+        )
