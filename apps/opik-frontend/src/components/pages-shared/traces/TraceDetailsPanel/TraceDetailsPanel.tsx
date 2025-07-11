@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { JsonParam, useQueryParam } from "use-query-params";
 import find from "lodash/find";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
@@ -26,6 +27,8 @@ import {
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import TraceDetailsActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel";
+
+const MAX_SPANS_LOAD_SIZE = 15000;
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -54,8 +57,23 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
-  const [search, setSearch] = useState<string | undefined>();
   const { flattenedTree } = useTreeDetailsStore();
+
+  const [search = undefined, setSearch] = useQueryParam(
+    `trace_panel_search`,
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [filters = [], setFilters] = useQueryParam(
+    `trace_panel_filters`,
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -77,7 +95,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       traceId,
       projectId,
       page: 1,
-      size: 15000,
+      size: MAX_SPANS_LOAD_SIZE,
     },
     {
       placeholderData: keepPreviousData,
@@ -96,6 +114,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           trace
       : trace;
   }, [spanId, spansData?.content, trace]);
+
+  const treeData = useMemo(() => {
+    return [...(trace ? [trace] : []), ...(spansData?.content || [])];
+  }, [spansData?.content, trace]);
 
   const horizontalNavigation = useMemo(
     () =>
@@ -149,6 +171,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               onSelectRow={handleRowSelect}
               search={search}
               setSearch={setSearch}
+              filters={filters}
+              setFilters={setFilters}
             />
           </ResizablePanel>
           <ResizableHandle />
@@ -215,6 +239,9 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           isSpansLazyLoading={isSpansLazyLoading}
           search={search}
           setSearch={setSearch}
+          filters={filters}
+          setFilters={setFilters}
+          treeData={treeData}
         />
       }
       onClose={onClose}

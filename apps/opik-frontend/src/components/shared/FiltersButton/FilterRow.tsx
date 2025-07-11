@@ -12,10 +12,8 @@ import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
 import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
 import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
+import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
 import { createEmptyFilter } from "@/lib/filters";
-import EqualsRow from "@/components/shared/FiltersButton/rows/EqualsRow";
-import { GuardrailResult } from "@/types/guardrails";
-import { ThreadStatus } from "@/types/thread";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -58,29 +56,9 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
-      case COLUMN_TYPE.guardrails:
+      case COLUMN_TYPE.category:
         return (
-          <EqualsRow
-            options={[
-              { value: GuardrailResult.FAILED, label: "Failed" },
-              { value: GuardrailResult.PASSED, label: "Passed" },
-            ]}
-            placeholder="Status"
-            filter={filter}
-            onChange={onChange}
-          />
-        );
-      case COLUMN_TYPE.threadStatus:
-        return (
-          <EqualsRow
-            options={[
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ]}
-            placeholder="Select value"
-            filter={filter}
-            onChange={onChange}
-          />
+          <CategoryRow filter={filter} onChange={onChange} config={config} />
         );
       case "":
       default:
