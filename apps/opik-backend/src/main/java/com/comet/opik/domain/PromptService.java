@@ -6,6 +6,11 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.google.inject.ImplementedBy;
@@ -38,7 +43,7 @@ import static java.util.stream.Collectors.toMap;
 public interface PromptService {
     Prompt create(Prompt promptRequest);
 
-    PromptPage find(String name, int page, int size);
+    PromptPage find(String name, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     PromptVersion createPromptVersion(CreatePromptVersion promptVersion);
 
@@ -74,6 +79,8 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -152,18 +159,29 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptPage find(String name, int page, int size) {
+    public PromptPage find(String name, int page, int size, List<SortingField> sortingFields,
+            List<? extends Filter> filters) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
+
+        String filtersSQL = Optional.ofNullable(filters)
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.PROMPT))
+                .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(filters)
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
 
         return transactionTemplate.inTransaction(handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            long total = promptDAO.count(name, workspaceId);
+            long total = promptDAO.count(name, workspaceId, filtersSQL, filterMapping);
 
             var offset = (page - 1) * size;
 
-            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size);
+            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql, filtersSQL,
+                    filterMapping);
 
             return PromptPage.builder()
                     .page(page)
@@ -257,7 +275,7 @@ class PromptServiceImpl implements PromptService {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            if (promptDAO.update(workspaceId, updatedPrompt) > 0) {
+            if (promptDAO.update(workspaceId, updatedPrompt, updatedPrompt.tags()) > 0) {
                 log.info("Updated prompt with id '{}'", id);
             } else {
                 log.info("Prompt with id '{}' not found", id);

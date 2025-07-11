@@ -35,6 +35,8 @@ class RawPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptPagePublic]:
         """
@@ -47,6 +49,10 @@ class RawPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -63,6 +69,8 @@ class RawPromptsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -91,6 +99,7 @@ class RawPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -112,6 +121,8 @@ class RawPromptsClient:
 
         type : typing.Optional[PromptWriteType]
 
+        tags : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -130,6 +141,7 @@ class RawPromptsClient:
                 "metadata": metadata,
                 "change_description": change_description,
                 "type": type,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -316,6 +328,7 @@ class RawPromptsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -328,6 +341,8 @@ class RawPromptsClient:
         name : str
 
         description : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -342,6 +357,7 @@ class RawPromptsClient:
             json={
                 "name": name,
                 "description": description,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -658,6 +674,8 @@ class AsyncRawPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptPagePublic]:
         """
@@ -670,6 +688,10 @@ class AsyncRawPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -686,6 +708,8 @@ class AsyncRawPromptsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -714,6 +738,7 @@ class AsyncRawPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -735,6 +760,8 @@ class AsyncRawPromptsClient:
 
         type : typing.Optional[PromptWriteType]
 
+        tags : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -753,6 +780,7 @@ class AsyncRawPromptsClient:
                 "metadata": metadata,
                 "change_description": change_description,
                 "type": type,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -939,6 +967,7 @@ class AsyncRawPromptsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -951,6 +980,8 @@ class AsyncRawPromptsClient:
         name : str
 
         description : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -965,6 +996,7 @@ class AsyncRawPromptsClient:
             json={
                 "name": name,
                 "description": description,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
