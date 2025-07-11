@@ -2138,6 +2138,14 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -7495,7 +7503,6 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7511,8 +7518,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7545,7 +7552,6 @@ components:
           readOnly: true
     ProviderApiKey:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7561,8 +7567,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7595,7 +7601,6 @@ components:
           readOnly: true
     ProviderApiKey_Write:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7607,8 +7612,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7626,16 +7631,23 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProviderApiKeyUpdate:
-      required:
-      - api_key
       type: object
       properties:
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
           type: string
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
@@ -8428,6 +8440,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8519,6 +8536,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     JsonNode_Detail:
       type: object
     PromptVersion_Detail:
@@ -8600,6 +8622,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8703,6 +8730,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -8742,13 +8774,21 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
       - pythonEvaluatorEnabled
+      - traceThreadPythonEvaluatorEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
+          type: boolean
+        traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean

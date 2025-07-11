@@ -2,9 +2,9 @@ export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
-  OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  CUSTOM = "custom-llm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -14,6 +14,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
+  GPT_4_1 = "gpt-4.1",
+  GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -272,6 +274,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_4_TURBO = "openai/gpt-4-turbo",
   OPENAI_GPT_4_TURBO_PREVIEW = "openai/gpt-4-turbo-preview",
   OPENAI_GPT_4_VISION_PREVIEW = "openai/gpt-4-vision-preview",
+  OPENAI_GPT_4_1 = "openai/gpt-4.1",
+  OPENAI_GPT_4_1_MINI = "openai/gpt-4.1-mini",
   OPENAI_O1 = "openai/o1",
   OPENAI_O1_MINI = "openai/o1-mini",
   OPENAI_O1_MINI_2024_09_12 = "openai/o1-mini-2024-09-12",
@@ -388,15 +392,9 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
-export enum PROVIDER_LOCATION_TYPE {
-  cloud = "cloud",
-  local = "local",
-}
-
-export interface LocalAIProviderData {
-  url: string;
-  models: string;
-  created_at: string;
+export interface ProviderKeyConfiguration {
+  location?: string;
+  models?: string;
 }
 
 export interface ProviderKey {
@@ -404,11 +402,12 @@ export interface ProviderKey {
   keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
+  base_url?: string;
+  configuration: ProviderKeyConfiguration;
 }
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
-  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -449,10 +448,19 @@ export interface LLMVertexAIConfigsType {
   topP: number;
 }
 
+export interface LLMCustomConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexAIConfigsType;
+  | LLMVertexAIConfigsType
+  | LLMCustomConfigsType;

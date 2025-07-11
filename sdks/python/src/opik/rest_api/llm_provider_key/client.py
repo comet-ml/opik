@@ -83,7 +83,7 @@ class LlmProviderKeyClient:
         self,
         *,
         provider: ProviderApiKeyWriteProvider,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -97,7 +97,7 @@ class LlmProviderKeyClient:
         ----------
         provider : ProviderApiKeyWriteProvider
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -118,7 +118,7 @@ class LlmProviderKeyClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.llm_provider_key.store_llm_provider_api_key(provider="openai", api_key='api_key', )
+        client.llm_provider_key.store_llm_provider_api_key(provider="openai", )
         """
         _response = self._raw_client.store_llm_provider_api_key(
             provider=provider,
@@ -162,8 +162,11 @@ class LlmProviderKeyClient:
         self,
         id: str,
         *,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -173,9 +176,15 @@ class LlmProviderKeyClient:
         ----------
         id : str
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -188,10 +197,16 @@ class LlmProviderKeyClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.llm_provider_key.update_llm_provider_api_key(id='id', api_key='api_key', )
+        client.llm_provider_key.update_llm_provider_api_key(id='id', )
         """
         _response = self._raw_client.update_llm_provider_api_key(
-            id, api_key=api_key, name=name, request_options=request_options
+            id,
+            api_key=api_key,
+            name=name,
+            headers=headers,
+            configuration=configuration,
+            base_url=base_url,
+            request_options=request_options,
         )
         return _response.data
 
@@ -272,7 +287,7 @@ class AsyncLlmProviderKeyClient:
         self,
         *,
         provider: ProviderApiKeyWriteProvider,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -286,7 +301,7 @@ class AsyncLlmProviderKeyClient:
         ----------
         provider : ProviderApiKeyWriteProvider
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -309,7 +324,7 @@ class AsyncLlmProviderKeyClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.llm_provider_key.store_llm_provider_api_key(provider="openai", api_key='api_key', )
+            await client.llm_provider_key.store_llm_provider_api_key(provider="openai", )
         asyncio.run(main())
         """
         _response = await self._raw_client.store_llm_provider_api_key(
@@ -357,8 +372,11 @@ class AsyncLlmProviderKeyClient:
         self,
         id: str,
         *,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -368,9 +386,15 @@ class AsyncLlmProviderKeyClient:
         ----------
         id : str
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -385,10 +409,16 @@ class AsyncLlmProviderKeyClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.llm_provider_key.update_llm_provider_api_key(id='id', api_key='api_key', )
+            await client.llm_provider_key.update_llm_provider_api_key(id='id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.update_llm_provider_api_key(
-            id, api_key=api_key, name=name, request_options=request_options
+            id,
+            api_key=api_key,
+            name=name,
+            headers=headers,
+            configuration=configuration,
+            base_url=base_url,
+            request_options=request_options,
         )
         return _response.data
