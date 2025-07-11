@@ -10,11 +10,13 @@ export const PromptUpdatable: core.serialization.Schema<serializers.PromptUpdata
     core.serialization.object({
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
     });
 
 export declare namespace PromptUpdatable {
     export interface Raw {
         name: string;
         description?: string | null;
+        tags?: string[] | null;
     }
 }

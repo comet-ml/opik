@@ -12,6 +12,7 @@ class PromptDetail(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
+    tags: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
