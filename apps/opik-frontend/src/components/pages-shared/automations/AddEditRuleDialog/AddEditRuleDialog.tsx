@@ -338,7 +338,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               <ExplainerCallout
                 Icon={MessageCircleWarning}
                 className="mb-2"
-                {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_a_rule]}
+                {...EXPLAINERS_MAP[
+                  isThreadScope
+                    ? EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule
+                    : EXPLAINER_ID.what_happens_if_i_edit_a_rule
+                ]}
               />
             )}
             <Form {...form}>
@@ -401,44 +405,48 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       );
                     }}
                   />
-                  <FormField
-                    control={form.control}
-                    name="scope"
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <Label className="flex items-center">
-                          Scope{" "}
-                          <TooltipWrapper
-                            content="Choose whether the evaluation rule scores the entire
+                  <div className="hidden">
+                    <FormField
+                      control={form.control}
+                      name="scope"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <Label className="flex items-center">
+                            Scope{" "}
+                            <TooltipWrapper
+                              content="Choose whether the evaluation rule scores the entire
                       thread or each individual trace. Thread-level rules assess
                       the full conversation, while trace-level rules evaluate
                       one model response at a time."
-                          >
-                            <Info className="ml-1 size-4 text-light-slate" />
-                          </TooltipWrapper>
-                        </Label>
-                        <FormControl>
-                          <Select
-                            value={field.value}
-                            onValueChange={handleScopeChange}
-                            disabled={isEdit}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select scope" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
-                                Trace
-                              </SelectItem>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.thread}>
-                                Thread
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                            >
+                              <Info className="ml-1 size-4 text-light-slate" />
+                            </TooltipWrapper>
+                          </Label>
+                          <FormControl>
+                            <Select
+                              value={field.value}
+                              onValueChange={handleScopeChange}
+                              disabled={isEdit}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select scope" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
+                                  Trace
+                                </SelectItem>
+                                <SelectItem
+                                  value={EVALUATORS_RULE_SCOPE.thread}
+                                >
+                                  Thread
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
 
                 <FormField
