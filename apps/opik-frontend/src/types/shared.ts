@@ -34,8 +34,7 @@ export enum COLUMN_TYPE {
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
-  guardrails = "guardrails",
-  threadStatus = "thread_status",
+  category = "category",
   errors = "errors",
 }
 
@@ -59,7 +58,7 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE;
+export type HeaderIconType = COLUMN_TYPE | "guardrails";
 
 export type ColumnData<T> = {
   id: string;

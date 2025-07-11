@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import copy from "clipboard-copy";
 import {
   Copy,
@@ -7,7 +7,20 @@ import {
   Share,
   Trash,
 } from "lucide-react";
+import uniq from "lodash/uniq";
+import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
 
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_GUARDRAILS_ID,
+  COLUMN_METADATA_ID,
+  COLUMN_TYPE,
+  DropdownOption,
+  OnChangeFn,
+} from "@/types/shared";
+import { Filters } from "@/types/filters";
+import { Span, SPAN_TYPE, Trace } from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -19,16 +32,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SelectItem } from "@/components/ui/select";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { OnChangeFn } from "@/types/shared";
-import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import SelectBox, {
+  SelectBoxProps,
+} from "@/components/shared/SelectBox/SelectBox";
 import ExpandableSearchInput from "@/components/shared/ExpandableSearchInput/ExpandableSearchInput";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { TREE_FILTER_COLUMNS } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { GuardrailResult } from "@/types/guardrails";
+import { getJSONPaths } from "@/lib/utils";
 
 const PANEL_ELEMENTS_EXPANDED_SIZE = [
   { name: "SEPARATOR", size: 25 },
   { name: "GO_TO_THREAD", size: 110 },
-  { name: "PADDING", size: 16 },
+  { name: "PADDING", size: 24 },
+  { name: "FILTER", size: 60 },
   { name: "SEPARATOR", size: 25 },
   { name: "MORE", size: 32 },
 ];
@@ -50,6 +74,9 @@ type TraceDetailsActionsPanelProps = {
   isSpansLazyLoading: boolean;
   search?: string;
   setSearch: OnChangeFn<string | undefined>;
+  filters: Filters;
+  setFilters: OnChangeFn<Filters>;
+  treeData: Array<Trace | Span>;
 };
 
 const TraceDetailsActionsPanel: React.FunctionComponent<
@@ -64,9 +91,15 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   isSpansLazyLoading,
   search,
   setSearch,
+  filters,
+  setFilters,
+  treeData,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
@@ -82,6 +115,124 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       projectId,
     });
   }, [onClose, mutate, traceId, projectId]);
+
+  const filtersColumnData = useMemo(() => {
+    return [
+      ...TREE_FILTER_COLUMNS,
+      ...(isGuardrailsEnabled
+        ? [
+            {
+              id: COLUMN_GUARDRAILS_ID,
+              label: "Guardrails",
+              type: COLUMN_TYPE.category,
+            },
+          ]
+        : []),
+    ];
+  }, [isGuardrailsEnabled]);
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        type: {
+          keyComponentProps: {
+            options: [
+              {
+                value: SPAN_TYPE.general,
+                label: "General",
+              },
+              {
+                value: SPAN_TYPE.tool,
+                label: "Tool",
+              },
+              {
+                value: SPAN_TYPE.llm,
+                label: "LLM call",
+              },
+              ...(isGuardrailsEnabled
+                ? [
+                    {
+                      value: SPAN_TYPE.guardrail,
+                      label: "Guardrail",
+                    },
+                  ]
+                : []),
+            ],
+            placeholder: "Select type",
+            renderOption: (option: DropdownOption<SPAN_TYPE>) => {
+              return (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  withoutCheck
+                  wrapperAsChild={true}
+                >
+                  <div className="flex w-full items-center gap-1.5">
+                    <BaseTraceDataTypeIcon type={option.value} />
+                    {option.label}
+                  </div>
+                </SelectItem>
+              );
+            },
+          },
+        },
+        [COLUMN_METADATA_ID]: {
+          keyComponent: (
+            props: {
+              onValueChange: SelectBoxProps<string>["onChange"];
+            } & SelectBoxProps<string>,
+          ) => <SelectBox {...props} onChange={props.onValueChange} />,
+          keyComponentProps: {
+            options: uniq(
+              treeData.reduce<string[]>((acc, d) => {
+                return acc.concat(
+                  isObject(d.metadata) || isArray(d.metadata)
+                    ? getJSONPaths(d.metadata, "metadata").map((path) =>
+                        path.substring(path.indexOf(".") + 1),
+                      )
+                    : [],
+                );
+              }, []),
+            )
+              .sort()
+              .map((key) => ({ value: key, label: key })),
+            placeholder: "key",
+          },
+        },
+        [COLUMN_FEEDBACK_SCORES_ID]: {
+          keyComponent: (
+            props: {
+              onValueChange: SelectBoxProps<string>["onChange"];
+            } & SelectBoxProps<string>,
+          ) => <SelectBox {...props} onChange={props.onValueChange} />,
+          keyComponentProps: {
+            options: uniq(
+              treeData.reduce<string[]>((acc, d) => {
+                return acc.concat(
+                  isArray(d.feedback_scores)
+                    ? d.feedback_scores.map((score) => score.name)
+                    : [],
+                );
+              }, []),
+            )
+              .sort()
+              .map((key) => ({ value: key, label: key })),
+            placeholder: "Select score",
+          },
+        },
+        [COLUMN_GUARDRAILS_ID]: {
+          keyComponentProps: {
+            options: [
+              { value: GuardrailResult.FAILED, label: "Failed" },
+              { value: GuardrailResult.PASSED, label: "Passed" },
+            ],
+            placeholder: "Status",
+          },
+        },
+      },
+    }),
+    [isGuardrailsEnabled, treeData],
+  );
 
   return (
     <div ref={ref} className="flex flex-auto items-center justify-between">
@@ -110,6 +261,16 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             disabled={isSpansLazyLoading}
           />
         </div>
+        <FiltersButton
+          columns={filtersColumnData}
+          filters={filters}
+          onChange={setFilters}
+          config={filtersConfig as never}
+          layout="icon"
+          variant="outline"
+          disabled={isSpansLazyLoading}
+          align="end"
+        />
         <Separator orientation="vertical" className="mx-1 h-4" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

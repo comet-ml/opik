@@ -68,6 +68,7 @@ import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScores
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import { ThreadStatus } from "@/types/thread";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -104,7 +105,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
     id: "status",
     label: "Status",
-    type: COLUMN_TYPE.threadStatus,
+    type: COLUMN_TYPE.category,
     cell: ThreadStatusCell as never,
   },
   {
@@ -326,6 +327,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           keyComponentProps: {
             projectId,
             placeholder: "Select score",
+          },
+        },
+        status: {
+          keyComponentProps: {
+            options: [
+              { value: ThreadStatus.INACTIVE, label: "Inactive" },
+              { value: ThreadStatus.ACTIVE, label: "Active" },
+            ],
+            placeholder: "Select value",
           },
         },
       },

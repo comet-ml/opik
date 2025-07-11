@@ -94,23 +94,24 @@ describe("prettifyMessage", () => {
 
   it("handles LangGraph input message format", () => {
     const message = {
-      messages: [["role", "User message"]],
+      messages: [{ type: "human", content: "User message" }],
     };
     const result = prettifyMessage(message, { type: "input" });
     expect(result).toEqual({ message: "User message", prettified: true });
   });
 
-  it("handles LangGraph output message format with multiple human messages", () => {
+  it("handles LangGraph output message format with multiple AI messages", () => {
     const message = {
       messages: [
-        { type: "human", content: "Message 1" },
-        { type: "ai", content: "AI response" },
-        { type: "human", content: "Message 2" },
+        { type: "human", content: "User question" },
+        { type: "ai", content: "AI response 1" },
+        { type: "human", content: "Follow-up question" },
+        { type: "ai", content: "AI response 2" },
       ],
     };
     const result = prettifyMessage(message, { type: "output" });
     expect(result).toEqual({
-      message: "Message 1\n\n  ----------------- \n\nMessage 2",
+      message: "AI response 2",
       prettified: true,
     });
   });
