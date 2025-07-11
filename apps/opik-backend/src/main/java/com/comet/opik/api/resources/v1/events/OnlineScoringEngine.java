@@ -1,15 +1,17 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -22,21 +24,25 @@ import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 
 @UtilityClass
 @Slf4j
@@ -67,6 +73,62 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
+     * Trace variables and with the proper structured output format.
+     *
+     * @param evaluatorCode the LLM-as-Judge 'code'
+     * @param traces the sampled traces from the trace threads to be scored
+     * @return a request to trigger to any supported provider with a ChatLanguageModel
+     */
+    public static ChatRequest prepareThreadLlmRequest(
+            @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
+            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+        var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+        var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
+
+        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
+    }
+
+    static List<ChatMessage> renderThreadMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+        // prepare the map of replacements to use in all messages
+        Map<String, String> replacements = variablesMap.keySet().stream()
+                .map(variableName -> switch (variableName) {
+                    case TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME -> {
+                        try {
+                            yield MessageVariableMapping.builder()
+                                    .variableName(variableName)
+                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)))
+                                    .build();
+                        } catch (JsonProcessingException ex) {
+                            throw new UncheckedIOException(ex);
+                        }
+                    }
+                    default -> throw new IllegalArgumentException("Invalid variable name: " + variableName);
+                })
+                .collect(
+                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
+
+        // render the message templates from evaluator rule
+        return templateMessages.stream()
+                .map(templateMessage -> {
+                    var renderedMessage = TemplateParseUtils.render(
+                            templateMessage.content(), replacements, PromptType.MUSTACHE);
+                    return switch (templateMessage.role()) {
+                        case USER -> UserMessage.from(renderedMessage);
+                        case SYSTEM -> SystemMessage.from(renderedMessage);
+                        default -> {
+                            log.info("No mapping for message role type {}", templateMessage.role());
+                            yield null;
+                        }
+                    };
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
      * Render the rule evaluator message template using the values from an actual trace.
      * <p>
      * As the rule may consist in multiple messages, we check each one of them for variables to fill.
@@ -80,7 +142,7 @@ public class OnlineScoringEngine {
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
         // prepare the map of replacements to use in all messages
-        var replacements = toReplacements(variablesMap, trace);
+        Map<String, String> replacements = toReplacements(variablesMap, trace);
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
@@ -150,14 +212,42 @@ public class OnlineScoringEngine {
     }
 
     private static String extractFromJson(JsonNode json, String path) {
+        Map<String, Object> forcedObject;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
-            var forcedObject = OBJECT_MAPPER.convertValue(json, Map.class);
-            return JsonPath.parse(forcedObject).read(path);
-        } catch (Exception e) {
-            log.debug("Couldn't find path '{}' inside json {}: {}", path, json, e.getMessage());
+            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
+            });
+        } catch (InvalidArgumentException e) {
+            log.debug("failed to parse json, json={}, exception={}", json, e.getMessage());
             return null;
         }
+
+        try {
+            return JsonPath.parse(forcedObject).read(path);
+        } catch (Exception e) {
+            log.debug("Couldn't find path inside json, trying flat structure, path={}, json={}, exception={}", path,
+                    json, e.getMessage());
+            return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
+                    .map(Object::toString)
+                    .orElseGet(() -> {
+                        log.debug("Couldn't find flat or nested path in json, path={}, json={}", path, json);
+                        return null;
+                    });
+        }
+    }
+
+    public static List<TraceThreadPythonEvaluatorRequest.ChatMessage> fromTraceToThread(List<Trace> traces) {
+        return traces.stream()
+                .flatMap(trace -> Stream.of(
+                        TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
+                                .role(TraceThreadPythonEvaluatorRequest.ROLE_USER)
+                                .content(trace.input())
+                                .build(),
+                        TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
+                                .role(TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT)
+                                .content(trace.output())
+                                .build()))
+                .toList();
     }
 
     public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
@@ -183,7 +273,7 @@ public class OnlineScoringEngine {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
-                    FeedbackScoreBatchItemBuilder resultBuilder = FeedbackScoreBatchItem.builder()
+                    var resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);
@@ -196,7 +286,7 @@ public class OnlineScoringEngine {
                     return resultBuilder.build();
                 })
                 .filter(Objects::nonNull)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     private static String extractJson(String response) {

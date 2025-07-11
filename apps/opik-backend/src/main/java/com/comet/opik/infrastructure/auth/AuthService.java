@@ -10,7 +10,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-import static com.comet.opik.infrastructure.auth.RequestContext.*;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 
 public interface AuthService {
 

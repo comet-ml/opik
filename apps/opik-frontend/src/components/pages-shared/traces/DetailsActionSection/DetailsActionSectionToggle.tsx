@@ -1,9 +1,6 @@
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
-import {
-  DetailsActionSection,
-  DetailsActionSectionValue,
-} from "@/components/pages-shared/traces/DetailsActionSection";
+import { DetailsActionSectionValue, DetailsActionSection } from "./types";
 import { MessageSquareMore, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
