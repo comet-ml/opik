@@ -43,8 +43,6 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
-import { capitalizeFirstLetter } from "@/lib/utils";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -79,12 +77,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
-  {
-    id: "scope",
-    label: "Scope",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
-  },
+  // {
+  //   id: "scope",
+  //   label: "Scope",
+  //   type: COLUMN_TYPE.string,
+  //   accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  // },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
