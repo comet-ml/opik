@@ -8,6 +8,7 @@ import {
   FlaskConical,
   GraduationCap,
   LayoutGrid,
+  LayoutDashboard,
   LucideIcon,
   MessageCircleQuestion,
   FileTerminal,
@@ -18,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  PanelTop,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -165,6 +167,20 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Bolt,
         label: "Configuration",
+      },
+      {
+        id: "panel-templates",
+        path: "/$workspaceName/panel-templates",
+        type: MENU_ITEM_TYPE.router,
+        icon: PanelTop,
+        label: "Panel templates",
+      },
+      {
+        id: "dashboard-templates",
+        path: "/$workspaceName/dashboard-templates",
+        type: MENU_ITEM_TYPE.router,
+        icon: LayoutDashboard,
+        label: "Dashboard templates",
       },
     ],
   },
