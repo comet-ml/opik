@@ -160,12 +160,12 @@ const getFieldValue = (
   type?: COLUMN_TYPE,
 ): unknown => {
   if (!data) return undefined;
-  const filedValue = get(data, fieldId, undefined);
+  const fieldValue = get(data, fieldId, undefined);
 
   if (type === COLUMN_TYPE.numberDictionary) {
-    if (isArray(filedValue)) {
+    if (isArray(fieldValue)) {
       return (
-        (filedValue as Array<TraceFeedbackScore>).find((s) => s.name === key)
+        (fieldValue as Array<TraceFeedbackScore>).find((s) => s.name === key)
           ?.value ?? undefined
       );
     } else {
@@ -173,11 +173,11 @@ const getFieldValue = (
     }
   }
 
-  if (key && !isUndefined(filedValue)) {
+  if (key && !isUndefined(fieldValue)) {
     try {
       // Ensure the path starts with $ for JSONPath
       const jsonPath = key.startsWith("$") ? key : `$.${key}`;
-      const result = JSONPath({ path: jsonPath, json: filedValue });
+      const result = JSONPath({ path: jsonPath, json: fieldValue });
 
       if (result.length === 0) return undefined;
       if (result.length === 1) return result[0];
@@ -188,7 +188,7 @@ const getFieldValue = (
     }
   }
 
-  return filedValue;
+  return fieldValue;
 };
 
 const isValueEmpty = (value: unknown): boolean => {
