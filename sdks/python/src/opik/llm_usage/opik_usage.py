@@ -83,6 +83,10 @@ class OpikUsage(pydantic.BaseModel):
         )
 
     @classmethod
+    def from_groq_completions_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        return cls.from_openai_completions_dict(usage)
+
+    @classmethod
     def from_google_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = google_usage.GoogleGeminiUsage.from_original_usage_dict(usage)
 
