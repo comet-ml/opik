@@ -42,7 +42,9 @@ public class CostService {
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
+            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
+            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
+            SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -92,19 +94,53 @@ public class CostService {
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
 
+                // Parse multimodal pricing fields
+                BigDecimal audioInputPrice = Optional.ofNullable(modelCost.inputCostPerAudioToken())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal audioOutputPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal imageInputPrice = Optional.ofNullable(modelCost.inputCostPerImage()).map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal videoInputPrice = BigDecimal.ZERO;
+                BigDecimal audioInputPerSecondPrice = Optional.ofNullable(modelCost.inputCostPerAudioPerSecond())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal videoInputPerSecondPrice = Optional.ofNullable(modelCost.inputCostPerVideoPerSecond())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+
+                // Determine appropriate calculator based on pricing structure
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                            SpanCostCalculator::textGenerationCost);
-                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::textGenerationCost;
-                }
+                boolean hasMultimodalPricing = audioInputPrice.compareTo(BigDecimal.ZERO) > 0 ||
+                        audioOutputPrice.compareTo(BigDecimal.ZERO) > 0 ||
+                        imageInputPrice.compareTo(BigDecimal.ZERO) > 0 ||
+                        audioInputPerSecondPrice.compareTo(BigDecimal.ZERO) > 0 ||
+                        videoInputPerSecondPrice.compareTo(BigDecimal.ZERO) > 0;
+
+                if (hasMultimodalPricing) {
+                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                        calculator = SpanCostCalculator::multimodalCostWithCache;
+                    } else {
+                        calculator = SpanCostCalculator::multimodalCost;
+                    }
+                } else
+                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                                        SpanCostCalculator::textGenerationCost);
+                            } else
+                        if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                            calculator = SpanCostCalculator::textGenerationCost;
+                        }
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                cacheReadInputTokenPrice, calculator));
+                                cacheReadInputTokenPrice, audioInputPrice, audioOutputPrice, imageInputPrice,
+                                videoInputPrice, audioInputPerSecondPrice, videoInputPerSecondPrice, calculator));
             }
         });
 

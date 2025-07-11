@@ -35,6 +35,13 @@ class OpikUsage(pydantic.BaseModel):
     completion_tokens: Optional[int] = None
     prompt_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    
+    # Multimodal usage tracking
+    audio_input_tokens: Optional[int] = None
+    audio_output_tokens: Optional[int] = None
+    image_count: Optional[int] = None
+    video_seconds: Optional[int] = None
+    audio_seconds: Optional[int] = None
 
     provider_usage: ProviderUsage
 
@@ -51,6 +58,11 @@ class OpikUsage(pydantic.BaseModel):
                 "completion_tokens": self.completion_tokens,
                 "prompt_tokens": self.prompt_tokens,
                 "total_tokens": self.total_tokens,
+                "audio_input_tokens": self.audio_input_tokens,
+                "audio_output_tokens": self.audio_output_tokens,
+                "image_count": self.image_count,
+                "video_seconds": self.video_seconds,
+                "audio_seconds": self.audio_seconds,
             },
             value_type=int,
         )
@@ -75,10 +87,22 @@ class OpikUsage(pydantic.BaseModel):
             usage
         )
 
+        # Extract audio tokens from token details
+        audio_input_tokens = None
+        audio_output_tokens = None
+        
+        if provider_usage.prompt_tokens_details and provider_usage.prompt_tokens_details.audio_tokens:
+            audio_input_tokens = provider_usage.prompt_tokens_details.audio_tokens
+            
+        if provider_usage.completion_tokens_details and provider_usage.completion_tokens_details.audio_tokens:
+            audio_output_tokens = provider_usage.completion_tokens_details.audio_tokens
+
         return cls(
             completion_tokens=provider_usage.completion_tokens,
             prompt_tokens=provider_usage.prompt_tokens,
             total_tokens=provider_usage.total_tokens,
+            audio_input_tokens=audio_input_tokens,
+            audio_output_tokens=audio_output_tokens,
             provider_usage=provider_usage,
         )
 
