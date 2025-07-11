@@ -16,6 +16,7 @@ import {
   useQueryParam,
 } from "use-query-params";
 import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -27,6 +28,7 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -78,7 +80,6 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
-import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -103,6 +104,27 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: "duration.p50",
+    label: "Duration (avg.)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p50,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p90",
+    label: "Duration (p90)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p90,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p99",
+    label: "Duration (p99)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p99,
+    cell: DurationCell as never,
   },
   {
     id: "prompt",

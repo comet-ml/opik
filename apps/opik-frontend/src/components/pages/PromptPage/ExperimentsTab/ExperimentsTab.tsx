@@ -24,6 +24,7 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -103,6 +104,27 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: "duration.p50",
+    label: "Duration (avg.)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p50,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p90",
+    label: "Duration (p90)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p90,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p99",
+    label: "Duration (p99)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p99,
+    cell: DurationCell as never,
   },
 ];
 
