@@ -38,6 +38,10 @@ Common labels
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
+{{- define "opik.clickhouse.labels" -}}
+{{ include "opik.clickhouse.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
 {{/*
 Selector labels
 */}}
@@ -45,7 +49,15 @@ Selector labels
 app.kubernetes.io/name: {{ include "opik.name" $ }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+{{- define "opik.clickhouse.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "opik.name" $ }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+component: clickhouse
+# app.kubernetes.io/component: clickhouse
+{{- end }}
 
+{{/*
+{{- end }}
 {{/*
 Create the name of the service account to use
 */}}
