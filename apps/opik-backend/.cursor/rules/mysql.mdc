@@ -1,0 +1,23 @@
+---
+description: Business Logic
+globs:
+alwaysApply: true
+---
+MySQL Transaction Usage
+- Always use transactions for MySQL reads/writes.
+- Preferred pattern using TransactionTemplate:
+	```
+    import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+    import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+    try {
+        return transactionTemplate.inTransaction(TransactionType.<WRITE/READ>, handle -> {
+            var repository = handle.attach(MyDao.class);
+            return repository.myMethod(param1, param2);
+        });
+    }
+    ```
+- Replace TransactionType.<WRITE/READ> with WRITE or READ based on the use case
+- Always log and handle exceptions gracefully
+- Avoid performing unrelated logic inside the transaction block
+- DAOs: Use interfaces; if logic is minimal, define inline
+- Models: Data structures reflecting DB or business entities

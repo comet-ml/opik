@@ -1,0 +1,14 @@
+---
+description: Testing
+globs:
+alwaysApply: true
+---
+- Ensure strong unit test coverage
+- Use mocks/stubs where appropriate
+- changes should by default be covered with tests
+- always check first if a test already cover your changes before creating a new test
+- use PODAM for generating test data
+- use JUnit 5 for unit tests
+- use assertJ for assertions
+- prefer using @ParameterizedTest when possible to cover multiple scenarios
+- when running tests, prefer running specific test classes or methods instead of the entire test suite

@@ -1,0 +1,7 @@
+---
+description: Business Logic
+globs:
+alwaysApply: true
+---
+- Consistent, structured logging
+- use SLF4J for logging, use the `@Slf4j` annotation
