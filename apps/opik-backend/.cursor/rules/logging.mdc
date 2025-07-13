@@ -1,5 +1,5 @@
 ---
-description: Business Logic
+description: Logging guidelines for opik-backend
 globs:
 alwaysApply: true
 ---

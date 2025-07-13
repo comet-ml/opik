@@ -1,5 +1,5 @@
 ---
-description: Business Logic
+description: Error handling best practices
 globs:
 alwaysApply: true
 ---

@@ -1,5 +1,5 @@
 ---
-description: Business Logic
+description: MySQL transaction usage guidelines for opik-backend
 globs:
 alwaysApply: true
 ---
