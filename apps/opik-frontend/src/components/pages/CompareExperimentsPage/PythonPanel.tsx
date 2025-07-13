@@ -23,6 +23,13 @@ const PythonPanel: React.FC<PythonPanelProps> = ({ config, id }) => {
     }
   }, [config.code, getPreviewUrl]);
 
+  // Handle refresh button click
+  const handleRefresh = () => {
+    if (config.code) {
+      getPreviewUrl(config.code);
+    }
+  };
+
   // Memoize the status indicator
   const statusIndicator = useMemo(() => {
     if (previewLoading) {
@@ -67,14 +74,24 @@ const PythonPanel: React.FC<PythonPanelProps> = ({ config, id }) => {
           <span className={`comet-body-xs px-2 py-1 rounded-sm ${statusIndicator.bgColor} ${statusIndicator.color}`}>
             {statusIndicator.label}
           </span>
-          {previewUrl && (
+          <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={() => window.open(previewUrl, '_blank')}
-              className="ml-auto comet-body-xs text-primary hover:text-primary-dark underline"
+              onClick={handleRefresh}
+              disabled={previewLoading}
+              className="comet-body-xs text-primary hover:text-primary-dark underline disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh preview"
             >
-              Open in new tab ↗
+              🔄 Refresh
             </button>
-          )}
+            {previewUrl && (
+              <button
+                onClick={() => window.open(previewUrl, '_blank')}
+                className="comet-body-xs text-primary hover:text-primary-dark underline"
+              >
+                Open in new tab ↗
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

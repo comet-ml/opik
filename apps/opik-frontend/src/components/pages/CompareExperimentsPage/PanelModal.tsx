@@ -22,24 +22,94 @@ interface PanelModalProps {
 }
 
 const DEFAULT_PYTHON_CODE = `# Python Panel Example
-import matplotlib.pyplot as plt
-import numpy as np
+import streamlit as st
+from opik import Opik
+import pandas as pd
+import os
 
-# Generate sample data
-x = np.linspace(0, 10, 100)
-y = np.sin(x)
+experimentsNames = [None]
 
-# Create plot
-plt.figure(figsize=(10, 6))
-plt.plot(x, y, 'b-', linewidth=2, label='sin(x)')
-plt.xlabel('X values')
-plt.ylabel('Y values')
-plt.title('Sample Python Panel')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.show()
+# {CONNECTION_CONFIG} 
+# {FILTER_CONFIG}
 
-print("Python panel executed successfully!")`;
+# experimentsNames[0] = "Demo experiment" # only for testing, make sure to remove it before saving
+
+
+client = Opik()
+
+st.success("Number of Datasets")
+st.title(len(client.get_datasets()))
+
+if len(experimentsNames) > 0:
+  data = []
+  experiments = client.get_experiments_by_name(experimentsNames[0])
+  for exp in experiments:
+    exp_data = exp.get_experiment_data()
+    if exp_data.feedback_scores:
+                for score in exp_data.feedback_scores:
+                    data.append({
+                        'experiment_id': exp.id,
+                        'experiment_name': exp.name,
+                        'score_name': score.name,
+                        'score_value': score.value,
+                        'created_at': getattr(exp, 'created_at', None)
+                    })
+  
+  df = pd.DataFrame(data)
+  with st.spinner(f"Fetching data for experiment: '{exp.name}'..."):
+          df = pd.DataFrame(data)
+          
+          if df.empty:
+              st.warning(f"No feedback scores found for experiment '{exp.name}'")
+          else:
+          
+            st.success(f"Found {len(df)} feedback scores for experiment '{exp.name}'")
+            
+            # Plot bar chart with score names on Y-axis
+            st.subheader("📈 Feedback Scores")
+            
+            # Create a simple dataframe for plotting
+            chart_df = df.groupby('score_name')['score_value'].mean().reset_index()
+            chart_df = chart_df.sort_values('score_value', ascending=True)
+            
+            # Create horizontal bar chart
+            st.bar_chart(
+                data=chart_df.set_index('score_name'),
+                y='score_value',
+                horizontal=True
+            )
+            
+            # Show raw data
+            st.subheader("📊 Raw Data")
+            st.dataframe(df)
+`;
+
+// const DEFAULT_PYTHON_CODE = `# Python Panel Example
+// import streamlit as st
+// from opik import Opik
+// import os
+
+// experimentsNames = [None]
+
+// # {CONNECTION_CONFIG} 
+// # {FILTER_CONFIG}
+
+// experimentsNames[0] = "yariv-experiment-dict-1" 
+
+
+// client = Opik()
+
+// st.success("Number of Datasets")
+// st.title(len(client.get_datasets()))
+
+// if len(experimentsNames) > 0:
+//   experiments = client.get_experiments_by_name(experimentsNames[0])
+//   for exp in experiments:
+//     exp_data = exp.get_experiment_data()
+//     print(exp.id)
+//     print(exp.name)
+//     print(exp_data.feedback_scores)
+// `;
 
 const DEFAULT_TEXT_CONTENT = `# Welcome to Text Panel
 
@@ -464,11 +534,29 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
 
   // Memoized render functions
   const renderPreview = useCallback(() => {
+    const handleRefresh = () => {
+      if (panelType === "python" && debouncedCode) {
+        getPreviewUrl(debouncedCode);
+      }
+    };
+
     return (
       <div className="h-full bg-gray-50 rounded-lg p-4">
-        <div className="mb-2">
-          <h5 className="text-sm font-medium text-gray-700">Preview</h5>
-          <p className="text-xs text-gray-500">Live preview of your panel</p>
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <h5 className="text-sm font-medium text-gray-700">Preview</h5>
+            <p className="text-xs text-gray-500">Live preview of your panel</p>
+          </div>
+          {panelType === "python" && (
+            <button
+              onClick={handleRefresh}
+              disabled={previewLoading}
+              className="text-xs text-primary hover:text-primary-dark underline disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              title="Refresh preview"
+            >
+              🔄 Refresh
+            </button>
+          )}
         </div>
         <div className="bg-white rounded border h-full min-h-[300px] overflow-hidden flex items-center justify-center">
           {panelType === "python" ? (
@@ -498,7 +586,7 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
         </div>
       </div>
     );
-  }, [panelType, previewPanel, previewLoading, previewError, previewUrl]);
+  }, [panelType, previewPanel, previewLoading, previewError, previewUrl, debouncedCode, getPreviewUrl]);
 
   const renderPanelTypeConfig = useCallback(() => {
     switch (panelType) {
