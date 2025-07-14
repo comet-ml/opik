@@ -77,6 +77,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -949,27 +950,15 @@ class ProjectMetricsResourceTest {
                     WORKSPACE_NAME);
             Instant marker = getIntervalStart(interval);
 
-            // Create traces with different thread_ids at different times
-            Long threadCountMinus3 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_3, interval));
-            Long threadCountMinus1 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_1, interval));
-            Long threadCountNow = createTracesWithThreads(projectName, marker);
+            // Create traces with different thread_ids at different times with different thread counts
+            Long threadCountMinus3 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_3, interval), 2);
+            Long threadCountMinus1 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), 4);
+            Long threadCountNow = createTracesWithThreads(projectName, marker, 3);
 
             // SUT
-            Map<String, Long> minus3 = new HashMap<>() {
-                {
-                    put(ProjectMetricsDAO.NAME_THREADS, threadCountMinus3);
-                }
-            };
-            Map<String, Long> minus1 = new HashMap<>() {
-                {
-                    put(ProjectMetricsDAO.NAME_THREADS, threadCountMinus1);
-                }
-            };
-            Map<String, Long> current = new HashMap<>() {
-                {
-                    put(ProjectMetricsDAO.NAME_THREADS, threadCountNow);
-                }
-            };
+            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus3);
+            Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus1);
+            Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountNow);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
@@ -997,12 +986,11 @@ class ProjectMetricsResourceTest {
             getAndAssertEmpty(projectId, interval, marker);
         }
 
-        private Long createTracesWithThreads(String projectName, Instant marker) {
+        private Long createTracesWithThreads(String projectName, Instant marker, int threadCount) {
             // Create traces with different thread_ids to simulate multiple threads
-            List<String> threadIds = List.of(
-                    RandomStringUtils.randomAlphabetic(10),
-                    RandomStringUtils.randomAlphabetic(10),
-                    RandomStringUtils.randomAlphabetic(10));
+            List<String> threadIds = IntStream.range(0, threadCount)
+                    .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
+                    .toList();
 
             // Create multiple traces per thread to test that threads are counted, not traces
             threadIds.forEach(threadId -> {
@@ -1020,11 +1008,7 @@ class ProjectMetricsResourceTest {
         }
 
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
-            Map<String, Long> empty = new HashMap<>() {
-                {
-                    put(ProjectMetricsDAO.NAME_THREADS, null);
-                }
-            };
+            Map<String, Long> empty = Collections.singletonMap(ProjectMetricsDAO.NAME_THREADS, null);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
