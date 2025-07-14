@@ -26,6 +26,7 @@ export type SplitCellRenderContent = (
   experimentId: string,
   idx: number,
 ) => React.ReactNode;
+
 type VerticallySplitCellWrapperProps<TData> = {
   metadata?: ColumnMeta<TData, unknown>;
   tableMetadata?: TableMeta<TData>;

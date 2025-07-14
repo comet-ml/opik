@@ -1,3 +1,4 @@
+import logging
 import pydantic
 from typing import Union, Dict, Any, Optional
 from . import (
@@ -18,6 +19,8 @@ ProviderUsage = Union[
     openai_responses_usage.OpenAIResponsesUsage,
     unknown_usage.UnknownUsage,
 ]
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OpikUsage(pydantic.BaseModel):
@@ -80,11 +83,35 @@ class OpikUsage(pydantic.BaseModel):
         )
 
     @classmethod
+    def from_groq_completions_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        return cls.from_openai_completions_dict(usage)
+
+    @classmethod
     def from_google_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = google_usage.GoogleGeminiUsage.from_original_usage_dict(usage)
 
+        # The completions token should include both the candidates token_count and the thought tokens. Usage differs depending on the models and between VertexAI and Google AI
+        # See https://github.com/BerriAI/litellm/pull/10141#discussion_r2052272035
+        # Do something similar as: https://github.com/BerriAI/litellm/blob/4854482af4a2a56060bbfeb4345bce4f1bb7ec41/litellm/llms/vertex_ai/gemini/vertex_and_google_ai_studio_gemini.py#L980-L995
+
+        if (
+            provider_usage.total_token_count
+            == provider_usage.prompt_token_count + provider_usage.candidates_token_count
+        ):
+            completion_tokens = provider_usage.candidates_token_count
+        elif provider_usage.thoughts_token_count is not None:
+            completion_tokens = (
+                provider_usage.candidates_token_count
+                + provider_usage.thoughts_token_count
+            )
+        else:
+            LOGGER.debug(
+                "Something is wrong in Google usage, completion_tokens might be invalid"
+            )
+            completion_tokens = provider_usage.candidates_token_count
+
         return cls(
-            completion_tokens=provider_usage.candidates_token_count,
+            completion_tokens=completion_tokens,
             prompt_tokens=provider_usage.prompt_token_count,
             total_tokens=provider_usage.total_token_count,
             provider_usage=provider_usage,
