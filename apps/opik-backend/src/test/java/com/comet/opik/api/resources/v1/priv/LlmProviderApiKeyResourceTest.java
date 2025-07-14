@@ -17,6 +17,7 @@ import com.comet.opik.domain.LlmProviderApiKeyDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -46,6 +47,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -315,6 +317,11 @@ class LlmProviderApiKeyResourceTest {
                 .apiKey(emptyString).build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(createdProvider.id(), testProviderUpdate, apiKey,
                 workspaceName, HttpStatus.SC_NO_CONTENT);
+
+        var actual = llmProviderApiKeyResourceClient.getById(createdProvider.id(), workspaceName, apiKey,
+                HttpStatus.SC_OK);
+        var actualApiKey = Optional.ofNullable(actual.apiKey()).map(EncryptionUtils::decrypt).orElse(null);
+        assertThat(actualApiKey).isEqualTo(emptyString);
     }
 
     @ParameterizedTest
