@@ -21,6 +21,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -94,8 +95,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
                 userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), chatResponse);
             } catch (Exception exception) {
+                String errorMessage = Optional.ofNullable(exception.getCause())
+                        .map(Throwable::getMessage)
+                        .orElse(exception.getMessage());
+
                 userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
-                        trace.id(), message.ruleName(), exception.getCause().getMessage());
+                        trace.id(), message.ruleName(), errorMessage);
                 throw exception;
             }
 

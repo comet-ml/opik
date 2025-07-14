@@ -284,45 +284,48 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive,
             ContextView ctx) {
+
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-        return traceThreadDAO.closeThreadWith(projectId, now, timeoutToMarkThreadAsInactive)
-                .flatMap(count -> {
-                    var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
-                    return lockService.unlockUsingToken(lock).thenReturn(count);
+
+        return traceThreadDAO.streamPendingClosureThreads(projectId, now, timeoutToMarkThreadAsInactive)
+                .flatMap(threads -> {
+
+                    if (threads.isEmpty()) {
+                        log.info("No pending trace threads to close for projectId: '{}' on workspaceId '{}'",
+                                projectId, workspaceId);
+                        return Mono.just((long) threads.size());
+                    }
+
+                    List<String> threadIds = threads.stream()
+                            .map(TraceThreadModel::threadId)
+                            .toList();
+
+                    return traceThreadDAO.closeThread(projectId, threadIds)
+                            .doOnSuccess(count -> log.info(
+                                    "Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
+                                    count, projectId, workspaceId))
+                            .flatMap(count -> checkAndTriggerOnlineScoring(projectId, threads)
+                                    .thenReturn(count));
                 })
-                .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
-                        count, projectId, workspaceId))
+                .reduce(0L, Long::sum)
                 .doOnError(ex -> log.error(
                         "Error when processing closure of pending trace threads  for project: '%s' workspaceId '%s'"
                                 .formatted(projectId, workspaceId),
                         ex))
-                .flatMap(count -> checkAndTriggerOnlineScoring(projectId, count));
-
-    }
-
-    private Mono<Long> checkAndTriggerOnlineScoring(UUID projectId, Long count) {
-        if (count <= 0) {
-            log.info("No closed trace threads to process for projectId: '{}'. Skipping online scoring.", projectId);
-            return Mono.just(count);
-        }
-
-        return getClosedThreadsByProject(projectId)
-                .flatMap(closedThreads -> {
-                    if (!closedThreads.isEmpty()) {
-                        // Publish closed threads for online scoring
-                        return onlineScorePublisher.publish(projectId, closedThreads)
-                                .thenReturn(count);
-                    }
-
-                    log.info("No closed threads found for projectId: '{}'. Skipping online scoring.", projectId);
-                    return Mono.just(count);
+                .flatMap(count -> {
+                    var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
+                    return lockService.unlockUsingToken(lock).thenReturn(count);
                 });
     }
 
-    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId) {
-        return traceThreadDAO.streamClosedThreads(projectId)
-                .collectList()
-                .switchIfEmpty(Mono.just(List.of()));
+    private Mono<Void> checkAndTriggerOnlineScoring(UUID projectId, List<TraceThreadModel> closedThreads) {
+        if (closedThreads.isEmpty()) {
+            log.info("No closed trace threads to process for projectId: '{}'. Skipping online scoring.", projectId);
+            return Mono.empty();
+        }
+
+        // Publish closed threads for online scoring
+        return onlineScorePublisher.publish(projectId, closedThreads);
     }
 
     @Override
@@ -333,24 +336,40 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> openThread(@NonNull UUID projectId, @NonNull String threadId) {
-        return lockService.executeWithLockCustomExpire(
+        return Mono.deferContextual(ctx -> lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId)).then(),
-                LOCK_DURATION);
+                Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId))
+                        .then(Mono.defer(() -> getOrCreateThreadId(projectId, threadId)))
+                        .doOnSuccess(threadModelId -> publishReopenedEvent(projectId, threadId, ctx, threadModelId))
+                        .then(),
+                LOCK_DURATION));
+    }
+
+    private void publishReopenedEvent(UUID projectId, String threadId, ContextView ctx, UUID threadModelId) {
+        log.info("Opened thread for threadId '{}' and projectId: '{}'", threadId, projectId);
+
+        eventBus.post(new ThreadsReopened(
+                Set.of(threadModelId), projectId, ctx.get(RequestContext.WORKSPACE_ID),
+                ctx.get(RequestContext.USER_NAME)));
     }
 
     @Override
     public Mono<Void> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
+        List<String> threadIds = List.of(threadId);
         return verifyAndCreateThreadIfNeed(projectId, threadId)
                 // Once we have all, we can close the thread
                 .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                        Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadId))
+                        Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadIds))
                                 .doOnSuccess(
                                         count -> log.info("Closed count '{}' for threadId '{}' and  projectId: '{}'",
                                                 count, threadId, projectId))
-                                .flatMap(count -> checkAndTriggerOnlineScoring(projectId, count))
-                                .then(),
+                                .then(Mono.defer(() -> traceThreadDAO.findThreadsByProject(1, threadIds.size(),
+                                        TraceThreadCriteria.builder()
+                                                .projectId(projectId)
+                                                .threadIds(threadIds)
+                                                .build())))
+                                .flatMap(threadModels -> checkAndTriggerOnlineScoring(projectId, threadModels)),
                         LOCK_DURATION)));
     }
 
