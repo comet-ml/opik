@@ -31,9 +31,11 @@ class TracesPage:
 
         self.page.get_by_role("button", name="Columns").click()
         # Enable the Name column by default
-        
+
         try:
-            expect(self.page.get_by_role("button", name="Name").get_by_role("checkbox")).to_be_checked(timeout=2000)
+            expect(
+                self.page.get_by_role("button", name="Name").get_by_role("checkbox")
+            ).to_be_checked(timeout=2000)
         except Exception as _:
             self.page.get_by_role("button", name="Name").click()
         self.page.keyboard.press(key="Escape")
