@@ -162,15 +162,12 @@ const ExperimentDashboardTab: React.FC<ExperimentDashboardTabProps> = ({ experim
             }
             className="rounded-lg border bg-card"
           />
-        ) : currentDashboard.sections.length === 0 ? (
-          <NoData
-            icon={<PlusCircle className="size-16 text-muted-slate" />}
-            title="Empty Dashboard"
-            message="This dashboard doesn't have any sections yet. Add your first section to get started with data visualization."
-            className="rounded-lg border bg-card"
-          />
         ) : (
-          <DashboardSections experimentId={experimentId} dashboard={currentDashboard} />
+          <DashboardSections 
+            experimentId={experimentId}
+            contextExperimentId={experimentId}
+            dashboard={currentDashboard}
+          />
         )}
       </PageBodyStickyContainer>
     </PageBodyScrollContainer>

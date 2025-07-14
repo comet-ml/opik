@@ -17,18 +17,22 @@ const LAYOUT_MARGIN: [number, number] = [10, 10];
 
 interface PanelGridProps {
   experimentId: string;
+  contextExperimentId?: string; // For experiment context
   section: PanelSection;
   onEditPanel: (panel: Panel) => void;
   onRemovePanel: (panelId: string) => void;
   onLayoutChange: (layout: PanelSectionLayout) => void;
+  isTemplate?: boolean; // Prevent API calls when used as template/preview
 }
 
 const PanelGrid: React.FC<PanelGridProps> = ({ 
   experimentId, 
+  contextExperimentId,
   section, 
   onEditPanel, 
   onRemovePanel, 
-  onLayoutChange 
+  onLayoutChange,
+  isTemplate = false
 }) => {
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
   
@@ -72,7 +76,7 @@ const PanelGrid: React.FC<PanelGridProps> = ({
     return (panel: Panel) => {
       switch (panel.data.type) {
         case "python":
-          return <PythonPanel config={panel.data.config} id={panel.id} />;
+          return <PythonPanel config={panel.data.config} id={panel.id} experimentId={contextExperimentId} isTemplate={isTemplate} />;
         case "chart":
           return <ChartPanel config={panel.data.config} id={panel.id} />;
         case "text":
@@ -92,7 +96,7 @@ const PanelGrid: React.FC<PanelGridProps> = ({
           );
       }
     };
-  }, []);
+  }, [contextExperimentId, isTemplate]);
 
   // Memoize panel header renderer
   const renderPanelHeader = useCallback((panel: Panel) => (

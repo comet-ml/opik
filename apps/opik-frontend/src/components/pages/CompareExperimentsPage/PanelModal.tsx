@@ -19,6 +19,7 @@ interface PanelModalProps {
   onSave: (panel: Panel, templateId?: string) => void;
   sectionId: string;
   panel?: Panel; // For editing existing panels
+  contextExperimentId?: string; // For experiment context
 }
 
 const DEFAULT_PYTHON_CODE = `# Python Panel Example
@@ -160,7 +161,7 @@ if (ctx && typeof Chart !== 'undefined') {
 }
 </script>`;
 
-const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionId, panel }) => {
+const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionId, panel, contextExperimentId }) => {
   const [name, setName] = useState("New Panel");
   const [panelType, setPanelType] = useState<"python" | "chart" | "text" | "metric" | "html">("python");
   
@@ -185,7 +186,9 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
   // Python panel state
   const [pythonCode, setPythonCode] = useState(DEFAULT_PYTHON_CODE);
   // Live preview state for Python panel
-  const { url: previewUrl, loading: previewLoading, error: previewError, getPreviewUrl } = usePythonPanelPreview();
+  const { url: previewUrl, loading: previewLoading, error: previewError, getPreviewUrl } = usePythonPanelPreview({
+    experimentId: contextExperimentId
+  });
   const [debouncedCode, setDebouncedCode] = useState(pythonCode);
 
   // Debounce code changes
@@ -194,12 +197,12 @@ const PanelModal: React.FC<PanelModalProps> = ({ open, onClose, onSave, sectionI
     return () => clearTimeout(handler);
   }, [pythonCode]);
 
-  // Fetch preview URL when debounced code changes (only for python panel)
+  // Fetch preview URL when debounced code changes (only for python panel and when modal is open)
   useEffect(() => {
-    if (panelType === "python" && debouncedCode) {
+    if (open && panelType === "python" && debouncedCode) {
       getPreviewUrl(debouncedCode);
     }
-  }, [debouncedCode, panelType, getPreviewUrl]);
+  }, [open, debouncedCode, panelType, getPreviewUrl]);
   
   // Chart panel state
   const [chartType, setChartType] = useState<"line" | "bar" | "scatter" | "histogram">("line");

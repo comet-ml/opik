@@ -89,15 +89,9 @@ class DashboardServiceImpl implements DashboardService {
                 // Insert dashboard
                 dao.insert(id, dashboard.name(), dashboard.description(), workspaceId, userName);
 
-                // Insert sections and panels if provided, or create a default section
+                // Insert sections and panels if provided
                 List<DashboardSection> sectionsToCreate = dashboard.sections();
-                if (ListUtils.emptyIfNull(sectionsToCreate).isEmpty()) {
-                    // Create a default section only if not explicitly skipped
-                    if (!Boolean.TRUE.equals(dashboard.skipDefaultSection())) {
-                        UUID defaultSectionId = idGenerator.generateId();
-                        dao.insertSection(defaultSectionId, id, "Default Section", 0, userName);
-                    }
-                } else {
+                if (!ListUtils.emptyIfNull(sectionsToCreate).isEmpty()) {
                     // Insert provided sections and panels
                     for (int i = 0; i < sectionsToCreate.size(); i++) {
                         DashboardSection section = sectionsToCreate.get(i);

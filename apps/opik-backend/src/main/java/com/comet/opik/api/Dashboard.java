@@ -22,7 +22,6 @@ public record Dashboard(
         @JsonView({View.Public.class, View.Write.class}) String description,
         @JsonView({View.Public.class}) String workspaceId,
         @JsonView({View.Public.class}) @Valid List<DashboardSection> sections,
-        @JsonView({View.Write.class}) Boolean skipDefaultSection,
         @JsonView({View.Public.class}) Instant createdAt,
         @JsonView({View.Public.class}) String createdBy,
         @JsonView({View.Public.class}) Instant lastUpdatedAt,

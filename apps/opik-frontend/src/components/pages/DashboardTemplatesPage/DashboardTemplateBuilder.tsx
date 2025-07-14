@@ -51,32 +51,8 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
   // Helper function to generate unique IDs
   const generateId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  // Helper function to ensure template always has a default section
-  const ensureDefaultSection = (config: DashboardTemplateConfiguration): DashboardTemplateConfiguration => {
-    if (config.sections.length === 0 || !config.sections.some(s => s.position_order === 0)) {
-      const defaultSection: TemplatePanelSection = {
-        id: generateId(),
-        title: "Default Section",
-        position_order: 0,
-        panels: [],
-      };
-      
-      // Shift existing sections to make room for default section
-      const existingSections = config.sections.map(section => ({
-        ...section,
-        position_order: section.position_order + 1,
-      }));
-      
-      return {
-        sections: [defaultSection, ...existingSections],
-      };
-    }
-    return config;
-  };
-
   const [configuration, setConfiguration] = useState<DashboardTemplateConfiguration>(() => {
-    const initialConfig = initialConfiguration || { sections: [] };
-    return ensureDefaultSection(initialConfig);
+    return initialConfiguration || { sections: [] };
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [modalSectionId, setModalSectionId] = useState<string>("");
@@ -115,12 +91,9 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
   const handleAddSection = useCallback(() => {
     if (readonly) return;
     
-    // Count sections excluding the default section for proper numbering
-    const nonDefaultSections = configuration.sections.filter(s => s.title !== "Default Section");
-    
     const newSection: TemplatePanelSection = {
       id: generateId(),
-      title: `Section ${nonDefaultSections.length + 1}`,
+      title: `Section ${configuration.sections.length + 1}`,
       position_order: configuration.sections.length,
       panels: [],
     };
@@ -146,12 +119,6 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
 
   const handleRemoveSection = useCallback((sectionId: string) => {
     if (readonly) return;
-    
-    // Prevent deletion of the default section
-    const sectionToRemove = configuration.sections.find(s => s.id === sectionId);
-    if (sectionToRemove?.title === "Default Section") {
-      return;
-    }
     
     const newConfig = {
       ...configuration,
@@ -303,11 +270,6 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
         <div className="flex items-center gap-2">
           <h3 className="comet-title-m">
             {section.title}
-            {section.title === "Default Section" && (
-              <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
-                Required
-              </span>
-            )}
           </h3>
           <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
             {section.items.length} panel{section.items.length !== 1 ? 's' : ''}
@@ -328,7 +290,7 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
           </Button>
         )}
         
-        {!readonly && section.title !== "Default Section" && (
+        {!readonly && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="ghost">
@@ -389,6 +351,7 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
         onEditPanel={(panel) => handleEditPanel(section.id, panel)}
         onRemovePanel={(panelId) => handleRemovePanel(section.id, panelId)}
         onLayoutChange={(layout) => handleLayoutChange(section.id, layout)}
+        isTemplate={true}
       />
     );
   }, [handleEditPanel, handleRemovePanel, handleLayoutChange, renderEmptySection]);

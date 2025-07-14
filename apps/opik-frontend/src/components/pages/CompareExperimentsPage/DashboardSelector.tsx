@@ -146,7 +146,6 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
         dashboard: {
           name: data.name.trim(),
           description: data.description?.trim() || "",
-          skipDefaultSection: !!data.templateId, // Skip default section when creating from template
         }
       });
       

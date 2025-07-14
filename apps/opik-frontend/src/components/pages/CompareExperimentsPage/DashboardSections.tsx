@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 
 interface DashboardSectionsProps {
   experimentId: string;
+  contextExperimentId?: string; // For experiment context
   dashboard: DashboardWithSections;
 }
 
-const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, dashboard }) => {
+const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, contextExperimentId, dashboard }) => {
   const { calculateNextPosition } = useDashboardStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalSectionId, setModalSectionId] = useState<string>("");
@@ -184,6 +185,7 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
     return (
       <PanelGrid
         experimentId={experimentId}
+        contextExperimentId={contextExperimentId}
         section={section}
         onEditPanel={(panel) => handleEditPanel(section.id, panel)}
         onRemovePanel={(panelId) => {
@@ -196,7 +198,7 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
         }}
       />
     );
-  }, [experimentId, handleEditPanel, renderEmptySection]);
+  }, [experimentId, contextExperimentId, handleEditPanel, renderEmptySection]);
 
   return (
     <div className="space-y-6">
@@ -220,17 +222,31 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
       </div>
 
       <div>
-        {frontendSections.map((section: PanelSection) => (
-          <div key={section.id} className="border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow mb-6 mx-6">
-            {renderSectionHeader(section)}
-
-            {section.isExpanded && (
-              <div className="p-4">
-                {renderSectionContent(section)}
-              </div>
-            )}
+        {frontendSections.length === 0 ? (
+          <div className="text-center py-12 mx-6">
+            <div className="text-6xl mb-4">📊</div>
+            <h3 className="comet-title-m mb-2">Get Started with Dashboard Sections</h3>
+            <p className="text-muted-foreground mb-4">
+              This dashboard doesn't have any sections yet. Add your first section to organize your panels and data visualizations.
+            </p>
+            <Button onClick={handleAddSection} size="lg" disabled={createSectionMutation.isPending}>
+              <Plus className="mr-2 size-4" />
+              {createSectionMutation.isPending ? "Adding..." : "Add First Section"}
+            </Button>
           </div>
-        ))}
+        ) : (
+          frontendSections.map((section: PanelSection) => (
+            <div key={section.id} className="border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow mb-6 mx-6">
+              {renderSectionHeader(section)}
+
+              {section.isExpanded && (
+                <div className="p-4">
+                  {renderSectionContent(section)}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       <PanelModal
@@ -239,6 +255,7 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, das
         onSave={handleSavePanel}
         sectionId={modalSectionId}
         panel={editingPanel}
+        contextExperimentId={contextExperimentId}
       />
     </div>
   );
