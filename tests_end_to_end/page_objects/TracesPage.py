@@ -29,6 +29,15 @@ class TracesPage:
         )
         self.attachment_container = self.page.get_by_label("Attachments")
 
+        self.page.get_by_role("button", name="Columns").click()
+        # Enable the Name column by default
+        
+        try:
+            expect(self.page.get_by_role("button", name="Name").get_by_role("checkbox")).to_be_checked(timeout=2000)
+        except Exception as _:
+            self.page.get_by_role("button", name="Name").click()
+        self.page.keyboard.press(key="Escape")
+
     def get_all_trace_names_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
         names = self.page.locator(self.trace_names_selector).all_inner_texts()
