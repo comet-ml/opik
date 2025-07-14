@@ -32,7 +32,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
       dangerouslySetInnerHTML={{
         __html: svg,
       }}
-      className="mermaid flex size-full items-center justify-center"
+      className="mermaid flex size-full [&>svg]:m-auto [&>svg]:size-auto [&>svg]:!max-h-full [&>svg]:!max-w-full"
     />
   );
 };

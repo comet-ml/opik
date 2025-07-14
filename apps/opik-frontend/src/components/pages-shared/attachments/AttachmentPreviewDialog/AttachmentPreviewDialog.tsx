@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import PDFPreview from "@/components/pages-shared/attachments/PDFPreview/PDFPreview";
 import TextPreview from "@/components/pages-shared/attachments/TextPreview/TextPreview";
+import ZoomPanContainer from "@/components/shared/ZoomPanContainer/ZoomPanContainer";
 
 export type AttachmentPreviewProps = {
   open: boolean;
@@ -64,12 +65,14 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
   const renderImageContent = () => {
     return (
       <div className="flex h-[80vh] w-full">
-        <img
-          src={url}
-          loading="lazy"
-          alt={name}
-          className="m-auto max-h-full max-w-full object-contain"
-        />
+        <ZoomPanContainer showExpandButton={false} className="pt-8">
+          <img
+            src={url}
+            loading="lazy"
+            alt={name}
+            className="m-auto size-full object-contain"
+          />
+        </ZoomPanContainer>
       </div>
     );
   };
@@ -110,7 +113,8 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         className={containerClassName()}
-        onEscapeKeyDown={(event) => event.stopPropagation()}
+        onEscapeKeyDown={(e) => e.stopPropagation()}
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="truncate">{name}</DialogTitle>
