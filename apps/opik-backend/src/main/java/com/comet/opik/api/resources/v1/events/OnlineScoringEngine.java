@@ -218,19 +218,18 @@ public class OnlineScoringEngine {
             forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
             });
         } catch (InvalidArgumentException e) {
-            log.debug("failed to parse json, json={}, exception={}", json, e.getMessage());
+            log.warn("failed to parse json, json={}", json, e);
             return null;
         }
 
         try {
             return JsonPath.parse(forcedObject).read(path);
         } catch (Exception e) {
-            log.debug("Couldn't find path inside json, trying flat structure, path={}, json={}, exception={}", path,
-                    json, e.getMessage());
+            log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
             return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
                     .map(Object::toString)
                     .orElseGet(() -> {
-                        log.debug("Couldn't find flat or nested path in json, path={}, json={}", path, json);
+                        log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
                         return null;
                     });
         }
