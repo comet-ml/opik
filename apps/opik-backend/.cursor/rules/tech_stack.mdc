@@ -1,0 +1,24 @@
+---
+description: Tech Stack
+globs:
+alwaysApply: true
+---
+Do not add java dependencies lightly! Always prefer to use existing dependencies
+
+- Language: Java 21
+- Build Tool: Maven
+- Frameworks & Libraries:
+    - Dropwizard 4.0.12 (REST API)
+    - Dropwizard-Guicey (DI)
+    - JDBI3 (Database access)
+    - Lombok, MapStruct, Jackson
+    - OpenTelemetry (Observability)
+    - Redisson (Redis), Swagger (API Docs)
+    - Liquibase (MySQL + ClickHouse)
+    - Testcontainers, WireMock
+    - AWS Java SDK, Mustache.java
+    - Database Drivers:
+    - MySQL Connector/J 9.2.0
+    - ClickHouse Java Driver
+    - Build Plugins:
+    - Maven Surefire, Javadoc, and Source Plugins

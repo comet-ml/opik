@@ -1,0 +1,12 @@
+---
+description: Business Logic
+globs:
+alwaysApply: true
+---
+- Use annotations when possible, examples: @Singleton, @RequiredArgsConstructor(onConstructor_ = @Inject)
+- Use JDBI3 for MySQL with TransactionTemplate (ru.vyarus.guicey.jdbi3.tx.TransactionTemplate)
+- Inject and use IdGenerator for UUIDs:
+    ```
+    import com.comet.opik.domain.IdGenerator;
+    private final @NonNull IdGenerator idGenerator;
+    ```

@@ -1,0 +1,10 @@
+---
+description: General guidelines for making a change in opik-backend
+globs:
+alwaysApply: true
+---
+- Follow the layered architecture: Resources → Services → DAOs → Models
+- When creating a new resource, service, DAO, or model, place it in the correct layer
+- Review 3 similar classes to align with existing patterns and conventions
+- All files must end with a blank line
+- this project contain many tests, when checking whether the code compiles, skip the tests
