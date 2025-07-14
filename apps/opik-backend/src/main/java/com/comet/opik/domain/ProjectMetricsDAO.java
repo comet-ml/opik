@@ -244,18 +244,21 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COUNT = """
             WITH thread_summary AS (
                 SELECT
-                    thread_id,
-                    <bucket> AS bucket
-                FROM traces
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND thread_id != ''
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                GROUP BY thread_id, bucket
+                    tt.id,
+                    min(t.start_time) as start_time
+                FROM trace_threads tt
+                JOIN traces t ON tt.thread_id = t.thread_id
+                    AND tt.project_id = t.project_id
+                    AND tt.workspace_id = t.workspace_id
+                WHERE tt.project_id = :project_id
+                AND tt.workspace_id = :workspace_id
+                AND tt.thread_id != ''
+                AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                GROUP BY tt.id
             )
-            SELECT bucket,
-                   nullIf(count(DISTINCT thread_id), 0) as count
+            SELECT <bucket> AS bucket,
+                   nullIf(count(DISTINCT id), 0) as count
             FROM thread_summary
             GROUP BY bucket
             ORDER BY bucket

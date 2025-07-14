@@ -992,6 +992,11 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
                     .toList();
 
+            // Open threads first
+            threadIds.forEach(threadId -> {
+                traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
+            });
+
             // Create multiple traces per thread to test that threads are counted, not traces
             threadIds.forEach(threadId -> {
                 List<Trace> traces = IntStream.range(0, 2) // 2 traces per thread
@@ -1002,6 +1007,11 @@ class ProjectMetricsResourceTest {
                                 .build())
                         .toList();
                 traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            });
+
+            // Close threads to ensure they are written to the trace_threads table
+            threadIds.forEach(threadId -> {
+                traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
             });
 
             return (long) threadIds.size();
