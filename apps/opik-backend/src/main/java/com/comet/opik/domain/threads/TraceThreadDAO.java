@@ -4,7 +4,6 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -50,11 +49,9 @@ public interface TraceThreadDAO {
             Duration timeoutToMarkThreadAsInactive,
             int limit);
 
-    Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive);
-
     Mono<Long> openThread(UUID projectId, String threadId);
 
-    Mono<Long> closeThread(UUID projectId, String threadId);
+    Mono<Long> closeThread(UUID projectId, List<String> threadId);
 
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 
@@ -66,7 +63,8 @@ public interface TraceThreadDAO {
 
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 
-    Flux<TraceThreadModel> streamClosedThreads(UUID projectId);
+    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant now,
+            Duration timeoutToMarkThreadAsInactive);
 }
 
 @Singleton
@@ -128,7 +126,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             <if(project_ids)>AND project_id IN :project_ids<endif>
             <if(status)> AND status = :status <endif>
             <if(ids)> AND id IN :ids <endif>
-            <if(threadIds)> AND thread_id IN :thread_ids <endif>
+            <if(thread_ids)> AND thread_id IN :thread_ids <endif>
             <if(scored_at_empty)> AND scored_at IS NULL <endif>
             ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
@@ -160,19 +158,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             WHERE tt.workspace_id = :workspace_id
             AND tt.project_id = :project_id
             AND tt.status != :status
-            <if(last_updated_at)>
-            AND (
-                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at \\< timestamp_sub(parseDateTime64BestEffort(:now, 6), pc.timeout_mark_thread_as_inactive))
-            OR
-                (tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6))
-            )
-            <endif>
-            <if(thread_id)>AND tt.thread_id = :thread_id<endif>
-            <if(enforce_consistent_read)>
-            SETTINGS
-                insert_quorum_parallel = 0,
-                insert_quorum = 'auto'
-            <endif>
+            <if(thread_ids)>AND tt.thread_id IN :thread_ids<endif>
             ;
             """;
 
@@ -241,21 +227,24 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
-                SELECT
-                    *
-                FROM trace_threads final
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND status = 'inactive'
-                AND scored_at IS NULL
-                <if(enforce_consistent_read)>
-                SETTINGS select_sequential_consistency = 1
-                <endif>
-                ;
+            SELECT
+                workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at
+            FROM trace_threads tt final
+            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
+            WHERE tt.workspace_id = :workspace_id
+            AND tt.project_id = :project_id
+            AND tt.status != :status
+            <if(last_updated_at)>
+            AND (
+                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at \\< timestamp_sub(parseDateTime64BestEffort(:now, 6), pc.timeout_mark_thread_as_inactive))
+            OR
+                (tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6))
+            )
+            <endif>
+            ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<Long> save(@NonNull List<TraceThreadModel> traceThreads) {
@@ -365,45 +354,16 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant now,
-            @NonNull Duration timeoutToMarkThreadAsInactive) {
-        return asyncTemplate.nonTransaction(connection -> {
-            ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-
-            if (shouldEnforceConsistentRead()) {
-                closureThreadsSql.add("enforce_consistent_read", true);
-            }
-
-            closureThreadsSql.add("last_updated_at", true);
-            var statement = connection.createStatement(closureThreadsSql.render())
-                    .bind("project_id", projectId)
-                    .bind("last_updated_at",
-                            now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
-
-            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        });
-    }
-
-    private boolean shouldEnforceConsistentRead() {
-        return configuration.getDatabaseAnalytics().hasReplicationEnabled();
-    }
-
-    @Override
     public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
         return asyncTemplate.nonTransaction(connection -> {
             ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-            openThreadsSql.add("thread_id", threadId);
+            List<String> threadIds = List.of(threadId);
 
-            if (shouldEnforceConsistentRead()) {
-                openThreadsSql.add("enforce_consistent_read", true);
-            }
+            openThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(openThreadsSql.render())
                     .bind("project_id", projectId)
-                    .bind("thread_id", threadId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new))
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -412,18 +372,18 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
+    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.just(0L);
+        }
+
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-            closureThreadsSql.add("thread_id", threadId);
-
-            if (shouldEnforceConsistentRead()) {
-                closureThreadsSql.add("enforce_consistent_read", true);
-            }
+            closureThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
-                    .bind("thread_id", threadId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new))
                     .bind("status", TraceThreadStatus.INACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -543,19 +503,22 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Flux<TraceThreadModel> streamClosedThreads(@NonNull UUID projectId) {
+    public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId, @NonNull Instant now,
+            @NonNull Duration timeoutToMarkThreadAsInactive) {
         return asyncTemplate.stream(connection -> {
-            ST closedThreadsPerProject = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
+            ST closureThreadsSql = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
+            closureThreadsSql.add("last_updated_at", true);
 
-            if (shouldEnforceConsistentRead()) {
-                closedThreadsPerProject.add("enforce_consistent_read", true);
-            }
+            var statement = connection.createStatement(closureThreadsSql.render())
+                    .bind("project_id", projectId)
+                    .bind("last_updated_at",
+                            now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
 
-            var statement = connection.createStatement(closedThreadsPerProject.render())
-                    .bind("project_id", projectId);
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
-        });
+        }).buffer(1000);
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
