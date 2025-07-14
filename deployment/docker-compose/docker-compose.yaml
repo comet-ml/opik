@@ -270,7 +270,7 @@ services:
       - COMPUTE_ENGINE_DEBUG=TRUE
       - ALLOWED_DOMAINS=http://localhost:80,http://localhost:8080,http://localhost:9080,http://localhost:5174
     volumes:
-       - .:/data
+      - ./python_panel_pages:/app/app/pages
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9080/api/status"]
       interval: 30s
@@ -287,5 +287,5 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
-  panel_data:
-     driver: local
+#  panel_data:
+#     driver: local

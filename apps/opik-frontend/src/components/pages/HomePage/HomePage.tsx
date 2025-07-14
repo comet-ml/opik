@@ -82,7 +82,6 @@ const HomePage = () => {
             <PythonPanel 
               config={{ code: panel.configuration?.code || "# Python code will be executed here" }} 
               id={panel.id} 
-              isTemplate={true}
             />
           );
         case "metric":

@@ -3,10 +3,12 @@ import { AxiosError } from "axios";
 import get from "lodash/get";
 import api, { DASHBOARDS_REST_ENDPOINT, DASHBOARDS_KEY } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
+import { DashboardSection } from "./useDashboardById";
 
 export interface UpdateDashboardRequest {
   name?: string;
   description?: string;
+  sections?: DashboardSection[];
 }
 
 export interface UpdateDashboardResponse {
@@ -50,9 +52,15 @@ const useDashboardUpdateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: () => {
+    onSettled: (_, __, { dashboardId }) => {
+      // Invalidate the general dashboards list
       queryClient.invalidateQueries({
         queryKey: [DASHBOARDS_KEY],
+      });
+      
+      // Also invalidate the specific dashboard-by-id query
+      queryClient.invalidateQueries({
+        queryKey: [DASHBOARDS_KEY, { dashboardId }],
       });
     },
   });

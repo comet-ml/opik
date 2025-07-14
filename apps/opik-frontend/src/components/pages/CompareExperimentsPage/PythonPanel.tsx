@@ -6,11 +6,10 @@ interface PythonPanelProps {
   config: PythonPanelConfig;
   id: string;
   experimentId?: string; // For experiment context
-  isTemplate?: boolean; // Prevent API calls when used as template/preview
 }
 
-const PythonPanel: React.FC<PythonPanelProps> = ({ config, id, experimentId, isTemplate = false }) => {
-  // Use the preview hook to get live Streamlit preview - but only if not a template
+const PythonPanel: React.FC<PythonPanelProps> = ({ config, id, experimentId }) => {
+  // Use the preview hook to get live Streamlit preview
   const { url: previewUrl, loading: previewLoading, error: previewError, getPreviewUrl } = usePythonPanelPreview({
     experimentId
   });
@@ -20,16 +19,16 @@ const PythonPanel: React.FC<PythonPanelProps> = ({ config, id, experimentId, isT
     return config.code;
   }, [config.code]);
 
-  // Fetch preview URL when component mounts or code changes - but only if not a template
+  // Fetch preview URL when component mounts or code changes
   useEffect(() => {
-    if (!isTemplate && config.code) {
+    if (config.code) {
       getPreviewUrl(config.code);
     }
-  }, [config.code, getPreviewUrl, isTemplate]);
+  }, [config.code, getPreviewUrl]);
 
   // Handle refresh button click
   const handleRefresh = () => {
-    if (!isTemplate && config.code) {
+    if (config.code) {
       getPreviewUrl(config.code);
     }
   };
@@ -101,20 +100,7 @@ const PythonPanel: React.FC<PythonPanelProps> = ({ config, id, experimentId, isT
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        {isTemplate ? (
-          // Template mode - show code preview instead of live iframe
-          <div className="h-full p-4 overflow-auto bg-muted/10">
-            <div className="mb-3">
-              <h4 className="comet-body-s font-medium text-foreground mb-2">Python Code Preview:</h4>
-              <p className="comet-body-xs text-muted-foreground">
-                Live execution is disabled in template mode
-              </p>
-            </div>
-            <pre className="bg-muted text-foreground p-3 rounded-md text-xs overflow-auto font-mono border max-h-[300px]">
-              {codePreview}
-            </pre>
-          </div>
-        ) : previewLoading ? (
+        {previewLoading ? (
           <div className="h-full flex flex-col items-center justify-center bg-card">
             <div className="text-4xl mb-4">⏳</div>
             <p className="comet-body-s text-muted-foreground mb-2">
@@ -167,9 +153,7 @@ const PythonPanel: React.FC<PythonPanelProps> = ({ config, id, experimentId, isT
       {/* Footer */}
       <div className="p-3 bg-accent/50 border-t">
         <p className="comet-body-xs text-muted-foreground text-center">
-          {isTemplate ? (
-            <>📋 Python Panel Template Preview</>
-          ) : previewUrl ? (
+          {previewUrl ? (
             <>🚀 Live Streamlit app running at {previewUrl}</>
           ) : (
             <>🔧 Python Panel Engine integration active</>

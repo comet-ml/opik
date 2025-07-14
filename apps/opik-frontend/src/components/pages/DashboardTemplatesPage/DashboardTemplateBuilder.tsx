@@ -4,6 +4,15 @@ import { Panel, PanelSection } from "../CompareExperimentsPage/dashboardTypes";
 import PanelGrid from "../CompareExperimentsPage/PanelGrid";
 import PanelModal from "../CompareExperimentsPage/PanelModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +69,8 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     () => new Set(configuration.sections.map(s => s.id))
   );
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionTitle, setEditingSectionTitle] = useState<string>("");
 
   // Calculate next position for panels
   const calculateNextPosition = useCallback((layout: any[]) => {
@@ -299,10 +310,8 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => {
-                const newTitle = prompt("Enter new section title:", section.title);
-                if (newTitle && newTitle.trim()) {
-                  handleEditSection(section.id, newTitle.trim());
-                }
+                setEditingSectionTitle(section.title);
+                setEditingSectionId(section.id); // Set the editing section ID
               }}>
                 <Edit2 size={14} className="mr-2" />
                 Edit Section
@@ -319,7 +328,7 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
         )}
       </div>
     </div>
-  ), [toggleSectionExpanded, readonly, handleAddPanel, handleEditSection, handleRemoveSection]);
+  ), [toggleSectionExpanded, readonly, handleAddPanel, handleRemoveSection]);
 
   // Empty section renderer
   const renderEmptySection = useCallback((section: PanelSection) => (
@@ -351,7 +360,6 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
         onEditPanel={(panel) => handleEditPanel(section.id, panel)}
         onRemovePanel={(panelId) => handleRemovePanel(section.id, panelId)}
         onLayoutChange={(layout) => handleLayoutChange(section.id, layout)}
-        isTemplate={true}
       />
     );
   }, [handleEditPanel, handleRemovePanel, handleLayoutChange, renderEmptySection]);
@@ -415,6 +423,56 @@ const DashboardTemplateBuilder: React.FC<DashboardTemplateBuilderProps> = ({
         sectionId={modalSectionId}
         panel={editingPanel}
       />
+
+      <Dialog open={!!editingSectionId} onOpenChange={(open) => {
+        if (!open) {
+          setEditingSectionId(null);
+          setEditingSectionTitle("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Section Title</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="section-title">
+                Section Title
+              </Label>
+              <Input
+                id="section-title"
+                value={editingSectionTitle}
+                onChange={(e) => setEditingSectionTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && editingSectionId && editingSectionTitle.trim()) {
+                    handleEditSection(editingSectionId, editingSectionTitle.trim());
+                    setEditingSectionId(null);
+                    setEditingSectionTitle("");
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setEditingSectionId(null);
+              setEditingSectionTitle("");
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (editingSectionId && editingSectionTitle.trim()) {
+                handleEditSection(editingSectionId, editingSectionTitle.trim());
+                setEditingSectionId(null);
+                setEditingSectionTitle("");
+              }
+            }}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

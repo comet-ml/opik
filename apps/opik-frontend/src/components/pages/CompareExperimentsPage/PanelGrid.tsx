@@ -9,6 +9,14 @@ import ChartPanel from "./ChartPanel";
 import TextPanel from "./TextPanel";
 import MetricPanel from "./MetricPanel";
 import HtmlPanel from "./HtmlPanel";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // TODO: adjust these constants as needed
 const DASHBOARD_COLUMNS = 12;
@@ -22,7 +30,6 @@ interface PanelGridProps {
   onEditPanel: (panel: Panel) => void;
   onRemovePanel: (panelId: string) => void;
   onLayoutChange: (layout: PanelSectionLayout) => void;
-  isTemplate?: boolean; // Prevent API calls when used as template/preview
 }
 
 const PanelGrid: React.FC<PanelGridProps> = ({ 
@@ -31,10 +38,11 @@ const PanelGrid: React.FC<PanelGridProps> = ({
   section, 
   onEditPanel, 
   onRemovePanel, 
-  onLayoutChange,
-  isTemplate = false
+  onLayoutChange
 }) => {
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [panelToDelete, setPanelToDelete] = useState<Panel | null>(null);
   
   const gridRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -71,12 +79,25 @@ const PanelGrid: React.FC<PanelGridProps> = ({
     [onEditPanel]
   );
 
+  const handleConfirmDelete = useCallback(() => {
+    if (panelToDelete) {
+      handleRemovePanel(panelToDelete.id);
+      setConfirmDeleteOpen(false);
+      setPanelToDelete(null);
+    }
+  }, [panelToDelete, handleRemovePanel]);
+
+  const handleCancelDelete = useCallback(() => {
+    setConfirmDeleteOpen(false);
+    setPanelToDelete(null);
+  }, []);
+
   // Memoize panel content renderer
   const renderPanelContent = useMemo(() => {
     return (panel: Panel) => {
       switch (panel.data.type) {
         case "python":
-          return <PythonPanel config={panel.data.config} id={panel.id} experimentId={contextExperimentId} isTemplate={isTemplate} />;
+          return <PythonPanel config={panel.data.config} id={panel.id} experimentId={contextExperimentId} />;
         case "chart":
           return <ChartPanel config={panel.data.config} id={panel.id} />;
         case "text":
@@ -96,7 +117,7 @@ const PanelGrid: React.FC<PanelGridProps> = ({
           );
       }
     };
-  }, [contextExperimentId, isTemplate]);
+  }, [contextExperimentId]);
 
   // Memoize panel header renderer
   const renderPanelHeader = useCallback((panel: Panel) => (
@@ -131,16 +152,15 @@ const PanelGrid: React.FC<PanelGridProps> = ({
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (confirm(`Are you sure you want to remove the panel "${panel.name}"?`)) {
-              handleRemovePanel(panel.id);
-            }
+            setPanelToDelete(panel);
+            setConfirmDeleteOpen(true);
           }}
         >
           Remove
         </button>
       </div>
     </div>
-  ), [handleEditPanel, handleRemovePanel]);
+  ), [handleEditPanel]);
 
   // Memoize grid layout config
   const gridLayoutConfig = useMemo(() => ({
@@ -161,23 +181,53 @@ const PanelGrid: React.FC<PanelGridProps> = ({
   }
 
   return (
-    <div ref={gridRef} style={{ width: "100%" }}>
-      <GridLayout {...gridLayoutConfig}>
-        {section.items.map((panel) => (
-          <div 
-            key={panel.id} 
-            className="bg-card rounded-md border shadow-sm overflow-hidden"
-          >
-            {renderPanelHeader(panel)}
-            
-            {/* Panel Content */}
-            <div className="h-[calc(100%-65px)]">
-              {renderPanelContent(panel)}
+    <>
+      <div ref={gridRef} style={{ width: "100%" }}>
+        <GridLayout {...gridLayoutConfig}>
+          {section.items.map((panel) => (
+            <div 
+              key={panel.id} 
+              className="bg-card rounded-md border shadow-sm overflow-hidden"
+            >
+              {renderPanelHeader(panel)}
+              
+              {/* Panel Content */}
+              <div className="h-[calc(100%-65px)]">
+                {renderPanelContent(panel)}
+              </div>
             </div>
+          ))}
+        </GridLayout>
+      </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Panel Removal</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-600">
+              Are you sure you want to remove the panel "{panelToDelete?.name}"? This action cannot be undone.
+            </p>
           </div>
-        ))}
-      </GridLayout>
-    </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCancelDelete}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
+              Remove Panel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

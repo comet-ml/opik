@@ -39,14 +39,16 @@ os.environ["OPIK_API_KEY"] = "opik-1234567890"`;
       const encodedData = encoder.encode(processedCode);
       const hashBuffer = await crypto.subtle.digest('SHA-256', encodedData);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const instanceId = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Python panel filename must start with letters!!
+      const instanceId = "page_" + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       
       const res = await fetch("http://localhost:9080/api/get-python-panel-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           code: processedCode,
-          //instanceId: instanceId 
+          instanceId: instanceId  
         }),
       });
       const responseData = await res.json();

@@ -3,10 +3,26 @@ import { ChevronDown, ChevronRight, Plus, Edit2, Trash2, MoreHorizontal } from "
 import { useDashboardStore } from "./dashboardStore";
 import { Panel, PanelSection, DashboardWithSections } from "./dashboardTypes";
 import useDashboardSectionCreateMutation from "@/api/dashboards/useDashboardSectionCreateMutation";
+import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import useDashboardPanelCreateMutation from "@/api/dashboards/useDashboardPanelCreateMutation";
 import PanelGrid from "./PanelGrid";
 import PanelModal from "./PanelModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DashboardSectionsProps {
   experimentId: string;
@@ -22,9 +38,12 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, con
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     () => new Set(dashboard.sections.map(s => s.id))
   );
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionTitle, setEditingSectionTitle] = useState<string>("");
 
   // API mutations
   const createSectionMutation = useDashboardSectionCreateMutation();
+  const updateDashboardMutation = useDashboardUpdateMutation();
   const createPanelMutation = useDashboardPanelCreateMutation();
 
   // Memoized handlers
@@ -41,6 +60,65 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, con
       console.error("Failed to create section:", error);
     }
   }, [createSectionMutation, dashboard.id, dashboard.sections.length]);
+
+  const handleEditSection = useCallback(async (sectionId: string, newTitle: string) => {
+    try {
+      await updateDashboardMutation.mutateAsync({
+        dashboardId: dashboard.id,
+        dashboard: {
+          sections: dashboard.sections.map(section =>
+            section.id === sectionId 
+              ? { 
+                  ...section, 
+                  title: newTitle,
+                  // Ensure we include all the required fields
+                  panels: section.panels || []
+                } 
+              : {
+                  ...section,
+                  panels: section.panels || []
+                }
+          )
+        }
+      });
+    } catch (error: any) {
+      console.error("Failed to update section:", error);
+    }
+  }, [updateDashboardMutation, dashboard.id, dashboard.sections]);
+
+  const handleRemoveSection = useCallback(async (sectionId: string) => {
+    try {
+      await updateDashboardMutation.mutateAsync({
+        dashboardId: dashboard.id,
+        dashboard: {
+          sections: dashboard.sections
+            .filter(section => section.id !== sectionId)
+            .map(section => ({
+              ...section,
+              panels: section.panels || []
+            }))
+        }
+      });
+    } catch (error: any) {
+      console.error("Failed to delete section:", error);
+    }
+  }, [updateDashboardMutation, dashboard.id, dashboard.sections]);
+
+  const handleRemovePanel = useCallback(async (panelId: string) => {
+    try {
+      await updateDashboardMutation.mutateAsync({
+        dashboardId: dashboard.id,
+        dashboard: {
+          sections: dashboard.sections.map(section => ({
+            ...section,
+            panels: (section.panels || []).filter(panel => panel.id !== panelId)
+          }))
+        }
+      });
+    } catch (error: any) {
+      console.error("Failed to delete panel:", error);
+    }
+  }, [updateDashboardMutation, dashboard.id, dashboard.sections]);
 
   const handleAddPanel = useCallback((sectionId: string) => {
     setModalSectionId(sectionId);
@@ -158,9 +236,34 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, con
             {createPanelMutation.isPending && modalSectionId === section.id ? "Adding..." : "Add Panel"}
           </Button>
         )}
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost">
+              <MoreHorizontal size={16} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={() => {
+              setEditingSectionTitle(section.title);
+              setEditingSectionId(section.id);
+            }}>
+              <Edit2 size={14} className="mr-2" />
+              Edit Section
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => handleRemoveSection(section.id)}
+              className="text-destructive"
+              disabled={updateDashboardMutation.isPending}
+            >
+              <Trash2 size={14} className="mr-2" />
+              {updateDashboardMutation.isPending ? "Removing..." : "Remove Section"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
-  ), [toggleSectionExpanded, handleAddPanel, createPanelMutation.isPending, modalSectionId]);
+  ), [toggleSectionExpanded, handleAddPanel, createPanelMutation.isPending, modalSectionId, handleRemoveSection, updateDashboardMutation.isPending]);
 
   const renderEmptySection = useCallback((section: PanelSection) => (
     <div className="text-center py-8 text-gray-500">
@@ -188,17 +291,14 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, con
         contextExperimentId={contextExperimentId}
         section={section}
         onEditPanel={(panel) => handleEditPanel(section.id, panel)}
-        onRemovePanel={(panelId) => {
-          // TODO: Implement remove panel API call
-          console.log("Remove panel:", panelId);
-        }}
+        onRemovePanel={handleRemovePanel}
         onLayoutChange={(layout) => {
           // TODO: Implement layout change API call
           console.log("Layout changed:", layout);
         }}
       />
     );
-  }, [experimentId, contextExperimentId, handleEditPanel, renderEmptySection]);
+  }, [experimentId, contextExperimentId, handleEditPanel, handleRemovePanel, renderEmptySection]);
 
   return (
     <div className="space-y-6">
@@ -257,6 +357,60 @@ const DashboardSections: React.FC<DashboardSectionsProps> = ({ experimentId, con
         panel={editingPanel}
         contextExperimentId={contextExperimentId}
       />
+
+      {/* Section Edit Dialog */}
+      <Dialog open={!!editingSectionId} onOpenChange={(open) => {
+        if (!open) {
+          setEditingSectionId(null);
+          setEditingSectionTitle("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Section Title</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="section-title">
+                Section Title
+              </Label>
+              <Input
+                id="section-title"
+                value={editingSectionTitle}
+                onChange={(e) => setEditingSectionTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && editingSectionId && editingSectionTitle.trim()) {
+                    handleEditSection(editingSectionId, editingSectionTitle.trim());
+                    setEditingSectionId(null);
+                    setEditingSectionTitle("");
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setEditingSectionId(null);
+              setEditingSectionTitle("");
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (editingSectionId && editingSectionTitle.trim()) {
+                  handleEditSection(editingSectionId, editingSectionTitle.trim());
+                  setEditingSectionId(null);
+                  setEditingSectionTitle("");
+                }
+              }}
+              disabled={updateDashboardMutation.isPending}
+            >
+              {updateDashboardMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
