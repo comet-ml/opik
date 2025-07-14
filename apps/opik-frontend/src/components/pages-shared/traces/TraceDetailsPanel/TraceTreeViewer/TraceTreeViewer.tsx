@@ -1,22 +1,20 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import useLocalStorageState from "use-local-storage-state";
+import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import {
   addAllParentIds,
   constructDataMapAndSearchIds,
-  searchFunction,
+  filterFunction,
 } from "./helpers";
+import { OnChangeFn } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
+import { Filters } from "@/types/filters";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/components/ui/button";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import VirtualizedTreeViewer from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
 import useTreeDetailsStore, {
@@ -24,9 +22,6 @@ import useTreeDetailsStore, {
   TreeNode,
   TreeNodeConfig,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { FoldVertical, UnfoldVertical } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
 import SpanDetailsButton from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
 
 const SELECTED_TREE_DATABLOCKS_KEY = "tree-datablocks-config";
@@ -47,7 +42,10 @@ type TraceTreeViewerProps = {
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
-  isSpansLazyLoading: boolean;
+  search?: string;
+  setSearch: OnChangeFn<string | undefined>;
+  filters: Filters;
+  setFilters: OnChangeFn<Filters>;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -55,9 +53,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   spans,
   rowId,
   onSelectRow,
-  isSpansLazyLoading,
+  search,
+  setSearch,
+  filters,
+  setFilters,
 }) => {
-  const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useLocalStorageState(
@@ -67,15 +67,21 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     },
   );
 
-  const noSearch = !search;
+  const hasSearch = Boolean(search && search.length);
+  const hasFilter = Boolean(filters.length);
+  const hasSearchOrFilter = hasSearch || hasFilter;
+  const title = !hasSearchOrFilter
+    ? "Trace"
+    : hasFilter && hasSearch
+      ? "Results"
+      : hasSearch
+        ? "Search results"
+        : "Filtered results";
 
   const predicate = useCallback(
-    (data: Span | Trace) => {
-      if (!search) return true;
-      const searchValue = search.toLowerCase();
-      return searchValue ? searchFunction(searchValue, data) : true;
-    },
-    [search],
+    (data: Span | Trace) =>
+      !hasSearch && !hasFilter ? true : filterFunction(data, filters, search),
+    [hasSearch, hasFilter, search, filters],
   );
 
   const { filteredTraceSpans, searchIds } = useMemo(() => {
@@ -87,7 +93,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       filteredTraceSpans: traceSpans,
     };
 
-    if (noSearch) return retVal;
+    if (!hasSearchOrFilter) return retVal;
 
     const [dataMap, searchIds] = constructDataMapAndSearchIds(
       trace,
@@ -106,7 +112,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           );
 
     return retVal;
-  }, [trace, traceSpans, predicate, noSearch]);
+  }, [traceSpans, hasSearchOrFilter, trace, predicate]);
 
   const { tree, toggleExpandAll, setTree, expandedTreeRows, fullExpandedSet } =
     useTreeDetailsStore();
@@ -189,13 +195,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       ref={scrollRef}
     >
       <div className="min-w-[400px] max-w-full">
-        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-white pb-2 pl-6 pr-4  pt-4">
-          <div className="flex items-center gap-1">
-            <div className="comet-title-xs">
-              {noSearch ? "Trace spans" : "Search results"}
-            </div>
+        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-white pb-2 pl-6 pr-4 pt-4">
+          <div className="flex h-8 items-center gap-1">
+            <div className="comet-title-xs">{title}</div>
             <div className="comet-body-s text-muted-slate">
-              {noSearch ? traceSpans.length : searchIds.size} spans
+              {!hasSearchOrFilter ? traceSpans.length : searchIds.size} items
             </div>
             <ExplainerIcon
               {...EXPLAINERS_MAP[
@@ -204,7 +208,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             />
           </div>
           <div className="flex items-center gap-x-1.5">
-            {noSearch ? (
+            {!hasSearchOrFilter ? (
               <>
                 <SpanDetailsButton config={config} onConfigChange={setConfig} />
                 <TooltipWrapper
@@ -220,22 +224,19 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
                 </TooltipWrapper>
               </>
             ) : (
-              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={() => {
+                  setSearch(undefined);
+                  setFilters([]);
+                }}
+              >
                 Clear
               </Button>
             )}
           </div>
         </div>
-        <div className="sticky top-12 z-10 flex flex-wrap items-center bg-white py-2 pl-6 pr-4">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search by all fields"
-            dimension="sm"
-            disabled={isSpansLazyLoading}
-          ></SearchInput>
-        </div>
-
         {tree.length ? (
           <VirtualizedTreeViewer
             scrollRef={scrollRef}
@@ -244,7 +245,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             onRowIdChange={onSelectRow}
           />
         ) : (
-          <NoData message="No search results" icon={null} />
+          <NoData message="No results" icon={null} />
         )}
       </div>
     </div>

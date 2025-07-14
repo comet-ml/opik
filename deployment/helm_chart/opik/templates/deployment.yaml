@@ -40,12 +40,18 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with $value.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 10 }}
+      {{- end }}
       {{- if or $value.initContainers $value.waitForClickhouse $value.run_migration }}
       initContainers:
       {{- if and (eq $key "backend") $value.waitForClickhouse }}
         - name: wait-for-clickhouse-service
           image: "{{ default $.Values.registry $value.waitForClickhouse.image.registry }}/{{ $value.waitForClickhouse.image.repository }}:{{ $value.waitForClickhouse.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForClickhouse.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -59,6 +65,8 @@ spec:
         - name: backend-migrations
           image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
           command: ["./run_db_migrations.sh"]
           {{- with $value.envFrom }}
           envFrom:

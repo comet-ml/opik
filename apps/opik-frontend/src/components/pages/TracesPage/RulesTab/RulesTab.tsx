@@ -77,6 +77,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
+  // {
+  //   id: "scope",
+  //   label: "Scope",
+  //   type: COLUMN_TYPE.string,
+  //   accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  // },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -89,6 +95,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
+  "scope",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";

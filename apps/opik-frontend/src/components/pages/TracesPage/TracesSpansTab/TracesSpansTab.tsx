@@ -33,6 +33,7 @@ import {
   ColumnData,
   ColumnsStatistic,
   DynamicColumn,
+  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { BaseTraceData, Span, Trace } from "@/types/traces";
@@ -85,6 +86,7 @@ import {
   DetailsActionSectionParam,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import { GuardrailResult } from "@/types/guardrails";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -310,12 +312,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder: "Select score",
           },
         },
+        [COLUMN_GUARDRAILS_ID]: {
+          keyComponentProps: {
+            options: [
+              { value: GuardrailResult.FAILED, label: "Failed" },
+              { value: GuardrailResult.PASSED, label: "Passed" },
+            ],
+            placeholder: "Status",
+          },
+        },
       },
     }),
     [projectId, type],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const clearRowSelection = useCallback(() => {
+    setRowSelection({});
+  }, []);
 
   const { data, isPending, refetch } = useTracesOrSpansList(
     {
@@ -539,7 +554,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
+              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
@@ -565,6 +581,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Thread ID",
               type: COLUMN_TYPE.string,
             },
+            {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+            },
           ]
         : []),
       {
@@ -582,7 +603,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
             },
           ]
         : []),
@@ -729,6 +750,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             rows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
+            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper

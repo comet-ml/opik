@@ -20,14 +20,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
-import static com.comet.opik.utils.TemplateUtils.*;
+import static com.comet.opik.utils.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
 public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
+
+    List<String> CUSTOM_MARKER_KEYS = List.of("trace_id", "thread_model_id");
 
     static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory) {
         return new AutomationRuleEvaluatorLogsDAOImpl(factory);
@@ -141,10 +145,16 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
-                        String traceId = Optional.ofNullable(event.getMDCPropertyMap().get("trace_id"))
-                                .orElseThrow(() -> failWithMessage("trace_id is not set"));
                         String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
                                 .orElseThrow(() -> failWithMessage("rule_id is not set"));
+
+                        Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
+                                .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
+                                .filter(entry -> !entry.getValue().isEmpty())
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+                        String[] markerKeys = makers.keySet().toArray(String[]::new);
+                        String[] markerValues = makers.keySet().stream().map(makers::get).toArray(String[]::new);
 
                         statement
                                 .bind("timestamp" + i, event.getInstant().toString())
@@ -152,8 +162,8 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                                 .bind("workspace_id" + i, workspaceId)
                                 .bind("rule_id" + i, ruleId)
                                 .bind("message" + i, event.getFormattedMessage())
-                                .bind("marker_keys" + i, new String[]{"trace_id"})
-                                .bind("marker_values" + i, new String[]{traceId});
+                                .bind("marker_keys" + i, markerKeys)
+                                .bind("marker_values" + i, markerValues);
                     }
 
                     return statement.execute();

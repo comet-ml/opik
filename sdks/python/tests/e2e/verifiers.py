@@ -3,10 +3,11 @@ import json
 from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
 from unittest import mock
 
+import pytest
 import opik
 from opik import Attachment, Prompt, synchronization
 from opik.api_objects.dataset import dataset_item
-from opik.rest_api import ExperimentPublic
+from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
 from opik.rest_api.types import (
     attachment as rest_api_attachment,
     span_public,
@@ -86,40 +87,11 @@ def verify_trace(
         assert trace_project.name == project_name
 
     if feedback_scores is not mock.ANY:
-        if trace.feedback_scores is None:
-            assert (
-                feedback_scores is None
-            ), f"Expected feedback scores to be None, but got {feedback_scores}"
-            return
-
-        actual_feedback_scores = (
-            [] if trace.feedback_scores is None else trace.feedback_scores
+        _assert_feedback_scores(
+            item_id=trace_id,
+            feedback_scores=trace.feedback_scores,
+            expected_feedback_scores=feedback_scores,
         )
-        assert (
-            len(actual_feedback_scores) == len(feedback_scores)
-        ), f"Expected amount of trace feedback scores ({len(feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
-
-        actual_feedback_scores: List[FeedbackScoreDict] = [
-            FeedbackScoreDict(
-                category_name=score.category_name,
-                id=trace_id,
-                name=score.name,
-                reason=score.reason,
-                value=score.value,
-            )
-            for score in trace.feedback_scores
-        ]
-
-        sorted_actual_feedback_scores = sorted(
-            actual_feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
-        )
-        sorted_expected_feedback_scores = sorted(
-            feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
-        )
-        for actual_score, expected_score in zip(
-            sorted_actual_feedback_scores, sorted_expected_feedback_scores
-        ):
-            testlib.assert_dicts_equal(actual_score, expected_score)
 
     if guardrails_validations is not mock.ANY:
         if trace.guardrails_validations is None:
@@ -216,40 +188,11 @@ def verify_span(
         assert span_project.name == project_name
 
     if feedback_scores is not mock.ANY:
-        if span.feedback_scores is None:
-            assert (
-                feedback_scores is None
-            ), f"Expected feedback scores to be None, but got {feedback_scores}"
-            return
-
-        actual_feedback_scores = (
-            [] if span.feedback_scores is None else span.feedback_scores
+        _assert_feedback_scores(
+            item_id=span_id,
+            feedback_scores=span.feedback_scores,
+            expected_feedback_scores=feedback_scores,
         )
-        assert (
-            len(actual_feedback_scores) == len(feedback_scores)
-        ), f"Expected amount of span feedback scores ({len(feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
-
-        actual_feedback_scores: List[FeedbackScoreDict] = [
-            FeedbackScoreDict(
-                category_name=score.category_name,
-                id=span_id,
-                name=score.name,
-                reason=score.reason,
-                value=score.value,
-            )
-            for score in span.feedback_scores
-        ]
-
-        sorted_actual_feedback_scores = sorted(
-            actual_feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
-        )
-        sorted_expected_feedback_scores = sorted(
-            feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
-        )
-        for actual_score, expected_score in zip(
-            sorted_actual_feedback_scores, sorted_expected_feedback_scores
-        ):
-            testlib.assert_dicts_equal(actual_score, expected_score)
 
 
 def verify_dataset(
@@ -510,3 +453,93 @@ def verify_optimization(
     assert (
         optimization_content.objective_name == objective_name
     ), f"{optimization_content.objective_name} != {objective_name}"
+
+
+def verify_thread(
+    opik_client: opik.Opik,
+    thread_id: str,
+    project_name: Optional[str] = None,
+    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
+) -> None:
+    threads_client = opik_client.get_threads_client()
+    if not synchronization.until(
+        lambda: (
+            len(
+                threads_client.search_threads(
+                    project_name=project_name, filter_string=f'id = "{thread_id}"'
+                )
+            )
+            == 1
+        )
+    ):
+        raise AssertionError(f"Failed to get thread with id '{thread_id}'.")
+    threads = threads_client.search_threads(
+        project_name=project_name,
+        filter_string=f'id = "{thread_id}"',
+    )
+    assert len(threads) == 1
+
+    thread = threads[0]
+    assert thread.id == thread_id
+
+    def _get_feedback_scores() -> Optional[List[Union[FeedbackScore]]]:
+        return threads_client.search_threads(
+            project_name=project_name,
+            filter_string=f'id = "{thread_id}"',
+        )[0].feedback_scores
+
+    if feedback_scores is not mock.ANY:
+        # wait for feedback scores to propagate
+        if not synchronization.until(lambda: (_get_feedback_scores() is not None)):
+            raise AssertionError(
+                f"Failed to get feedback scores for thread with id '{thread_id}'."
+            )
+
+        actual_feedback_scores = _get_feedback_scores()
+        _assert_feedback_scores(
+            item_id=thread_id,
+            feedback_scores=actual_feedback_scores,
+            expected_feedback_scores=feedback_scores,
+        )
+
+
+def _assert_feedback_scores(
+    item_id: str,
+    feedback_scores: Optional[List[Union[FeedbackScore, FeedbackScorePublic]]],
+    expected_feedback_scores: Optional[List[FeedbackScoreDict]],
+) -> None:
+    if feedback_scores is None:
+        assert (
+            expected_feedback_scores is None
+        ), f"Expected feedback scores to be None, but got {expected_feedback_scores}"
+        return
+
+    actual_feedback_scores = [] if feedback_scores is None else feedback_scores
+    assert (
+        len(actual_feedback_scores) == len(expected_feedback_scores)
+    ), f"Expected amount of feedback scores ({len(expected_feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
+
+    actual_feedback_scores: List[FeedbackScoreDict] = [
+        FeedbackScoreDict(
+            category_name=score.category_name,
+            id=item_id,
+            name=score.name,
+            reason=score.reason,
+            value=score.value,
+        )
+        for score in feedback_scores
+    ]
+
+    sorted_actual_feedback_scores = sorted(
+        actual_feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
+    )
+    sorted_expected_feedback_scores = sorted(
+        expected_feedback_scores, key=lambda item: json.dumps(item, sort_keys=True)
+    )
+    for actual_score, expected_score in zip(
+        sorted_actual_feedback_scores, sorted_expected_feedback_scores
+    ):
+        testlib.assert_dicts_equal(actual_score, expected_score, ignore_keys=["value"])
+        assert expected_score["value"] == pytest.approx(
+            actual_score["value"], abs=0.0001
+        )

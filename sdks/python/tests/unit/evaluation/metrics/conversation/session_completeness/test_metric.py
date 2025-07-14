@@ -295,3 +295,26 @@ async def test__session_completeness_quality__mocked__parsing_error__async(
 
     with pytest.raises(exceptions.MetricComputationError):
         await metric.ascore(simple_conversation)
+
+
+def test__session_completeness_quality__empty_conversation__raises_error(mock_model):
+    """Test scoring with an empty conversation."""
+    conversation = []
+    metric = SessionCompletenessQuality(
+        model=mock_model, include_reason=False, track=False
+    )
+    with pytest.raises(exceptions.MetricComputationError):
+        metric.score(conversation=conversation)
+
+
+@pytest.mark.asyncio
+async def test__session_completeness_quality__empty_conversation__raises_error__async(
+    mock_model,
+):
+    """Test scoring with an empty conversation."""
+    conversation = []
+    metric = SessionCompletenessQuality(
+        model=mock_model, include_reason=False, track=False
+    )
+    with pytest.raises(exceptions.MetricComputationError):
+        await metric.ascore(conversation=conversation)

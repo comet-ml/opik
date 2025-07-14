@@ -7,7 +7,11 @@ import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Mapper
 interface TraceThreadMapper {
@@ -27,10 +31,21 @@ interface TraceThreadMapper {
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .tags(Optional.ofNullable(row.get("tags", String[].class))
+                        .map(Set::of)
+                        .orElse(null))
+                .sampling(Optional.ofNullable(row.get("sampling_per_rule", Map.class))
+                        .map(sampling -> (Map<String, Boolean>) sampling)
+                        .map(samplingMap -> samplingMap.entrySet()
+                                .stream()
+                                .map(entry -> Map.entry(UUID.fromString(entry.getKey()), entry.getValue()))
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                        .orElse(Map.of()))
+                .scoredAt(row.get("scored_at", Instant.class))
                 .build();
     }
 
-    default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosuseThreads(Row row) {
+    default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosureThreads(Row row) {
         return ProjectWithPendingClosureTraceThreads.builder()
                 .projectId(row.get("project_id", UUID.class))
                 .workspaceId(row.get("workspace_id", String.class))
