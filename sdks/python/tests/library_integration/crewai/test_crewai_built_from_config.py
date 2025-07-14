@@ -10,20 +10,7 @@ from ...testlib import (
     assert_equal,
 )
 
-EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens": ANY_BUT_NONE,
-    "original_usage.total_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
-}
+from . import constants
 
 
 def test_crewai__happyflow(
@@ -95,7 +82,9 @@ def test_crewai__happyflow(
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with(
+                                            constants.MODEL_NAME_SHORT
+                                        ),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
@@ -103,7 +92,7 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],
@@ -141,7 +130,9 @@ def test_crewai__happyflow(
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with(
+                                            constants.MODEL_NAME_SHORT
+                                        ),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
@@ -149,7 +140,7 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],
