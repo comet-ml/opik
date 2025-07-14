@@ -25,6 +25,10 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
+  const [dashboardName = "", setDashboardName] = useQueryParam("dashboard", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const response = useExperimentsByIds({
     experimentsIds,
   });
@@ -105,6 +109,8 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           <TabsContent value="dashboard">
             <ExperimentDashboardTab 
               experimentId={singleExperiment.id}
+              dashboardName={dashboardName}
+              onDashboardNameChange={setDashboardName}
             />
           </TabsContent>
         )}

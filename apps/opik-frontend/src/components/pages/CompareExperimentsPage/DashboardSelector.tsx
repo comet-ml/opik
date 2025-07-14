@@ -62,9 +62,10 @@ type DashboardFormData = z.infer<typeof dashboardFormSchema>;
 
 interface DashboardSelectorProps {
   experimentId: string;
+  onDashboardChange?: (dashboardName: string) => void;
 }
 
-const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) => {
+const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId, onDashboardChange }) => {
   const { currentDashboardId, setCurrentDashboard } = useDashboardStore();
   
   // API hooks
@@ -141,60 +142,68 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
 
   const handleCreateDashboard = async (data: DashboardFormData) => {
     try {
-      // Create the dashboard first (without sections)
-      const newDashboard = await createDashboardMutation.mutateAsync({
+      const createdDashboard = await createDashboardMutation.mutateAsync({
         dashboard: {
           name: data.name.trim(),
           description: data.description?.trim() || "",
         }
       });
       
-      if (newDashboard?.id) {
-        // If creating from template, populate the dashboard with template content
-        if (data.templateId) {
-          const template = dashboardTemplates?.find(t => t.id === data.templateId);
-          if (template?.configuration?.sections && template.configuration.sections.length > 0) {
+      if (createdDashboard?.id) {
+        await associateDashboardMutation.mutateAsync({
+          experimentId,
+          dashboardId: createdDashboard.id
+        });
+        
+        setCurrentDashboard(createdDashboard.id);
+        
+        // Notify parent component about dashboard name change for URL update
+        if (onDashboardChange) {
+          onDashboardChange(createdDashboard.name);
+        }
+        
+        // If template is selected, create sections from template
+        if (data.templateId && dashboardTemplates) {
+          const template = dashboardTemplates.find(t => t.id === data.templateId);
+          if (template?.configuration?.sections) {
             // Create sections and panels from template
-            for (const sectionTemplate of template.configuration.sections) {
-              const newSection = await createSectionMutation.mutateAsync({
-                dashboardId: newDashboard.id,
-                section: {
-                  title: sectionTemplate.title,
-                  position_order: sectionTemplate.position_order,
-                }
-              });
-              
-              if (newSection?.id && sectionTemplate.panels) {
+            for (const templateSection of template.configuration.sections) {
+              try {
+                const createdSection = await createSectionMutation.mutateAsync({
+                  dashboardId: createdDashboard.id,
+                  section: {
+                    title: templateSection.title,
+                    position_order: templateSection.position_order,
+                  }
+                });
+                
                 // Create panels for this section
-                for (const panelTemplate of sectionTemplate.panels) {
-                  await createPanelMutation.mutateAsync({
-                    dashboardId: newDashboard.id,
-                    sectionId: newSection.id,
-                    panel: {
-                      name: panelTemplate.name,
-                      type: panelTemplate.type.toUpperCase() as "PYTHON" | "CHART" | "TEXT" | "METRIC" | "HTML",
-                      configuration: panelTemplate.configuration,
-                      layout: panelTemplate.layout,
-                      templateId: panelTemplate.template_id,
-                    }
-                  });
+                if (templateSection.panels && createdSection?.id) {
+                  for (const templatePanel of templateSection.panels) {
+                    await createPanelMutation.mutateAsync({
+                      dashboardId: createdDashboard.id,
+                      sectionId: createdSection.id,
+                      panel: {
+                        name: templatePanel.name,
+                        type: templatePanel.type.toUpperCase() as "PYTHON" | "CHART" | "TEXT" | "METRIC" | "HTML",
+                        configuration: templatePanel.configuration,
+                        layout: templatePanel.layout,
+                        templateId: templatePanel.template_id,
+                      }
+                    });
+                  }
                 }
+              } catch (sectionError) {
+                console.error("Failed to create section from template:", sectionError);
               }
             }
           }
         }
-        
-        // Associate with experiment
-        await associateDashboardMutation.mutateAsync({
-          experimentId,
-          dashboardId: newDashboard.id
-        });
-        
-        setCurrentDashboard(newDashboard.id);
-        createForm.reset();
-        setSelectedTemplateId("");
-        setShowCreateModal(false);
       }
+      
+      setShowCreateModal(false);
+      createForm.reset();
+      setSelectedTemplateId("");
     } catch (error) {
       console.error("Failed to create dashboard:", error);
     }
@@ -207,6 +216,14 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
         dashboardId
       });
       setCurrentDashboard(dashboardId);
+      
+      // Notify parent component about dashboard name change for URL update
+      if (onDashboardChange && dashboardsData) {
+        const selectedDashboard = dashboardsData.find(d => d.id === dashboardId);
+        if (selectedDashboard) {
+          onDashboardChange(selectedDashboard.name);
+        }
+      }
     } catch (error) {
       console.error("Failed to associate dashboard:", error);
     }
@@ -251,7 +268,17 @@ const DashboardSelector: React.FC<DashboardSelectorProps> = ({ experimentId }) =
       });
       
       if (duplicatedDashboard?.id) {
+        await associateDashboardMutation.mutateAsync({
+          experimentId,
+          dashboardId: duplicatedDashboard.id
+        });
+        
         setCurrentDashboard(duplicatedDashboard.id);
+        
+        // Notify parent component about dashboard name change for URL update
+        if (onDashboardChange) {
+          onDashboardChange(duplicatedDashboard.name);
+        }
       }
     } catch (error) {
       console.error("Failed to duplicate dashboard:", error);

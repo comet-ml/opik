@@ -16,9 +16,15 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface ExperimentDashboardTabProps {
   experimentId: string;
+  dashboardName?: string | null;
+  onDashboardNameChange?: (name: string) => void;
 }
 
-const ExperimentDashboardTab: React.FC<ExperimentDashboardTabProps> = ({ experimentId }) => {
+const ExperimentDashboardTab: React.FC<ExperimentDashboardTabProps> = ({ 
+  experimentId, 
+  dashboardName,
+  onDashboardNameChange 
+}) => {
   const { currentDashboardId, setCurrentDashboard } = useDashboardStore();
   
   // API queries with proper error handling and retry configuration
@@ -64,18 +70,36 @@ const ExperimentDashboardTab: React.FC<ExperimentDashboardTabProps> = ({ experim
     }
   );
 
-  // No need to manage experiment ID in store - it's passed as prop
-
-  // Auto-select dashboard logic
+  // Dashboard selection logic with URL sync
   const handleDashboardSelection = useCallback(() => {
-    if (!currentDashboardId) {
+    // Priority: URL dashboard name > experiment associated dashboard > first available dashboard
+    if (dashboardName && dashboardsData) {
+      const dashboardByName = dashboardsData.find(d => d.name === dashboardName);
+      if (dashboardByName && dashboardByName.id !== currentDashboardId) {
+        setCurrentDashboard(dashboardByName.id);
+        return;
+      }
+    }
+    
+    // Auto-select logic (only if no URL dashboard name is provided)
+    if (!dashboardName && !currentDashboardId) {
       if (experimentDashboard?.dashboard_id) {
         setCurrentDashboard(experimentDashboard.dashboard_id);
       } else if (dashboardsData && dashboardsData.length > 0) {
         setCurrentDashboard(dashboardsData[0].id);
       }
     }
-  }, [currentDashboardId, experimentDashboard?.dashboard_id, dashboardsData, setCurrentDashboard]);
+  }, [dashboardName, dashboardsData, currentDashboardId, experimentDashboard?.dashboard_id, setCurrentDashboard]);
+
+  // Update URL when dashboard selection changes
+  useEffect(() => {
+    if (currentDashboard && onDashboardNameChange) {
+      const currentDashboardName = currentDashboard.name;
+      if (currentDashboardName !== dashboardName) {
+        onDashboardNameChange(currentDashboardName);
+      }
+    }
+  }, [currentDashboard, dashboardName, onDashboardNameChange]);
 
   useEffect(() => {
     handleDashboardSelection();
@@ -146,7 +170,10 @@ const ExperimentDashboardTab: React.FC<ExperimentDashboardTabProps> = ({ experim
           </Button>
         </div>
         <div className="mt-4">
-          <DashboardSelector experimentId={experimentId} />
+          <DashboardSelector 
+            experimentId={experimentId} 
+            onDashboardChange={onDashboardNameChange}
+          />
         </div>
       </PageBodyStickyContainer>
 
