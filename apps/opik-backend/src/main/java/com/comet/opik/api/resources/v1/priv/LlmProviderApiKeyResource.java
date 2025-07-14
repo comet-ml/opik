@@ -95,7 +95,7 @@ public class LlmProviderApiKeyResource {
         log.info("Got LLM Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
         return Response.ok().entity(providerApiKey.toBuilder()
-                .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : "null")
+                .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : null)
                 .build()).build();
     }
 
