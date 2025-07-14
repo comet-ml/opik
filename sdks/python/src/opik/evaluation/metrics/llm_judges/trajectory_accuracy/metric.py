@@ -4,7 +4,7 @@ import pydantic
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation.metrics.llm_judges import parsing_helpers
+from opik.evaluation.metrics.llm_judges.trajectory_accuracy import templates, parser
 from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -89,32 +89,26 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
-            # Create example dict for evaluation
             example = {
                 'goal': goal,
                 'trajectory': trajectory,
                 'final_result': final_result
             }
             
-            # Generate evaluation prompt
-            prompt = self._create_evaluation_prompt(example)
+            prompt = templates.create_evaluation_prompt(example)
             
-            # Get LLM evaluation
             response = self._model.generate_string(
                 input=prompt, 
                 response_format=TrajectoryAccuracyResponseFormat
             )
             
-            # Parse and return result
-            return self._parse_evaluation_response(response)
+            return parser.parse_evaluation_response(response, self.name)
             
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)
-            return score_result.ScoreResult(
-                name=self.name,
-                value=0.0,
-                reason=f"Evaluation failed: {str(e)}"
-            )
+            raise exceptions.MetricComputationError(
+                f"Trajectory accuracy evaluation failed: {str(e)}"
+            ) from e
 
     async def ascore(
         self,
@@ -137,128 +131,23 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
-            # Create example dict for evaluation
             example = {
                 'goal': goal,
                 'trajectory': trajectory,
                 'final_result': final_result
             }
             
-            # Generate evaluation prompt
-            prompt = self._create_evaluation_prompt(example)
+            prompt = templates.create_evaluation_prompt(example)
             
-            # Get LLM evaluation
             response = await self._model.agenerate_string(
                 input=prompt, 
                 response_format=TrajectoryAccuracyResponseFormat
             )
             
-            # Parse and return result
-            return self._parse_evaluation_response(response)
+            return parser.parse_evaluation_response(response, self.name)
             
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)
-            return score_result.ScoreResult(
-                name=self.name,
-                value=0.0,
-                reason=f"Evaluation failed: {str(e)}"
-            )
-
-    def _create_evaluation_prompt(self, example: Dict[str, Any]) -> str:
-        """Create the evaluation prompt for trajectory assessment."""
-        
-        goal = example.get('goal', 'No goal specified')
-        trajectory = example.get('trajectory', [])
-        final_result = example.get('final_result', 'No result specified')
-        
-        # Format trajectory steps concisely
-        trajectory_steps = self._format_trajectory_steps(trajectory)
-        
-        return f"""You are an expert evaluator of ReAct-style agent trajectories. Assess how effectively the agent reasoned through the problem and selected appropriate actions.
-
-Evaluation Criteria:
-1. Reasoning Quality: Logical, relevant thoughts that guide action selection
-2. Action Appropriateness: Actions align with thoughts and progress toward the goal  
-3. Observation Integration: Effective use of feedback to inform next steps
-4. Goal Achievement: Successfully accomplishes the stated objective
-5. Efficiency: Reasonable path without unnecessary detours
-
-Scoring Guidelines:
-- 0.9-1.0: Excellent reasoning, appropriate actions, achieves goal efficiently
-- 0.7-0.8: Good performance with minor issues or inefficiencies
-- 0.5-0.6: Adequate but with notable problems in reasoning or actions
-- 0.3-0.4: Poor performance, significant flaws but some progress
-- 0.0-0.2: Fundamentally flawed, fails to achieve goal
-
-GOAL: {goal}
-
-TRAJECTORY:
-{trajectory_steps}
-
-FINAL RESULT: {final_result}
-
-Respond in JSON format:
-{{
-    "score": <float between 0.0 and 1.0>,
-    "explanation": "<specific evaluation referencing trajectory steps>"
-}}"""
-
-    def _format_trajectory_steps(self, trajectory: List[Dict[str, Any]]) -> str:
-        """Format trajectory steps for prompt inclusion."""
-        if not trajectory:
-            return "No trajectory steps provided"
-        
-        formatted_steps = []
-        for i, step in enumerate(trajectory, 1):
-            thought = step.get('thought', 'No thought')
-            action = step.get('action', 'No action') 
-            observation = step.get('observation', 'No observation')
-            
-            formatted_steps.append(
-                f"Step {i}:\n"
-                f"  Thought: {thought}\n"
-                f"  Action: {action}\n"
-                f"  Observation: {observation}"
-            )
-        
-        return "\n\n".join(formatted_steps)
-
-    def _parse_evaluation_response(self, content: str) -> score_result.ScoreResult:
-        """Parse LLM response and extract score and explanation."""
-        try:
-            # Use Opik's parsing helper for robust JSON extraction
-            parsed_content = parsing_helpers.extract_json_content_or_raise(content)
-            
-            score = float(parsed_content["score"])
-            explanation = str(parsed_content["explanation"])
-            
-            # Validate score range
-            if not (0.0 <= score <= 1.0):
-                raise ValueError(f"Score {score} outside valid range [0.0, 1.0]")
-            
-            # Validate explanation is not empty
-            if not explanation.strip():
-                raise ValueError("Explanation cannot be empty")
-            
-            return score_result.ScoreResult(
-                name=self.name,
-                value=score,
-                reason=explanation
-            )
-            
-        except KeyError as e:
-            missing_key = str(e).strip("'\"")
             raise exceptions.MetricComputationError(
-                f"Missing required field in response: {missing_key}"
-            )
-        except (ValueError, TypeError) as e:
-            raise exceptions.MetricComputationError(
-                f"Invalid response format: {str(e)}"
-            )
-        except exceptions.JSONParsingError:
-            # Re-raise JSON parsing errors as-is
-            raise
-        except Exception as e:
-            raise exceptions.MetricComputationError(
-                f"Failed to parse trajectory accuracy evaluation: {str(e)}"
-            ) 
+                f"Trajectory accuracy evaluation failed: {str(e)}"
+            ) from e 

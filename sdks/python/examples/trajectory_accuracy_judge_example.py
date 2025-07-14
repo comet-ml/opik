@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-Test script for trajectory_accuracy_judge function.
+Example script for the TrajectoryAccuracy metric.
 
-This script demonstrates how to use the trajectory accuracy evaluation function
-with a sample ReAct-style agent trajectory.
+This script demonstrates how to use the TrajectoryAccuracy metric
+with sample ReAct-style agent trajectories.
 """
 
 import sys
 import os
 
-# Add the current directory to Python path to import our module
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from opik.evaluation.metrics import TrajectoryAccuracy
 
-from opik.evaluation.metrics.llm_judges.trajectory_accuracy import trajectory_accuracy_judge
+# Add the parent directory to the Python path to ensure the 'opik' module can be found.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
-
-def test_basic_example():
-    """Test the trajectory accuracy judge with a basic example."""
-    print("Testing trajectory_accuracy_judge with basic example...")
+def run_basic_example(metric: TrajectoryAccuracy):
+    """Demonstrates the TrajectoryAccuracy metric with a basic example."""
+    print("Running TrajectoryAccuracy with a basic example...")
     print("=" * 60)
     
     example = {
@@ -38,7 +37,7 @@ def test_basic_example():
     }
     
     try:
-        result = trajectory_accuracy_judge(example)
+        result = metric.score(**example)
         
         print("INPUT:")
         print(f"Goal: {example['goal']}")
@@ -47,27 +46,27 @@ def test_basic_example():
         print()
         
         print("OUTPUT:")
-        print(f"Score: {result['score']}")
-        print(f"Explanation: {result['explanation']}")
+        print(f"Score: {result.value}")
+        print(f"Explanation: {result.reason}")
         print()
         
         # Validate result format
-        assert isinstance(result['score'], float), "Score should be a float"
-        assert 0.0 <= result['score'] <= 1.0, f"Score {result['score']} should be between 0.0 and 1.0"
-        assert isinstance(result['explanation'], str), "Explanation should be a string"
-        assert len(result['explanation']) > 0, "Explanation should not be empty"
+        assert isinstance(result.value, float), "Score should be a float"
+        assert 0.0 <= result.value <= 1.0, f"Score {result.value} should be between 0.0 and 1.0"
+        assert isinstance(result.reason, str), "Explanation should be a string"
+        assert len(result.reason) > 0, "Explanation should not be empty"
         
-        print("✅ Test passed successfully!")
+        print("✅ Example completed successfully!")
         return True
         
     except Exception as e:
-        print(f"❌ Test failed with error: {e}")
+        print(f"❌ Example failed with error: {e}")
         return False
 
 
-def test_edge_cases():
-    """Test the trajectory accuracy judge with edge cases."""
-    print("\nTesting edge cases...")
+def run_edge_cases_example(metric: TrajectoryAccuracy):
+    """Demonstrates the TrajectoryAccuracy metric with various edge cases."""
+    print("\nRunning edge cases...")
     print("=" * 60)
     
     test_cases = [
@@ -82,6 +81,7 @@ def test_edge_cases():
         {
             "name": "Missing goal",
             "example": {
+                "goal": "",
                 "trajectory": [
                     {
                         "thought": "I need to do something",
@@ -99,7 +99,6 @@ def test_edge_cases():
                 "trajectory": [
                     {
                         "thought": "I need to search",
-                        # Missing action and observation
                     }
                 ],
                 "final_result": "Search completed"
@@ -107,32 +106,32 @@ def test_edge_cases():
         }
     ]
     
-    passed_tests = 0
-    for test_case in test_cases:
-        print(f"\nTesting: {test_case['name']}")
+    passed_count = 0
+    for case in test_cases:
+        print(f"\nRunning case: {case['name']}")
         try:
-            result = trajectory_accuracy_judge(test_case['example'])
-            print(f"  Score: {result['score']}")
-            print(f"  Explanation: {result['explanation'][:100]}...")
+            result = metric.score(**case['example'])
+            print(f"  Score: {result.value}")
+            print(f"  Explanation: {result.reason[:100]}...")
             
             # Basic validation
-            assert isinstance(result['score'], float)
-            assert 0.0 <= result['score'] <= 1.0
-            assert isinstance(result['explanation'], str)
+            assert isinstance(result.value, float)
+            assert 0.0 <= result.value <= 1.0
+            assert isinstance(result.reason, str)
             
             print("  ✅ Passed")
-            passed_tests += 1
+            passed_count += 1
             
         except Exception as e:
             print(f"  ❌ Failed: {e}")
     
-    print(f"\nEdge case tests: {passed_tests}/{len(test_cases)} passed")
-    return passed_tests == len(test_cases)
+    print(f"\nEdge case examples: {passed_count}/{len(test_cases)} completed")
+    return passed_count == len(test_cases)
 
 
-def test_complex_trajectory():
-    """Test with a more complex multi-step trajectory."""
-    print("\nTesting complex trajectory...")
+def run_complex_trajectory_example(metric: TrajectoryAccuracy):
+    """Demonstrates the metric with a more complex multi-step trajectory."""
+    print("\nRunning complex trajectory example...")
     print("=" * 60)
     
     example = {
@@ -168,49 +167,52 @@ def test_complex_trajectory():
     }
     
     try:
-        result = trajectory_accuracy_judge(example)
+        result = metric.score(**example)
         
-        print("COMPLEX TRAJECTORY TEST:")
+        print("COMPLEX TRAJECTORY EXAMPLE:")
         print(f"Goal: {example['goal']}")
         print(f"Steps: {len(example['trajectory'])}")
-        print(f"Score: {result['score']}")
-        print(f"Explanation: {result['explanation']}")
+        print(f"Score: {result.value}")
+        print(f"Explanation: {result.reason}")
         
-        assert isinstance(result['score'], float)
-        assert 0.0 <= result['score'] <= 1.0
-        assert isinstance(result['explanation'], str)
+        assert isinstance(result.value, float)
+        assert 0.0 <= result.value <= 1.0
+        assert isinstance(result.reason, str)
         
-        print("✅ Complex trajectory test passed!")
+        print("✅ Complex trajectory example completed!")
         return True
         
     except Exception as e:
-        print(f"❌ Complex trajectory test failed: {e}")
+        print(f"❌ Complex trajectory example failed: {e}")
         return False
 
 
 if __name__ == "__main__":
-    print("Trajectory Accuracy Judge Test Suite")
+    print("Trajectory Accuracy Metric Example Suite")
     print("=" * 60)
     
-    # Run all tests
-    tests_passed = 0
-    total_tests = 3
+    # Instantiate the metric
+    trajectory_metric = TrajectoryAccuracy()
     
-    if test_basic_example():
-        tests_passed += 1
+    # Run all examples
+    success_count = 0
+    total_examples = 3
     
-    if test_edge_cases():
-        tests_passed += 1
+    if run_basic_example(trajectory_metric):
+        success_count += 1
+    
+    if run_edge_cases_example(trajectory_metric):
+        success_count += 1
         
-    if test_complex_trajectory():
-        tests_passed += 1
+    if run_complex_trajectory_example(trajectory_metric):
+        success_count += 1
     
     print("\n" + "=" * 60)
-    print(f"FINAL RESULTS: {tests_passed}/{total_tests} test suites passed")
+    print(f"FINAL RESULTS: {success_count}/{total_examples} example suites ran")
     
-    if tests_passed == total_tests:
-        print("🎉 All tests passed successfully!")
+    if success_count == total_examples:
+        print("🎉 All examples ran successfully!")
         sys.exit(0)
     else:
-        print("⚠️  Some tests failed. Please check the output above.")
+        print("⚠️  Some examples failed. Please check the output above.")
         sys.exit(1) 
