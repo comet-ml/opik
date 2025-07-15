@@ -37,6 +37,7 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import TagsPage from "@/components/pages/TagsPage/TagsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -338,6 +339,16 @@ const playgroundRoute = createRoute({
   component: PlaygroundPage,
 });
 
+// ----------- tags
+const tagsRoute = createRoute({
+  path: "/tags",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Tags",
+  },
+  component: TagsPage,
+});
+
 // --------- configuration
 
 const configurationRoute = createRoute({
@@ -401,6 +412,7 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
+      tagsRoute,
       redirectRoute.addChildren([
         homeRedirectRoute,
         redirectProjectsRoute,

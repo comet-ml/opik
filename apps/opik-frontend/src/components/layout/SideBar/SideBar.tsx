@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  Tag,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -165,6 +166,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Bolt,
         label: "Configuration",
+      },
+      {
+        id: "tags",
+        path: "/$workspaceName/tags",
+        type: MENU_ITEM_TYPE.router,
+        icon: Tag,
+        label: "Tags",
       },
     ],
   },
