@@ -24,7 +24,7 @@ on:
         paths:
           - 'sdks/python/**'
 env:
-  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: True  # unlike other workflows, here we need it for tests
   OPIK_SENTRY_ENABLE: False
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}

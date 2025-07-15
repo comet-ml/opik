@@ -52,17 +52,17 @@ def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     if "current_span_data" in params.get("metadata", {}).get("opik", {}):
         return params
 
-    return {
-        **params,
-        "metadata": {
-            **params.get("metadata", {}),
-            "opik": {
-                **params.get("metadata", {}).get("opik", {}),
-                "current_span_data": current_span,
-                "project_name": current_span.project_name,
-            },
+    metadata = {
+        **params.get("metadata", {}),
+        "opik": {
+            **params.get("metadata", {}).get("opik", {}),
+            "current_span_data": current_span,
         },
     }
+    if current_span.project_name is not None:
+        metadata["opik"]["project_name"] = current_span.project_name
+
+    return {**params, "metadata": metadata}
 
 
 def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
