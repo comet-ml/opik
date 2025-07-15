@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import sys
 import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
@@ -313,6 +314,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
         show_misconfiguration_message : A flag indicating whether to display detailed error messages if the configuration
             is determined to be misconfigured. Defaults to False.
         """
+        if "pytest" in sys.modules:
+            return False
 
         is_misconfigured_flag, error_message = (
             self.get_misconfiguration_detection_results()

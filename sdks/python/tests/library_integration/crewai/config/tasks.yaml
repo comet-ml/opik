@@ -1,7 +1,7 @@
 # src/latest_ai_development/config/tasks.yaml
 research_task:
   description: >
-    Conduct a thorough research about {topic}
+    Conduct a research about {topic}
     Make sure you find any interesting and relevant information given
     the current year is 2024.
   expected_output: >
