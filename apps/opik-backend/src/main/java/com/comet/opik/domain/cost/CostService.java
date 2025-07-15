@@ -90,11 +90,14 @@ public class CostService {
 
                 BigDecimal inputTextPrice = Optional.ofNullable(modelCost.inputTextCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal inputImagePrice = Optional.ofNullable(modelCost.inputImageCostPerImage()).map(BigDecimal::new)
+                BigDecimal inputImagePrice = Optional.ofNullable(modelCost.inputImageCostPerImage())
+                        .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal inputAudioPrice = Optional.ofNullable(modelCost.inputAudioCostPerSecond()).map(BigDecimal::new)
+                BigDecimal inputAudioPrice = Optional.ofNullable(modelCost.inputAudioCostPerSecond())
+                        .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal inputVideoPrice = Optional.ofNullable(modelCost.inputVideoCostPerSecond()).map(BigDecimal::new)
+                BigDecimal inputVideoPrice = Optional.ofNullable(modelCost.inputVideoCostPerSecond())
+                        .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
                 BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
@@ -124,14 +127,16 @@ public class CostService {
                         cost = cost.add(SpanCostCalculator.videoCost(mp, usage));
                     }
                     // Cache cost
-                    if (mp.cacheCreationInputTokenPrice().compareTo(BigDecimal.ZERO) > 0 || mp.cacheReadInputTokenPrice().compareTo(BigDecimal.ZERO) > 0) {
+                    if (mp.cacheCreationInputTokenPrice().compareTo(BigDecimal.ZERO) > 0
+                            || mp.cacheReadInputTokenPrice().compareTo(BigDecimal.ZERO) > 0) {
                         cost = cost.add(SpanCostCalculator.cacheCost(mp, usage));
                     }
                     return cost;
                 };
 
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator;
-                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0 || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
                     calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, genericMultimodalCalculator);
                 } else {
                     calculator = genericMultimodalCalculator;

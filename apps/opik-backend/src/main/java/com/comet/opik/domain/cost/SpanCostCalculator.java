@@ -91,7 +91,9 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal cacheCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return modelPrice.cacheCreationInputTokenPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("cache_creation_input_tokens", 0)))
-            .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("cache_read_input_tokens", 0))));
+        return modelPrice.cacheCreationInputTokenPrice()
+                .multiply(BigDecimal.valueOf(usage.getOrDefault("cache_creation_input_tokens", 0)))
+                .add(modelPrice.cacheReadInputTokenPrice()
+                        .multiply(BigDecimal.valueOf(usage.getOrDefault("cache_read_input_tokens", 0))));
     }
 }
