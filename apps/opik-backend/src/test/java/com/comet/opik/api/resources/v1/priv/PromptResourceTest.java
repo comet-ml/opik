@@ -67,6 +67,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -1549,7 +1550,91 @@ class PromptResourceTest {
                                     .operator(Operator.NOT_CONTAINS)
                                     .value(prompts.getFirst().tags().iterator().next())
                                     .build(),
-                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())));
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(prompts.getFirst().name().substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.ENDS_WITH)
+                                    .value(prompts.getFirst().name().substring(3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().createdAt().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()));
         }
     }
 
