@@ -43,7 +43,7 @@ class TestDatasetsCrud:
 
         # Create dataset from traces
         logger.info(f"Creating dataset {dataset_name} from traces")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         try:
             traces_page.add_all_traces_to_new_dataset(dataset_name=dataset_name)
             logger.info("Successfully created dataset from traces")

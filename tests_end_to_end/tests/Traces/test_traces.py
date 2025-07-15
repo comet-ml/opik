@@ -69,7 +69,7 @@ class TestTracesCrud:
         _ = create_traces
 
         # Wait for traces to appear on UI
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         traces_page.wait_for_traces_to_be_visible()
 
         # Verify traces in UI
@@ -184,7 +184,7 @@ class TestTracesCrud:
             projects_page.go_to_page()
             projects_page.click_project(project_name)
 
-            traces_page = TracesPage(page)
+            traces_page = TracesPage(page, traces_created=True)
             for trace in traces_to_delete:
                 expect(
                     traces_page.page.get_by_role("row", name=trace["name"])
@@ -286,7 +286,7 @@ class TestTracesCrud:
 
         # Delete traces via UI
         logger.info("Deleting traces via UI")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
 
         # Wait for traces to appear on UI
         traces_page.wait_for_traces_to_be_visible()

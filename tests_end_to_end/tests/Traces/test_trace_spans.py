@@ -53,7 +53,7 @@ class TestTraceSpans:
 
         # Get all traces
         logger.info("Getting trace names")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         try:
             trace_names = traces_page.get_all_trace_names_on_page()
             logger.info(f"Found {len(trace_names)} traces")
@@ -149,7 +149,7 @@ class TestTraceSpans:
 
         # Get all traces
         logger.info("Getting trace names")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         try:
             trace_names = traces_page.get_all_trace_names_on_page()
             logger.info(f"Found {len(trace_names)} traces")
