@@ -8,17 +8,17 @@ from opik.evaluation.models.litellm import litellm_chat_model
 from . import constants
 
 
-def test_litellm_chat_model__call_made_inside_another_span_with_user_defined_project_name__llm_span_assigned_to_user_defined_project(
+def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_in_env__llm_span_assigned_to_configured_project(
     ensure_openai_configured,
     opik_client: Opik,
+    configure_e2e_tests_env_unique_project_name: str,
 ):
     tested = litellm_chat_model.LiteLLMChatModel(
         model_name=constants.MODEL_NAME,
     )
     ID_STORAGE = {}
-    USER_DEFINED_PROJECT_NAME = "some-project-name"
 
-    @opik.track(project_name=USER_DEFINED_PROJECT_NAME)
+    @opik.track
     def f(input):
         ID_STORAGE["f_span_id"] = opik_context.get_current_span_data().id
         ID_STORAGE["f_trace_id"] = opik_context.get_current_trace_data().id
@@ -28,7 +28,7 @@ def test_litellm_chat_model__call_made_inside_another_span_with_user_defined_pro
 
     def wait_condition_checker():
         spans = opik_client.search_spans(
-            project_name=USER_DEFINED_PROJECT_NAME,
+            project_name=configure_e2e_tests_env_unique_project_name,
             trace_id=ID_STORAGE["f_trace_id"],
             filter_string=f'name contains "{constants.MODEL_NAME}"',
         )
@@ -40,11 +40,11 @@ def test_litellm_chat_model__call_made_inside_another_span_with_user_defined_pro
         max_try_seconds=30,
     ):
         raise AssertionError(
-            f"Failed to get traces from project '{USER_DEFINED_PROJECT_NAME}'"
+            f"Failed to get spans from project '{configure_e2e_tests_env_unique_project_name}'"
         )
 
     llm_spans = opik_client.search_spans(
-        project_name=USER_DEFINED_PROJECT_NAME,
+        project_name=configure_e2e_tests_env_unique_project_name,
         trace_id=ID_STORAGE["f_trace_id"],
         filter_string=f'name contains "{constants.MODEL_NAME}"',
     )
@@ -65,7 +65,7 @@ def test_litellm_chat_model__call_made_inside_another_span_with_user_defined_pro
         ],
         output=ANY_DICT,
         tags=["openai"],
-        project_name=USER_DEFINED_PROJECT_NAME,
+        project_name=configure_e2e_tests_env_unique_project_name,
         error_info=None,
         type="llm",
     )
