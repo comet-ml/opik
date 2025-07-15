@@ -107,6 +107,10 @@ export const useCodeMirrorSearch = (
 
     if (!searchValue?.trim()) {
       closeSearchPanel(view);
+      view.dispatch({
+        selection: { anchor: 0, head: 0 },
+        scrollIntoView: false,
+      });
       setSearchState({
         totalMatches: 0,
         currentMatchIndex: 0,
