@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
@@ -159,6 +160,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       ruleName: defaultRule?.name || "",
       projectId: defaultRule?.project_id || projectId || "",
       samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
+      enabled: defaultRule?.enabled ?? true,
       uiType: formUIRuleType,
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
@@ -274,6 +276,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       name: formData.ruleName,
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
+      enabled: formData.enabled,
       type: ruleType,
     };
 
@@ -461,6 +464,29 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       label="Sampling rate"
                       tooltip="Percentage of traces to evaluate"
                     />
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <Label className="text-base font-semibold">
+                          Enabled
+                        </Label>
+                        <Description className="text-sm text-muted-foreground">
+                          Enable or disable this rule. Disabled rules will not process any traces.
+                        </Description>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
                   )}
                 />
 

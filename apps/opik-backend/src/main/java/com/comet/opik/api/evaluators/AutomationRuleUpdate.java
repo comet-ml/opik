@@ -21,6 +21,8 @@ public sealed interface AutomationRuleUpdate permits AutomationRuleEvaluatorUpda
     AutomationRule.AutomationRuleAction getAction();
 
     float getSamplingRate();
+    
+    boolean isEnabled();
 
     UUID getProjectId();
 }

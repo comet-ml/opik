@@ -43,6 +43,8 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
 
     private final float samplingRate;
 
+    private final boolean enabled;
+
     @JsonIgnore
     @NotNull private final T code;
 

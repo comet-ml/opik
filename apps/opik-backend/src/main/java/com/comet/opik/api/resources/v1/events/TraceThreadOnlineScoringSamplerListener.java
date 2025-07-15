@@ -126,22 +126,38 @@ public class TraceThreadOnlineScoringSamplerListener {
 
                     return rules.stream()
                             .map(evaluator -> {
-                                boolean shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
+                                boolean shouldBeSampled = false;
+                                
+                                // Check if rule is enabled first
+                                if (!evaluator.isEnabled()) {
+                                    try (var logContext = wrapWithMdc(Map.of(
+                                            UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                                            UserLog.WORKSPACE_ID, workspaceId,
+                                            UserLog.RULE_ID, evaluator.getId().toString(),
+                                            UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
 
-                                try (var logContext = wrapWithMdc(Map.of(
-                                        UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                                        UserLog.WORKSPACE_ID, workspaceId,
-                                        UserLog.RULE_ID, evaluator.getId().toString(),
-                                        UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
+                                        userFacingLogger.info(
+                                                "The threadModelId '{}' was skipped for rule: '{}' as the rule is disabled",
+                                                traceThreadModelId, evaluator.getName());
+                                    }
+                                } else {
+                                    shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
 
-                                    if (!shouldBeSampled) {
-                                        userFacingLogger.info(
-                                                "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
-                                                traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
-                                    } else {
-                                        userFacingLogger.info(
-                                                "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
-                                                traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
+                                    try (var logContext = wrapWithMdc(Map.of(
+                                            UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                                            UserLog.WORKSPACE_ID, workspaceId,
+                                            UserLog.RULE_ID, evaluator.getId().toString(),
+                                            UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
+
+                                        if (!shouldBeSampled) {
+                                            userFacingLogger.info(
+                                                    "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
+                                                    traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
+                                        } else {
+                                            userFacingLogger.info(
+                                                    "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
+                                                    traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
+                                        }
                                     }
                                 }
 

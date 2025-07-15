@@ -29,6 +29,8 @@ const ProjectIdSchema = z
 
 const SamplingRateSchema = z.number();
 
+const EnabledSchema = z.boolean();
+
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
 
 const LLMJudgeBaseSchema = z.object({
@@ -156,6 +158,7 @@ export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
   projectId: ProjectIdSchema,
   samplingRate: SamplingRateSchema,
+  enabled: EnabledSchema,
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
 });

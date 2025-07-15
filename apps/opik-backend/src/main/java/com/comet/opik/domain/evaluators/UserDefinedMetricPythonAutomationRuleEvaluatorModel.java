@@ -17,6 +17,7 @@ public record UserDefinedMetricPythonAutomationRuleEvaluatorModel(
         String projectName,
         String name,
         Float samplingRate,
+        Boolean enabled,
         @Json UserDefinedMetricPythonCode code,
         Instant createdAt,
         String createdBy,
