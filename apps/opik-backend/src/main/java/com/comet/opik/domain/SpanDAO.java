@@ -279,8 +279,8 @@ class SpanDAO {
 
     /***
      * Handles the update of a span when the span already exists in the database.
+     * Uses optimistic locking by checking last_updated_at to prevent lost updates.
      ***/
-    //TODO: refactor to implement proper conflict resolution
     private static final String UPDATE = """
             INSERT INTO spans (
             	id,
@@ -304,7 +304,8 @@ class SpanDAO {
             	error_info,
             	created_at,
             	created_by,
-            	last_updated_by
+            	last_updated_by,
+            	last_updated_at
             ) SELECT
             	id,
             	project_id,
@@ -327,10 +328,12 @@ class SpanDAO {
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                now64(9) as last_updated_at
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            <if(last_updated_at)> AND last_updated_at = parseDateTime64BestEffort(:last_updated_at, 9) <endif>
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
             ;

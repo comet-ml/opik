@@ -28,6 +28,9 @@ public record RedisUrl(String scheme, String host, int port, int database) {
 
     private static int getDatabase(String path) {
         try {
+            if (path.length() <= 1) {
+                throw new IllegalArgumentException("Invalid database path in Redis URL: " + path);
+            }
             return Integer.parseInt(path.substring(1));
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Invalid database index in Redis URL: " + path);

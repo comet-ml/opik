@@ -46,6 +46,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
+    private final Object stateLock = new Object();
 
     protected final Meter meter;
     protected final LongHistogram messageProcessingTime;
@@ -88,27 +89,31 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     @Override
     public void start() {
-        if (stream != null) {
-            log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
-            return;
+        synchronized (stateLock) {
+            if (stream != null) {
+                log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
+                return;
+            }
+            // This particular subscriber implementation only consumes the respective Redis stream
+            stream = initStream(config, redisson);
+            log.info("{} consumer started successfully", getSubscriberName());
         }
-        // This particular subscriber implementation only consumes the respective Redis stream
-        stream = initStream(config, redisson);
-        log.info("{} consumer started successfully", getSubscriberName());
     }
 
     @Override
     public void stop() {
         log.info("Shutting down '{}' and closing stream", getSubscriberName());
 
-        if (stream == null) {
-            return;
-        }
+        synchronized (stateLock) {
+            if (stream == null) {
+                return;
+            }
 
-        if (streamSubscription == null || streamSubscription.isDisposed()) {
-            log.info("No active subscription, deleting Redis stream");
-            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
-            return;
+            if (streamSubscription == null || streamSubscription.isDisposed()) {
+                log.info("No active subscription, deleting Redis stream");
+                stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+                return;
+            }
         }
 
         log.info("Waiting for last messages to be processed before shutdown...");
@@ -159,7 +164,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     private void setupStreamListener(RStreamReactive<String, M> stream) {
-        this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
+        synchronized (stateLock) {
+            this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
                 .onBackpressureDrop()
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
                 .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
@@ -169,6 +175,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorContinue(
                         (throwable, object) -> log.error("Error processing message from Redis stream", throwable))
                 .subscribe();
+        }
     }
 
     private Mono<Void> processReceivedMessages(
