@@ -17,8 +17,8 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentType;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
@@ -31,6 +31,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.DatasetField;
+import com.comet.opik.api.filter.DatasetFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.FieldType;
@@ -81,6 +83,7 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -132,6 +135,7 @@ import java.util.Spliterators;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -139,6 +143,8 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -1583,7 +1589,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1628,7 +1634,8 @@ class DatasetsResourceTest {
 
     }
 
-    private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+    private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+            String workspaceName) {
         try (var actualResponse = client.target(getTracesPath())
                 .path("feedback-scores")
                 .request()
@@ -1788,8 +1795,33 @@ class DatasetsResourceTest {
                 return null;
             });
 
-            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection,
-                    SortableFields.LAST_CREATED_EXPERIMENT_AT);
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+                    SortableFields.LAST_CREATED_EXPERIMENT_AT, null);
+        }
+
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all datasets, then return datasets sorted by tags")
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByTags(
+                Direction requestDirection, Direction expectedDirection) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+
+            expected.forEach(dataset -> {
+                createAndAssert(dataset, apiKey, workspaceName);
+            });
+
+            expected = expected.stream()
+                    .sorted(Comparator.comparing(d -> d.tags().toString().toLowerCase()))
+                    .toList();
+
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+                    SortableFields.TAGS, null);
         }
 
         @ParameterizedTest
@@ -1819,8 +1851,8 @@ class DatasetsResourceTest {
                 return null;
             });
 
-            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection,
-                    SortableFields.LAST_CREATED_OPTIMIZATION_AT);
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+                    SortableFields.LAST_CREATED_OPTIMIZATION_AT, null);
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
@@ -1830,17 +1862,26 @@ class DatasetsResourceTest {
                     Arguments.of(Named.of("descending", Direction.DESC), Direction.DESC));
         }
 
-        private void requestAndAssertDatasetsSorting(String workspaceName, String apiKey, List<Dataset> allDatasets,
-                Direction request, Direction expected, String sortingField) {
-            var sorting = List.of(SortingField.builder()
-                    .field(sortingField)
-                    .direction(request)
-                    .build());
+        private void requestAndAssertDatasetsPage(String workspaceName, String apiKey, List<Dataset> allDatasets,
+                Direction request, Direction expected, String sortingField, List<DatasetFilter> filters) {
 
-            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("size", allDatasets.size())
-                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
-                            StandardCharsets.UTF_8))
+            WebTarget target = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", allDatasets.size());
+
+            if (sortingField != null) {
+                var sorting = List.of(SortingField.builder()
+                        .field(sortingField)
+                        .direction(request)
+                        .build());
+                target = target.queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8));
+            }
+
+            if (CollectionUtils.isNotEmpty(filters)) {
+                target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+            }
+
+            var actualResponse = target
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -1860,6 +1901,48 @@ class DatasetsResourceTest {
             assertThat(actualEntity.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                     .containsExactlyElementsOf(allDatasets);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getValidFilters")
+        @DisplayName("when fetching all datasets, then return datasets filtered datasets")
+        void whenFilterDatasets__thenReturnDatasetsFiltered(Function<List<Dataset>, DatasetFilter> getFilter,
+                Function<List<Dataset>, List<Dataset>> getExpectedDatasets) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+
+            datasets.forEach(dataset -> {
+                createAndAssert(dataset, apiKey, workspaceName);
+            });
+
+            List<Dataset> expectedDatasets = getExpectedDatasets.apply(datasets).reversed();
+            DatasetFilter filter = getFilter.apply(datasets);
+
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expectedDatasets, null, null,
+                    null, List.of(filter));
+        }
+
+        private Stream<Arguments> getValidFilters() {
+            return Stream.of(
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TAGS)
+                                    .operator(Operator.NOT_CONTAINS)
+                                    .value(datasets.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())));
         }
 
         @Test
@@ -2081,7 +2164,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = scores.stream()
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -2552,6 +2635,7 @@ class DatasetsResourceTest {
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
+                    .tags(datasetUpdate.tags())
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
@@ -2612,6 +2696,7 @@ class DatasetsResourceTest {
                     .toBuilder()
                     .description(null)
                     .visibility(null)
+                    .tags(null)
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -3878,7 +3963,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -4441,7 +4526,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(items, traces, scores, experimentId, experimentItems);
@@ -4524,7 +4609,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
@@ -4698,7 +4783,8 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+        private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+                String workspaceName) {
             try (var actualResponse = client.target(getTracesPath())
                     .path("feedback-scores")
                     .request()
@@ -4742,12 +4828,12 @@ class DatasetsResourceTest {
                     .map(score -> score.toBuilder()
                             .name(factory.manufacturePojo(String.class))
                             .build())
-                    .toList();
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+                    .collect(toList());
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
-                    Stream.of((FeedbackScoreBatchItem) null)).collect(toList()),
+                    Stream.of((FeedbackScoreBatchItem) null)).toList(),
                     experimentId, experimentItems);
 
             createAndAssert(

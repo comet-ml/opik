@@ -43,6 +43,8 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { capitalizeFirstLetter } from "@/lib/utils";
+import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -77,6 +79,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
+  {
+    id: "scope",
+    label: "Scope",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -89,6 +97,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
+  "scope",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";

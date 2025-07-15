@@ -1,11 +1,18 @@
-from typing import Any, Dict, List, Optional, Union
+import contextlib
+from typing import Any, Dict, List, Optional, Union, Iterator
 
 from opik import llm_usage
-from opik.api_objects import span, trace
+from opik.api_objects import span, trace, opik_client
 from opik.api_objects.attachment import Attachment
-from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
+from opik.types import (
+    DistributedTraceHeadersDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    ErrorInfoDict,
+)
 
 from . import context_storage, exceptions
+from .decorator import error_info_collector
 
 
 def get_current_span_data() -> Optional[span.SpanData]:
@@ -68,8 +75,8 @@ def update_current_span(
         output: The output data of the span.
         metadata: The metadata of the span.
         tags: The tags of the span.
-        usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-            the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
+        usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
+            the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
             If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
             format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
         feedback_scores: The feedback scores of the span.
@@ -141,10 +148,65 @@ def update_current_trace(
     current_trace_data.update(**new_params)
 
 
+@contextlib.contextmanager
+def trace_context(
+    trace_data: trace.TraceData,
+    client: opik_client.Opik,
+) -> Iterator[None]:
+    """
+    Provides a context manager to handle trace data within an execution context.
+
+    This function sets up trace data for the current context, ensuring it is
+    properly cleaned up and processed during the lifecycle of the context. It also
+    handles exceptions by collecting error information and associating it with
+    the trace data before raising the exception further. At the end of the context,
+    it finalizes the trace and logs it using the provided client.
+
+    Args:
+        trace_data: An instance of trace.TraceData containing information
+            about the current trace context, such as start time, end time, and
+            any relevant metadata for tracking execution.
+        client: An object of type opik_client.Opik used to report the trace
+            data, typically communicating with an external tracing or monitoring
+            system.
+
+    Yields:
+        None: The context manager yields control back to the caller, allowing
+            code execution within the defined trace context.
+
+    Raises:
+        Exception: The function raises any exceptions encountered within the
+            context after collecting error information and associating it with the
+            trace data.
+    """
+    if client.config.log_start_trace_span:
+        client.trace(**trace_data.as_start_parameters)
+
+    error_info: Optional[ErrorInfoDict] = None
+    try:
+        context_storage.set_trace_data(trace_data)
+        yield
+    except Exception as exception:
+        error_info = error_info_collector.collect(exception)
+        raise
+    finally:
+        trace_data = context_storage.pop_trace_data()  # type: ignore
+
+        assert trace_data is not None
+
+        if error_info is not None:
+            trace_data.error_info = error_info
+
+        trace_data.init_end_time()
+
+        client.trace(**trace_data.as_parameters)
+
+
 __all__ = [
     "get_current_span_data",
     "get_current_trace_data",
     "update_current_span",
     "update_current_trace",
     "get_distributed_trace_headers",
+    "trace_context",
 ]

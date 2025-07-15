@@ -63,6 +63,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
                   AND id BETWEEN :id_prior_start AND :id_end
+                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
@@ -77,7 +78,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 'cost' AS name
             FROM spans final
             WHERE workspace_id = :workspace_id
-                <if(project_ids)> AND project_id IN :project_ids <endif>;
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                AND id BETWEEN :id_prior_start AND :id_end
+                AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
             """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
@@ -94,6 +97,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
                       AND id BETWEEN :id_start AND :id_end
+                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
@@ -127,6 +131,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND id BETWEEN :id_start AND :id_end
+                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND entity_type = 'trace'
@@ -155,6 +160,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
+                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
                 WITH FILL
@@ -178,6 +184,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
+                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY bucket
                 ORDER BY bucket
                 WITH FILL
@@ -199,11 +206,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
             @NonNull WorkspaceMetricsSummaryRequest request) {
-        return getFeedbackScoresSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
+        return getMetricsSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request) {
+    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(@NonNull WorkspaceMetricRequest request) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
+                "For metrics request, name must be provided");
         var query = CollectionUtils
                 .isEmpty(request.projectIds())
                         ? GET_FEEDBACK_SCORES_DAILY
@@ -212,13 +221,16 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     @Override
-    public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request) {
-        return getFeedbackScoresSummary(request, GET_COSTS_SUMMARY)
+    public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(
+            @NonNull WorkspaceMetricsSummaryRequest request) {
+        return getMetricsSummary(request, GET_COSTS_SUMMARY)
                 .map(List::getFirst);
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request) {
+    public Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(@NonNull WorkspaceMetricRequest request) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
+                "For metrics request, name must be provided");
         var query = CollectionUtils
                 .isEmpty(request.projectIds())
                         ? GET_COSTS_DAILY
@@ -228,8 +240,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private Mono<List<WorkspaceMetricResponse.Result>> getMetricsDaily(WorkspaceMetricRequest request,
             String query) {
-        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
-                "For metrics request, name must be provided");
         return template.nonTransaction(connection -> getMetricsDaily(connection, request, query)
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
@@ -253,10 +263,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
-    private Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
+    private Mono<List<WorkspaceMetricsSummaryResponse.Result>> getMetricsSummary(
             WorkspaceMetricsSummaryRequest request,
             String query) {
-        return template.nonTransaction(connection -> getFeedbackScoresSummary(connection, request, query)
+        return template.nonTransaction(connection -> getMetricsSummary(connection, request, query)
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceMetricsSummaryResponse.Result.builder()
                         .name(row.get("name", String.class))
                         .current(filterNan(row.get("current", Double.class)))
@@ -266,7 +276,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 .collectList());
     }
 
-    private Mono<? extends Result> getFeedbackScoresSummary(Connection connection,
+    private Mono<? extends Result> getMetricsSummary(Connection connection,
             WorkspaceMetricsSummaryRequest request,
             String query) {
         ST template = new ST(query);
@@ -276,6 +286,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         }
 
         var statement = connection.createStatement(template.render())
+                .bind("timestamp_prior_start", getPriorStart(request.intervalStart(), request.intervalEnd()).toString())
+                .bind("timestamp_end", request.intervalEnd().toString())
                 .bind("id_start",
                         idGenerator.getTimeOrderedEpoch(request.intervalStart().toEpochMilli()))
                 .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()))

@@ -12,8 +12,8 @@ import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
 import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
 import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
+import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
 import { createEmptyFilter } from "@/lib/filters";
-import GuardrailsRow from "./rows/GuardrailsRow";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -56,8 +56,10 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
-      case COLUMN_TYPE.guardrails:
-        return <GuardrailsRow filter={filter} onChange={onChange} />;
+      case COLUMN_TYPE.category:
+        return (
+          <CategoryRow filter={filter} onChange={onChange} config={config} />
+        );
       case "":
       default:
         return <DefaultRow filter={filter} />;

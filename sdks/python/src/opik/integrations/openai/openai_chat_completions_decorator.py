@@ -12,6 +12,7 @@ from typing import (
 )
 
 import openai
+import openai.lib.streaming.chat
 from openai import _types as _openai_types
 from openai.types.chat import chat_completion, chat_completion_chunk
 from typing_extensions import override
@@ -164,6 +165,28 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             return stream_patchers.patch_async_stream(
                 stream=output,
+                span_to_end=span_to_end,
+                trace_to_end=trace_to_end,
+                generations_aggregator=generations_aggregator,
+                finally_callback=self._after_call,
+            )
+
+        if isinstance(output, openai.lib.streaming.chat.ChatCompletionStreamManager):
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            return stream_patchers.patch_sync_chat_completion_stream_manager(
+                chat_completion_stream_manager=output,
+                span_to_end=span_to_end,
+                trace_to_end=trace_to_end,
+                generations_aggregator=generations_aggregator,
+                finally_callback=self._after_call,
+            )
+
+        if isinstance(
+            output, openai.lib.streaming.chat.AsyncChatCompletionStreamManager
+        ):
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            return stream_patchers.patch_async_chat_completion_stream_manager(
+                async_chat_completion_stream_manager=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,

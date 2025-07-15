@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.23.7 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -90,6 +90,7 @@ Call opik api on http://localhost:5173/api
 |-----|------|---------|-------------|
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
+| altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
 | basicAuth | bool | `false` |  |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
@@ -98,6 +99,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.command[1] | string | `"-cx"` |  |
 | clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.schedule | string | `"0 0 * * *"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.backup.serviceAccount.create | bool | `false` |  |
 | clickhouse.backup.serviceAccount.name | string | `""` |  |
@@ -110,6 +112,9 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.serviceAccount.annotations | object | `{}` |  |
+| clickhouse.serviceAccount.create | bool | `false` |  |
+| clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
@@ -163,13 +168,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
 | component.backend.service.ports[0].targetPort | int | `8080` |  |
-| component.backend.service.ports[1].name | string | `"backend"` |  |
+| component.backend.service.ports[1].name | string | `"swagger"` |  |
 | component.backend.service.ports[1].port | int | `3003` |  |
 | component.backend.service.ports[1].protocol | string | `"TCP"` |  |
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
-| component.backend.serviceAccount.enabled | bool | `true` |  |
 | component.backend.serviceAccount.name | string | `"opik-backend"` |  |
 | component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
@@ -202,7 +206,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.ports[0].targetPort | int | `5173` |  |
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
-| component.frontend.serviceAccount.enabled | bool | `true` |  |
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
@@ -256,7 +259,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
-| component.python-backend.serviceAccount.enabled | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
@@ -303,6 +305,9 @@ Call opik api on http://localhost:5173/api
 | redis.metrics.enabled | bool | `false` |  |
 | redis.ssl | bool | `false` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
+| serviceAccount.annotations | object | `{}` |  |
+| serviceAccount.create | bool | `false` |  |
+| serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |

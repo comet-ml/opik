@@ -31,6 +31,8 @@ public interface Field {
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
     String ERROR_INFO_QUERY_PARAM = "error_info";
     String STATUS_QUERY_PARAM = "status";
+    String TYPE_QUERY_PARAM = "type";
+    String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
 
     @JsonValue
     String getQueryParamField();

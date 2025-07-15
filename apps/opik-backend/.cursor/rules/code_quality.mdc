@@ -1,0 +1,16 @@
+---
+description: Code Quality guidelines
+globs:
+alwaysApply: true
+---
+- Code must follow style conventions and be well-documented
+- use design patterns where appropriate
+- Avoid code duplication; use utility classes or methods
+- Ensure code is modular and reusable
+- Use meaningful variable and method names
+- Keep methods short and focused on a single task
+- Use comments to explain complex logic or decisions
+- Use consistent naming conventions for classes, methods, and variables
+- Avoid hardcoding values; use constants or configuration files
+- changes must pass spotless checks
+- prefer using Map.of(), List.of(), Set.of() for creating immutable collections
