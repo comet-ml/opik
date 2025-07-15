@@ -38,12 +38,18 @@ public interface ProjectMetricsDAO {
     String NAME_THREADS = "threads";
     String NAME_COST = "cost";
     String NAME_GUARDRAILS_FAILED_COUNT = "failed";
-    String NAME_DURATION_P50 = "duration.p50";
-    String NAME_DURATION_P90 = "duration.p90";
-    String NAME_DURATION_P99 = "duration.p99";
-    String NAME_THREAD_DURATION_P50 = "thread_duration.p50";
-    String NAME_THREAD_DURATION_P90 = "thread_duration.p90";
-    String NAME_THREAD_DURATION_P99 = "thread_duration.p99";
+
+    String TRACE_DURATION_PREFIX = "duration";
+    String THREAD_DURATION_PREFIX = "thread_duration";
+    String P50 = "p50";
+    String P90 = "p90";
+    String P99 = "p99";
+    String NAME_TRACE_DURATION_P50 = String.join(".", TRACE_DURATION_PREFIX, P50);
+    String NAME_TRACE_DURATION_P90 = String.join(".", TRACE_DURATION_PREFIX, P90);
+    String NAME_TRACE_DURATION_P99 = String.join(".", TRACE_DURATION_PREFIX, P99);
+    String NAME_THREAD_DURATION_P50 = String.join(".", THREAD_DURATION_PREFIX, P50);
+    String NAME_THREAD_DURATION_P90 = String.join(".", THREAD_DURATION_PREFIX, P90);
+    String NAME_THREAD_DURATION_P99 = String.join(".", THREAD_DURATION_PREFIX, P99);
 
     @Builder
     record Entry(String name, Instant time, Number value) {
@@ -313,41 +319,24 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_DURATION, "traceDuration")
-                .flatMapMany(result -> result.map((row, metadata) -> mapDuration(row)))
+                .flatMapMany(result -> result
+                        .map((row, metadata) -> mapDuration(row, TRACE_DURATION_PREFIX)))
                 .reduce(Stream::concat)
                 .map(Stream::toList));
     }
 
-    private Stream<Entry> mapDuration(Row row) {
+    private Stream<Entry> mapDuration(Row row, String prefix) {
         return Optional.ofNullable(row.get("duration", List.class))
                 .map(durations -> Stream.of(
-                        Entry.builder().name(NAME_DURATION_P50)
+                        Entry.builder().name(String.join(".", prefix, P50))
                                 .time(row.get("bucket", Instant.class))
                                 .value(getP(durations, 0))
                                 .build(),
-                        Entry.builder().name(NAME_DURATION_P90)
+                        Entry.builder().name(String.join(".", prefix, P90))
                                 .time(row.get("bucket", Instant.class))
                                 .value(getP(durations, 1))
                                 .build(),
-                        Entry.builder().name(NAME_DURATION_P99)
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 2))
-                                .build()))
-                .orElse(Stream.empty());
-    }
-
-    private Stream<Entry> mapThreadDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", List.class))
-                .map(durations -> Stream.of(
-                        Entry.builder().name(NAME_THREAD_DURATION_P50)
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 0))
-                                .build(),
-                        Entry.builder().name(NAME_THREAD_DURATION_P90)
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 1))
-                                .build(),
-                        Entry.builder().name(NAME_THREAD_DURATION_P99)
+                        Entry.builder().name(String.join(".", prefix, P99))
                                 .time(row.get("bucket", Instant.class))
                                 .value(getP(durations, 2))
                                 .build()))
@@ -384,7 +373,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_THREAD_DURATION, "threadDuration")
-                .flatMapMany(result -> result.map((row, metadata) -> mapThreadDuration(row)))
+                .flatMapMany(result -> result
+                        .map((row, metadata) -> mapDuration(row, THREAD_DURATION_PREFIX)))
                 .reduce(Stream::concat)
                 .map(Stream::toList));
     }

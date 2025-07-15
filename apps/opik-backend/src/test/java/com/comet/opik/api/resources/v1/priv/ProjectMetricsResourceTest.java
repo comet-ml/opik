@@ -769,17 +769,17 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
 
             var durationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus3.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus1.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsCurrent.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(
                     projectId,
@@ -790,8 +790,8 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
-                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -810,9 +810,9 @@ class ProjectMetricsResourceTest {
 
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_DURATION_P50, null);
-                    put(ProjectMetricsDAO.NAME_DURATION_P90, null);
-                    put(ProjectMetricsDAO.NAME_DURATION_P99, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P90, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P99, null);
                 }
             };
 
@@ -825,8 +825,8 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
-                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     empty,
                     empty,
