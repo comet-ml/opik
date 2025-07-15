@@ -7,6 +7,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -81,6 +82,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull SortingFactoryPrompts sortingFactory;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -188,6 +190,7 @@ class PromptServiceImpl implements PromptService {
                     .size(content.size())
                     .content(content)
                     .total(total)
+                    .sortableBy(sortingFactory.getSortableFields())
                     .build();
         });
     }
