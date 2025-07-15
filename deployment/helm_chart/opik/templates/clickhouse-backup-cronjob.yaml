@@ -48,20 +48,20 @@ spec:
               value: {{ .Values.clickhouse.adminUser.password }}
             {{- end }}
             {{- if .Values.clickhouse.backup.secretName }}
-            - name: AWS_ACCESS_KEY_ID
+            - name: ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.clickhouse.backup.secretName }}
                   key: {{ .Values.clickhouse.backup.accessKey | default "access_key_id" }}
-            - name: AWS_SECRET_ACCESS_KEY
+            - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.clickhouse.backup.secretName }}
                   key: {{ .Values.clickhouse.backup.secretKey | default "access_key_secret" }}
             {{- else }}
-            - name: AWS_ACCESS_KEY_ID
+            - name: ACCESS_KEY
               value: ""
-            - name: AWS_SECRET_ACCESS_KEY
+            - name: SECRET_KEY
               value: ""
             {{- end }}
           {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.nodeSelector ) }}
