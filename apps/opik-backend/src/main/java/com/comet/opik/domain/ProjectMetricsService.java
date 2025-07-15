@@ -35,6 +35,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
             @NonNull ProjectService projectService) {
         projectMetricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount,
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
                 MetricType.COST, projectMetricsDAO::getCost,

@@ -35,6 +35,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
+    String NAME_THREADS = "threads";
     String NAME_COST = "cost";
     String NAME_GUARDRAILS_FAILED_COUNT = "failed";
     String NAME_DURATION_P50 = "duration.p50";
@@ -47,6 +48,7 @@ public interface ProjectMetricsDAO {
 
     Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
@@ -239,6 +241,33 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """;
 
+    private static final String GET_THREAD_COUNT = """
+            WITH thread_summary AS (
+                SELECT
+                    tt.id,
+                    min(t.start_time) as start_time
+                FROM trace_threads tt
+                JOIN traces t ON tt.thread_id = t.thread_id
+                    AND tt.project_id = t.project_id
+                    AND tt.workspace_id = t.workspace_id
+                WHERE tt.project_id = :project_id
+                AND tt.workspace_id = :workspace_id
+                AND tt.thread_id != ''
+                AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                GROUP BY tt.id
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(DISTINCT id), 0) as count
+            FROM thread_summary
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -279,6 +308,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_COUNT, "traceCount")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_THREAD_COUNT, "threadCount")
+                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREADS,
                         row -> row.get("count", Integer.class)))
                 .collectList());
     }

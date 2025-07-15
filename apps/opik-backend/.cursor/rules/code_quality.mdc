@@ -13,3 +13,4 @@ alwaysApply: true
 - Use consistent naming conventions for classes, methods, and variables
 - Avoid hardcoding values; use constants or configuration files
 - changes must pass spotless checks
+- prefer using Map.of(), List.of(), Set.of() for creating immutable collections
