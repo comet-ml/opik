@@ -9,7 +9,10 @@ import {
   VisitorNode,
 } from "./types";
 import { createSearchRegex } from "./utils";
-import { CURRENT_HIGHLIGHT_COLOR, HIGHLIGHT_COLOR } from "./constants";
+import {
+  SEARCH_CURRENT_HIGHLIGHT_COLOR,
+  SEARCH_HIGHLIGHT_COLOR,
+} from "../../constants";
 
 const createHighlightMarkup = (
   match: string,
@@ -18,8 +21,8 @@ const createHighlightMarkup = (
 ): string => {
   const isCurrentMatch = currentMatchIndex === matchIndex;
   const highlightClass = isCurrentMatch
-    ? CURRENT_HIGHLIGHT_COLOR
-    : HIGHLIGHT_COLOR;
+    ? SEARCH_CURRENT_HIGHLIGHT_COLOR
+    : SEARCH_HIGHLIGHT_COLOR;
 
   return `<mark class="${highlightClass}" data-match-index="${matchIndex}" data-current-match-index="${currentMatchIndex}">${match}</mark>`;
 };
@@ -122,8 +125,8 @@ export const highlightPlainText = (
     const currentIndex = matchIndex.value++;
     const isCurrentMatch = currentMatchIndex === currentIndex;
     const highlightClass = isCurrentMatch
-      ? CURRENT_HIGHLIGHT_COLOR
-      : HIGHLIGHT_COLOR;
+      ? SEARCH_CURRENT_HIGHLIGHT_COLOR
+      : SEARCH_HIGHLIGHT_COLOR;
 
     elements.push(
       React.createElement(

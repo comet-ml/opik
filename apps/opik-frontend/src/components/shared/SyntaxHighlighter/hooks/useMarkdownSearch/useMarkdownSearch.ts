@@ -56,7 +56,6 @@ export const useMarkdownSearch = ({
         currentMatchIndex,
       )(tree);
 
-      // Update total matches state after the search plugin runs
       setSearchState((prev) => ({
         ...prev,
         totalMatches: matchIndexRef.current.value,
@@ -82,7 +81,6 @@ export const useMarkdownSearch = ({
         currentMatchIndex,
       );
 
-      // Update total matches state after the plain text search
       setSearchState((prev) => ({
         ...prev,
         totalMatches: matchIndexRef.current.value,
