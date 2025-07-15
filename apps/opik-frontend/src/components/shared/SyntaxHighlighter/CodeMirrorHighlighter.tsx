@@ -16,6 +16,7 @@ export interface CodeMirrorHighlighterProps {
   codeOutput: CodeOutput;
   modeSelector: ReactNode;
   copyButton: ReactNode;
+  withSearch?: boolean;
 }
 
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
@@ -23,6 +24,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   searchValue,
   modeSelector,
   copyButton,
+  withSearch,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
   const [localSearchValue, setLocalSearchValue] = useState<string>("");
@@ -51,14 +53,16 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
       leftHeader={modeSelector}
       rightHeader={
         <>
-          <SearchHighlighter
-            searchValue={localSearchValue}
-            onSearch={setLocalSearchValue}
-            onPrev={findPrev}
-            onNext={findNext}
-            currentMatchIndex={currentMatchIndex}
-            totalMatches={totalMatches}
-          />
+          {withSearch && (
+            <SearchHighlighter
+              searchValue={localSearchValue}
+              onSearch={setLocalSearchValue}
+              onPrev={findPrev}
+              onNext={findNext}
+              currentMatchIndex={currentMatchIndex}
+              totalMatches={totalMatches}
+            />
+          )}
           {copyButton}
         </>
       }

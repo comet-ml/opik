@@ -15,6 +15,7 @@ export interface MarkdownHighlighterProps {
   codeOutput: CodeOutput;
   modeSelector: ReactNode;
   copyButton: ReactNode;
+  withSearch?: boolean;
 }
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
@@ -22,6 +23,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   searchValue,
   modeSelector,
   copyButton,
+  withSearch,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [localSearchValue, setLocalSearchValue] = useState<string>("");
@@ -64,14 +66,16 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       leftHeader={modeSelector}
       rightHeader={
         <>
-          <SearchHighlighter
-            searchValue={localSearchValue}
-            onSearch={setLocalSearchValue}
-            onPrev={findPrev}
-            onNext={findNext}
-            currentMatchIndex={currentMatchIndex}
-            totalMatches={totalMatches}
-          />
+          {withSearch && (
+            <SearchHighlighter
+              searchValue={localSearchValue}
+              onSearch={setLocalSearchValue}
+              onPrev={findPrev}
+              onNext={findNext}
+              currentMatchIndex={currentMatchIndex}
+              totalMatches={totalMatches}
+            />
+          )}
           {copyButton}
         </>
       }

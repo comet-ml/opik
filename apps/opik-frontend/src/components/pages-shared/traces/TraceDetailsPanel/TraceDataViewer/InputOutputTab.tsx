@@ -67,6 +67,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-trace-sidebar-input"
               search={search}
+              withSearch
             />
           )}
         </AccordionContent>
@@ -85,6 +86,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-trace-sidebar-output"
               search={search}
+              withSearch
             />
           )}
         </AccordionContent>
