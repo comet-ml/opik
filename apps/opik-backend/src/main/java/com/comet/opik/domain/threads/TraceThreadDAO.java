@@ -172,37 +172,62 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
-                INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
-                SELECT
-                    tt.workspace_id,
-                    tt.project_id,
-                    tt.thread_id,
-                    tt.id,
-                    tt.status,
-                    tt.created_by,
-                    :user_name,
-                    tt.created_at,
-                    now64(6),
-                    tt.tags,
-                    sd.sampling_per_rule,
-                    tt.scored_at
-                FROM trace_threads tt final
-                JOIN (
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
+            SELECT
+                new_tt.workspace_id,
+                new_tt.project_id,
+                new_tt.thread_id,
+                new_tt.id,
+                if(empty(tt.thread_id), new_tt.status, tt.status) AS status,
+                if(empty(tt.thread_id), new_tt.created_by, tt.created_by) AS created_by,
+                :user_name AS last_updated_by,
+                if(empty(tt.thread_id), new_tt.created_at, tt.created_at) AS created_at,
+                now64(6) AS last_updated_at,
+                if(empty(tt.thread_id), new_tt.tags, tt.tags) AS tags,
+                tt_new.sampling_per_rule AS sampling_per_rule,
+                if(empty(tt.thread_id), new_tt.scored_at, tt.scored_at) AS scored_at
+            FROM (
+                <items:{item |
                     SELECT
-                        thread_model_id,
-                        sampling_per_rule
-                    FROM (
-                        <items:{item |
-                            SELECT
-                                :thread_model_id<item.index> AS thread_model_id,
-                                mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
-                            <if(item.hasNext)>UNION ALL<endif>
-                        }>
-                    )
-                ) AS sd ON tt.id = sd.thread_model_id
+                        :workspace_id AS workspace_id,
+                        :project_id<item.index> AS project_id,
+                        :thread_id<item.index> AS thread_id,
+                        :thread_model_id<item.index> AS id,
+                        :status<item.index> AS status,
+                        :created_by<item.index> AS created_by,
+                        :user_name AS last_updated_by,
+                        :created_at<item.index> AS created_at,
+                        now64(6) AS last_updated_at,
+                        :tags<item.index> AS tags,
+                        mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
+                        :scored_at<item.index> AS scored_at
+                    <if(item.hasNext)>UNION ALL<endif>
+                }>
+            ) as new_tt
+            LEFT JOIN (
+                SELECT
+                    tt.workspace_id AS workspace_id,
+                    tt.project_id AS project_id,
+                    tt.thread_id AS thread_id,
+                    tt.id AS id,
+                    tt.status AS status,
+                    tt.created_by AS created_by,
+                    :user_name AS last_updated_by,
+                    tt.created_at AS created_at,
+                    now64(6) AS last_updated_at,
+                    tt.tags AS tags,
+                    sd.sampling_per_rule AS sampling_per_rule,
+                    tt.scored_at AS scored_at
+                FROM trace_threads tt final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN :ids
+            ) AS tt
+            ON new_tt.id = tt.id
+            AND new_tt.workspace_id = tt.workspace_id
+            AND new_tt.project_id = tt.project_id
+            AND new_tt.thread_id = tt.thread_id
+            ;
             """;
 
     private static final String UPDATE_THREAD_SCORED_AT = """
@@ -446,6 +471,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             int i = 0;
             for (TraceThreadSampling sampling : threadSamplingPerRules) {
                 UUID threadModelId = sampling.threadModelId();
+                TraceThreadModel traceThreadModel = sampling.traceThread();
+
                 UUID[] ruleIds = sampling.samplingPerRule().keySet()
                         .toArray(UUID[]::new);
 
@@ -456,6 +483,21 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("thread_model_id" + i, threadModelId);
                 statement.bind("rule_ids" + i, ruleIds);
                 statement.bind("sampling" + i, samplingValues);
+                statement.bind("project_id" + i, traceThreadModel.projectId());
+                statement.bind("thread_id", traceThreadModel.threadId());
+                statement.bind("status" + 1, traceThreadModel.status().getValue());
+                statement.bind("created_by" + i, traceThreadModel.createdBy());
+                statement.bind("created_at" + i, traceThreadModel.createdAt().toString());
+                statement.bind("tags" + i, traceThreadModel.tags() != null
+                        ? traceThreadModel.tags().toArray(String[]::new)
+                        : new String[]{});
+
+                if (traceThreadModel.scoredAt() != null) {
+                    statement.bind("scored_at" + i, traceThreadModel.scoredAt().toString());
+                } else {
+                    statement.bindNull("scored_at" + i, Instant.class);
+                }
+
                 i++;
             }
 
