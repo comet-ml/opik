@@ -286,7 +286,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     max(t.end_time) as thread_end_time,
                     if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
                                 AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000000.0),
+                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                             NULL) AS thread_duration
                 FROM trace_threads tt
                 JOIN traces t ON tt.thread_id = t.thread_id

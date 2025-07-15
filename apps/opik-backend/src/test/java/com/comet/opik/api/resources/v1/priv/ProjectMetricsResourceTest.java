@@ -1134,9 +1134,7 @@ class ProjectMetricsResourceTest {
                 traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
                 // Calculate actual thread duration: (last trace end time) - (first trace start time)
-                double threadDurationSeconds = (double) (threadEndTime.toEpochMilli() - threadStartTime.toEpochMilli())
-                        / 1000.0;
-                threadDurations.add(threadDurationSeconds);
+                threadDurations.add(threadStartTime.until(threadEndTime, ChronoUnit.MICROS) / 1000.0);
             }
 
             // Close threads to ensure they are written to the trace_threads table
