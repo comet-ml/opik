@@ -68,13 +68,6 @@ public class FilterQueryBuilder {
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
 
-    // Dataset fields
-    private static final String DATASET_ID_DB = "id";
-    private static final String DATASET_NAME_DB = "name";
-    private static final String DATASET_VISIBILITY_MODE_DB = "visibility";
-    private static final String DATASET_CREATED_AT_DB = "created_at";
-    private static final String DATASET_LAST_UPDATED_AT_DB = "last_updated_at";
-
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
