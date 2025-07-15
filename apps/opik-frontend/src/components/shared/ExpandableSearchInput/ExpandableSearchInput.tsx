@@ -74,7 +74,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
     }
   };
 
-  const hasMatches = Boolean(totalMatches && totalMatches > 1);
+  const hasMatches = Boolean(totalMatches);
 
   return (
     <div
@@ -108,7 +108,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
               onKeyDown={handleKeyDown}
               disabled={disabled}
               className={cn("h-8 px-8", inputClassName, {
-                "pr-[100px]": hasMatches,
+                "pr-[112px]": hasMatches,
               })}
             />
             <div className="absolute inset-y-0 right-1 flex h-full items-center justify-center gap-0.5">

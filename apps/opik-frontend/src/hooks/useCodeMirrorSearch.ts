@@ -64,22 +64,27 @@ export const useCodeMirrorSearch = (
     const searchQuery = getSearchQuery(view.state);
     const cursor = searchQuery.getCursor(view.state);
 
-    const counter = { count: 0, current: 1 };
     const { from, to } = view.state.selection.main;
 
+    let totalMatches = 0;
+    let currentMatchIndex = 0;
+
+    const MAX_MATCHES = 999;
+
     let item = cursor.next();
-    while (!item.done) {
+    while (!item.done && totalMatches < MAX_MATCHES) {
+      totalMatches++;
+
       if (item.value.from === from && item.value.to === to) {
-        counter.current = counter.count + 1;
+        currentMatchIndex = totalMatches;
       }
 
       item = cursor.next();
-      counter.count++;
     }
 
     setSearchState({
-      totalMatches: counter.count,
-      currentMatchIndex: counter.current,
+      totalMatches,
+      currentMatchIndex,
     });
   }, [view]);
 

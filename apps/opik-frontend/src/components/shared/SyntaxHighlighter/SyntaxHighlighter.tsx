@@ -3,7 +3,7 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
 import { MODE_TYPE } from "./constants";
-import { SyntaxHighlighterProps } from "./types";
+import { PrettifyConfig } from "./types";
 import {
   useSyntaxHighlighterMode,
   useSyntaxHighlighterCode,
@@ -12,11 +12,20 @@ import {
 import CodeMirrorHighlighter from "./CodeMirrorHighlighter";
 import MarkdownHighlighter from "./MarkdownHighlighter";
 
+export type SyntaxHighlighterProps = {
+  data: object;
+  prettifyConfig?: PrettifyConfig;
+  preserveKey?: string;
+  search?: string;
+  withSearch?: boolean;
+};
+
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   data,
   prettifyConfig,
   preserveKey,
   search: searchValue,
+  withSearch,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -57,6 +66,7 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         searchValue={searchValue}
         modeSelector={modeSelector}
         copyButton={copyButton}
+        withSearch={withSearch}
       />
     );
   }
@@ -67,6 +77,7 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       searchValue={searchValue}
       modeSelector={modeSelector}
       copyButton={copyButton}
+      withSearch={withSearch}
     />
   );
 };
