@@ -77,6 +77,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -931,6 +932,100 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty, empty,
                     empty);
+        }
+    }
+
+    @Nested
+    @DisplayName("Thread count")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadCountTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            // Create traces with different thread_ids at different times with different thread counts
+            Long threadCountMinus3 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_3, interval), 2);
+            Long threadCountMinus1 = createTracesWithThreads(projectName, subtract(marker, TIME_BUCKET_1, interval), 4);
+            Long threadCountNow = createTracesWithThreads(projectName, marker, 3);
+
+            // SUT
+            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus3);
+            Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus1);
+            Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountNow);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    minus3, minus1, current);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
+
+            Instant marker = getIntervalStart(interval);
+
+            // SUT
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private Long createTracesWithThreads(String projectName, Instant marker, int threadCount) {
+            // Create traces with different thread_ids to simulate multiple threads
+            List<String> threadIds = IntStream.range(0, threadCount)
+                    .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
+                    .toList();
+
+            // Open threads first
+            threadIds.forEach(threadId -> {
+                traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
+            });
+
+            // Create multiple traces per thread to test that threads are counted, not traces
+            threadIds.forEach(threadId -> {
+                List<Trace> traces = IntStream.range(0, 2) // 2 traces per thread
+                        .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .threadId(threadId)
+                                .startTime(marker.plusSeconds(i))
+                                .build())
+                        .toList();
+                traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            });
+
+            // Close threads to ensure they are written to the trace_threads table
+            threadIds.forEach(threadId -> {
+                traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
+            });
+
+            return (long) threadIds.size();
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, Long> empty = Collections.singletonMap(ProjectMetricsDAO.NAME_THREADS, null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
         }
     }
 
