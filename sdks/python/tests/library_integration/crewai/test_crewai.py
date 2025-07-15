@@ -12,7 +12,7 @@ from ...testlib import (
 from . import constants
 
 
-def test_crewai__sequental_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
+def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
     fake_backend,
 ):
     project_name = "crewai-test"
