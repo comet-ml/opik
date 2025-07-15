@@ -126,13 +126,13 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "- You should NOT mention irrelevancy in your reason, and make the reason sound convincing.\n" +
         "- You should mention LLM response instead of `assistant`, and User instead of `user`.\n" +
         "- You should format <name_score> to use 1 decimal place in the reason.\n" +
-        "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score_value' key providing the relevancy score.\n" +
+        "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score' key providing the relevancy score.\n" +
         "- You MUST only return the 'results' JSON object in the final result.\n" +
         "- You MUST provide a 'reason' for the final result score in the format: 'The score is <name_score> because <your_reason>.'.\n" +
         "\n" +
         "** Example 'results' JSON: **\n" +
         "{\n" +
-        '    "score_value": <relevancy_score>,\n' +
+        '    "score": <relevancy_score>,\n' +
         '    "reason": "The score is <relevancy_score> because <your_reason>."\n' +
         "}\n" +
         "{{context}}",
@@ -340,9 +340,9 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
         content:
           "Based on the given list of message exchanges between a user and an LLM, generate 'verdicts' JSON object to indicate whether the LAST `assistant` messages is relevant to the context in messages. Do evaluation on the last `assistant` messages by using sliding window of size 10 which includes only given amount of turns and moves one turn at a time until reaches the last turn. You should start the sliding window from the first turn. For each turn, you should use the previous 10 turns to make an informed judgement on relevancy and have it as one record in 'verdicts' JSON.\n" +
           "\n" +
-          "After generating the 'verdicts' JSON object, you MUST return the final result in JSON format using the 'verdicts' object. You MUST NOT return anything else. The final result MUST be a 'results' JSON object with 'reason' and 'score_value' keys. The 'reason' key is a list of strings explaining why the 'assistant' messages are relevant or irrelevant to the 'user' messages.\n" +
+          "After generating the 'verdicts' JSON object, you MUST return the final result in JSON format using the 'verdicts' object. You MUST NOT return anything else. The final result MUST be a 'results' JSON object with 'reason' and 'score' keys. The 'reason' key is a list of strings explaining why the 'assistant' messages are relevant or irrelevant to the 'user' messages.\n" +
           "\n" +
-          "The 'score_value' is a [0, 1] score indicating how relevant the OVERALL AI 'assistant' messages are in a conversation (higher is the better relevancy). The score value calculated based on the generated 'verdicts' JSON object by counting the number of 'yes' verdicts divided by the total number of 'verdicts'.\n" +
+          "The 'score' is a [0, 1] score indicating how relevant the OVERALL AI 'assistant' messages are in a conversation (higher is the better relevancy). The score value calculated based on the generated 'verdicts' JSON object by counting the number of 'yes' verdicts divided by the total number of 'verdicts'.\n" +
           "\n" +
           "** Guidelines for 'turns' JSON: **\n" +
           "\n" +
@@ -365,7 +365,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "- You should NOT mention irrelevancy in your reason, and make the reason sound convincing.\n" +
           "- You should mention LLM response instead of `assistant`, and User instead of `user`.\n" +
           "- You should format <relevancy_score> to use 1 decimal place in the reason.\n" +
-          "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score_value' key providing the relevancy score.\n" +
+          "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score' key providing the relevancy score.\n" +
           "- You MUST only return the 'results' JSON object in the final result.\n" +
           "- You MUST provide a 'reason' for the final result score in the format: 'The score is <relevancy_score> because <your_reason>.'.\n" +
           "\n" +
@@ -398,7 +398,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "\n" +
           "** Example 'results' JSON: **\n" +
           "{\n" +
-          '    "score_value": <relevancy_score>,\n' +
+          '    "score": <relevancy_score>,\n' +
           '    "reason": "The score is <relevancy_score> because <your_reason>."\n' +
           "}\n" +
           "===== END OF EXAMPLE ======\n" +
@@ -450,7 +450,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "- You should NOT mention concrete frustration in your reason, and make the reason sound convincing.\n" +
           "- You should mention LLM response instead of `assistant`, and User instead of `user`.\n" +
           "- You should format <frustration_score> to use 1 decimal place in the reason.\n" +
-          "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score_value' key providing the frustration score.\n" +
+          "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score' key providing the frustration score.\n" +
           "- You MUST only return the 'results' JSON object in the final result.\n" +
           "\n" +
           "===== Start OF EXAMPLE ======\n" +
@@ -517,7 +517,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
           "\n" +
           "** Example 'results' JSON **\n" +
           "{\n" +
-          '    "score_value": <frustration_score>,\n' +
+          '    "score": <frustration_score>,\n' +
           '    "reason": "The score is <frustration_score> because <your_reason>."\n' +
           "}\n" +
           "===== END OF EXAMPLE ======\n" +

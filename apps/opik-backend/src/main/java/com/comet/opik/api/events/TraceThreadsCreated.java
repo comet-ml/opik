@@ -1,5 +1,6 @@
 package com.comet.opik.api.events;
 
+import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.infrastructure.events.BaseEvent;
 import lombok.Getter;
 import lombok.NonNull;
@@ -13,12 +14,12 @@ import java.util.UUID;
 public class TraceThreadsCreated extends BaseEvent {
 
     private final @NonNull UUID projectId;
-    private final @NonNull List<UUID> traceThreadModelIds;
+    private final @NonNull List<TraceThreadModel> traceThreadModels;
 
-    public TraceThreadsCreated(@NonNull List<UUID> traceThreadModelIds, @NonNull UUID projectId,
+    public TraceThreadsCreated(@NonNull List<TraceThreadModel> traceThreadModels, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName) {
         super(workspaceId, userName);
-        this.traceThreadModelIds = traceThreadModelIds;
+        this.traceThreadModels = traceThreadModels;
         this.projectId = projectId;
     }
 
