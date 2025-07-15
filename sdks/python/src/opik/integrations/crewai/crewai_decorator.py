@@ -125,10 +125,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata["object_type"] = "agent"
             agent = args[0]
             input_dict = {"context": kwargs.get("context")}
-            agent_dict = jsonable_encoder.encode(agent)
-            agent_dict, _ = dict_utils.split_dict_by_keys(
-                agent_dict, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS
-            )
+            agent_dict = _encode_dict_and_keep_keys(agent, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             input_dict["agent"] = agent_dict
             name = agent.role.strip()
 
@@ -137,10 +134,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata["object_type"] = "task"
             input_dict = {}
             task = args[0]
-            task_dict = jsonable_encoder.encode(task)
-            task_dict, _ = dict_utils.split_dict_by_keys(
-                task_dict, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS
-            )
+            task_dict = _encode_dict_and_keep_keys(task, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             input_dict["task"] = task_dict
             name = f"Task: {task.name}"
 
@@ -195,14 +189,11 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if object_type == "crew":
             output_dict = jsonable_encoder.encode(output)
-            _ = output_dict.pop("token_usage", None)
+            output_dict.pop("token_usage", None)
         elif object_type == "agent":
             output_dict = {"output": output}
         elif object_type == "task":
-            output_dict = jsonable_encoder.encode(output)
-            output_dict, _ = dict_utils.split_dict_by_keys(
-                output_dict, TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT
-            )
+            output_dict = _encode_dict_and_keep_keys(output, TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
         elif object_type == "completion":
             output_dict = jsonable_encoder.encode(output)
             if output_dict.get("usage", None) is not None:
@@ -229,3 +220,12 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
         return super()._streams_handler(output, capture_output, generations_aggregator)
+
+
+def _encode_dict_and_keep_keys(
+    dict: Dict[str, Any],
+    keys_to_keep: List[str],
+) -> Dict[str, Any]:
+    encoded_dict = jsonable_encoder.encode(dict)
+    encoded_dict, _ = dict_utils.split_dict_by_keys(encoded_dict, keys_to_keep)
+    return encoded_dict
