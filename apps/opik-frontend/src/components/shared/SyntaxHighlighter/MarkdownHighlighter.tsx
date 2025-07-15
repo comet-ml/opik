@@ -8,7 +8,7 @@ import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
-import SearchHighlighter from "./SearchHighlighter";
+import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
@@ -67,7 +67,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       rightHeader={
         <>
           {withSearch && (
-            <SearchHighlighter
+            <SyntaxHighlighterSearch
               searchValue={localSearchValue}
               onSearch={setLocalSearchValue}
               onPrev={findPrev}

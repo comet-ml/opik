@@ -7,8 +7,8 @@ import {
   TextNode,
   MatchIndex,
   VisitorNode,
-} from "./types";
-import { createSearchRegex } from "./utils";
+} from "../../types";
+import { createSearchRegex } from "../../utils";
 import {
   SEARCH_CURRENT_HIGHLIGHT_COLOR,
   SEARCH_HIGHLIGHT_COLOR,
