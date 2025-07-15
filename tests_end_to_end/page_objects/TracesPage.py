@@ -29,10 +29,13 @@ class TracesPage:
         )
         self.attachment_container = self.page.get_by_label("Attachments")
 
-        columns_button = self.page.get_by_role("button", name="Columns")
-        columns_button.wait_for(state="visible")
-        columns_button.wait_for(state="attached")
-        columns_button.click()
+        self.page.wait_for_timeout(1000)
+        try:
+            self.page.get_by_role("button", name="Columns").click(timeout=5000)
+        except Exception as _:
+            self.page.reload()
+            self.page.wait_for_load_state("networkidle", timeout=10000)
+            self.page.get_by_role("button", name="Columns").click(timeout=5000)
         # Enable the Name column by default
         try:
             expect(
