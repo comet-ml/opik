@@ -46,7 +46,7 @@ class TestTraceSpans:
             ) from e
 
         # Wait for traces to appear on UI
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         traces_page.wait_for_traces_to_be_visible()
 
         # Get all traces
@@ -112,7 +112,7 @@ class TestTraceSpans:
             ) from e
 
         # Wait for traces to appear on UI
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         traces_page.wait_for_traces_to_be_visible()
 
         # Get all traces
@@ -177,7 +177,7 @@ class TestTraceSpans:
             ) from e
 
         # Wait for traces to appear on UI
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         traces_page.wait_for_traces_to_be_visible()
 
         # Get all traces

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class TracesPage:
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, traces_created: bool = False):
         self.page = page
         self.traces_table = self.page.get_by_role("table")
         self.trace_names_selector = "tr td:nth-child(3) div span"
@@ -30,20 +30,21 @@ class TracesPage:
         self.attachment_container = self.page.get_by_label("Attachments")
 
         self.page.wait_for_timeout(1000)
-        try:
-            self.page.get_by_role("button", name="Columns").click(timeout=5000)
-        except Exception as _:
-            self.page.reload()
-            self.page.wait_for_load_state("networkidle", timeout=10000)
-            self.page.get_by_role("button", name="Columns").click(timeout=5000)
-        # Enable the Name column by default
-        try:
-            expect(
-                self.page.get_by_role("button", name="Name").get_by_role("checkbox")
-            ).to_be_checked(timeout=2000)
-        except Exception as _:
-            self.page.get_by_role("button", name="Name").click()
-        self.page.keyboard.press(key="Escape")
+        if traces_created:
+            try:
+                self.page.get_by_role("button", name="Columns").click(timeout=5000)
+            except Exception as _:
+                self.page.reload()
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+                self.page.get_by_role("button", name="Columns").click(timeout=5000)
+            # Enable the Name column by default
+            try:
+                expect(
+                    self.page.get_by_role("button", name="Name").get_by_role("checkbox")
+                ).to_be_checked(timeout=2000)
+            except Exception as _:
+                self.page.get_by_role("button", name="Name").click()
+            self.page.keyboard.press(key="Escape")
 
     def get_all_trace_names_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
