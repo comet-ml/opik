@@ -8,4 +8,5 @@ public enum MetricType {
     COST,
     GUARDRAILS_FAILED_COUNT,
     THREAD_COUNT,
+    THREAD_DURATION,
 }

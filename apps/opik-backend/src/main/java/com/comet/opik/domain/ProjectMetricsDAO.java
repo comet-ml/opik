@@ -41,6 +41,9 @@ public interface ProjectMetricsDAO {
     String NAME_DURATION_P50 = "duration.p50";
     String NAME_DURATION_P90 = "duration.p90";
     String NAME_DURATION_P99 = "duration.p99";
+    String NAME_THREAD_DURATION_P50 = "thread_duration.p50";
+    String NAME_THREAD_DURATION_P90 = "thread_duration.p90";
+    String NAME_THREAD_DURATION_P99 = "thread_duration.p99";
 
     @Builder
     record Entry(String name, Instant time, Number value) {
@@ -49,6 +52,7 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
@@ -268,6 +272,43 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """;
 
+    private static final String GET_THREAD_DURATION = """
+            WITH thread_duration_summary AS (
+                SELECT
+                    tt.id,
+                    min(t.start_time) as thread_start_time,
+                    max(t.end_time) as thread_end_time,
+                    if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
+                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000000.0),
+                            NULL) AS thread_duration
+                FROM trace_threads tt
+                JOIN traces t ON tt.thread_id = t.thread_id
+                    AND tt.project_id = t.project_id
+                    AND tt.workspace_id = t.workspace_id
+                WHERE tt.project_id = :project_id
+                AND tt.workspace_id = :workspace_id
+                AND tt.thread_id != ''
+                AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                GROUP BY tt.id
+            )
+            SELECT <bucket> AS bucket,
+                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(thread_duration)) AS duration
+            FROM (
+                SELECT
+                    thread_start_time as start_time,
+                    thread_duration
+                FROM thread_duration_summary
+            ) AS thread_data
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -289,6 +330,24 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 .value(getP(durations, 1))
                                 .build(),
                         Entry.builder().name(NAME_DURATION_P99)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 2))
+                                .build()))
+                .orElse(Stream.empty());
+    }
+
+    private Stream<Entry> mapThreadDuration(Row row) {
+        return Optional.ofNullable(row.get("duration", List.class))
+                .map(durations -> Stream.of(
+                        Entry.builder().name(NAME_THREAD_DURATION_P50)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 0))
+                                .build(),
+                        Entry.builder().name(NAME_THREAD_DURATION_P90)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 1))
+                                .build(),
+                        Entry.builder().name(NAME_THREAD_DURATION_P99)
                                 .time(row.get("bucket", Instant.class))
                                 .value(getP(durations, 2))
                                 .build()))
@@ -319,6 +378,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREADS,
                         row -> row.get("count", Integer.class)))
                 .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_THREAD_DURATION, "threadDuration")
+                .flatMapMany(result -> result.map((row, metadata) -> mapThreadDuration(row)))
+                .reduce(Stream::concat)
+                .map(Stream::toList));
     }
 
     @Override
