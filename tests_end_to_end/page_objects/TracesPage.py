@@ -20,16 +20,16 @@ class TracesPage:
         )
         self.delete_button_locator = (
             self.page.locator("div")
-            .filter(has_text=re.compile(r"^Add to dataset$"))
+            .filter(has_text=re.compile(r"^Add to datasetAdd tags$"))
             .get_by_role("button")
-            .nth(2)
+            .nth(3)
         )
         self.attachments_submenu_button = self.page.get_by_role(
             "button", name="Attachments"
         )
         self.attachment_container = self.page.get_by_label("Attachments")
 
-        self.page.get_by_role("button", name="Columns").click()
+        self.page.get_by_role("button", name="Columns").click(force=True)
         # Enable the Name column by default
 
         try:
