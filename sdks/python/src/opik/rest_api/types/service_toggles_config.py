@@ -10,6 +10,9 @@ from ..core.serialization import FieldMetadata
 
 class ServiceTogglesConfig(UniversalBaseModel):
     python_evaluator_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="pythonEvaluatorEnabled")]
+    trace_thread_python_evaluator_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="traceThreadPythonEvaluatorEnabled")
+    ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
 
     if IS_PYDANTIC_V2:

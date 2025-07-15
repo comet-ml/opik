@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -532,17 +533,17 @@ class ProjectMetricsResourceTest {
                                         .projectName(projectName)
                                         .id(trace.id())
                                         .build())
-                                .toList();
+                                .collect(Collectors.toList());
 
                         traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
                         return scores;
                     }).flatMap(List::stream)
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name))
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
                     .entrySet().stream()
                     .collect(Collectors.toMap(
                             Map.Entry::getKey,
-                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
                                     .toList())));
         }
 

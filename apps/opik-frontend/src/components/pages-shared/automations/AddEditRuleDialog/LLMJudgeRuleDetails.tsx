@@ -35,6 +35,7 @@ import { EvaluationRuleFormType } from "@/components/pages-shared/automations/Ad
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -68,6 +69,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
+  const scope = form.watch("scope");
+  const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+
+  const templates = LLM_PROMPT_TEMPLATES[scope];
+
   const handleAddProvider = useCallback(
     (provider: PROVIDER_TYPE) => {
       const model =
@@ -76,9 +82,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       if (!model) {
         form.setValue(
           "llmJudgeDetails.model",
-          calculateDefaultModel(model, [provider], provider, {
-            structuredOutput: true,
-          }),
+          calculateDefaultModel(model, [provider], provider),
         );
       }
     },
@@ -127,7 +131,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     workspaceName={workspaceName}
                     onAddProvider={handleAddProvider}
                     onDeleteProvider={handleDeleteProvider}
-                    onlyWithStructuredOutput
                   />
 
                   <FormField
@@ -177,10 +180,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
                     const templateData =
                       cache.current[newTemplate] ??
-                      find(
-                        LLM_PROMPT_TEMPLATES,
-                        (t) => t.value === newTemplate,
-                      );
+                      find(templates, (t) => t.value === newTemplate);
 
                     form.setValue(
                       "llmJudgeDetails.messages",
@@ -188,7 +188,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     );
                     form.setValue(
                       "llmJudgeDetails.variables",
-                      templateData.variables,
+                      templateData.variables ?? {},
                     );
                     form.setValue(
                       "llmJudgeDetails.schema",
@@ -200,7 +200,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     );
                   }
                 }}
-                options={LLM_PROMPT_TEMPLATES}
+                options={templates}
               />
             </FormControl>
             <FormMessage />
@@ -267,31 +267,33 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             );
           }}
         />
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.variables"
-          render={({ field, formState }) => {
-            const parsingVariablesError = form.getValues(
-              "llmJudgeDetails.parsingVariablesError",
-            );
-            const validationErrors = get(formState.errors, [
-              "llmJudgeDetails",
-              "variables",
-            ]);
+        {!isThreadScope && (
+          <FormField
+            control={form.control}
+            name="llmJudgeDetails.variables"
+            render={({ field, formState }) => {
+              const parsingVariablesError = form.getValues(
+                "llmJudgeDetails.parsingVariablesError",
+              );
+              const validationErrors = get(formState.errors, [
+                "llmJudgeDetails",
+                "variables",
+              ]);
 
-            return (
-              <>
-                <LLMPromptMessagesVariables
-                  parsingError={parsingVariablesError}
-                  validationErrors={validationErrors}
-                  projectId={form.watch("projectId")}
-                  variables={field.value}
-                  onChange={field.onChange}
-                />
-              </>
-            );
-          }}
-        />
+              return (
+                <>
+                  <LLMPromptMessagesVariables
+                    parsingError={parsingVariablesError}
+                    validationErrors={validationErrors}
+                    projectId={form.watch("projectId")}
+                    variables={field.value}
+                    onChange={field.onChange}
+                  />
+                </>
+              );
+            }}
+          />
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center">

@@ -64,13 +64,16 @@ component:
             <your annotations>
         hosts:
             - host: opik.example.com
-            paths:
-                - path: /opik
+              paths:
+                - path: /
                   port: 5173
                   pathType: Prefix
-                - path: /opik/api
-                  port: 5173
-                  pathType: Prefix
+        # For TLS configuration (optional)
+        tls:
+            enabled: true
+            hosts:  # Optional - defaults to hosts from rules if not specified
+                - opik.example.com
+            secretName: <your-tls-secret>  # Optional - omit if using cert-manager or similar
 ```
 
 ### Configure LoadBalancer service for clickhouse
@@ -82,9 +85,9 @@ clickhouse:
     annotations: <your clickhouse LB service annotations>
 ```
 
-## Configure Clickhouse backup on S3 (or minio)
+## Configure Clickhouse backup
 
-### With AWS Key and Secret key
+### With AWS Key and Secret key - on AWS S3 or minio
 
 You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
 
@@ -105,21 +108,68 @@ clickhouse:
     baseBackup: ""
 ```
 
-### With IAM Role
+### With IAM Role on AWS
 
+You will need to create a IAM role with permissions for your bucket and with TrustRelationshipPolicy for the serviceAccount you configure here:
+
+Policy:
+```json
+{
+    "Statement": [
+        {
+            "Action": "s3:*",
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:s3:::BUCKET",
+                "arn:aws:s3:::BUCKET/*"
+            ],
+            "Sid": "AllowS3ClickhouseBackup"
+        }
+    ],
+    "Version": "2012-10-17"
+}
+```
+
+Trust relationship policy:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:sub": "system:serviceaccount:YOURNAMESPACE:opik-clickhouse",
+                    "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:aud": "sts.amazonaws.com"
+                }
+            }
+        }
+    ]
+}
+```
+Helm values:
 ```yaml
 clickhouse:
+  serviceAccount:
+    create: true
+    name: opik-clickhouse    # or any other name
+    annotations:
+      eks.amazonaws.com/role-arn: <your IAM role arn>
   backup:
     enabled: true
-    bucketURL: https://<your bucket>.s3.<region>.amazonaws.com
+    bucketURL: https://BUCKET.s3.REGION.amazonaws.com
     schedule: <your cron schedule, like "00 03 * * *">
     baseBackup: ""
-    serviceAccount:
-      enabled: true
-      create: true
-      annotations:
-        eks.amazonaws.com/role-arn: <your IAM role arn>
+    
 ```
+
+### With custom backup command
+
+You can also change Clickhouse backup command by setting `clickhouse.backup.command` if you want to change the default one.
 
 ## Configure replication for Clickhouse
 

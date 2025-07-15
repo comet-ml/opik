@@ -10,7 +10,7 @@ const CostCell = <TData,>(context: CellContext<TData, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {formatCost(value, true)}
+      {formatCost(value, { modifier: "short" })}
     </CellWrapper>
   );
 };

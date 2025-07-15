@@ -12,12 +12,14 @@ type ProjectsSelectBoxProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  disabled?: boolean;
 };
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = ({
   value,
   onChange,
   className,
+  disabled,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -56,6 +58,7 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = ({
           : undefined
       }
       buttonClassName={className}
+      disabled={disabled}
       isLoading={isLoading}
       optionsCount={DEFAULT_LOADED_PROJECT_ITEMS}
     />

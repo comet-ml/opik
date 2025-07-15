@@ -20,7 +20,6 @@ def test_basic_package_import() -> None:
     assert hasattr(opik_optimizer, "MetaPromptOptimizer")
     assert hasattr(opik_optimizer, "EvolutionaryOptimizer")
     assert hasattr(opik_optimizer, "FewShotBayesianOptimizer")
-    assert hasattr(opik_optimizer, "MiproOptimizer")
     assert hasattr(opik_optimizer, "OptimizationResult")
 
 
@@ -39,7 +38,7 @@ def test_optimizer_classes_importable() -> None:
     from opik_optimizer import MetaPromptOptimizer
     from opik_optimizer import EvolutionaryOptimizer
     from opik_optimizer import FewShotBayesianOptimizer
-    from opik_optimizer import MiproOptimizer
+    from opik_optimizer.mipro_optimizer import MiproOptimizer
 
     # Should be callable classes
     assert callable(MetaPromptOptimizer)
@@ -61,10 +60,10 @@ def test_chat_prompt_import_and_creation() -> None:
     prompt = ChatPrompt(messages=messages)
 
     # Validate basic properties
-    assert prompt.formatted_messages == messages
-    assert len(prompt.formatted_messages) == 2
-    assert prompt.formatted_messages[0]["role"] == "system"
-    assert prompt.formatted_messages[1]["role"] == "user"
+    assert prompt.get_messages() == messages
+    assert len(prompt.get_messages()) == 2
+    assert prompt.get_messages()[0]["role"] == "system"
+    assert prompt.get_messages()[1]["role"] == "user"
 
 
 def test_optimization_result_import_and_creation() -> None:
@@ -110,7 +109,8 @@ def test_optimization_result_import_and_creation() -> None:
 def test_optimizer_initialization_basic() -> None:
     """Test that optimizers can be initialized with basic parameters."""
     from opik_optimizer import MetaPromptOptimizer, EvolutionaryOptimizer
-    from opik_optimizer import FewShotBayesianOptimizer, MiproOptimizer
+    from opik_optimizer import FewShotBayesianOptimizer
+    from opik_optimizer.mipro_optimizer import MiproOptimizer
 
     # Test MetaPromptOptimizer initialization
     meta_optimizer = MetaPromptOptimizer(

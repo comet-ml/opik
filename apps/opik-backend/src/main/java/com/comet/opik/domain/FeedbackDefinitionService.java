@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackDefinition;
-import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;

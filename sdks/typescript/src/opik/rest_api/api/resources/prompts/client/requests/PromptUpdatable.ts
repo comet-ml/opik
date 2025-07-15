@@ -11,4 +11,5 @@
 export interface PromptUpdatable {
     name: string;
     description?: string;
+    tags?: string[];
 }

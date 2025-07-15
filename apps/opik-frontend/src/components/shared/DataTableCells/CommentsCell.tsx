@@ -26,7 +26,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   const isLocalComments = isLocalCommentCheck(commentsList[0]?.created_by);
 
   if (!commentsCount) {
-    return "-";
+    return <div className="px-3 py-2">-</div>;
   }
 
   if (commentsCount === 1) {
@@ -88,8 +88,7 @@ const CompareExperimentsCell: React.FC<
           !isSmall && "overflow-y-auto max-h-full",
         )}
         commentsList={commentsList}
-        onReply={() => onReply(idx)}
-        showReply={!!tableMeta?.onCommentsReply}
+        onReply={tableMeta?.onCommentsReply ? () => onReply(idx) : undefined}
       >
         <CommentsCellContent isSmall={isSmall} commentsList={commentsList} />
       </UserCommentHoverList>
@@ -130,8 +129,7 @@ const CommentsCell = <TData,>(context: CellContext<TData, unknown>) => {
           !isSmall && "overflow-y-auto max-h-full",
         )}
         commentsList={commentsList}
-        onReply={onReply}
-        showReply={!!tableMeta?.onCommentsReply}
+        onReply={tableMeta?.onCommentsReply ? onReply : undefined}
       >
         <CommentsCellContent commentsList={commentsList} isSmall={isSmall} />
       </UserCommentHoverList>

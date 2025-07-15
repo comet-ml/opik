@@ -36,7 +36,7 @@ def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
 
     tested.put(test_messages[0])
     tested.put(test_messages[1])
-    assert tested.flush(timeout=0.0001) is True
+    assert tested.flush(timeout=0.01) is True
 
     mock_message_processor.process.assert_has_calls(
         [

@@ -7,13 +7,12 @@ import * as OpikApi from "../../../../index";
 /**
  * @example
  *     {
- *         provider: "openai",
- *         apiKey: "api_key"
+ *         provider: "openai"
  *     }
  */
 export interface ProviderApiKeyWrite {
     provider: OpikApi.ProviderApiKeyWriteProvider;
-    apiKey: string;
+    apiKey?: string;
     name?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;

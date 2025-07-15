@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.domain.WorkspaceMetricsService;
@@ -57,6 +59,77 @@ public class WorkspacesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved workspace metrics summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/metrics")
+    @Operation(operationId = "getMetric", summary = "Get metric daily data", description = "Get metric daily data", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace metric data by days", content = @Content(schema = @Schema(implementation = WorkspaceMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getMetric(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace metric data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
+                workspaceId);
+        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceFeedbackScores(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace metric data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
+                workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/costs/summaries")
+    @Operation(operationId = "costsSummary", summary = "Get costs summary", description = "Get costs summary", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace Metrics", content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryResponse.Result.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response costsSummary(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricsSummaryRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace costs summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+        var response = workspaceMetricsService.getWorkspaceCostsSummary(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace costs summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/costs")
+    @Operation(operationId = "getCost", summary = "Get cost daily data", description = "Get cost daily data", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace cost data by days", content = @Content(schema = @Schema(implementation = WorkspaceMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getCost(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace cost data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
+                workspaceId);
+        request = request.toBuilder().name("cost").build();
+        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceCosts(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace cost data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
                 workspaceId);
 
         return Response.ok().entity(response).build();

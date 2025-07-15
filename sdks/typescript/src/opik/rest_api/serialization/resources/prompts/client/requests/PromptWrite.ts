@@ -17,6 +17,7 @@ export const PromptWrite: core.serialization.Schema<serializers.PromptWrite.Raw,
         metadata: JsonNodeWrite.optional(),
         changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
         type: PromptWriteType.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
     });
 
 export declare namespace PromptWrite {
@@ -28,5 +29,6 @@ export declare namespace PromptWrite {
         metadata?: JsonNodeWrite.Raw | null;
         change_description?: string | null;
         type?: PromptWriteType.Raw | null;
+        tags?: string[] | null;
     }
 }

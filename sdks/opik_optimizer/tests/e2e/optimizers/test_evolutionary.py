@@ -17,7 +17,7 @@ def test_evolutionary_optimizer() -> None:
         )
 
     prompt = chat_prompt.ChatPrompt(
-        system="Provide an answer to the question.", prompt="{text}"
+        system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing

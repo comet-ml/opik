@@ -5,8 +5,8 @@ import TextareaAutosize from "react-textarea-autosize";
 import { Check, Pencil, Trash } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { LLMJudgeSchema } from "@/types/automations";
-import { LLM_SCHEMA_TYPE } from "@/types/llm";
+import { LLMJudgeSchema } from "@/types/llm";
+import { LLM_SCHEMA_TYPE, ScoresValidationError } from "@/types/llm";
 import { Card, CardContent } from "@/components/ui/card";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -16,7 +16,6 @@ import { FormErrorSkeleton } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 import { get } from "lodash";
-import { ScoresValidationError } from "./LLMJudgeScores";
 
 const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   {

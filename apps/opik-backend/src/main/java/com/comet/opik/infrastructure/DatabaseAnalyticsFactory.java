@@ -20,6 +20,7 @@ public class DatabaseAnalyticsFactory {
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
+    private boolean hasReplicationEnabled;
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
@@ -35,5 +36,9 @@ public class DatabaseAnalyticsFactory {
         ;
 
         private final String value;
+    }
+
+    public boolean hasReplicationEnabled() {
+        return hasReplicationEnabled;
     }
 }

@@ -17,8 +17,8 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentType;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
@@ -139,6 +139,8 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -1583,7 +1585,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1628,7 +1630,8 @@ class DatasetsResourceTest {
 
     }
 
-    private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+    private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+            String workspaceName) {
         try (var actualResponse = client.target(getTracesPath())
                 .path("feedback-scores")
                 .request()
@@ -2081,7 +2084,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = scores.stream()
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -3878,7 +3881,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -4441,7 +4444,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(items, traces, scores, experimentId, experimentItems);
@@ -4524,7 +4527,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
@@ -4698,7 +4701,8 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+        private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+                String workspaceName) {
             try (var actualResponse = client.target(getTracesPath())
                     .path("feedback-scores")
                     .request()
@@ -4742,12 +4746,12 @@ class DatasetsResourceTest {
                     .map(score -> score.toBuilder()
                             .name(factory.manufacturePojo(String.class))
                             .build())
-                    .toList();
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+                    .collect(toList());
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
-                    Stream.of((FeedbackScoreBatchItem) null)).collect(toList()),
+                    Stream.of((FeedbackScoreBatchItem) null)).toList(),
                     experimentId, experimentItems);
 
             createAndAssert(

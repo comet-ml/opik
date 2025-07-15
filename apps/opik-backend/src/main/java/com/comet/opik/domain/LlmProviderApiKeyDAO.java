@@ -31,7 +31,12 @@ public interface LlmProviderApiKeyDAO {
             @BindMethods("bean") ProviderApiKey providerApiKey);
 
     @SqlUpdate("UPDATE llm_provider_api_key SET " +
-            "api_key = :bean.apiKey, name = :bean.name, last_updated_by = :lastUpdatedBy " +
+            "api_key = CASE WHEN :bean.apiKey IS NULL THEN api_key ELSE :bean.apiKey END, " +
+            "name = CASE WHEN :bean.name IS NULL THEN name ELSE :bean.name END, " +
+            "headers = CASE WHEN :bean.headers IS NULL THEN headers ELSE :bean.headers END, " +
+            "base_url = CASE WHEN :bean.baseUrl IS NULL THEN base_url ELSE :bean.baseUrl END, " +
+            "configuration = CASE WHEN :bean.configuration IS NULL THEN configuration ELSE :bean.configuration END, " +
+            "last_updated_by = :lastUpdatedBy " +
             "WHERE id = :id AND workspace_id = :workspaceId")
     void update(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,

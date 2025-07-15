@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import PercentageTrend from "@/components/pages/CompareOptimizationsPage/PercentageTrend";
+import PercentageTrend from "@/components/shared/PercentageTrend/PercentageTrend";
 
 type BestPromptProps = {
   optimization: Optimization;

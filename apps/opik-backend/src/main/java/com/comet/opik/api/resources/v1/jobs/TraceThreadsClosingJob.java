@@ -18,7 +18,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -47,7 +46,7 @@ public class TraceThreadsClosingJob extends Job {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
         var timeoutToMarkThreadAsInactive = traceThreadConfig
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
-        int limit = 1000; // Limit to a process in each job execution
+        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
                 .subscribe(
@@ -58,18 +57,21 @@ public class TraceThreadsClosingJob extends Job {
     private Mono<Void> lockAndProcessJob(Lock lock, Duration timeoutToMarkThreadAsInactive, int limit) {
         return lockService.bestEffortLock(
                 lock,
-                Mono.defer(() -> enqueueInRedis(
-                        traceThreadService
-                                .getProjectsWithPendingClosureThreads(
-                                        Instant.now().minus(timeoutToMarkThreadAsInactive)
-                                                .truncatedTo(ChronoUnit.MICROS),
-                                        limit))),
+                Mono.defer(() -> {
+                    var now = Instant.now();
+                    return enqueueInRedis(
+                            traceThreadService
+                                    .getProjectsWithPendingClosureThreads(
+                                            now,
+                                            timeoutToMarkThreadAsInactive,
+                                            limit));
+                }),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
                     return null;
                 }),
-                Duration.ofSeconds(4), // Timeout to release the lock
-                Duration.ofMillis(300)); // Timeout to acquiring the lock
+                traceThreadConfig.getCloseTraceThreadJobLockTime().toJavaDuration(), // Timeout to release the lock
+                traceThreadConfig.getCloseTraceThreadJobLockWaitTime().toJavaDuration()); // Timeout to acquiring the lock
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import uniq from "lodash/uniq";
-import { EVALUATORS_RULE_TYPE, LLMJudgeObject } from "@/types/automations";
+import {
+  LLMJudgeObject,
+  EVALUATORS_RULE_SCOPE,
+  UI_EVALUATORS_RULE_TYPE,
+  EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -8,7 +13,6 @@ import {
   LLMMessage,
   ProviderMessageType,
 } from "@/types/llm";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { generateRandomString } from "@/lib/utils";
 
 const RuleNameSchema = z
@@ -25,12 +29,14 @@ const ProjectIdSchema = z
 
 const SamplingRateSchema = z.number();
 
-export const LLMJudgeDetailsFormSchema = z.object({
+const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
+
+const LLMJudgeBaseSchema = z.object({
   model: z
-    .union([z.nativeEnum(PROVIDER_MODEL_TYPE), z.string().length(0)], {
+    .string({
       required_error: "Model is required",
     })
-    .refine((model) => model.length >= 1, { message: "Model is required" }),
+    .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number(),
   }),
@@ -41,15 +47,6 @@ export const LLMJudgeDetailsFormSchema = z.object({
       content: z.string().min(1, { message: "Message is required" }),
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
-  ),
-  variables: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)/, {
-        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
-      }),
   ),
   parsingVariablesError: z.boolean().optional(),
   schema: z
@@ -79,13 +76,8 @@ export const LLMJudgeDetailsFormSchema = z.object({
     ),
 });
 
-export const PythonCodeDetailsFormSchema = z.object({
-  metric: z
-    .string({
-      required_error: "Code is required",
-    })
-    .min(1, { message: "Code is required" }),
-  arguments: z.record(
+export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
+  variables: z.record(
     z.string(),
     z
       .string()
@@ -94,34 +86,117 @@ export const PythonCodeDetailsFormSchema = z.object({
         message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
       }),
   ),
-  parsingArgumentsError: z.boolean().optional(),
 });
 
-export const LLMEvaluationRuleFormSchema = z.object({
+export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
+  variables: z.record(z.string(), z.string()),
+}).superRefine((data, ctx) => {
+  const contextCount = data.messages.filter((m) =>
+    m.content.includes("{{context}}"),
+  ).length;
+
+  if (contextCount < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "At least one message should contain the {{context}} variable",
+      path: ["messages", data.messages.length - 1, "content"],
+    });
+  }
+
+  if (contextCount > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Only one message can contain the {{context}} variable.",
+      path: ["messages", data.messages.length - 1, "content"],
+    });
+  }
+
+  data.messages.forEach((message, index) => {
+    const matches = message.content.match(/{{([^}]+)}}/g);
+    if (matches) {
+      matches.forEach((match) => {
+        if (match !== "{{context}}") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Template variable ${match} is not allowed. Only {{context}} is supported.`,
+            path: ["messages", index, "content"],
+          });
+        }
+      });
+    }
+  });
+});
+
+export const BasePythonCodeFormSchema = z.object({
+  metric: z
+    .string({
+      required_error: "Code is required",
+    })
+    .min(1, { message: "Code is required" }),
+});
+
+export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
+  {
+    arguments: z.record(
+      z.string(),
+      z
+        .string()
+        .min(1, { message: "Key is required" })
+        .regex(/^(input|output|metadata)/, {
+          message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+        }),
+    ),
+    parsingArgumentsError: z.boolean().optional(),
+  },
+);
+
+export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
+
+export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
   projectId: ProjectIdSchema,
   samplingRate: SamplingRateSchema,
-  type: z.literal(EVALUATORS_RULE_TYPE.llm_judge),
-  llmJudgeDetails: LLMJudgeDetailsFormSchema,
+  scope: ScopeSchema,
+  uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
 });
 
-export const PythonEvaluationRuleFormSchema = z.object({
-  ruleName: RuleNameSchema,
-  projectId: ProjectIdSchema,
-  samplingRate: SamplingRateSchema,
-  type: z.literal(EVALUATORS_RULE_TYPE.python_code),
-  pythonCodeDetails: PythonCodeDetailsFormSchema,
-});
+export const LLMJudgeTraceEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.llm_judge),
+    llmJudgeDetails: LLMJudgeDetailsTraceFormSchema,
+  });
+
+export const LLMJudgeThreadEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.thread_llm_judge),
+    llmJudgeDetails: LLMJudgeDetailsThreadFormSchema,
+  });
+
+export const PythonCodeTraceEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.python_code),
+    pythonCodeDetails: PythonCodeDetailsTraceFormSchema,
+  });
+
+export const PythonCodeThreadEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.thread_python_code),
+    pythonCodeDetails: PythonCodeDetailsThreadFormSchema,
+  });
 
 export const EvaluationRuleFormSchema = z.discriminatedUnion("type", [
-  LLMEvaluationRuleFormSchema,
-  PythonEvaluationRuleFormSchema,
+  LLMJudgeTraceEvaluationRuleFormSchema,
+  LLMJudgeThreadEvaluationRuleFormSchema,
+  PythonCodeTraceEvaluationRuleFormSchema,
+  PythonCodeThreadEvaluationRuleFormSchema,
 ]);
 
-export type LLMJudgeDetailsFormType = z.infer<typeof LLMJudgeDetailsFormSchema>;
+export type LLMJudgeDetailsTraceFormType = z.infer<
+  typeof LLMJudgeDetailsTraceFormSchema
+>;
 
-export type PythonCodeDetailsFormType = z.infer<
-  typeof PythonCodeDetailsFormSchema
+export type LLMJudgeDetailsThreadFormType = z.infer<
+  typeof LLMJudgeDetailsThreadFormSchema
 >;
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
@@ -147,14 +222,14 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
-    variables: data.variables,
+    variables: data.variables ?? {},
     parsingVariablesError: false,
     schema: data.schema,
   };
 };
 
 export const convertLLMJudgeDataToLLMJudgeObject = (
-  data: LLMJudgeDetailsFormType,
+  data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
   return {
     model: {

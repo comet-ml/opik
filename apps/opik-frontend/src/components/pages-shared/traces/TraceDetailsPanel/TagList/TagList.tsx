@@ -1,18 +1,8 @@
-import React, { useState } from "react";
-import { Plus, Tag } from "lucide-react";
-import RemovableTag from "./RemovableTag";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
 import useAppStore from "@/store/AppStore";
 import { Span, Trace } from "@/types/traces";
-import { useToast } from "@/components/ui/use-toast";
+import TagListRenderer from "./TagListRenderer";
 
 type TagListProps = {
   tags: string[];
@@ -29,13 +19,9 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   traceId,
   spanId,
 }) => {
-  const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [open, setOpen] = useState(false);
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();
-
-  const [newTag, setNewTag] = useState<string>("");
 
   const mutateTags = (newTags: string[]) => {
     if (spanId) {
@@ -65,21 +51,8 @@ const TagList: React.FunctionComponent<TagListProps> = ({
     }
   };
 
-  const handleAddTag = () => {
-    if (!newTag) return;
-
-    if (tags.includes(newTag)) {
-      toast({
-        title: "Error",
-        description: `The tag "${newTag}" already exist`,
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleAddTag = (newTag: string) => {
     mutateTags([...tags, newTag]);
-    setNewTag("");
-    setOpen(false);
   };
 
   const handleDeleteTag = (tag: string) => {
@@ -87,43 +60,11 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-1 overflow-x-hidden">
-      <Tag className="mx-1 size-4 text-muted-slate" />
-      {tags.sort().map((tag) => {
-        return (
-          <RemovableTag
-            label={tag}
-            key={tag}
-            size="lg"
-            onDelete={handleDeleteTag}
-          />
-        );
-      })}
-      <Popover onOpenChange={setOpen} open={open}>
-        <PopoverTrigger asChild>
-          <Button
-            data-testid="add-tag-button"
-            variant="outline"
-            size="icon-sm"
-            className="size-7"
-          >
-            <Plus />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[420px] p-6" align="end">
-          <div className="flex gap-2">
-            <Input
-              placeholder="New tag"
-              value={newTag}
-              onChange={(event) => setNewTag(event.target.value)}
-            />
-            <Button variant="default" onClick={handleAddTag}>
-              Add tag
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+    <TagListRenderer
+      tags={tags}
+      onAddTag={handleAddTag}
+      onDeleteTag={handleDeleteTag}
+    />
   );
 };
 

@@ -1,9 +1,21 @@
-import { LLM_SCHEMA_TYPE, ProviderMessageType } from "@/types/llm";
+import { LLMJudgeSchema, ProviderMessageType } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge",
   python_code = "user_defined_metric_python",
+  thread_llm_judge = "trace_thread_llm_as_judge",
+  thread_python_code = "trace_thread_user_defined_metric_python",
+}
+
+export enum EVALUATORS_RULE_SCOPE {
+  trace = "trace",
+  thread = "thread",
+}
+
+export enum UI_EVALUATORS_RULE_TYPE {
+  llm_judge = "llm_judge",
+  python_code = "python_code",
 }
 
 export interface LLMJudgeModel {
@@ -11,32 +23,36 @@ export interface LLMJudgeModel {
   temperature: number;
 }
 
-export interface LLMJudgeSchema {
-  name: string;
-  type: LLM_SCHEMA_TYPE;
-  description: string;
-  unsaved: boolean;
-}
-
 export interface LLMJudgeObject {
   model: LLMJudgeModel;
   messages: ProviderMessageType[];
-  variables: Record<string, string>;
+  variables?: Record<string, string>;
   schema: LLMJudgeSchema[];
 }
 
 export interface LLMJudgeDetails {
-  type: EVALUATORS_RULE_TYPE.llm_judge;
+  type: EVALUATORS_RULE_TYPE.llm_judge | EVALUATORS_RULE_TYPE.thread_llm_judge;
   code: LLMJudgeObject;
 }
 
-export interface PythonCodeObject {
+export interface PythonCodeDetailsTraceForm {
   metric: string;
   arguments: Record<string, string>;
+  parsingArgumentsError?: boolean;
 }
 
+export interface PythonCodeDetailsThreadForm {
+  metric: string;
+}
+
+export type PythonCodeObject =
+  | PythonCodeDetailsTraceForm
+  | PythonCodeDetailsThreadForm;
+
 export interface PythonCodeDetails {
-  type: EVALUATORS_RULE_TYPE.python_code;
+  type:
+    | EVALUATORS_RULE_TYPE.python_code
+    | EVALUATORS_RULE_TYPE.thread_python_code;
   code: PythonCodeObject;
 }
 

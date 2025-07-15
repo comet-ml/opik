@@ -231,9 +231,12 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   setExpanded,
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
-  const [openQuickstart, setOpenQuickstart] = useState(false);
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    activeWorkspaceName: workspaceName,
+    quickstartOpened,
+    setQuickstartOpened,
+  } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
 
   const { data: projectData } = useProjectsList(
@@ -330,7 +333,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       type: MENU_ITEM_TYPE.button,
       icon: GraduationCap,
       label: "Quickstart guide",
-      onClick: () => setOpenQuickstart(true),
+      onClick: () => setQuickstartOpened(true),
     },
     {
       id: "provideFeedback",
@@ -457,7 +460,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         setOpen={setOpenProvideFeedback}
       />
 
-      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
+      <QuickstartDialog open={quickstartOpened} setOpen={setQuickstartOpened} />
     </>
   );
 };

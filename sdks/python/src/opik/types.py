@@ -16,20 +16,23 @@ AttachmentEntityType = Literal["trace", "span"]
 
 
 class LLMProvider(str, enum.Enum):
-    GOOGLE_VERTEXAI = "google_vertexai"
+    GOOGLE_VERTEXAI: str = "google_vertexai"
     """Used for gemini models hosted in VertexAI. https://cloud.google.com/vertex-ai"""
 
-    GOOGLE_AI = "google_ai"
+    GOOGLE_AI: str = "google_ai"
     """Used for gemini models hosted in GoogleAI. https://ai.google.dev/aistudio"""
 
-    OPENAI = "openai"
+    OPENAI: str = "openai"
     """Used for models hosted by OpenAI. https://platform.openai.com"""
 
-    ANTHROPIC = "anthropic"
+    ANTHROPIC: str = "anthropic"
     """Used for models hosted by Anthropic. https://www.anthropic.com"""
 
-    ANTHROPIC_VERTEXAI = "anthropic_vertexai"
+    ANTHROPIC_VERTEXAI: str = "anthropic_vertexai"
     """Used for Anthropic models hosted by VertexAI. https://cloud.google.com/vertex-ai"""
+
+    GROQ = "groq"
+    """Used for models hosted by Groq. https://groq.com"""
 
     @classmethod
     def has_value(cls, value: str) -> bool:
@@ -57,7 +60,7 @@ class FeedbackScoreDict(TypedDict):
     id: NotRequired[str]
     """
     A unique identifier for the object this score should be assigned to.
-    Refers to either the trace_id or span_id depending on how the score is logged.
+    Refers to either the trace_id, span_id or thread_id depending on how the score is logged.
     """
 
     name: Required[str]

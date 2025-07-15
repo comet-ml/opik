@@ -8,13 +8,35 @@ from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.logging_messages import GEVAL_SCORE_CALC_FAILED
 
 if TYPE_CHECKING:  # TODO: Daniel check if this is needed
-    from litellm.types.utils import ModelResponse
+    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
 
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_model_output(
-    content: "ModelResponse", name: str, log_probs_supported: bool
+def parse_model_output_string(
+    content: str, metric_name: str
+) -> score_result.ScoreResult:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(content)
+
+        score = float(dict_content["score"])
+        if not 0 <= score <= 10:
+            raise ValueError(f"LLM returned score outside of [0, 10] range: {score}")
+
+        reason = str(dict_content["reason"])
+
+        return score_result.ScoreResult(
+            name=metric_name,
+            value=score / 10,
+            reason=reason,
+        )
+    except Exception as exception:
+        LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
+        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception
+
+
+def parse_litellm_model_output(
+    content: "LiteLLMModelResponse", name: str, log_probs_supported: bool
 ) -> score_result.ScoreResult:
     """
     This method computes the final score based on the model's response. The model's response is a dictionary
@@ -27,22 +49,8 @@ def parse_model_output(
     """
     try:
         if not log_probs_supported:
-            dict_content = parsing_helpers.extract_json_content_or_raise(
-                content.choices[0].message.content
-            )
-
-            score = float(dict_content["score"])
-            if not 0 <= score <= 10:
-                raise ValueError
-
-            reason = str(dict_content["reason"])
-
-            return score_result.ScoreResult(
-                name=name,
-                value=score / 10,
-                reason=reason,
-            )
-
+            text_content = content.choices[0].message.content
+            return parse_model_output_string(text_content, name)
         else:
             # Compute score using top logprobs
             score_token_position = 3
@@ -89,13 +97,15 @@ def parse_model_output(
                 final_score = int(log_probs_token) / 10
 
             if not (0.0 <= final_score <= 1.0):
-                raise ValueError
+                raise ValueError(
+                    f"Failed to compute final score from log_probs, the value is out of [0, 1] range: {final_score}"
+                )
 
             # Get the reason
             reason = json.loads(content.choices[0].message.content)["reason"]
 
             # Return the score and the reason
             return score_result.ScoreResult(name=name, value=final_score, reason=reason)
-    except Exception as e:
-        LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+    except Exception as exception:
+        LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
+        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception

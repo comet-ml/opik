@@ -10,4 +10,6 @@ export interface GetPromptsRequest {
     page?: number;
     size?: number;
     name?: string;
+    sorting?: string;
+    filters?: string;
 }

@@ -8,12 +8,14 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
+from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
+from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 
 
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
+    project_id: str
     project_name: typing.Optional[str] = None
     name: str
     sampling_rate: typing.Optional[float] = None
@@ -21,7 +23,7 @@ class Base(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
-    action: typing.Optional[typing.Literal["evaluator"]] = None
+    action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
@@ -61,6 +63,37 @@ class AutomationRuleEvaluatorPublic_UserDefinedMetricPython(Base):
             extra = pydantic.Extra.allow
 
 
+class AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge(Base):
+    type: typing.Literal["trace_thread_llm_as_judge"] = "trace_thread_llm_as_judge"
+    code: typing.Optional[TraceThreadLlmAsJudgeCodePublic] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+class AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython(Base):
+    type: typing.Literal["trace_thread_user_defined_metric_python"] = "trace_thread_user_defined_metric_python"
+    code: typing.Optional[TraceThreadUserDefinedMetricPythonCodePublic] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
 AutomationRuleEvaluatorPublic = typing.Union[
-    AutomationRuleEvaluatorPublic_LlmAsJudge, AutomationRuleEvaluatorPublic_UserDefinedMetricPython
+    AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+    AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
 ]

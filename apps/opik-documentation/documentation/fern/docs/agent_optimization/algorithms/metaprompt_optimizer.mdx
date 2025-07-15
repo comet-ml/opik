@@ -68,7 +68,6 @@ from opik_optimizer import MetaPromptOptimizer
 
 prompter = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
-    project_name="my-project",
     # LLM parameters like temperature, max_tokens are passed as keyword arguments
     temperature=0.1,
     max_tokens=5000,
@@ -76,7 +75,7 @@ prompter = MetaPromptOptimizer(
     reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
     max_rounds=3,
     num_prompts_per_round=4,
-    num_threads=8,
+    n_threads=8,
     seed=42 # Seed for LLM calls if supported by the model
 )
 ```
@@ -108,7 +107,7 @@ optimizer = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
     temperature=0.1,
     max_tokens=5000,
-    num_threads=8,
+    n_threads=8,
     seed=42
 )
 
@@ -120,6 +119,7 @@ def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(reference=dataset_item['answer'], output=llm_output)
 
 prompt = ChatPrompt(
+    project_name="my-project",
     messages=[
         {"role": "system", "content": "Provide an answer to the question."},
         {"role": "user", "content": "{question}"}
@@ -151,7 +151,6 @@ to the main [LiteLLM Support for Optimizers documentation page](/agent_optimizat
 ```python
 optimizer = MetaPromptOptimizer(
     model="google/gemini-pro",  # or any LiteLLM supported model
-    project_name="my-project",
     temperature=0.1,
     max_tokens=5000
 )

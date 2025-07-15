@@ -102,7 +102,7 @@ class RawLlmProviderKeyClient:
         self,
         *,
         provider: ProviderApiKeyWriteProvider,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -116,7 +116,7 @@ class RawLlmProviderKeyClient:
         ----------
         provider : ProviderApiKeyWriteProvider
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -233,8 +233,11 @@ class RawLlmProviderKeyClient:
         self,
         id: str,
         *,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -244,9 +247,15 @@ class RawLlmProviderKeyClient:
         ----------
         id : str
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -261,6 +270,9 @@ class RawLlmProviderKeyClient:
             json={
                 "api_key": api_key,
                 "name": name,
+                "headers": headers,
+                "configuration": configuration,
+                "base_url": base_url,
             },
             headers={
                 "content-type": "application/json",
@@ -391,7 +403,7 @@ class AsyncRawLlmProviderKeyClient:
         self,
         *,
         provider: ProviderApiKeyWriteProvider,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -405,7 +417,7 @@ class AsyncRawLlmProviderKeyClient:
         ----------
         provider : ProviderApiKeyWriteProvider
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -522,8 +534,11 @@ class AsyncRawLlmProviderKeyClient:
         self,
         id: str,
         *,
-        api_key: str,
+        api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -533,9 +548,15 @@ class AsyncRawLlmProviderKeyClient:
         ----------
         id : str
 
-        api_key : str
+        api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -550,6 +571,9 @@ class AsyncRawLlmProviderKeyClient:
             json={
                 "api_key": api_key,
                 "name": name,
+                "headers": headers,
+                "configuration": configuration,
+                "base_url": base_url,
             },
             headers={
                 "content-type": "application/json",

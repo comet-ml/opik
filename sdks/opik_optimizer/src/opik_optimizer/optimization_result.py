@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 import rich
 
-from .reporting_utils import get_console, get_link_text
+from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
 
 
 class OptimizationResult(pydantic.BaseModel):
@@ -34,6 +34,11 @@ class OptimizationResult(pydantic.BaseModel):
     tool_prompts: Optional[Dict[str, str]] = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    def get_run_link(self) -> str:
+        return get_optimization_run_url_by_id(
+            optimization_id=self.optimization_id, dataset_id=self.dataset_id
+        )
 
     def model_dump(self, *kargs: Any, **kwargs: Any) -> Dict[str, Any]:
         return super().model_dump(*kargs, **kwargs)
@@ -200,3 +205,4 @@ class OptimizationResult(pydantic.BaseModel):
         """
         console = get_console()
         console.print(self)
+        print("Optimization run link:", self.get_run_link())

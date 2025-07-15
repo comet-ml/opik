@@ -3,8 +3,11 @@ package com.comet.opik.domain.template;
 import com.github.mustachejava.Code;
 import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
+import com.github.mustachejava.MustacheException;
 import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -17,6 +20,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+@Slf4j
 public class MustacheParser implements TemplateParser {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
@@ -25,21 +29,41 @@ public class MustacheParser implements TemplateParser {
     public Set<String> extractVariables(String template) {
         Set<String> variables = new HashSet<>();
 
-        // Initialize Mustache Factory
-        Mustache mustache = MF.compile(new StringReader(template), "template");
+        if (StringUtils.isBlank(template)) {
+            return variables;
+        }
 
-        // Get the root node of the template
-        Code[] codes = mustache.getCodes();
-        collectVariables(codes, variables);
+        try {
+            // Initialize Mustache Factory
+            Mustache mustache = MF.compile(new StringReader(template), "template");
 
-        return variables;
+            // Get the root node of the template
+            Code[] codes = mustache.getCodes();
+            collectVariables(codes, variables);
+
+            return variables;
+        } catch (MustacheException ex) {
+            log.warn("Failed to parse Mustache template for variable extraction", ex);
+            return variables; // Return empty set when parsing fails
+        }
     }
 
     @Override
     public String render(String template, Map<String, ?> context) {
+        if (template == null) {
+            return "";
+        }
 
-        Mustache mustache = MF.compile(new StringReader(template), "template");
+        try {
+            Mustache mustache = MF.compile(new StringReader(template), "template");
+            return renderTemplate(context, mustache);
+        } catch (MustacheException ex) {
+            log.error("Failed to parse Mustache template for rendering:", ex);
+            throw new IllegalArgumentException("Invalid Mustache template", ex);
+        }
+    }
 
+    private String renderTemplate(Map<String, ?> context, Mustache mustache) {
         try (Writer writer = mustache.execute(new StringWriter(), context)) {
             writer.flush();
             return writer.toString();

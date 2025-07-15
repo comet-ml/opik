@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -16,12 +17,14 @@ import com.comet.opik.domain.LlmProviderApiKeyDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -30,7 +33,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -42,15 +47,19 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -110,8 +119,8 @@ class LlmProviderApiKeyResourceTest {
     }
 
     @Test
-    @DisplayName("Create and update provider Api Key")
-    void createAndUpdateProviderApiKey() {
+    @DisplayName("Create provider Api Key")
+    void testCreateProviderApiKey() {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -124,8 +133,100 @@ class LlmProviderApiKeyResourceTest {
                 workspaceName, 201);
         getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
         checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKey.apiKey());
+    }
 
-        var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class);
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Update provider Api Key")
+    void testUpdateProviderApiKey(ProviderApiKeyUpdate update, Function<ProviderApiKey, ProviderApiKey> getExpected) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        ProviderApiKey providerApiKey = createProviderApiKey();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+
+        llmProviderApiKeyResourceClient.updateProviderApiKey(createdProviderApiKey.id(), update, apiKey,
+                workspaceName, HttpStatus.SC_NO_CONTENT);
+
+        getAndAssertProviderApiKey(getExpected.apply(createdProviderApiKey), apiKey, workspaceName);
+
+        checkEncryption(createdProviderApiKey.id(), workspaceId,
+                update.apiKey() == null ? providerApiKey.apiKey() : update.apiKey());
+    }
+
+    private Stream<Arguments> testUpdateProviderApiKey() {
+        var updateAll = factory.manufacturePojo(ProviderApiKeyUpdate.class);
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedAll = (ProviderApiKey original) -> original.toBuilder()
+                .name(updateAll.name())
+                .apiKey(updateAll.apiKey())
+                .headers(updateAll.headers())
+                .configuration(updateAll.configuration())
+                .baseUrl(updateAll.baseUrl())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedName = (ProviderApiKey original) -> original.toBuilder()
+                .name(updateAll.name())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedApiKey = (ProviderApiKey original) -> original.toBuilder()
+                .apiKey(updateAll.apiKey())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedBaseUrl = (ProviderApiKey original) -> original.toBuilder()
+                .baseUrl(updateAll.baseUrl())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedHeaders = (ProviderApiKey original) -> original.toBuilder()
+                .headers(updateAll.headers())
+                .build();
+
+        Function<ProviderApiKey, ProviderApiKey> getExpectedConfig = (ProviderApiKey original) -> original.toBuilder()
+                .configuration(updateAll.configuration())
+                .build();
+
+        return Stream.of(
+                arguments(named("all fields", updateAll), getExpectedAll),
+                arguments(named("only name", updateAll.toBuilder().apiKey(null).headers(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedName),
+                arguments(named("only apiKey", updateAll.toBuilder().name(null).headers(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedApiKey),
+                arguments(named("only baseUrl", updateAll.toBuilder().apiKey(null).name(null).headers(null)
+                        .configuration(null).build()), getExpectedBaseUrl),
+                arguments(named("only headers", updateAll.toBuilder().name(null).apiKey(null).configuration(null)
+                        .baseUrl(null).build()), getExpectedHeaders),
+                arguments(named("only configuration", updateAll.toBuilder().name(null).apiKey(null).headers(null)
+                        .baseUrl(null).build()), getExpectedConfig));
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key - only name and apiKey")
+    void testUpdateProviderApiKeyOnlyNameAndApiKey() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        ProviderApiKey providerApiKey = createProviderApiKey()
+                .toBuilder()
+                .headers(null)
+                .configuration(null)
+                .baseUrl(null)
+                .build();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+
+        var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class)
+                .toBuilder()
+                .headers(null)
+                .configuration(null)
+                .baseUrl(null)
+                .build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
                 workspaceName, 204);
 
@@ -194,6 +295,36 @@ class LlmProviderApiKeyResourceTest {
     }
 
     @ParameterizedTest
+    @EmptySource
+    @NullSource
+    @DisplayName("Create and update provider with empty apiKey is allowed for custom provider")
+    void createUpdateCustomProviderWithEmptyApiKeyIsAllowed(String emptyString) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var testProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .name(CUSTOM_LLM_MODEL_PREFIX + "some_model_name")
+                .provider(LlmProvider.CUSTOM_LLM)
+                .apiKey(emptyString)
+                .build();
+        var createdProvider = llmProviderApiKeyResourceClient.createProviderApiKey(testProvider, apiKey, workspaceName,
+                HttpStatus.SC_CREATED);
+
+        var testProviderUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder()
+                .apiKey(emptyString).build();
+        llmProviderApiKeyResourceClient.updateProviderApiKey(createdProvider.id(), testProviderUpdate, apiKey,
+                workspaceName, HttpStatus.SC_NO_CONTENT);
+
+        var actual = llmProviderApiKeyResourceClient.getById(createdProvider.id(), workspaceName, apiKey,
+                HttpStatus.SC_OK);
+        var actualApiKey = Optional.ofNullable(actual.apiKey()).map(EncryptionUtils::decrypt).orElse(null);
+        assertThat(actualApiKey).isEqualTo(emptyString);
+    }
+
+    @ParameterizedTest
     @MethodSource
     @DisplayName("Create provider Api Key with invalid payload 422")
     void createAndUpdateProviderApiKeyInvalidPayload422(String body, String errorMsg) {
@@ -218,6 +349,18 @@ class LlmProviderApiKeyResourceTest {
                 arguments(
                         JsonUtils.writeValueAsString(providerApiKey.toBuilder().baseUrl("").build()),
                         "baseUrl must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .provider(LlmProvider.GEMINI)
+                                .apiKey("")
+                                .build()),
+                        "apiKey must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .provider(LlmProvider.GEMINI)
+                                .apiKey(null)
+                                .build()),
+                        "apiKey must not be blank"),
                 arguments(
                         JsonUtils.writeValueAsString(providerApiKey.toBuilder()
                                 .name(RandomStringUtils.secure().nextAlphabetic(200)).build()),

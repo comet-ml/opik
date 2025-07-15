@@ -75,6 +75,11 @@ spec:
     podTemplates:
       - name: clickhouse-cluster-pod-template
         spec:
+          serviceAccountName: {{ include "clickhouse.serviceAccountName" . }}
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
@@ -86,7 +91,6 @@ spec:
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-
           {{- with .Values.clickhouse.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
@@ -95,7 +99,6 @@ spec:
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          
           {{- with .Values.clickhouse.tolerations }}
           tolerations:
             {{- toYaml . | nindent 12 }}

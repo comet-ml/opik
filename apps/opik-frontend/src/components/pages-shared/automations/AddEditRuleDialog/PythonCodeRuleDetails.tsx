@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -27,6 +28,8 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   const theme = useCodemirrorTheme({
     editable: true,
   });
+
+  const isThreadScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.thread;
 
   return (
     <>
@@ -80,31 +83,33 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
           );
         }}
       />
-      <FormField
-        control={form.control}
-        name="pythonCodeDetails.arguments"
-        render={({ field, formState }) => {
-          const parsingArgumentsError = form.getValues(
-            "pythonCodeDetails.parsingArgumentsError",
-          );
-          const validationErrors = get(formState.errors, [
-            "pythonCodeDetails",
-            "arguments",
-          ]);
+      {!isThreadScope && (
+        <FormField
+          control={form.control}
+          name="pythonCodeDetails.arguments"
+          render={({ field, formState }) => {
+            const parsingArgumentsError = form.getValues(
+              "pythonCodeDetails.parsingArgumentsError",
+            );
+            const validationErrors = get(formState.errors, [
+              "pythonCodeDetails",
+              "arguments",
+            ]);
 
-          return (
-            <LLMPromptMessagesVariables
-              parsingError={parsingArgumentsError}
-              validationErrors={validationErrors}
-              projectId={form.watch("projectId")}
-              variables={field.value}
-              onChange={field.onChange}
-              description="All variables are automatically added based on the code snippet. They are extracted from the `score` method and are required."
-              errorText="Code parsing error. The variables cannot be extracted."
-            />
-          );
-        }}
-      />
+            return (
+              <LLMPromptMessagesVariables
+                parsingError={parsingArgumentsError}
+                validationErrors={validationErrors}
+                projectId={form.watch("projectId")}
+                variables={field.value}
+                onChange={field.onChange}
+                description="All variables are automatically added based on the code snippet. They are extracted from the `score` method and are required."
+                errorText="Code parsing error. The variables cannot be extracted."
+              />
+            );
+          }}
+        />
+      )}
     </>
   );
 };

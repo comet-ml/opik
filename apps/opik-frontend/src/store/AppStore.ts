@@ -8,9 +8,11 @@ type AppUser = {
 };
 type AppStore = {
   user: AppUser;
+  setUser: (user: AppUser) => void;
   activeWorkspaceName: string;
   setActiveWorkspaceName: (workspaceName: string) => void;
-  setUser: (user: AppUser) => void;
+  quickstartOpened: boolean;
+  setQuickstartOpened: (opened: boolean) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
@@ -18,6 +20,7 @@ const useAppStore = create<AppStore>((set) => ({
     apiKey: "",
     userName: DEFAULT_USERNAME,
   },
+  setUser: (user: AppUser) => set((state) => ({ ...state, user })),
   activeWorkspaceName: "",
   setActiveWorkspaceName: (workspaceName) => {
     axiosInstance.defaults.headers.common["Comet-Workspace"] = workspaceName;
@@ -26,7 +29,9 @@ const useAppStore = create<AppStore>((set) => ({
       activeWorkspaceName: workspaceName,
     }));
   },
-  setUser: (user: AppUser) => set((state) => ({ ...state, user })),
+  quickstartOpened: false,
+  setQuickstartOpened: (opened) =>
+    set((state) => ({ ...state, quickstartOpened: opened })),
 }));
 
 export const useActiveWorkspaceName = () =>

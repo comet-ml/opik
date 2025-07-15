@@ -4,8 +4,10 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -45,9 +47,22 @@ public class TraceThreadConfig implements StreamConfiguration {
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration closeTraceThreadJobInterval;
 
+    @Valid @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration closeTraceThreadJobLockTime;
+
+    @Valid @JsonProperty
+    @MaxDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    private Duration closeTraceThreadJobLockWaitTime;
+
+    @Valid @JsonProperty
+    @Min(1) @Max(10_000) private int closeTraceThreadMaxItemPerRun;
+
     @Override
     @JsonIgnore
     public Codec getCodec() {
         return CODEC;
     }
+
 }

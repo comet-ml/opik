@@ -37,7 +37,6 @@ interface PromptModelSelectProps {
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
-  onlyWithStructuredOutput?: boolean;
 }
 
 const STALE_TIME = 1000;
@@ -50,7 +49,6 @@ const PromptModelSelect = ({
   provider,
   onAddProvider,
   onDeleteProvider,
-  onlyWithStructuredOutput,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -93,12 +91,10 @@ const PromptModelSelect = ({
       .map(([pn, providerModels]) => {
         const providerName = pn as PROVIDER_TYPE;
 
-        const options = providerModels
-          .filter((m) => (onlyWithStructuredOutput ? m.structuredOutput : true))
-          .map((providerModel) => ({
-            label: providerModel.label,
-            value: providerModel.value,
-          }));
+        const options = providerModels.map((providerModel) => ({
+          label: providerModel.label,
+          value: providerModel.value,
+        }));
 
         if (!options.length) {
           return null;
@@ -112,7 +108,7 @@ const PromptModelSelect = ({
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, onlyWithStructuredOutput, getProviderModels]);
+  }, [configuredProvidersList, getProviderModels]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -266,6 +262,35 @@ const PromptModelSelect = ({
     return <Icon className="min-w-3.5" />;
   };
 
+  const renderSelectTrigger = () => {
+    const modelName =
+      groupOptions
+        .find((o) => o.provider === provider)
+        ?.options?.find((m) => m.value === value)?.label ?? value;
+
+    const title = `${
+      provider ? PROVIDERS[provider].label + " " : ""
+    }${modelName}`;
+
+    return (
+      <SelectTrigger
+        className={cn("size-full data-[placeholder]:text-light-slate", {
+          "border-destructive": hasError,
+        })}
+      >
+        <SelectValue
+          placeholder="Select an LLM model"
+          data-testid="select-a-llm-model"
+        >
+          <div className="flex items-center gap-2">
+            {renderProviderValueIcon()}
+            <span className="truncate">{title}</span>
+          </div>
+        </SelectValue>
+      </SelectTrigger>
+    );
+  };
+
   return (
     <>
       <Select
@@ -273,23 +298,7 @@ const PromptModelSelect = ({
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
       >
-        <SelectTrigger
-          className={cn("size-full data-[placeholder]:text-light-slate", {
-            "border-destructive": hasError,
-          })}
-        >
-          <SelectValue
-            placeholder="Select an LLM model"
-            data-testid="select-a-llm-model"
-          >
-            <div className="flex items-center gap-2">
-              {renderProviderValueIcon()}
-              <span className="truncate">
-                {provider && PROVIDERS[provider].label} {value}
-              </span>
-            </div>
-          </SelectValue>
-        </SelectTrigger>
+        {renderSelectTrigger()}
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
           <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
             <Search className="absolute left-2 size-4 text-light-slate" />

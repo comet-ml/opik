@@ -6,7 +6,6 @@ import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -86,6 +85,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -101,6 +101,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
@@ -1519,7 +1520,7 @@ class ProjectsResourceTest {
                             .projectName(project.name())
                             .id(trace.id())
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
 
@@ -1990,6 +1991,7 @@ class ProjectsResourceTest {
 
     private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,
             Direction request, Direction expected, int page, int size) {
+
         var sorting = List.of(SortingField.builder()
                 .field(SortableFields.LAST_UPDATED_TRACE_AT)
                 .direction(request)
@@ -2016,7 +2018,8 @@ class ProjectsResourceTest {
             allProjects = allProjects.reversed();
         }
 
-        assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+        assertThat(actualEntity.content())
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                 .containsExactlyElementsOf(allProjects);
     }
 
@@ -2501,6 +2504,152 @@ class ProjectsResourceTest {
             var feedbackScoreNamesByProjectId = projectResourceClient.findFeedbackScoreNames(projectIdsQueryParam,
                     apiKey, workspaceName);
             assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
+        }
+    }
+
+    @Nested
+    @DisplayName("Upsert Project Configurations")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpsertProjectConfigurations {
+
+        @Test
+        @DisplayName("when upsert project configurations with valid data, then return success")
+        void upsertProjectConfigurations__whenValidData__thenReturnSuccess() {
+            // Given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            Duration timeoutToMarkThreadAsInactive = Duration.ofMinutes(30);
+
+            var configuration = Project.Configuration.builder()
+                    .timeoutToMarkThreadAsInactive(timeoutToMarkThreadAsInactive)
+                    .build();
+
+            // When
+            projectResourceClient.updateConfigurations(configuration, projectId, apiKey, workspaceName);
+
+            // Verify the configuration was set by retrieving the project
+            var retrievedProject = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+            assertThat(retrievedProject.configuration()).isNotNull();
+            assertThat(retrievedProject.configuration().timeoutToMarkThreadAsInactive())
+                    .isEqualTo(timeoutToMarkThreadAsInactive);
+        }
+
+        @Test
+        @DisplayName("when upsert project configurations with null timeout, then return success")
+        void upsertProjectConfigurations__whenNullTimeout__thenReturnSuccess() {
+            // Given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+
+            var configuration = Project.Configuration.builder()
+                    .timeoutToMarkThreadAsInactive(null)
+                    .build();
+
+            // When
+            projectResourceClient.updateConfigurations(configuration, projectId, apiKey, workspaceName);
+
+            // Verify the configuration was set by retrieving the project
+            var retrievedProject = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+            assertThat(retrievedProject.configuration()).isNotNull();
+            assertThat(retrievedProject.configuration().timeoutToMarkThreadAsInactive()).isNull();
+        }
+
+        @Test
+        @DisplayName("when upsert project configurations with invalid duration, then return bad request")
+        void upsertProjectConfigurations__whenInvalidDuration__thenReturnBadRequest() {
+            // Given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+
+            // Create configuration with invalid duration (less than 1 second)
+            var configuration = Project.Configuration.builder()
+                    .timeoutToMarkThreadAsInactive(Duration.ofMillis(500))
+                    .build();
+
+            // When
+            try (var actualResponse = projectResourceClient.callUpdateConfigurations(configuration, projectId, apiKey,
+                    workspaceName)) {
+
+                // Then
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        // Test to try to upsert configuration with a duration longer than 7 days
+        @Test
+        @DisplayName("when upsert project configurations with duration longer than 7 days, then return bad request")
+        void upsertProjectConfigurations__whenDurationLongerThan7Days__thenReturnBadRequest() {
+            // Given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            Duration maxDuration = Duration.ofDays(7);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+
+            // Create configuration with duration longer than 7 days
+            var configuration = Project.Configuration.builder()
+                    .timeoutToMarkThreadAsInactive(Duration.ofDays(8))
+                    .build();
+
+            // When
+            try (var actualResponse = projectResourceClient.callUpdateConfigurations(configuration, projectId, apiKey,
+                    workspaceName)) {
+
+                // Then
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("timeoutToMarkThreadAsInactive duration exceeds the maximum allowed of "
+                                + maxDuration.toString());
+            }
+        }
+
+        @Test
+        @DisplayName("when upsert project configurations for non-existent project, then return not found")
+        void upsertProjectConfigurations__whenNonExistentProject__thenReturnNotFound() {
+            // Given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var nonExistentProjectId = UUID.randomUUID();
+            var configuration = Project.Configuration.builder()
+                    .timeoutToMarkThreadAsInactive(Duration.ofMinutes(30))
+                    .build();
+
+            // When
+            try (var actualResponse = projectResourceClient.callUpdateConfigurations(configuration,
+                    nonExistentProjectId, apiKey, workspaceName)) {
+
+                // Then
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
         }
     }
 

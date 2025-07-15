@@ -20,12 +20,22 @@ metadata:
   {{- end }}
 spec:
   ingressClassName: {{ default "alb" $value.ingress.ingressClassName }}  
-  {{- if $value.ingress.tls }}
+  {{- if and $value.ingress.tls $value.ingress.tls.enabled }}
   tls:
     - hosts:
-      - {{ $value.ingress.host }}
+      {{- if $value.ingress.tls.hosts }}
+      {{- range $value.ingress.tls.hosts }}
+      - {{ . | quote }}
+      {{- end }}
+      {{- else }}
+      {{- range $value.ingress.hosts }}
+      {{- if .host }}
+      - {{ .host | quote }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
       {{- if $value.ingress.tls.secretName }}
-        secretName: {{ $value.ingress.tls.secretName }}
+      secretName: {{ $value.ingress.tls.secretName }}
       {{- end }}
   {{- end }}
   rules:

@@ -79,19 +79,20 @@ from opik_optimizer.datasets import hotpot_300
 # Load a sample dataset
 hot_pot_dataset = hotpot_300()
 
+project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
+
 # Define the instruction for your chat prompt.
 # Input parameters from dataset examples will be interpolated into the full prompt.
 prompt = ChatPrompt(
+    project_name=project_name,
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "{question}"}
     ]
 )
-project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini", # LiteLLM name to use for generation and optimization
-    project_name=project_name, # Associates the run with a Comet project
     min_examples=3,      # Min few-shot examples
     max_examples=8,      # Max few-shot examples
     n_threads=16,        # Parallel threads for evaluation

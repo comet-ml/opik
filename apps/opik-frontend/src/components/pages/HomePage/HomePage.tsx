@@ -1,21 +1,33 @@
 import React from "react";
-import useAppStore from "@/store/AppStore";
-import GetStartedSection from "@/components/pages/HomePage/GetStartedSection";
+import useLocalStorageState from "use-local-storage-state";
+
+import WorkspaceStatisticSection from "@/components/pages/HomePage/WorkspaceStatisticSection";
+import OverallPerformanceSection from "@/components/pages/HomePage/OverallPerformanceSection";
 import ObservabilitySection from "@/components/pages/HomePage/ObservabilitySection";
 import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
-import { calculateWorkspaceName } from "@/lib/utils";
+import WelcomeBanner from "@/components/pages/HomePage/WecomeBanner";
+
+const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
 
 const HomePage = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [showWelcomeMessage, setShowWelcomeMessage] =
+    useLocalStorageState<boolean>(SHOW_WELCOME_MESSAGE_KEY, {
+      defaultValue: true,
+    });
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
-          Welcome to {calculateWorkspaceName(workspaceName, "Opik")}
-        </h1>
-      </div>
-      <GetStartedSection />
+      {showWelcomeMessage ? (
+        <WelcomeBanner setOpen={setShowWelcomeMessage} />
+      ) : (
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="comet-title-l truncate break-words">
+            Welcome back to Opik
+          </h1>
+        </div>
+      )}
+      <WorkspaceStatisticSection />
+      <OverallPerformanceSection />
       <ObservabilitySection />
       <EvaluationSection />
     </div>

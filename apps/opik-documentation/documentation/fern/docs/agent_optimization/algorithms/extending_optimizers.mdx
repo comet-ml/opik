@@ -51,10 +51,8 @@ While the exact implementation would vary, a custom optimizer might conceptually
 
 class CustomOptimizer:
     def __init__(self, model: str, # and other relevant params like in existing optimizers
-                 project_name: Optional[str] = None,
                  **model_kwargs):
         self.model = model
-        self.project_name = project_name
         self.model_kwargs = model_kwargs
         # Custom initialization for your algorithm
 

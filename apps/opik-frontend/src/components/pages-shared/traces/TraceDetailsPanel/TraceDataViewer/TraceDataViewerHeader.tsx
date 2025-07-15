@@ -1,5 +1,6 @@
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import React, { useRef, useState } from "react";
+import { ButtonLayoutSize } from "@/components/pages-shared/traces/DetailsActionSection";
 
 const LAYOUT_CONSTANTS = {
   MIN_SPACE_BETWEEN: 200,
@@ -9,18 +10,16 @@ const LAYOUT_CONSTANTS = {
   },
 };
 
-export type HeaderLayoutSize = "lg" | "sm";
-
 type TraceDataViewerHeaderProps = {
   title: React.ReactNode;
-  actionsPanel: (size: HeaderLayoutSize) => React.ReactNode;
+  actionsPanel: (size: ButtonLayoutSize) => React.ReactNode;
 };
 const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
   title,
   actionsPanel,
 }) => {
   const titleRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<HeaderLayoutSize>("sm");
+  const [size, setSize] = useState<ButtonLayoutSize>(ButtonLayoutSize.Small);
 
   const { ref: containerRef } = useObserveResizeNode<HTMLDivElement>((node) => {
     if (!titleRef.current) return;
@@ -28,7 +27,8 @@ const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
     const titleWidth = titleRef.current.clientWidth;
     const availableSpace =
       node.clientWidth - titleWidth - LAYOUT_CONSTANTS.REQUIRED_WIDTH;
-    const newSize: HeaderLayoutSize = availableSpace > 0 ? "lg" : "sm";
+    const newSize: ButtonLayoutSize =
+      availableSpace > 0 ? ButtonLayoutSize.Large : ButtonLayoutSize.Small;
 
     if (newSize !== size) {
       setSize(newSize);

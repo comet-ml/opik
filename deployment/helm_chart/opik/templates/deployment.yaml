@@ -35,12 +35,14 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- if $value.serviceAccount.enabled }}
-      serviceAccountName: {{ $value.serviceAccount.name | quote }}
-      {{- end }}
+      serviceAccountName: {{ include "service.serviceAccountName" ( merge . (dict "serviceName" $key ) ) }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $value.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 10 }}
       {{- end }}
       {{- if or $value.initContainers $value.waitForClickhouse $value.run_migration }}
       initContainers:
@@ -48,6 +50,8 @@ spec:
         - name: wait-for-clickhouse-service
           image: "{{ default $.Values.registry $value.waitForClickhouse.image.registry }}/{{ $value.waitForClickhouse.image.repository }}:{{ $value.waitForClickhouse.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForClickhouse.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -61,6 +65,8 @@ spec:
         - name: backend-migrations
           image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
           command: ["./run_db_migrations.sh"]
           {{- with $value.envFrom }}
           envFrom:
@@ -75,12 +81,10 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- end }}
-
       containers:
         {{- with $value.additionalContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-
         - name: {{ include "opik.name" $ }}-{{ $key | lower }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
@@ -134,7 +138,6 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
       {{- with $value.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
@@ -147,7 +150,6 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      
       {{- with $value.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

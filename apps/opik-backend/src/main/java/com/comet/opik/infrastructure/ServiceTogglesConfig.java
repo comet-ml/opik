@@ -9,5 +9,8 @@ import lombok.Data;
 public class ServiceTogglesConfig {
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
+    @JsonProperty
+    @NotNull boolean traceThreadPythonEvaluatorEnabled;
+    @JsonProperty
     @NotNull boolean guardrailsEnabled;
 }

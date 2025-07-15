@@ -2,7 +2,8 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any, Dict
 
-from opik_optimizer import MiproOptimizer, TaskConfig, datasets
+from opik_optimizer import TaskConfig, datasets
+from opik_optimizer.mipro_optimizer import MiproOptimizer
 
 
 def test_mipro_optimizer() -> None:

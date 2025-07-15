@@ -1,9 +1,8 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderService;
 import dev.langchain4j.model.chat.ChatModel;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
 public interface LlmServiceProvider {
 

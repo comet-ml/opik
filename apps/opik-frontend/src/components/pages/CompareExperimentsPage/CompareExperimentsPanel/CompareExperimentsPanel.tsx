@@ -3,6 +3,8 @@ import { keepPreviousData } from "@tanstack/react-query";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
 import copy from "clipboard-copy";
+import isBoolean from "lodash/isBoolean";
+import isFunction from "lodash/isFunction";
 import { Copy } from "lucide-react";
 
 import NoData from "@/components/shared/NoData/NoData";
@@ -70,6 +72,20 @@ const CompareExperimentsPanel: React.FunctionComponent<
     }
   }, [toast, experimentsCompare?.id]);
 
+  const horizontalNavigation = useMemo(
+    () =>
+      isBoolean(hasNextRow) &&
+      isBoolean(hasPreviousRow) &&
+      isFunction(onRowChange)
+        ? {
+            onChange: onRowChange,
+            hasNext: hasNextRow,
+            hasPrevious: hasPreviousRow,
+          }
+        : undefined,
+    [hasNextRow, hasPreviousRow, onRowChange],
+  );
+
   const renderContent = () => {
     if (!experimentsCompare) {
       return <NoData />;
@@ -97,7 +113,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   const renderHeaderContent = () => {
     return (
-      <div className="flex gap-2">
+      <div className="flex flex-auto justify-end gap-2 pl-6">
         <ShareURLButton />
         <Button size="sm" variant="outline" onClick={copyClickHandler}>
           <Copy className="mr-2 size-4" />
@@ -113,12 +129,10 @@ const CompareExperimentsPanel: React.FunctionComponent<
       entity="item"
       open={Boolean(experimentsCompareId)}
       headerContent={renderHeaderContent()}
-      hasPreviousRow={hasPreviousRow}
-      hasNextRow={hasNextRow}
       onClose={onClose}
-      onRowChange={onRowChange}
       initialWidth={0.8}
       ignoreHotkeys={isTraceDetailsOpened}
+      horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}
     </ResizableSidePanel>

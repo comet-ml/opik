@@ -2,7 +2,8 @@ import importlib.metadata
 import logging
 import warnings
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
+import pydantic
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
@@ -18,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        model_name: str = "gpt-3.5-turbo",
+        model_name: str = "gpt-4o",
         must_support_arguments: Optional[List[str]] = None,
         **completion_kwargs: Any,
     ) -> None:
@@ -124,18 +125,26 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         return filtered_params
 
-    def generate_string(self, input: str, **kwargs: Any) -> str:
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model.
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input
 
         Args:
             input: The input string based on which the model will generate the output.
+            response_format: pydantic model specifying the expected output string format.
             kwargs: Additional arguments that may be used by the model for string generation.
 
         Returns:
             str: The generated string output.
         """
+        if response_format is not None:
+            kwargs["response_format"] = response_format
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 
@@ -186,18 +195,26 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         return response
 
-    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
+    async def agenerate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model. Async version.
         You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
 
         Args:
             input: The input string based on which the model will generate the output.
+            response_format: pydantic model specifying the expected output string format.
             kwargs: Additional arguments that may be used by the model for string generation.
 
         Returns:
             str: The generated string output.
         """
+        if response_format is not None:
+            kwargs["response_format"] = response_format
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 

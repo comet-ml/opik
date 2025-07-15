@@ -1,17 +1,23 @@
+from typing import Any, Callable, Dict, List, Optional, Type
+
 import logging
 import time
 from abc import abstractmethod
-from typing import Any, Callable, Dict, List, Optional
+import random
+
 
 import litellm
-import opik
 from opik.rest_api.core import ApiError
 from opik.api_objects import optimization
+from opik import Dataset
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
-from .optimization_config import chat_prompt
+from .optimization_config import chat_prompt, mappers
+from .optimizable_agent import OptimizableAgent
+from .utils import create_litellm_agent_class
+from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -38,7 +44,6 @@ class BaseOptimizer:
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = None,
         verbose: int = 1,
         **model_kwargs: Any,
     ) -> None:
@@ -47,14 +52,12 @@ class BaseOptimizer:
 
         Args:
            model: LiteLLM model name
-           project_name: Opik project name
            verbose: Controls internal logging/progress bars (0=off, 1=on).
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
-        self.project_name = project_name
         self.verbose = verbose
         self._history: List[OptimizationRound] = []
         self.experiment_config = None
@@ -66,8 +69,8 @@ class BaseOptimizer:
     @abstractmethod
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
         **kwargs: Any,
@@ -84,35 +87,6 @@ class BaseOptimizer:
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            **kwargs: Additional arguments for optimization
-        """
-        pass
-
-    @abstractmethod
-    def evaluate_prompt(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
-        metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        **kwargs: Any,
-    ) -> float:
-        """
-        Evaluate a prompt.
-
-        Args:
-           prompt: the prompt to evaluate
-           dataset: Opik dataset name, or Opik dataset
-           metrics: A list of metric functions, these functions should have two arguments:
-               dataset_item and llm_output
-           n_samples: number of items to test in the dataset
-           dataset_item_ids: Optional list of dataset item IDs to evaluate
-           experiment_config: Optional configuration for the experiment
-           **kwargs: Additional arguments for evaluation
-
-        Returns:
-            float: The evaluation score
         """
         pass
 
@@ -151,3 +125,74 @@ class BaseOptimizer:
                 time.sleep(5)
         if count == 3:
             logger.warning("Unable to update optimization status; continuing...")
+
+    def evaluate_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable,
+        n_threads: int,
+        verbose: int = 1,
+        dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict] = None,
+        n_samples: Optional[int] = None,
+        seed: Optional[int] = None,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
+    ) -> float:
+        random.seed(seed)
+
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        self.agent_class: Type[OptimizableAgent]
+
+        if agent_class is None:
+            self.agent_class = create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
+
+        agent = self.agent_class(prompt)
+
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            messages = prompt.get_messages(dataset_item)
+            raw_model_output = agent.invoke(messages)
+            cleaned_model_output = raw_model_output.strip()
+            result = {
+                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+            }
+            return result
+
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = self.__class__.__name__
+        experiment_config = {
+            **experiment_config,
+            **{
+                "agent_class": self.agent_class.__name__,
+                "agent_config": prompt.to_dict(),
+                "metric": metric.__name__,
+                "dataset": dataset.name,
+                "configuration": {"prompt": (prompt.get_messages() if prompt else [])},
+            },
+        }
+
+        if n_samples is not None:
+            if dataset_item_ids is not None:
+                raise Exception("Can't use n_samples and dataset_item_ids")
+
+            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            dataset_item_ids = random.sample(all_ids, n_samples)
+
+        score = task_evaluator.evaluate(
+            dataset=dataset,
+            dataset_item_ids=dataset_item_ids,
+            metric=metric,
+            evaluated_task=llm_task,
+            num_threads=n_threads,
+            project_name=self.agent_class.project_name,
+            experiment_config=experiment_config,
+            optimization_id=None,
+            verbose=verbose,
+        )
+        return score
