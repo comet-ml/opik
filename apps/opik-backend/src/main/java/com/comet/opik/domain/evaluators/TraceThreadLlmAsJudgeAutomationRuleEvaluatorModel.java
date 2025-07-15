@@ -17,6 +17,7 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
         String projectName,
         String name,
         Float samplingRate,
+        Boolean enabled,
         @Json TraceThreadLlmAsJudgeCode code,
         Instant createdAt,
         String createdBy,

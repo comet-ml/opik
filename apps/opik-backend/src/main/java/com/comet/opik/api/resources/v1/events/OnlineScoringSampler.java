@@ -118,6 +118,22 @@ public class OnlineScoringSampler {
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, String workspaceId, Trace trace) {
+        // Check if rule is enabled first
+        if (!evaluator.isEnabled()) {
+            // Important to set the workspaceId for logging purposes
+            try (var logContext = wrapWithMdc(Map.of(
+                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                    "workspace_id", workspaceId,
+                    "rule_id", evaluator.getId().toString(),
+                    "trace_id", trace.id().toString()))) {
+
+                userFacingLogger.info(
+                        "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
+                        trace.id(), evaluator.getName());
+            }
+            return false;
+        }
+
         var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
 
         if (!shouldBeSampled) {

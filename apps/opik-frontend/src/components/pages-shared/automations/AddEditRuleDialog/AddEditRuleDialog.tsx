@@ -293,8 +293,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     return {
       ...ruleData,
       code: formData.pythonCodeDetails,
+      enabled: defaultRule?.enabled ?? true, // Default to enabled for new rules, preserve existing value for edits
+      type: formData.type,
     } as EvaluatorsRule;
-  }, [form]);
+  }, [form, defaultRule?.enabled]);
 
   const createPrompt = useCallback(() => {
     createMutate(
