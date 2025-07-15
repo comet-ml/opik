@@ -103,9 +103,7 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_in_d
         allow_errors=True,
         max_try_seconds=30,
     ):
-        raise AssertionError(
-            f"Failed to get spans from project '{PROJECT_NAME}'"
-        )
+        raise AssertionError(f"Failed to get spans from project '{PROJECT_NAME}'")
 
     llm_spans = opik_client.search_spans(
         project_name=PROJECT_NAME,
