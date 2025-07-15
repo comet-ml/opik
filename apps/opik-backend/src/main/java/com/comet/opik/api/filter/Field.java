@@ -7,6 +7,7 @@ public interface Field {
 
     String ID_QUERY_PARAM = "id";
     String NAME_QUERY_PARAM = "name";
+    String DESCRIPTION_QUERY_PARAM = "description";
     String START_TIME_QUERY_PARAM = "start_time";
     String END_TIME_QUERY_PARAM = "end_time";
     String INPUT_QUERY_PARAM = "input";

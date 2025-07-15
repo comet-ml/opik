@@ -42,6 +42,15 @@ public class FiltersFactory {
                             return false;
                         }
                     })
+                    .put(FieldType.DATE_TIME_STATE_DB, filter -> {
+                        try {
+                            Instant.parse(filter.value());
+                            return true;
+                        } catch (DateTimeParseException exception) {
+                            log.error("Invalid Instant format '{}'", filter.value(), exception);
+                            return false;
+                        }
+                    })
                     .put(FieldType.NUMBER, filter -> NumberUtils.isParsable(filter.value()))
                     .put(FieldType.FEEDBACK_SCORES_NUMBER, filter -> {
                         if (StringUtils.isBlank(filter.key())) {
