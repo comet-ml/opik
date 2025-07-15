@@ -125,7 +125,9 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata["object_type"] = "agent"
             agent = args[0]
             input_dict = {"context": kwargs.get("context")}
-            agent_dict = _encode_dict_and_keep_keys(agent, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
+            agent_dict = _encode_dict_and_keep_keys(
+                agent, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS
+            )
             input_dict["agent"] = agent_dict
             name = agent.role.strip()
 
@@ -134,7 +136,9 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata["object_type"] = "task"
             input_dict = {}
             task = args[0]
-            task_dict = _encode_dict_and_keep_keys(task, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
+            task_dict = _encode_dict_and_keep_keys(
+                task, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS
+            )
             input_dict["task"] = task_dict
             name = f"Task: {task.name}"
 
@@ -193,7 +197,9 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         elif object_type == "agent":
             output_dict = {"output": output}
         elif object_type == "task":
-            output_dict = _encode_dict_and_keep_keys(output, TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
+            output_dict = _encode_dict_and_keep_keys(
+                output, TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT
+            )
         elif object_type == "completion":
             output_dict = jsonable_encoder.encode(output)
             if output_dict.get("usage", None) is not None:
