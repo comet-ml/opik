@@ -96,16 +96,16 @@ spec:
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-          {{- if and .Values.clickhouse.backup.enabled .Values.clickhouse.backup.backupServer.enabled }}
+          {{- if and .Values.clickhouse.enabled .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
-            image: {{ .Values.clickhouse.backup.backupServer.image }}
-            imagePullPolicy: {{ .Values.clickhouse.backup.backupServer.imagePullPolicy | default "IfNotPresent" }}
-            {{- with .Values.clickhouse.backup.backupServer.resources }}
+            image: {{ .Values.clickhouse.backupServer.image }}
+            imagePullPolicy: {{ .Values.clickhouse.backupServer.imagePullPolicy | default "IfNotPresent" }}
+            {{- with .Values.clickhouse.backupServer.resources }}
             resources:
             {{- toYaml . | nindent 14 }}
             {{- end }}
             args: ["server"]
-            {{- with .Values.clickhouse.backup.backupServer.env }}
+            {{- with .Values.clickhouse.backupServer.env }}
             env:
             {{-   range $name, $value := . }}
             - name: {{ $name }}
@@ -114,17 +114,17 @@ spec:
             {{- end }}
             ports:
             - name: ch-backup-rest
-              containerPort: {{ .Values.clickhouse.backup.backupServer.port }}
+              containerPort: {{ .Values.clickhouse.backupServer.port }}
           {{- end }}
-          {{- with ( .Values.clickhouse.backup.nodeSelector | default .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
+          {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with ( .Values.clickhouse.backup.affinity | default .Values.clickhouse.affinity | default .Values.affinity ) }}
+          {{- with ( .Values.clickhouse.affinity | default .Values.affinity ) }}
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with ( .Values.clickhouse.backup.tolerations | default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
+          {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}

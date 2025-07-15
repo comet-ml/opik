@@ -34,7 +34,7 @@ spec:
 
 ####################################
 
-{{- if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled .Values.clickhouse.backup.monitoring.enabled  }}
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.monitoring.enabled  }}
 ---
 apiVersion: v1
 kind: Service
@@ -44,22 +44,22 @@ metadata:
   labels:
     {{- include "altinity-clickhouse-operator.labels" . | nindent 4 }}
     {{- include "opik.clickhouse.labels" . | nindent 4 }}
-    {{- with .Values.clickhouse.backup.monitoring.serviceMonitor.additionalLabels }}
+    {{- with .Values.clickhouse.backupServer.monitoring.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
     service-name: {{ include "opik.name" $ }}-ch-backup-monitoring
   {{- with .annotations }}
   annotations:
-    {{- with .Values.clickhouse.backup.monitoring.annotations  }}
+    {{- with .Values.clickhouse.backupServer.monitoring.annotations  }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
   {{- end }}
 spec:
-  type: {{ .Values.clickhouse.backup.monitoring.service.type }}
+  type: {{ .Values.clickhouse.backupServer.monitoring.service.type }}
   selector:
     {{- include "opik.clickhouse.selectorLabels" . | nindent 4 }}
   ports:
-  {{- range .Values.clickhouse.backup.monitoring.service.ports }}
+  {{- range .Values.clickhouse.backupServer.monitoring.service.ports }}
     - port: {{ .port }}
       targetPort: {{ .targetPort | default "7171" }}
       protocol: {{ .protocol | default "TCP"}}

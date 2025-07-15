@@ -1,4 +1,4 @@
-{{ if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled .Values.clickhouse.backup.backupCronJob.enabled }}
+{{ if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -6,9 +6,9 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
 spec:
-  schedule: "{{ .Values.clickhouse.backup.backupCronJob.schedule }}"
+  schedule: "{{ .Values.clickhouse.backup.schedule }}"
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.backupCronJob.successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
       template:
@@ -22,20 +22,20 @@ spec:
           serviceAccountName: {{ include "clickhouse.backup.serviceAccountName" . }}
           containers:
           - name: clickhouse-backup-job
-            image: {{ .Values.clickhouse.backup.backupCronJob.image | default .Values.clickhouse.image }}
+            image: {{ .Values.clickhouse.backup.image | default .Values.clickhouse.image }}
             {{- with .Values.clickhouse.imagePullSecrets }}
             imagePullSecrets:
               {{- toYaml . | nindent 8 }}
             {{- end }}
             command:
-            {{- .Values.clickhouse.backup.backupCronJob.command | toYaml | nindent 14 }}
-            {{- with .Values.clickhouse.backup.backupCronJob.resources }}
+            {{- .Values.clickhouse.backup.command | toYaml | nindent 14 }}
+            {{- with .Values.clickhouse.backup.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
             env:
             - name: CLICKHOUSE_BACKUP_BUCKET
-              value: {{ include "common.tplvalues.render" (dict "value" .Values.clickhouse.backup.backupCronJob.bucketURL "context" $) }}
+              value: {{ include "common.tplvalues.render" (dict "value" .Values.clickhouse.backup.bucketURL "context" $) }}
             - name: CLICKHOUSE_USER
               value: {{ .Values.clickhouse.adminUser.username }}
             - name: CLICKHOUSE_PASSWORD
