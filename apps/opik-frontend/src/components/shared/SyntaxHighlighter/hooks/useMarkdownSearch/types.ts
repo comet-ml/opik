@@ -6,7 +6,6 @@ export type MatchIndex = {
   value: number;
 };
 
-// Extended node types for markdown AST
 export interface TextNode extends VisitorNode {
   type: "text";
   value: string;

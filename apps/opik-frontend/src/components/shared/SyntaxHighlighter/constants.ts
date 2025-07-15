@@ -21,3 +21,6 @@ export const EXTENSION_MAP: { [key in MODE_TYPE]: LRLanguage | null } = {
 
 export const UNUSED_SYNTAX_HIGHLIGHTER_KEY =
   "__unused_syntax_highlighter_key__";
+
+export const SEARCH_HIGHLIGHT_COLOR = "bg-[#FFDF20]";
+export const SEARCH_CURRENT_HIGHLIGHT_COLOR = "bg-[#FF8904]";

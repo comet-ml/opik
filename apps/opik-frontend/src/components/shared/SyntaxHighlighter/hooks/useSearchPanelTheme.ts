@@ -1,5 +1,9 @@
 import { EditorView } from "@codemirror/view";
 import { useMemo } from "react";
+import {
+  SEARCH_CURRENT_HIGHLIGHT_COLOR,
+  SEARCH_HIGHLIGHT_COLOR,
+} from "../constants";
 
 export const useSearchPanelTheme = () => {
   return useMemo(() => {
@@ -10,10 +14,10 @@ export const useSearchPanelTheme = () => {
         backgroundColor: "transparent",
       }, // Active line highlight
       ".cm-searchMatch": {
-        backgroundColor: "#FFDF20",
+        backgroundColor: SEARCH_HIGHLIGHT_COLOR,
       },
       ".cm-searchMatch.cm-searchMatch-selected": {
-        backgroundColor: "#FF8904",
+        backgroundColor: SEARCH_CURRENT_HIGHLIGHT_COLOR,
       },
 
       // Flattened styles for the search panel
