@@ -29,9 +29,11 @@ class TracesPage:
         )
         self.attachment_container = self.page.get_by_label("Attachments")
 
-        self.page.get_by_role("button", name="Columns").click(force=True)
+        columns_button = self.page.get_by_role("button", name="Columns")
+        columns_button.wait_for(state="visible")
+        columns_button.wait_for(state="attached")
+        columns_button.click()
         # Enable the Name column by default
-
         try:
             expect(
                 self.page.get_by_role("button", name="Name").get_by_role("checkbox")
