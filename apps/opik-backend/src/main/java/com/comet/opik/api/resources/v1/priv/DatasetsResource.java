@@ -12,6 +12,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.filter.DatasetFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -118,13 +119,17 @@ public class DatasetsResource {
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") String name,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+
+        var queryFilters = filtersFactory.newFilters(filters, DatasetFilter.LIST_TYPE_REFERENCE);
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
                 .withExperimentsOnly(withExperimentsOnly)
                 .promptId(promptId)
                 .withOptimizationsOnly(withOptimizationsOnly)
+                .filters(queryFilters)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

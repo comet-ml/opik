@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
@@ -210,6 +211,11 @@ public class FilterQueryBuilder {
                     .put(PromptField.TAGS, TAGS_DB)
                     .build());
 
+    private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.TAGS, TAGS_DB)
+                    .build());
+
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
@@ -273,6 +279,9 @@ public class FilterQueryBuilder {
             FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.TAGS)
                     .build(),
+            FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .add(DatasetField.TAGS)
+                    .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -362,6 +371,7 @@ public class FilterQueryBuilder {
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {
