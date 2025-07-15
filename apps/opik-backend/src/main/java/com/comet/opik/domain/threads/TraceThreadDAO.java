@@ -184,7 +184,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 if(empty(tt.thread_id), new_tt.created_at, tt.created_at) AS created_at,
                 now64(6) AS last_updated_at,
                 if(empty(tt.thread_id), new_tt.tags, tt.tags) AS tags,
-                tt_new.sampling_per_rule AS sampling_per_rule,
+                new_tt.sampling_per_rule AS sampling_per_rule,
                 if(empty(tt.thread_id), new_tt.scored_at, tt.scored_at) AS scored_at
             FROM (
                 <items:{item |
@@ -196,10 +196,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         :status<item.index> AS status,
                         :created_by<item.index> AS created_by,
                         :user_name AS last_updated_by,
-                        :created_at<item.index> AS created_at,
+                        parseDateTime64BestEffort(:created_at<item.index>, 9) AS created_at,
                         now64(6) AS last_updated_at,
                         :tags<item.index> AS tags,
-                        mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
+                        mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule,
                         :scored_at<item.index> AS scored_at
                     <if(item.hasNext)>UNION ALL<endif>
                 }>
@@ -216,7 +216,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     tt.created_at AS created_at,
                     now64(6) AS last_updated_at,
                     tt.tags AS tags,
-                    sd.sampling_per_rule AS sampling_per_rule,
+                    tt.sampling_per_rule AS sampling_per_rule,
                     tt.scored_at AS scored_at
                 FROM trace_threads tt final
                 WHERE workspace_id = :workspace_id
@@ -484,8 +484,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("rule_ids" + i, ruleIds);
                 statement.bind("sampling" + i, samplingValues);
                 statement.bind("project_id" + i, traceThreadModel.projectId());
-                statement.bind("thread_id", traceThreadModel.threadId());
-                statement.bind("status" + 1, traceThreadModel.status().getValue());
+                statement.bind("thread_id" + i, traceThreadModel.threadId());
+                statement.bind("status" + i, traceThreadModel.status().getValue());
                 statement.bind("created_by" + i, traceThreadModel.createdBy());
                 statement.bind("created_at" + i, traceThreadModel.createdAt().toString());
                 statement.bind("tags" + i, traceThreadModel.tags() != null
