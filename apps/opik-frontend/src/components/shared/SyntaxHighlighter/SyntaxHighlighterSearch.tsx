@@ -1,7 +1,7 @@
 import React from "react";
 import ExpandableSearchInput from "../ExpandableSearchInput/ExpandableSearchInput";
 
-export interface SearchHighlighterProps {
+export interface SyntaxHighlighterSearchProps {
   searchValue?: string;
   onSearch: (value: string) => void;
   onPrev?: () => void;
@@ -10,11 +10,11 @@ export interface SearchHighlighterProps {
   totalMatches?: number;
 }
 
-const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
+const SyntaxHighlighterSearch: React.FC<SyntaxHighlighterSearchProps> = ({
   searchValue,
   onSearch,
-  onPrev,
-  onNext,
+  onPrev = () => {},
+  onNext = () => {},
   currentMatchIndex,
   totalMatches,
 }) => {
@@ -34,4 +34,4 @@ const SearchHighlighter: React.FC<SearchHighlighterProps> = ({
   );
 };
 
-export default SearchHighlighter;
+export default SyntaxHighlighterSearch;

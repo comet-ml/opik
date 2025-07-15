@@ -8,7 +8,7 @@ import {
   useSyntaxHighlighterMode,
   useSyntaxHighlighterCode,
   useSyntaxHighlighterOptions,
-} from "./hooks";
+} from "./hooks/useSyntaxHighlighterHooks";
 import CodeMirrorHighlighter from "./CodeMirrorHighlighter";
 import MarkdownHighlighter from "./MarkdownHighlighter";
 

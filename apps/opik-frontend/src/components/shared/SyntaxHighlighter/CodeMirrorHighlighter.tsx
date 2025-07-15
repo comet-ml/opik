@@ -9,7 +9,7 @@ import { useCodeMirrorSearch } from "./hooks/useCodeMirrorSearch";
 import { EXTENSION_MAP } from "./constants";
 import { CodeOutput } from "./types";
 import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
-import SearchHighlighter from "./SearchHighlighter";
+import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
 
 export interface CodeMirrorHighlighterProps {
   searchValue?: string;
@@ -54,7 +54,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
       rightHeader={
         <>
           {withSearch && (
-            <SearchHighlighter
+            <SyntaxHighlighterSearch
               searchValue={localSearchValue}
               onSearch={setLocalSearchValue}
               onPrev={findPrev}
@@ -82,7 +82,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           searchPanelTheme,
           searchExtension,
         ]}
-        maxHeight="300px"
+        maxHeight="150px"
         onCreateEditor={handleCreateEditor}
       />
     </SyntaxHighlighterLayout>
