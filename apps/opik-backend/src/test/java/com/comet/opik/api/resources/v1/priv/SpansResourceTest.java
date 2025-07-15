@@ -4772,7 +4772,7 @@ class SpansResourceTest {
                                     ? model
                                     : Optional.ofNullable(metadata)
                                             .map(md -> md.get("model"))
-                                            .map(JsonNode::asText).orElse(""),
+                                            .orElse(""),
                             provider,
                             usage,
                             metadata);
