@@ -5,7 +5,7 @@ RUN apk add --no-cache tini python3 py3-pip rust cargo
 WORKDIR /opt/opik-python-backend
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt --break-system-packages
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 
 ENV PYTHON_CODE_EXECUTOR_ASSET_NAME="opik-sandbox-executor-python"
 # Optionally copies the file. It's built ok without it, as it'll be pulled before running anyway.
