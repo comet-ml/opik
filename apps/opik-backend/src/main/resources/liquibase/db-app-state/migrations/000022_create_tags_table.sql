@@ -9,8 +9,7 @@ CREATE TABLE tags (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_tags_workspace_name (workspace_id, name),
-    INDEX idx_tags_workspace_id (workspace_id),
-    INDEX idx_tags_name (name)
+    INDEX idx_tags_workspace_id (workspace_id)
 );
 
 --rollback DROP TABLE tags;
