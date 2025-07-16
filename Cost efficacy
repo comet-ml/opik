@@ -1,0 +1,171 @@
+# Pi API code
+import http.client
+import json
+import os
+import requests
+import time
+
+api_key = os.getenv("PI_API_KEY")
+
+def image2video(image_url: str, prompt: str, output_path: str) -> None:
+    conn = http.client.HTTPSConnection("api.piapi.ai")
+
+    def get_task(task_id: str) -> dict:
+        headers = {"x-api-key": api_key}
+        conn.request("GET", f"/api/v1/task/{task_id}", headers=headers)
+        res = conn.getresponse()
+        data = res.read().decode("utf-8")
+        return json.loads(data)
+
+    def download_video(task: dict) -> None:
+        video_url = task["data"]["output"]["works"][0]["video"]["resource_without_watermark"]
+        response = requests.get(video_url)
+        response.raise_for_status()
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "wb") as f:
+            f.write(response.content)
+
+    payload = json.dumps({
+        "model": "kling",
+        "task_type": "video_generation",
+        "input": {
+            "image_url": image_url,
+            "prompt": prompt,
+            "negative_prompt": "distort the image, show anything that is not in the image, like human hand or fingers.",
+            "cfg_scale": 0.5,
+            "duration": 5,
+            "aspect_ratio": "9:16",
+            "camera_control": {
+                "type": "simple",
+                "config": {
+                    "horizontal": 0,
+                    "vertical": 0,
+                    "pan": -10,
+                    "tilt": 0,
+                    "roll": 0,
+                    "zoom": 0,
+                }
+            },
+            "mode": "std",
+            "version": "1.6"
+        },
+        "config": {
+            "service_mode": "",
+            "webhook_config": {"endpoint": "", "secret": ""}
+        }
+    })
+    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+    conn.request("POST", "/api/v1/task", payload, headers)
+    res = conn.getresponse()
+    data = res.read().decode("utf-8")
+    task_id = json.loads(data)["task_id"]
+
+    timeout = 600
+    task = get_task(task_id)
+    while timeout > 0 and task.get("data", {}).get("status") not in ["Completed", "Failed"]:
+        time.sleep(15)
+        timeout -= 15
+        task = get_task(task_id)
+
+    if task.get("data", {}).get("status") == "Completed":
+        download_video(task)
+
+# Replicate API code
+import os
+import time
+import requests
+import replicate
+from replicate.client import Client
+
+# Set the REPLICATE_API_TOKEN environment variable
+os.environ["REPLICATE_API_TOKEN"] = "your_api_token_here"
+
+api_token = os.environ["REPLICATE_API_TOKEN"]
+
+replicate = Client(api_token="<your_token>")
+def image2video(image_path: str, prompt: str, output_path: str) -> None:
+    with open(image_path, "rb") as image_file:
+        prediction = replicate.predictions.create(
+            model="kwaivgi/kling-v1.6-standard",
+            input={
+                "prompt": prompt,
+                "duration": 5,
+                "cfg_scale": 0.5,
+                "start_image": image_file,
+                "aspect_ratio": "9:16",
+                "negative_prompt": (
+                    "distort the image, show anything that is not in the image, "
+                    "like human hand or fingers."
+                )
+            }
+        )
+
+    timeout_seconds = 600
+    while prediction.status not in {"succeeded", "failed", "canceled"} and timeout_seconds > 0:
+        time.sleep(10)
+        timeout_seconds -= 10
+        prediction.reload()
+
+    if prediction.status == "succeeded":
+        video_url = prediction.output
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        response = requests.get(video_url)
+        with open(output_path, "wb") as f:
+            f.write(response.content)
+
+
+# Stability AI API code
+import os
+import time
+import requests
+
+api_key = os.environ["STABILITY_AI_API_KEY"]
+
+
+def get_generation_status(generation_id: str, api_key: str) -> requests.Response:
+    url = f"https://api.stability.ai/v2beta/image-to-video/result/{generation_id}"
+    return requests.get(
+        url,
+        headers={
+            "accept": "video/*",
+            "authorization": api_key,
+        }
+    )
+
+
+def write_video_file(content: bytes, output_path: str) -> None:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "wb") as f:
+        f.write(content)
+
+
+def image2video(image_path: str, prompt: str, output_path: str, api_key: str) -> None:
+    post_url = "https://api.stability.ai/v2beta/image-to-video"
+
+    with open(image_path, "rb") as image_file:
+        response = requests.post(
+            post_url,
+            headers={"authorization": api_key},
+            files={"image": image_file},
+            data={
+                "seed": 0,
+                "cfg_scale": 1.8,
+                "motion_bucket_id": 127,
+                "prompt": prompt,
+            },
+        )
+
+    response_json = response.json()
+    generation_id = response_json.get("id")
+
+    timeout = 600
+    wait_interval = 15
+
+    status_response = get_generation_status(generation_id, api_key)
+    while status_response.status_code != 200 and timeout > 0:
+        time.sleep(wait_interval)
+        timeout -= wait_interval
+        status_response = get_generation_status(generation_id, api_key)
+
+    if status_response.status_code == 200:
+        write_video_file(status_response.content, output_path)
