@@ -16,6 +16,7 @@ export const ProjectMetricRequestPublicMetricType: core.serialization.Schema<
     "DURATION",
     "COST",
     "GUARDRAILS_FAILED_COUNT",
+    "THREAD_COUNT",
 ]);
 
 export declare namespace ProjectMetricRequestPublicMetricType {
@@ -25,5 +26,6 @@ export declare namespace ProjectMetricRequestPublicMetricType {
         | "TOKEN_USAGE"
         | "DURATION"
         | "COST"
-        | "GUARDRAILS_FAILED_COUNT";
+        | "GUARDRAILS_FAILED_COUNT"
+        | "THREAD_COUNT";
 }

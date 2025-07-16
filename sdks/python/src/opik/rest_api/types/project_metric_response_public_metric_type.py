@@ -3,6 +3,8 @@
 import typing
 
 ProjectMetricResponsePublicMetricType = typing.Union[
-    typing.Literal["FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE", "DURATION", "COST", "GUARDRAILS_FAILED_COUNT"],
+    typing.Literal[
+        "FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE", "DURATION", "COST", "GUARDRAILS_FAILED_COUNT", "THREAD_COUNT"
+    ],
     typing.Any,
 ]
