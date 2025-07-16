@@ -13,7 +13,6 @@ export const DEFAULT_OPERATORS: DropdownOption<FilterOperator>[] = [
 export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.string]: "contains",
   [COLUMN_TYPE.number]: ">=",
-  [COLUMN_TYPE.boolean]: "=",
   [COLUMN_TYPE.list]: "contains",
   [COLUMN_TYPE.time]: ">=",
   [COLUMN_TYPE.dictionary]: "=",
@@ -70,16 +69,6 @@ export const OPERATORS_MAP: Record<
     {
       label: "<=",
       value: "<=",
-    },
-  ],
-  [COLUMN_TYPE.boolean]: [
-    {
-      label: "=",
-      value: "=",
-    },
-    {
-      label: "≠",
-      value: "!=",
     },
   ],
   [COLUMN_TYPE.cost]: [

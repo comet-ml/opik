@@ -12,7 +12,6 @@ import {
   Construction,
   LucideProps,
   AlertTriangle,
-  ToggleLeft,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
@@ -28,7 +27,6 @@ const COLUMN_TYPE_MAP: Record<
   guardrails: Construction,
   [COLUMN_TYPE.string]: Text,
   [COLUMN_TYPE.number]: Hash,
-  [COLUMN_TYPE.boolean]: ToggleLeft,
   [COLUMN_TYPE.list]: List,
   [COLUMN_TYPE.time]: Clock,
   [COLUMN_TYPE.duration]: Clock,

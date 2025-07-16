@@ -88,9 +88,8 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
   },
   {
     id: "enabled",
-    label: "Enabled",
-    type: COLUMN_TYPE.boolean,
-    accessorFn: (row) => (row.enabled ?? true ? "enabled" : "disabled"),
+    label: "State",
+    type: COLUMN_TYPE.string,
     cell: RuleEnabledCell as never,
   },
 ];

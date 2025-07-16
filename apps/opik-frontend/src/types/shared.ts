@@ -29,7 +29,6 @@ export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 export enum COLUMN_TYPE {
   string = "string",
   number = "number",
-  boolean = "boolean",
   list = "list",
   time = "date_time",
   duration = "duration",

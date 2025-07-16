@@ -9,6 +9,7 @@ import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -136,12 +137,8 @@ public class TraceThreadOnlineScoringSamplerListener {
 
                                 // Check if rule is enabled first
                                 if (!evaluator.isEnabled()) {
-                                    try (var logContext = wrapWithMdc(Map.of(
-                                            UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                                            UserLog.WORKSPACE_ID, workspaceId,
-                                            UserLog.RULE_ID, evaluator.getId().toString(),
-                                            UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
-
+                                    try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                            traceThreadModelId)) {
                                         userFacingLogger.info(
                                                 "The threadModelId '{}' was skipped for rule: '{}' as the rule is disabled",
                                                 traceThreadModelId, evaluator.getName());
@@ -149,12 +146,8 @@ public class TraceThreadOnlineScoringSamplerListener {
                                 } else {
                                     shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
 
-                                    try (var logContext = wrapWithMdc(Map.of(
-                                            UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                                            UserLog.WORKSPACE_ID, workspaceId,
-                                            UserLog.RULE_ID, evaluator.getId().toString(),
-                                            UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
-
+                                    try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                            traceThreadModelId)) {
                                         if (!shouldBeSampled) {
                                             userFacingLogger.info(
                                                     "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
@@ -187,5 +180,14 @@ public class TraceThreadOnlineScoringSamplerListener {
     private Map<UUID, Boolean> groupRuleSampling(Map<UUID, Boolean> acc, Map<UUID, Boolean> current) {
         acc.putAll(current);
         return acc;
+    }
+
+    private LogContextAware.Closable createThreadLoggingContext(String workspaceId,
+            AutomationRuleEvaluator<?> evaluator, UUID traceThreadModelId) {
+        return wrapWithMdc(Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, workspaceId,
+                UserLog.RULE_ID, evaluator.getId().toString(),
+                UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()));
     }
 }

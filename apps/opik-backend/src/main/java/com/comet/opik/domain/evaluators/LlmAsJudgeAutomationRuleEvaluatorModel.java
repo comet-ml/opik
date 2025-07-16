@@ -18,7 +18,7 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel(
         String projectName,
         String name,
         Float samplingRate,
-        Boolean enabled,
+        boolean enabled,
         @Json LlmAsJudgeCode code,
         Instant createdAt,
         String createdBy,

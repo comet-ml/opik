@@ -837,20 +837,22 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
-        @Test
-        void updateEnabledToDisabled() {
-            // Create an enabled rule
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Should update enabled status correctly")
+        void updateEnabledStatus(boolean initialEnabled, boolean targetEnabled, String scenarioDescription) {
+            // Create a rule with initial enabled state
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .enabled(true)
+                    .enabled(initialEnabled)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
 
-            // Update to disable it
+            // Update to target enabled state
             var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)
                     .toBuilder()
                     .projectId(automationRuleEvaluator.getProjectId())
-                    .enabled(false)
+                    .enabled(targetEnabled)
                     .build();
 
             try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
@@ -858,43 +860,19 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            // Verify the rule is now disabled
+            // Verify the rule has the expected enabled state
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                     id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
                 var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
-                assertThat(actualAutomationRuleEvaluator.isEnabled()).isFalse();
+                assertThat(actualAutomationRuleEvaluator.isEnabled()).isEqualTo(targetEnabled);
                 assertThat(actualAutomationRuleEvaluator.getName()).isEqualTo(updatedEvaluator.getName());
             }
         }
 
-        @Test
-        void updateDisabledToEnabled() {
-            // Create a disabled rule
-            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder()
-                    .enabled(false)
-                    .build();
-            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
-
-            // Update to enable it
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)
-                    .toBuilder()
-                    .projectId(automationRuleEvaluator.getProjectId())
-                    .enabled(true)
-                    .build();
-
-            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
-                    id, WORKSPACE_NAME, updatedEvaluator, API_KEY, HttpStatus.SC_NO_CONTENT)) {
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
-
-            // Verify the rule is now enabled
-            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
-                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
-                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
-                assertThat(actualAutomationRuleEvaluator.isEnabled()).isTrue();
-                assertThat(actualAutomationRuleEvaluator.getName()).isEqualTo(updatedEvaluator.getName());
-            }
+        static Stream<Arguments> updateEnabledStatus() {
+            return Stream.of(
+                    Arguments.of(true, false, "enabled to disabled"),
+                    Arguments.of(false, true, "disabled to enabled"));
         }
     }
 

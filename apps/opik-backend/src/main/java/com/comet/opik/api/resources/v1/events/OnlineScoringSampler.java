@@ -13,6 +13,7 @@ import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -121,12 +122,7 @@ public class OnlineScoringSampler {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
             // Important to set the workspaceId for logging purposes
-            try (var logContext = wrapWithMdc(Map.of(
-                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                    "workspace_id", workspaceId,
-                    "rule_id", evaluator.getId().toString(),
-                    "trace_id", trace.id().toString()))) {
-
+            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(
                         "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
                         trace.id(), evaluator.getName());
@@ -138,12 +134,7 @@ public class OnlineScoringSampler {
 
         if (!shouldBeSampled) {
             // Important to set the workspaceId for logging purposes
-            try (var logContext = wrapWithMdc(Map.of(
-                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                    "workspace_id", workspaceId,
-                    "rule_id", evaluator.getId().toString(),
-                    "trace_id", trace.id().toString()))) {
-
+            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(
                         "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
                         trace.id(), evaluator.getName(), evaluator.getSamplingRate());
@@ -186,5 +177,14 @@ public class OnlineScoringSampler {
                 messages.size(),
                 tracesBatch.traces().size(),
                 evaluator.getSamplingRate());
+    }
+
+    private LogContextAware.Closable createTraceLoggingContext(String workspaceId, AutomationRuleEvaluator<?> evaluator,
+            Trace trace) {
+        return wrapWithMdc(Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                "workspace_id", workspaceId,
+                "rule_id", evaluator.getId().toString(),
+                "trace_id", trace.id().toString()));
     }
 }

@@ -62,7 +62,8 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     private final float samplingRate;
 
     @JsonView({View.Public.class, View.Write.class})
-    private final boolean enabled;
+    @Builder.Default
+    private final boolean enabled = true;
 
     @JsonIgnore
     @NotNull private final T code;
