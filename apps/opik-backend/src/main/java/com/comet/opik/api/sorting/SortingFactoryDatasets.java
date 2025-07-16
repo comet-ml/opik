@@ -2,17 +2,22 @@ package com.comet.opik.api.sorting;
 
 import java.util.List;
 
+import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
+import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_CREATED_EXPERIMENT_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_CREATED_OPTIMIZATION_AT;
+import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
-import static java.util.Arrays.asList;
 
 public class SortingFactoryDatasets extends SortingFactory {
-    private static final List<String> SORTABLE_FIELDS = asList(LAST_CREATED_EXPERIMENT_AT,
-            LAST_CREATED_OPTIMIZATION_AT, TAGS);
+
+    private static final List<String> SUPPORTED_FIELDS = List.of(ID, NAME, DESCRIPTION, TAGS, CREATED_AT,
+            LAST_UPDATED_AT, LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_OPTIMIZATION_AT);
 
     @Override
     public List<String> getSortableFields() {
-        return SORTABLE_FIELDS;
+        return SUPPORTED_FIELDS;
     }
 }
