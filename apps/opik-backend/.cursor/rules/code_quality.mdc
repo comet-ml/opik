@@ -14,3 +14,4 @@ alwaysApply: true
 - Avoid hardcoding values; use constants or configuration files
 - changes must pass spotless checks
 - prefer using Map.of(), List.of(), Set.of() for creating immutable collections
+- for lists, always use getFirst() or getLast() instead of get(0) or get(size() - 1)
