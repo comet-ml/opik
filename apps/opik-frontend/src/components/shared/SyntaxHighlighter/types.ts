@@ -1,5 +1,5 @@
 import type { Node } from "unist";
-import { MODE_TYPE } from "./constants";
+import { MODE_TYPE } from "@/components/shared/SyntaxHighlighter/constants";
 
 export type PrettifyConfig = {
   fieldType: "input" | "output";

@@ -1,14 +1,14 @@
 import React, { ReactNode, useMemo, useRef } from "react";
-import { CodeOutput } from "./types";
-import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
-import { useMarkdownSearch } from "./hooks/useMarkdownSearch";
+import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
+import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
+import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import { cn, isStringMarkdown } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
-import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
+import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;

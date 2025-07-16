@@ -1,8 +1,17 @@
 import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { MODE_TYPE, UNUSED_SYNTAX_HIGHLIGHTER_KEY } from "../constants";
-import { PrettifyConfig, CodeOutput } from "../types";
-import { generateSyntaxHighlighterCode, generateSelectOptions } from "../utils";
+import {
+  MODE_TYPE,
+  UNUSED_SYNTAX_HIGHLIGHTER_KEY,
+} from "@/components/shared/SyntaxHighlighter/constants";
+import {
+  PrettifyConfig,
+  CodeOutput,
+} from "@/components/shared/SyntaxHighlighter/types";
+import {
+  generateSyntaxHighlighterCode,
+  generateSelectOptions,
+} from "@/components/shared/SyntaxHighlighter/utils";
 
 export const useSyntaxHighlighterMode = (
   prettifyConfig?: PrettifyConfig,

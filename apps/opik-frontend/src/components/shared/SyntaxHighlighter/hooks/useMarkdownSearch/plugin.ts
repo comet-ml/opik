@@ -7,12 +7,12 @@ import {
   TextNode,
   MatchIndex,
   VisitorNode,
-} from "../../types";
-import { createSearchRegex } from "../../utils";
+} from "@/components/shared/SyntaxHighlighter/types";
+import { createSearchRegex } from "@/components/shared/SyntaxHighlighter/utils";
 import {
   SEARCH_CURRENT_HIGHLIGHT_COLOR,
   SEARCH_HIGHLIGHT_COLOR,
-} from "../../constants";
+} from "@/components/shared/SyntaxHighlighter/constants";
 
 const createHighlightMarkup = (
   match: string,
