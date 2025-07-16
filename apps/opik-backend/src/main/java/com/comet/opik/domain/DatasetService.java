@@ -11,6 +11,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -110,6 +111,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
@@ -395,7 +397,7 @@ class DatasetServiceImpl implements DatasetService {
                 int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().getMaxExperimentInClauseSize();
 
                 if (ids.isEmpty()) {
-                    return Mono.just(DatasetPage.empty(page));
+                    return Mono.just(DatasetPage.empty(page, sortingFactory.getSortableFields()));
                 } else {
                     if (ids.size() <= maxExperimentInClauseSize) {
                         return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFieldsSql, visibility,
@@ -412,6 +414,7 @@ class DatasetServiceImpl implements DatasetService {
                     .page(datasetPage.page())
                     .size(datasetPage.size())
                     .total(datasetPage.total())
+                    .sortableBy(sortingFactory.getSortableFields())
                     .build();
         }
 
@@ -429,7 +432,7 @@ class DatasetServiceImpl implements DatasetService {
                             criteria.withOptimizationsOnly(),
                             sortingFieldsSql, visibility, filtersSQL, filterMapping));
 
-            return new DatasetPage(datasets, page, datasets.size(), count);
+            return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
         });
     }
 
@@ -464,7 +467,7 @@ class DatasetServiceImpl implements DatasetService {
                 int offset = (page - 1) * size;
                 List<Dataset> datasets = repository.findByTempTable(workspaceId, tableName, criteria.name(), size,
                         offset, sortingFields, visibility, filters, filterMapping);
-                return new DatasetPage(datasets, page, datasets.size(), count);
+                return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
             });
         }).doFinally(signalType -> {
             template.inTransaction(WRITE, handle -> {
@@ -485,7 +488,7 @@ class DatasetServiceImpl implements DatasetService {
             int offset = (page - 1) * size;
             List<Dataset> datasets = repository.findByIds(workspaceId, ids, criteria.name(), size, offset,
                     sortingFields, visibility, filters, filterMapping);
-            return new DatasetPage(datasets, page, datasets.size(), count);
+            return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
         }));
     }
 

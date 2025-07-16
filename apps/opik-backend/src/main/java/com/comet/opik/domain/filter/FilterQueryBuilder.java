@@ -62,6 +62,8 @@ public class FilterQueryBuilder {
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_DB = "created_at";
     private static final String LAST_UPDATED_AT_DB = "last_updated_at";
+    private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
+    private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
@@ -225,7 +227,14 @@ public class FilterQueryBuilder {
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.ID, ID_DB)
+                    .put(DatasetField.NAME, NAME_DB)
+                    .put(DatasetField.DESCRIPTION, DESCRIPTION_DB)
                     .put(DatasetField.TAGS, TAGS_DB)
+                    .put(DatasetField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
+                    .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -297,7 +306,14 @@ public class FilterQueryBuilder {
                     .add(PromptField.TAGS)
                     .build(),
             FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .add(DatasetField.ID)
+                    .add(DatasetField.NAME)
+                    .add(DatasetField.DESCRIPTION)
                     .add(DatasetField.TAGS)
+                    .add(DatasetField.CREATED_AT)
+                    .add(DatasetField.LAST_UPDATED_AT)
+                    .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
+                    .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
                     .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)

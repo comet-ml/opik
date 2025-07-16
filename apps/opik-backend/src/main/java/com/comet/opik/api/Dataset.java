@@ -62,10 +62,11 @@ public record Dataset(
                     Dataset.View.Public.class}) List<Dataset> content,
             @JsonView({Dataset.View.Public.class}) int page,
             @JsonView({Dataset.View.Public.class}) int size,
-            @JsonView({Dataset.View.Public.class}) long total) implements Page<Dataset>{
+            @JsonView({Dataset.View.Public.class}) long total,
+            @JsonView({Dataset.View.Public.class}) List<String> sortableBy) implements Page<Dataset>{
 
-        public static DatasetPage empty(int page) {
-            return new DatasetPage(List.of(), page, 0, 0);
+        public static DatasetPage empty(int page, List<String> sortableBy) {
+            return new DatasetPage(List.of(), page, 0, 0, sortableBy);
         }
     }
 }
