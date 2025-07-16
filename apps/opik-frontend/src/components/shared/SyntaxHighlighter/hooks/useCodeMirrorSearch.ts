@@ -88,7 +88,7 @@ export const useCodeMirrorSearch = (
   useEffect(() => {
     if (!view) return;
 
-    if (!searchValue?.trim()) {
+    if (!searchValue.trim()) {
       closeSearchPanel(view);
       view.dispatch({
         selection: { anchor: 0, head: 0 },

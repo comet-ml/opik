@@ -3,8 +3,21 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
+import { cva, VariantProps } from "class-variance-authority";
+
+const searchInputVariants = cva("px-8", {
+  variants: {
+    size: {
+      default: "h-8",
+      sm: "h-7",
+    },
+  },
+  defaultVariants: {
+    size: "default",
+  },
+});
 
 type ExpandableSearchInputProps = {
   placeholder?: string;
@@ -12,8 +25,8 @@ type ExpandableSearchInputProps = {
   onChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  inputClassName?: string;
+  buttonVariant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: VariantProps<typeof searchInputVariants>["size"];
   onPrev?: () => void;
   onNext?: () => void;
 };
@@ -23,8 +36,8 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   value,
   onChange,
   className,
-  buttonClassName,
-  inputClassName,
+  buttonVariant = "outline",
+  size = "default",
   disabled = false,
   onPrev,
   onNext,
@@ -84,11 +97,10 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
     >
       {!isExpanded && (
         <Button
-          variant="outline"
+          variant={buttonVariant}
           size="icon-sm"
           onClick={handleExpand}
           disabled={disabled}
-          className={buttonClassName}
         >
           <Search />
         </Button>
@@ -104,7 +116,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
               onValueChange={(value) => handleInputChange(value as string)}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className={cn("h-8 px-8", inputClassName, {
+              className={cn(searchInputVariants({ size }), {
                 "pr-[60px]": hasNextPrev,
               })}
             />
