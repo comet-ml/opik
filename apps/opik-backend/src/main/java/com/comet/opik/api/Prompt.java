@@ -73,12 +73,13 @@ public record Prompt(
                     Prompt.View.Public.class}) int page,
             @JsonView({Prompt.View.Public.class}) int size,
             @JsonView({Prompt.View.Public.class}) long total,
-            @JsonView({Prompt.View.Public.class}) List<Prompt> content)
+            @JsonView({Prompt.View.Public.class}) List<Prompt> content,
+            @JsonView({Prompt.View.Public.class}) List<String> sortableBy)
             implements
                 Page<Prompt>{
 
-        public static Prompt.PromptPage empty(int page) {
-            return new Prompt.PromptPage(page, 0, 0, List.of());
+        public static Prompt.PromptPage empty(int page, List<String> sortableBy) {
+            return new Prompt.PromptPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

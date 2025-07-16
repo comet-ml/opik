@@ -707,14 +707,14 @@ public class TracesResource {
         // Validate project identifier and get projectId
         UUID projectId = validateProjectIdentifier(identifier, workspaceId);
 
-        log.info("Open trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         traceThreadService.openThread(projectId, identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Opened trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Opened trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         return Response.noContent().build();
@@ -734,14 +734,14 @@ public class TracesResource {
         // Validate project identifier and get projectId
         UUID projectId = validateProjectIdentifier(identifier, workspaceId);
 
-        log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Close trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         traceThreadService.closeThread(projectId, identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Closed trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         return Response.noContent().build();
@@ -757,13 +757,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Update thread with threadModelId '{}' on workspaceId '{}'", threadModelId, workspaceId);
+        log.info("Update thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
 
         traceThreadService.update(threadModelId, threadUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Updated thread with threadModelId '{}' on workspaceId '{}'", threadModelId, workspaceId);
+        log.info("Updated thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
 
         return Response.noContent().build();
     }
