@@ -32,6 +32,10 @@ public class CostService {
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI);
 
+    private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR = Map
+            .of("anthropic", SpanCostCalculator::multimodalCostWithCacheAnthropic,
+                    "openai", SpanCostCalculator::multimodalCostWithCache);
+
     static {
         try {
             modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
@@ -122,7 +126,8 @@ public class CostService {
                 if (hasMultimodalPricing) {
                     if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
                             || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                        calculator = SpanCostCalculator::multimodalCostWithCache;
+                        calculator = PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                                SpanCostCalculator::multimodalCostWithCache);
                     } else {
                         calculator = SpanCostCalculator::multimodalCost;
                     }

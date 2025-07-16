@@ -149,6 +149,41 @@ class SpanCostCalculator {
         return cost;
     }
 
+    public static BigDecimal multimodalCostWithCacheAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
+        BigDecimal cost = BigDecimal.ZERO;
+
+        // For Anthropic, cached tokens are NOT subtracted from input tokens
+        // They are treated as separate billing items
+        int inputTokens = usage.getOrDefault("original_usage.input_tokens", usage.getOrDefault("prompt_tokens", 0));
+        int outputTokens = usage.getOrDefault("original_usage.output_tokens",
+                usage.getOrDefault("completion_tokens", 0));
+        int cacheReadInputTokens = usage.getOrDefault("original_usage.cache_read_input_tokens", 0);
+        int cacheCreationInputTokens = usage.getOrDefault("original_usage.cache_creation_input_tokens", 0);
+
+        cost = cost.add(modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens)));
+        cost = cost.add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)));
+        cost = cost.add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cacheReadInputTokens)));
+        cost = cost
+                .add(modelPrice.cacheCreationInputTokenPrice().multiply(BigDecimal.valueOf(cacheCreationInputTokens)));
+
+        // Calculate multimodal costs using original_usage fields
+        int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
+                usage.getOrDefault("audio_input_tokens", 0));
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("audio_output_tokens", 0));
+
+        cost = cost.add(modelPrice.audioInputPrice().multiply(BigDecimal.valueOf(audioInputTokens)));
+        cost = cost.add(modelPrice.audioOutputPrice().multiply(BigDecimal.valueOf(audioOutputTokens)));
+        cost = cost
+                .add(modelPrice.imageInputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("image_count", 0))));
+        cost = cost.add(modelPrice.videoInputPerSecondPrice()
+                .multiply(BigDecimal.valueOf(usage.getOrDefault("video_seconds", 0))));
+        cost = cost.add(modelPrice.audioInputPerSecondPrice()
+                .multiply(BigDecimal.valueOf(usage.getOrDefault("audio_seconds", 0))));
+
+        return cost;
+    }
+
     public static BigDecimal audioCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return modelPrice.audioInputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("audio_input_tokens", 0)))
                 .add(modelPrice.audioOutputPrice()
