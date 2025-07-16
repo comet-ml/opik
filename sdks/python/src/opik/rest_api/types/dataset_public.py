@@ -12,6 +12,7 @@ class DatasetPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
     visibility: typing.Optional[DatasetPublicVisibility] = None
+    tags: typing.Optional[typing.List[str]] = None
     description: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

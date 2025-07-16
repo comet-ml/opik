@@ -15,6 +15,7 @@ export const PromptPagePublic: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(PromptPublic).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace PromptPagePublic {
@@ -23,5 +24,6 @@ export declare namespace PromptPagePublic {
         size?: number | null;
         total?: number | null;
         content?: PromptPublic.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }

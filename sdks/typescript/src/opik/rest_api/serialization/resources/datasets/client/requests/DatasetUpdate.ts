@@ -12,6 +12,7 @@ export const DatasetUpdate: core.serialization.Schema<serializers.DatasetUpdate.
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
         visibility: DatasetUpdateVisibility.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
     });
 
 export declare namespace DatasetUpdate {
@@ -19,5 +20,6 @@ export declare namespace DatasetUpdate {
         name: string;
         description?: string | null;
         visibility?: DatasetUpdateVisibility.Raw | null;
+        tags?: string[] | null;
     }
 }

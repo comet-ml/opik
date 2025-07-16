@@ -39,6 +39,7 @@ class RawDatasetsClient:
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetPagePublic]:
         """
@@ -60,6 +61,8 @@ class RawDatasetsClient:
 
         sorting : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -79,6 +82,7 @@ class RawDatasetsClient:
                 "prompt_id": prompt_id,
                 "name": name,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -103,6 +107,7 @@ class RawDatasetsClient:
         name: str,
         id: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -116,6 +121,8 @@ class RawDatasetsClient:
         id : typing.Optional[str]
 
         visibility : typing.Optional[DatasetWriteVisibility]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         description : typing.Optional[str]
 
@@ -133,6 +140,7 @@ class RawDatasetsClient:
                 "id": id,
                 "name": name,
                 "visibility": visibility,
+                "tags": tags,
                 "description": description,
             },
             headers={
@@ -246,6 +254,7 @@ class RawDatasetsClient:
         name: str,
         description: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -261,6 +270,8 @@ class RawDatasetsClient:
 
         visibility : typing.Optional[DatasetUpdateVisibility]
 
+        tags : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -275,6 +286,7 @@ class RawDatasetsClient:
                 "name": name,
                 "description": description,
                 "visibility": visibility,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -752,6 +764,7 @@ class AsyncRawDatasetsClient:
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetPagePublic]:
         """
@@ -773,6 +786,8 @@ class AsyncRawDatasetsClient:
 
         sorting : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -792,6 +807,7 @@ class AsyncRawDatasetsClient:
                 "prompt_id": prompt_id,
                 "name": name,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -816,6 +832,7 @@ class AsyncRawDatasetsClient:
         name: str,
         id: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -829,6 +846,8 @@ class AsyncRawDatasetsClient:
         id : typing.Optional[str]
 
         visibility : typing.Optional[DatasetWriteVisibility]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         description : typing.Optional[str]
 
@@ -846,6 +865,7 @@ class AsyncRawDatasetsClient:
                 "id": id,
                 "name": name,
                 "visibility": visibility,
+                "tags": tags,
                 "description": description,
             },
             headers={
@@ -959,6 +979,7 @@ class AsyncRawDatasetsClient:
         name: str,
         description: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -974,6 +995,8 @@ class AsyncRawDatasetsClient:
 
         visibility : typing.Optional[DatasetUpdateVisibility]
 
+        tags : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -988,6 +1011,7 @@ class AsyncRawDatasetsClient:
                 "name": name,
                 "description": description,
                 "visibility": visibility,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",

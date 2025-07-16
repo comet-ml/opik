@@ -14,4 +14,5 @@ export interface FindDatasetsRequest {
     promptId?: string;
     name?: string;
     sorting?: string;
+    filters?: string;
 }
