@@ -397,4 +397,36 @@ public class ExperimentsResource {
 
         return Response.ok(feedbackScoreNames).build();
     }
+
+    @GET
+    @Path("/grouped")
+    @Operation(operationId = "findGroupedExperiments", summary = "Find grouped experiments by dataset", description = "Find grouped experiments by dataset, with pagination, sorting, and filtering.", responses = {
+            @ApiResponse(responseCode = "200", description = "Grouped experiments resource", content = @Content(schema = @Schema(implementation = Experiment.GroupedExperimentPage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView(Experiment.View.Public.class)
+    public Response findGrouped(
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters,
+            @QueryParam("dataset_id") UUID datasetId,
+            @QueryParam("prompt_id") UUID promptId,
+            @QueryParam("name") String name) {
+        // Sorting and filtering for datasets
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        WorkspaceMetadata metadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
+        var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
+        // Call service to get grouped experiments
+        var groupedPage = experimentService.findGrouped(
+                page, size, sortingFields, experimentFilters, datasetId, promptId, name)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext)).block();
+        return Response.ok().entity(groupedPage).build();
+    }
 }
