@@ -28,6 +28,8 @@ public interface Field {
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
     String CREATED_AT_QUERY_PARAM = "created_at";
     String LAST_UPDATED_AT_QUERY_PARAM = "last_updated_at";
+    String LAST_CREATED_EXPERIMENT_AT_QUERY_PARAM = "last_created_experiment_at";
+    String LAST_CREATED_OPTIMIZATION_AT_QUERY_PARAM = "last_created_optimization_at";
     String GUARDRAILS_QUERY_PARAM = "guardrails";
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
     String ERROR_INFO_QUERY_PARAM = "error_info";
