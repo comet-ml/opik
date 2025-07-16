@@ -71,6 +71,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -1403,16 +1404,27 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var random = new Random();
+
             var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
-                            .versionCount(0L)
+                            .versionCount(random.nextLong(5))
                             .template(null)
                             .build())
                     .toList();
 
-            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
 
             List<Prompt> expectedPrompts = prompts.stream().sorted(comparator).toList();
 
@@ -1434,6 +1446,9 @@ class PromptResourceTest {
             Comparator<Prompt> lastUpdatedByComparator = Comparator.comparing(Prompt::lastUpdatedBy,
                     String.CASE_INSENSITIVE_ORDER);
             Comparator<Prompt> tagsComparator = Comparator.comparing(prompt -> prompt.tags().toString().toLowerCase());
+            Comparator<Prompt> versionCountComparator = Comparator.comparing(Prompt::versionCount);
+
+            Comparator<Prompt> idComparatorReversed = Comparator.comparing(Prompt::id).reversed();
 
             return Stream.of(
                     // ID field sorting
@@ -1496,6 +1511,14 @@ class PromptResourceTest {
                             SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
                                     .build()),
 
+                    // VERSION_COUNT field sorting
+                    Arguments.of(
+                            versionCountComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            versionCountComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.DESC).build()),
+
                     // TAGS field sorting
                     Arguments.of(
                             tagsComparator,
@@ -1517,16 +1540,27 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var random = new Random();
+
             var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
-                            .versionCount(0L)
+                            .versionCount(random.nextLong(5))
                             .template(null)
                             .build())
                     .toList();
 
-            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
 
             List<Prompt> expectedPrompts = getExpectedPrompts.apply(prompts);
             PromptFilter filter = getFilter.apply(prompts);
@@ -1536,6 +1570,7 @@ class PromptResourceTest {
         }
 
         private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
             return Stream.of(
                     Arguments.of(
                             (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
@@ -1579,6 +1614,50 @@ class PromptResourceTest {
                                     .value(prompts.getFirst().name().substring(3))
                                     .build(),
                             (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream().filter(prompt -> prompt.versionCount() >= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream().filter(prompt -> prompt.versionCount() <= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
                     Arguments.of(
                             (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
                                     .field(PromptField.DESCRIPTION)

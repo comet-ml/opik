@@ -52,6 +52,7 @@ public class FilterQueryBuilder {
     private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
     private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_DB = "tags";
+    private static final String VERSION_COUNT_DB = "version_count";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
@@ -62,6 +63,8 @@ public class FilterQueryBuilder {
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_DB = "created_at";
     private static final String LAST_UPDATED_AT_DB = "last_updated_at";
+    private static final String CREATED_BY_DB = "created_by";
+    private static final String LAST_UPDATED_BY_DB = "last_updated_by";
     private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
     private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
@@ -222,7 +225,10 @@ public class FilterQueryBuilder {
                     .put(PromptField.DESCRIPTION, DESCRIPTION_DB)
                     .put(PromptField.CREATED_AT, CREATED_AT_DB)
                     .put(PromptField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(PromptField.CREATED_BY, CREATED_BY_DB)
+                    .put(PromptField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(PromptField.TAGS, TAGS_DB)
+                    .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
                     .build());
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
@@ -303,7 +309,10 @@ public class FilterQueryBuilder {
                     .add(PromptField.DESCRIPTION)
                     .add(PromptField.CREATED_AT)
                     .add(PromptField.LAST_UPDATED_AT)
+                    .add(PromptField.CREATED_BY)
+                    .add(PromptField.LAST_UPDATED_BY)
                     .add(PromptField.TAGS)
+                    .add(PromptField.VERSION_COUNT)
                     .build(),
             FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
                     .add(DatasetField.ID)
