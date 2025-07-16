@@ -19,9 +19,8 @@ const SyntaxHighlighterSearch: React.FC<SyntaxHighlighterSearchProps> = ({
       <ExpandableSearchInput
         value={searchValue}
         placeholder="Search..."
-        className=""
-        buttonClassName="border-none bg-primary-foreground"
-        inputClassName="h-7"
+        buttonVariant="ghost"
+        size="sm"
         onChange={onSearch}
         onPrev={onPrev}
         onNext={onNext}

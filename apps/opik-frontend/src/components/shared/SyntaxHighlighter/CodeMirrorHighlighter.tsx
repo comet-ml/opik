@@ -83,7 +83,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           searchPanelTheme,
           searchExtension,
         ]}
-        maxHeight="150px"
+        maxHeight="700px"
         onCreateEditor={handleCreateEditor}
       />
     </SyntaxHighlighterLayout>
