@@ -380,3 +380,219 @@ def test_no_scores_returns_bad_request(client):
     assert response.status_code == 400
     assert response.json[
                "error"] == "400 Bad Request: The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'"
+
+
+# ConversationThreadMetric test definitions
+CONVERSATION_THREAD_METRIC = """
+from typing import Any, Union, List
+
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+from opik.evaluation.metrics import score_result
+
+
+class TestConversationThreadMetric(conversation_thread_metric.ConversationThreadMetric):
+    def __init__(
+        self,
+        name: str = "test_conversation_thread_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, conversation: types.Conversation, **kwargs: Any
+    ) -> score_result.ScoreResult:
+        # Simple test metric that counts the number of messages in conversation
+        message_count = len(conversation)
+        # Score based on whether the conversation has an appropriate length
+        value = 1.0 if 2 <= message_count <= 10 else 0.0
+        return score_result.ScoreResult(
+            value=value, 
+            name=self.name,
+            reason=f"Conversation has {message_count} messages"
+        )
+"""
+
+CONVERSATION_THREAD_METRIC_LIST_RESPONSE = """
+from typing import Any, Union, List
+
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+from opik.evaluation.metrics import score_result
+
+
+class TestConversationThreadMetricList(conversation_thread_metric.ConversationThreadMetric):
+    def __init__(
+        self,
+        name: str = "test_conversation_thread_metric_list",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, conversation: types.Conversation, **kwargs: Any
+    ) -> List[score_result.ScoreResult]:
+        # Return multiple scores for testing list response
+        message_count = len(conversation)
+        user_messages = len([msg for msg in conversation if msg.get("role") == "user"])
+        assistant_messages = len([msg for msg in conversation if msg.get("role") == "assistant"])
+        
+        return [
+            score_result.ScoreResult(
+                value=float(user_messages) / message_count if message_count > 0 else 0.0, 
+                name=f"{self.name}_user_ratio"
+            ),
+            score_result.ScoreResult(
+                value=float(assistant_messages) / message_count if message_count > 0 else 0.0, 
+                name=f"{self.name}_assistant_ratio"
+            )
+        ]
+"""
+
+# Test data for conversation metrics
+CONVERSATION_DATA = {
+    "conversation": [
+        {
+            "role": "user",
+            "content": "Hello, how can you help me today?"
+        },
+        {
+            "role": "assistant", 
+            "content": "Hello! I'm here to help you with any questions or tasks you might have. What can I assist you with?"
+        },
+        {
+            "role": "user",
+            "content": "Can you help me write a Python function?"
+        },
+        {
+            "role": "assistant",
+            "content": "Of course! I'd be happy to help you write a Python function. What specific function would you like to create?"
+        }
+    ]
+}
+
+SHORT_CONVERSATION_DATA = {
+    "conversation": [
+        {
+            "role": "user",
+            "content": "Hi"
+        }
+    ]
+}
+
+JSON_CONVERSATION_DATA = {
+    "conversation": [
+        {
+            "role": "user",
+            "content": {
+                "query": "What is the weather like?",
+                "location": "New York",
+                "timestamp": "2024-01-15T10:30:00Z"
+            }
+        },
+        {
+            "role": "assistant", 
+            "content": {
+                "response": "The weather in New York is currently 72°F with partly cloudy skies.",
+                "temperature": 72,
+                "condition": "partly_cloudy",
+                "humidity": 65
+            }
+        },
+        {
+            "role": "user",
+            "content": {
+                "query": "Will it rain today?",
+                "follow_up": True
+            }
+        },
+        {
+            "role": "assistant",
+            "content": {
+                "response": "There's a 30% chance of light rain this afternoon.",
+                "precipitation_probability": 0.3,
+                "precipitation_type": "light_rain"
+            }
+        }
+    ]
+}
+
+
+def test_conversation_thread_metric_success(client):
+    """Test that ConversationThreadMetric works with proper conversation data."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": CONVERSATION_DATA,
+        "code": CONVERSATION_THREAD_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json['scores']
+    assert len(scores) == 1
+    
+    score = scores[0]
+    assert score['name'] == 'test_conversation_thread_metric'
+    assert score['value'] == 1.0  # 4 messages is within 2-10 range
+    assert score['reason'] == "Conversation has 4 messages"
+    assert score['scoring_failed'] is False
+
+
+def test_conversation_thread_metric_short_conversation(client):
+    """Test ConversationThreadMetric with a short conversation (edge case)."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": SHORT_CONVERSATION_DATA,
+        "code": CONVERSATION_THREAD_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json['scores']
+    assert len(scores) == 1
+    
+    score = scores[0]
+    assert score['name'] == 'test_conversation_thread_metric'
+    assert score['value'] == 0.0  # 1 message is below the 2-10 range
+    assert score['reason'] == "Conversation has 1 messages"
+    assert score['scoring_failed'] is False
+
+
+def test_conversation_thread_metric_list_response(client):
+    """Test ConversationThreadMetric that returns a list of scores."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": CONVERSATION_DATA,
+        "code": CONVERSATION_THREAD_METRIC_LIST_RESPONSE
+    })
+
+    assert response.status_code == 200
+    scores = response.json['scores']
+    assert len(scores) == 2
+    
+    # Check user ratio score
+    user_score = scores[0]
+    assert user_score['name'] == 'test_conversation_thread_metric_list_user_ratio'
+    assert user_score['value'] == 0.5  # 2 user messages out of 4 total
+    assert user_score['scoring_failed'] is False
+    
+    # Check assistant ratio score  
+    assistant_score = scores[1]
+    assert assistant_score['name'] == 'test_conversation_thread_metric_list_assistant_ratio'
+    assert assistant_score['value'] == 0.5  # 2 assistant messages out of 4 total
+    assert assistant_score['scoring_failed'] is False
+
+
+def test_conversation_thread_metric_with_json_content(client):
+    """Test ConversationThreadMetric with JSON content instead of string content."""
+    response = client.post(EVALUATORS_URL, json={
+        "data": JSON_CONVERSATION_DATA,
+        "code": CONVERSATION_THREAD_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json['scores']
+    assert len(scores) == 1
+    
+    score = scores[0]
+    assert score['name'] == 'test_conversation_thread_metric'
+    assert score['value'] == 1.0  # 4 messages is within 2-10 range
+    assert score['reason'] == "Conversation has 4 messages"
+    assert score['scoring_failed'] is False
