@@ -135,7 +135,7 @@ public class SpanService {
                         //TODO: refactor to implement proper conflict resolution
                         .flatMap(project -> lockService.executeWithLock(
                                 new LockService.Lock(id, SPAN_KEY),
-                                Mono.defer(() -> spanDAO.getById(id)
+                                Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
                                         .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
                                         .switchIfEmpty(
                                                 Mono.defer(() -> spanDAO.partialInsert(id, project.id(), spanUpdate)))
