@@ -1,7 +1,10 @@
 import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { createRemarkSearchPlugin, highlightPlainText } from "./plugin";
-import { MatchIndex, VisitorNode } from "../../types";
-import { scrollToMatchByIndex } from "../../utils";
+import {
+  MatchIndex,
+  VisitorNode,
+} from "@/components/shared/SyntaxHighlighter/types";
+import { scrollToMatchByIndex } from "@/components/shared/SyntaxHighlighter/utils";
 
 export type UseMarkdownSearchOptions = {
   searchValue?: string;

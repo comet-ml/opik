@@ -62,9 +62,11 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
       handleCollapse();
     }
     if (e.key === "ArrowUp" && onPrev) {
+      e.preventDefault();
       onPrev();
     }
     if (e.key === "ArrowDown" && onNext) {
+      e.preventDefault();
       onNext();
     }
   };

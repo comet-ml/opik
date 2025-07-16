@@ -1,7 +1,13 @@
 import * as yml from "js-yaml";
 import { prettifyMessage } from "@/lib/traces";
-import { MODE_TYPE, DEFAULT_OPTIONS } from "./constants";
-import { PrettifyConfig, CodeOutput } from "./types";
+import {
+  MODE_TYPE,
+  DEFAULT_OPTIONS,
+} from "@/components/shared/SyntaxHighlighter/constants";
+import {
+  PrettifyConfig,
+  CodeOutput,
+} from "@/components/shared/SyntaxHighlighter/types";
 
 export const generateSyntaxHighlighterCode = (
   data: object,

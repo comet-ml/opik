@@ -2,15 +2,15 @@ import React, { useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
-import { MODE_TYPE } from "./constants";
-import { PrettifyConfig } from "./types";
+import { MODE_TYPE } from "@/components/shared/SyntaxHighlighter/constants";
+import { PrettifyConfig } from "@/components/shared/SyntaxHighlighter/types";
 import {
   useSyntaxHighlighterMode,
   useSyntaxHighlighterCode,
   useSyntaxHighlighterOptions,
-} from "./hooks/useSyntaxHighlighterHooks";
-import CodeMirrorHighlighter from "./CodeMirrorHighlighter";
-import MarkdownHighlighter from "./MarkdownHighlighter";
+} from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
+import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
+import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
 
 export type SyntaxHighlighterProps = {
   data: object;

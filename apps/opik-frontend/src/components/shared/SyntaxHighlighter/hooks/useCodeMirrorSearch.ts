@@ -10,7 +10,7 @@ import {
   findNext,
   findPrevious,
 } from "@codemirror/search";
-import { CodeOutput } from "../types";
+import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 
 interface UseCodeMirrorSearchOptions {
   view: EditorView | null;
