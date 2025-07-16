@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useMemo, useRef } from "react";
 import { CodeOutput } from "./types";
 import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "./hooks/useMarkdownSearch";
@@ -12,6 +12,8 @@ import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
+  localSearchValue?: string;
+  setLocalSearchValue: (value: string) => void;
   codeOutput: CodeOutput;
   modeSelector: ReactNode;
   copyButton: ReactNode;
@@ -20,24 +22,19 @@ export interface MarkdownHighlighterProps {
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   codeOutput,
+  localSearchValue,
   searchValue,
+  setLocalSearchValue,
   modeSelector,
   copyButton,
   withSearch,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [localSearchValue, setLocalSearchValue] = useState<string>("");
-  const {
-    searchPlugin,
-    searchPlainText,
-    findNext,
-    findPrev,
-    currentMatchIndex,
-    totalMatches,
-  } = useMarkdownSearch({
-    searchValue: localSearchValue || searchValue,
-    container: containerRef.current,
-  });
+  const { searchPlugin, searchPlainText, findNext, findPrev } =
+    useMarkdownSearch({
+      searchValue: localSearchValue || searchValue,
+      container: containerRef.current,
+    });
 
   const markdownPreview = useMemo(() => {
     if (isNull(codeOutput.message)) return "";
@@ -72,8 +69,6 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
               onSearch={setLocalSearchValue}
               onPrev={findPrev}
               onNext={findNext}
-              currentMatchIndex={currentMatchIndex}
-              totalMatches={totalMatches}
             />
           )}
           {copyButton}

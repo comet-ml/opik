@@ -6,8 +6,6 @@ export interface SyntaxHighlighterSearchProps {
   onSearch: (value: string) => void;
   onPrev?: () => void;
   onNext?: () => void;
-  currentMatchIndex?: number;
-  totalMatches?: number;
 }
 
 const SyntaxHighlighterSearch: React.FC<SyntaxHighlighterSearchProps> = ({
@@ -15,8 +13,6 @@ const SyntaxHighlighterSearch: React.FC<SyntaxHighlighterSearchProps> = ({
   onSearch,
   onPrev = () => {},
   onNext = () => {},
-  currentMatchIndex,
-  totalMatches,
 }) => {
   return (
     <ExpandableSearchInput
@@ -28,8 +24,6 @@ const SyntaxHighlighterSearch: React.FC<SyntaxHighlighterSearchProps> = ({
       onChange={onSearch}
       onPrev={onPrev}
       onNext={onNext}
-      currentMatchIndex={currentMatchIndex}
-      totalMatches={totalMatches}
     />
   );
 };

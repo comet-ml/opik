@@ -13,8 +13,6 @@ export type UseMarkdownSearchReturn = {
   searchPlainText: (text: string) => React.ReactNode[];
   findNext: () => void;
   findPrev: () => void;
-  currentMatchIndex: number;
-  totalMatches: number;
 };
 
 type SearchState = {
@@ -38,7 +36,7 @@ export const useMarkdownSearch = ({
     currentMatchIndex: 0,
     totalMatches: 0,
   });
-  const { currentMatchIndex, totalMatches } = searchState;
+  const { currentMatchIndex } = searchState;
   const matchIndexRef = useRef<MatchIndex>({ value: 0 });
 
   const searchPlugin = useMemo(() => {
@@ -127,7 +125,5 @@ export const useMarkdownSearch = ({
     searchPlainText,
     findNext,
     findPrev,
-    currentMatchIndex: searchState.currentMatchIndex + 1,
-    totalMatches,
   };
 };
