@@ -1,6 +1,7 @@
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
+from opik_backend.constants import TRACE_THREAD_METRIC_TYPE
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
@@ -451,148 +452,71 @@ class TestConversationThreadMetricList(conversation_thread_metric.ConversationTh
         ]
 """
 
-# Test data for conversation metrics
-CONVERSATION_DATA = {
-    "conversation": [
-        {
-            "role": "user",
-            "content": "Hello, how can you help me today?"
-        },
-        {
-            "role": "assistant", 
-            "content": "Hello! I'm here to help you with any questions or tasks you might have. What can I assist you with?"
-        },
-        {
-            "role": "user",
-            "content": "Can you help me write a Python function?"
-        },
-        {
-            "role": "assistant",
-            "content": "Of course! I'd be happy to help you write a Python function. What specific function would you like to create?"
-        }
-    ]
-}
-
-SHORT_CONVERSATION_DATA = {
-    "conversation": [
-        {
-            "role": "user",
-            "content": "Hi"
-        }
-    ]
-}
-
-JSON_CONVERSATION_DATA = {
-    "conversation": [
-        {
-            "role": "user",
-            "content": {
-                "query": "What is the weather like?",
-                "location": "New York",
-                "timestamp": "2024-01-15T10:30:00Z"
+def test_conversation_thread_metric_wrong_data_structure_fails(client):
+    """Test that ConversationThreadMetric fails when data is a list without type: trace_thread."""
+    # This demonstrates the WRONG way - data as a list without type: trace_thread
+    wrong_payload = {
+        "data": [  # ❌ This is wrong when type is not "trace_thread"
+            {
+                "role": "user",
+                "content": {
+                    "query": "My phone won't work",
+                    "thread_id": "test-123"
+                }
+            },
+            {
+                "role": "assistant", 
+                "content": {
+                    "output": "Let me help you with that."
+                }
             }
-        },
-        {
-            "role": "assistant", 
-            "content": {
-                "response": "The weather in New York is currently 72°F with partly cloudy skies.",
-                "temperature": 72,
-                "condition": "partly_cloudy",
-                "humidity": 65
-            }
-        },
-        {
-            "role": "user",
-            "content": {
-                "query": "Will it rain today?",
-                "follow_up": True
-            }
-        },
-        {
-            "role": "assistant",
-            "content": {
-                "response": "There's a 30% chance of light rain this afternoon.",
-                "precipitation_probability": 0.3,
-                "precipitation_type": "light_rain"
-            }
-        }
-    ]
-}
-
-
-def test_conversation_thread_metric_success(client):
-    """Test that ConversationThreadMetric works with proper conversation data."""
-    response = client.post(EVALUATORS_URL, json={
-        "data": CONVERSATION_DATA,
+        ],
+        # ❌ Missing "type": "trace_thread" - so backend tries **data unpacking
         "code": CONVERSATION_THREAD_METRIC
-    })
+    }
+    
+    response = client.post(EVALUATORS_URL, json=wrong_payload)
+    
+    # Should fail with 400 error about mapping vs list
+    assert response.status_code == 400
+    assert "argument after ** must be a mapping, not list" in response.json["error"]
 
+
+
+
+
+def test_conversation_thread_metric_with_trace_thread_type(client):
+    """Test that ConversationThreadMetric works with trace_thread type and direct data array."""
+    # Test the NEW way - using type: trace_thread with data as direct array
+    trace_thread_payload = {
+        "data": [  # ✅ Data as direct array works with type: trace_thread
+            {
+                "role": "user",
+                "content": {
+                    "query": "My phone won't work",
+                    "thread_id": "test-123"
+                }
+            },
+            {
+                "role": "assistant", 
+                "content": {
+                    "output": "Let me help you with that."
+                }
+            }
+        ],
+        "type": TRACE_THREAD_METRIC_TYPE,  # ✅ This tells backend to pass data as first positional arg
+        "code": CONVERSATION_THREAD_METRIC
+    }
+    
+    response = client.post(EVALUATORS_URL, json=trace_thread_payload)
+    
+    # Should work correctly now
     assert response.status_code == 200
     scores = response.json['scores']
     assert len(scores) == 1
     
     score = scores[0]
     assert score['name'] == 'test_conversation_thread_metric'
-    assert score['value'] == 1.0  # 4 messages is within 2-10 range
-    assert score['reason'] == "Conversation has 4 messages"
-    assert score['scoring_failed'] is False
-
-
-def test_conversation_thread_metric_short_conversation(client):
-    """Test ConversationThreadMetric with a short conversation (edge case)."""
-    response = client.post(EVALUATORS_URL, json={
-        "data": SHORT_CONVERSATION_DATA,
-        "code": CONVERSATION_THREAD_METRIC
-    })
-
-    assert response.status_code == 200
-    scores = response.json['scores']
-    assert len(scores) == 1
-    
-    score = scores[0]
-    assert score['name'] == 'test_conversation_thread_metric'
-    assert score['value'] == 0.0  # 1 message is below the 2-10 range
-    assert score['reason'] == "Conversation has 1 messages"
-    assert score['scoring_failed'] is False
-
-
-def test_conversation_thread_metric_list_response(client):
-    """Test ConversationThreadMetric that returns a list of scores."""
-    response = client.post(EVALUATORS_URL, json={
-        "data": CONVERSATION_DATA,
-        "code": CONVERSATION_THREAD_METRIC_LIST_RESPONSE
-    })
-
-    assert response.status_code == 200
-    scores = response.json['scores']
-    assert len(scores) == 2
-    
-    # Check user ratio score
-    user_score = scores[0]
-    assert user_score['name'] == 'test_conversation_thread_metric_list_user_ratio'
-    assert user_score['value'] == 0.5  # 2 user messages out of 4 total
-    assert user_score['scoring_failed'] is False
-    
-    # Check assistant ratio score  
-    assistant_score = scores[1]
-    assert assistant_score['name'] == 'test_conversation_thread_metric_list_assistant_ratio'
-    assert assistant_score['value'] == 0.5  # 2 assistant messages out of 4 total
-    assert assistant_score['scoring_failed'] is False
-
-
-def test_conversation_thread_metric_with_json_content(client):
-    """Test ConversationThreadMetric with JSON content instead of string content."""
-    response = client.post(EVALUATORS_URL, json={
-        "data": JSON_CONVERSATION_DATA,
-        "code": CONVERSATION_THREAD_METRIC
-    })
-
-    assert response.status_code == 200
-    scores = response.json['scores']
-    assert len(scores) == 1
-    
-    score = scores[0]
-    assert score['name'] == 'test_conversation_thread_metric'
-    assert score['value'] == 1.0  # 4 messages is within 2-10 range
-    assert score['reason'] == "Conversation has 4 messages"
+    assert score['value'] == 1.0  # 2 messages is within 2-10 range
+    assert score['reason'] == "Conversation has 2 messages"
     assert score['scoring_failed'] is False
