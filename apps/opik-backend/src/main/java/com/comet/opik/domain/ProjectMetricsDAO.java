@@ -60,6 +60,7 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getThreadFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
@@ -143,6 +144,43 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     name,
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
+    private static final String GET_THREAD_FEEDBACK_SCORES = """
+            WITH thread_feedback_scores AS (
+                SELECT t.start_time,
+                        fs.name,
+                        fs.value
+                FROM feedback_scores fs final
+                JOIN (
+                    SELECT
+                        tt.id,
+                        min(t.start_time) as start_time
+                    FROM trace_threads tt final
+                    JOIN traces t final ON t.thread_id = tt.thread_id
+                        AND t.project_id = tt.project_id
+                        AND t.workspace_id = tt.workspace_id
+                    WHERE tt.project_id = :project_id
+                    AND tt.workspace_id = :workspace_id
+                    AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
+                    AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    AND tt.status = 'inactive'
+                    GROUP BY tt.id
+                ) t ON t.id = fs.entity_id
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                AND entity_type = 'thread'
+            )
+            SELECT <bucket> AS bucket,
+                    name,
+                    nullIf(avg(value), 0) AS value
+            FROM thread_feedback_scores
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
@@ -383,6 +421,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_FEEDBACK_SCORES, "feedbackScores")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getThreadFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_THREAD_FEEDBACK_SCORES, "threadFeedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
                         row -> row.get("name", String.class),
