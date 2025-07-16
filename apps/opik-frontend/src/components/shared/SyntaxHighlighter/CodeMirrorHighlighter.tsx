@@ -1,4 +1,4 @@
-import React, { ReactNode, useRef, useState } from "react";
+import React, { ReactNode, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -13,6 +13,8 @@ import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
 
 export interface CodeMirrorHighlighterProps {
   searchValue?: string;
+  localSearchValue?: string;
+  setLocalSearchValue: (value: string) => void;
   codeOutput: CodeOutput;
   modeSelector: ReactNode;
   copyButton: ReactNode;
@@ -22,12 +24,13 @@ export interface CodeMirrorHighlighterProps {
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   codeOutput,
   searchValue,
+  localSearchValue,
+  setLocalSearchValue,
   modeSelector,
   copyButton,
   withSearch,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
-  const [localSearchValue, setLocalSearchValue] = useState<string>("");
   const theme = useCodemirrorTheme();
   const searchPanelTheme = useSearchPanelTheme();
 
@@ -35,17 +38,17 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     extension: searchExtension,
     findNext,
     findPrev,
-    currentMatchIndex,
-    totalMatches,
+    initSearch,
   } = useCodeMirrorSearch({
     searchValue: localSearchValue || searchValue,
     caseSensitive: false,
     view: viewRef.current,
-    data: codeOutput,
+    codeOutput,
   });
 
   const handleCreateEditor = (view: EditorView) => {
     viewRef.current = view;
+    initSearch(view, localSearchValue || searchValue);
   };
 
   return (
@@ -59,8 +62,6 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
               onSearch={setLocalSearchValue}
               onPrev={findPrev}
               onNext={findNext}
-              currentMatchIndex={currentMatchIndex}
-              totalMatches={totalMatches}
             />
           )}
           {copyButton}

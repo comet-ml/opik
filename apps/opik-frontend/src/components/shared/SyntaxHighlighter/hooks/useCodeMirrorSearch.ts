@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback, useState } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
@@ -9,39 +9,35 @@ import {
   setSearchQuery,
   findNext,
   findPrevious,
-  getSearchQuery,
 } from "@codemirror/search";
+import { CodeOutput } from "../types";
 
 interface UseCodeMirrorSearchOptions {
   view: EditorView | null;
   searchValue?: string;
   caseSensitive?: boolean;
   regexp?: boolean;
-  data?: object;
+  codeOutput?: CodeOutput;
 }
 
 interface UseCodeMirrorSearchReturn {
   extension: Extension;
   findNext: () => void;
   findPrev: () => void;
-  currentMatchIndex: number;
-  totalMatches: number;
+  initSearch: (view: EditorView, searchValue?: string) => void;
 }
 
 export const useCodeMirrorSearch = (
   options: UseCodeMirrorSearchOptions,
 ): UseCodeMirrorSearchReturn => {
-  const [searchState, setSearchState] = useState({
-    totalMatches: 0,
-    currentMatchIndex: 0,
-  });
   const {
     view,
     searchValue = "",
     caseSensitive = false,
     regexp = false,
-    data,
+    codeOutput,
   } = options;
+  const trimmedSearchValue = searchValue.trim();
 
   const searchConfig = useMemo(() => {
     return search({
@@ -58,73 +54,23 @@ export const useCodeMirrorSearch = (
 
   const extension = useMemo(() => searchConfig, [searchConfig]);
 
-  const updateSearchState = useCallback(() => {
-    if (!view) return;
-
-    const searchQuery = getSearchQuery(view.state);
-    const cursor = searchQuery.getCursor(view.state);
-
-    const { from, to } = view.state.selection.main;
-
-    let totalMatches = 0;
-    let currentMatchIndex = 0;
-
-    const MAX_MATCHES = 999;
-
-    let item = cursor.next();
-    while (!item.done && totalMatches < MAX_MATCHES) {
-      totalMatches++;
-
-      if (item.value.from === from && item.value.to === to) {
-        currentMatchIndex = totalMatches;
-      }
-
-      item = cursor.next();
-    }
-
-    setSearchState({
-      totalMatches,
-      currentMatchIndex,
-    });
-  }, [view]);
-
   const findNextOccurrence = useCallback(() => {
-    if (!view) return;
+    if (!view || !trimmedSearchValue) return;
 
     findNext(view);
-    updateSearchState();
-  }, [view, updateSearchState]);
+  }, [view, trimmedSearchValue]);
 
   const findPreviousOccurrence = useCallback(() => {
-    if (!view) return;
+    if (!view || !trimmedSearchValue) return;
 
     findPrevious(view);
-    updateSearchState();
-  }, [view, updateSearchState]);
+  }, [view, trimmedSearchValue]);
 
-  useEffect(() => {
-    if (!view) return;
-
-    if (!searchValue?.trim()) {
-      closeSearchPanel(view);
-      view.dispatch({
-        selection: { anchor: 0, head: 0 },
-        scrollIntoView: false,
-      });
-      setSearchState({
-        totalMatches: 0,
-        currentMatchIndex: 0,
-      });
-
-      return;
-    }
+  const initSearch = useCallback((view: EditorView, searchValue?: string) => {
+    if (!searchValue?.trim()) return;
 
     const searchQuery = new SearchQuery({
       search: searchValue,
-      caseSensitive,
-      regexp,
-      wholeWord: false,
-      replace: "",
     });
 
     view.dispatch({
@@ -137,15 +83,28 @@ export const useCodeMirrorSearch = (
       effects: setSearchQuery.of(searchQuery),
     });
     findNext(view);
+  }, []);
 
-    updateSearchState();
-  }, [view, searchValue, caseSensitive, regexp, data, updateSearchState]);
+  useEffect(() => {
+    if (!view) return;
+
+    if (!searchValue?.trim()) {
+      closeSearchPanel(view);
+      view.dispatch({
+        selection: { anchor: 0, head: 0 },
+        scrollIntoView: false,
+      });
+
+      return;
+    }
+
+    initSearch(view, searchValue);
+  }, [view, searchValue, codeOutput, initSearch]);
 
   return {
     extension,
     findNext: findNextOccurrence,
     findPrev: findPreviousOccurrence,
-    currentMatchIndex: searchState.currentMatchIndex,
-    totalMatches: searchState.totalMatches,
+    initSearch,
   };
 };

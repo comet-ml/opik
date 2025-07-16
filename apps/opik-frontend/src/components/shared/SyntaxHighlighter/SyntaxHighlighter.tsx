@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -36,6 +36,7 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     prettifyConfig,
     code.canBePrettified,
   );
+  const [localSearchValue, setLocalSearchValue] = useState<string>("");
 
   const handleModeChange = (newMode: string) => {
     setMode(newMode as MODE_TYPE);
@@ -64,6 +65,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       <MarkdownHighlighter
         codeOutput={code}
         searchValue={searchValue}
+        localSearchValue={localSearchValue}
+        setLocalSearchValue={setLocalSearchValue}
         modeSelector={modeSelector}
         copyButton={copyButton}
         withSearch={withSearch}
@@ -75,6 +78,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     <CodeMirrorHighlighter
       codeOutput={code}
       searchValue={searchValue}
+      localSearchValue={localSearchValue}
+      setLocalSearchValue={setLocalSearchValue}
       modeSelector={modeSelector}
       copyButton={copyButton}
       withSearch={withSearch}
