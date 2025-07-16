@@ -1810,7 +1810,12 @@ class DatasetsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                    .map(d -> d.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .toList();
 
             datasets.forEach(dataset -> {
                 var id = createAndAssert(dataset, apiKey, workspaceName);
@@ -1838,13 +1843,18 @@ class DatasetsResourceTest {
             Comparator<Dataset> tagsComparator = Comparator.comparing(d -> d.tags().toString(),
                     String.CASE_INSENSITIVE_ORDER);
             Comparator<Dataset> createdAtComparator = Comparator.comparing(Dataset::createdAt);
+            Comparator<Dataset> createdByComparator = Comparator.comparing(Dataset::createdBy,
+                    String.CASE_INSENSITIVE_ORDER);
             Comparator<Dataset> lastUpdatedAtComparator = Comparator.comparing(Dataset::lastUpdatedAt);
+            Comparator<Dataset> lastUpdatedByComparator = Comparator.comparing(Dataset::lastUpdatedBy,
+                    String.CASE_INSENSITIVE_ORDER);
             Comparator<Dataset> lastCreatedExperimentAtComparator = Comparator.comparing(
                     Dataset::lastCreatedExperimentAt,
                     Comparator.nullsLast(Comparator.naturalOrder()));
             Comparator<Dataset> lastCreatedOptimizationAtComparator = Comparator.comparing(
                     Dataset::lastCreatedOptimizationAt,
                     Comparator.nullsLast(Comparator.naturalOrder()));
+            Comparator<Dataset> idComparatorReversed = Comparator.comparing(Dataset::id).reversed();
 
             return Stream.of(
                     // ID field sorting
@@ -1857,10 +1867,10 @@ class DatasetsResourceTest {
 
                     // NAME field sorting
                     Arguments.of(
-                            nameComparator,
+                            nameComparator.thenComparing(idComparatorReversed),
                             SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
                     Arguments.of(
-                            nameComparator.reversed(),
+                            nameComparator.reversed().thenComparing(idComparatorReversed),
                             SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
 
                     // DESCRIPTION field sorting
@@ -1887,6 +1897,14 @@ class DatasetsResourceTest {
                             createdAtComparator.reversed(),
                             SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
 
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            createdByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
                     // LAST_UPDATED_AT field sorting
                     Arguments.of(
                             lastUpdatedAtComparator,
@@ -1895,6 +1913,16 @@ class DatasetsResourceTest {
                     Arguments.of(
                             lastUpdatedAtComparator.reversed(),
                             SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(
+                            lastUpdatedByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
                                     .build()),
 
                     // LAST_CREATED_EXPERIMENT_AT field sorting
@@ -2156,6 +2184,32 @@ class DatasetsResourceTest {
                                     .build(),
                             (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
 
+                    // CREATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().createdBy())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().createdBy())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().createdBy().substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> dataset.createdBy()
+                                            .contains(datasets.getFirst().createdBy().substring(0, 3)))
+                                    .toList()),
+
                     // LAST_UPDATED_AT field tests (following prompt test pattern)
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
@@ -2171,6 +2225,32 @@ class DatasetsResourceTest {
                                     .value(Instant.now().toString())
                                     .build(),
                             (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_UPDATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().lastUpdatedBy())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().lastUpdatedBy())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().lastUpdatedBy().substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> dataset.lastUpdatedBy()
+                                            .contains(datasets.getFirst().lastUpdatedBy().substring(0, 3)))
+                                    .toList()),
 
                     // LAST_CREATED_EXPERIMENT_AT field tests
                     Arguments.of(

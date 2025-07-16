@@ -238,7 +238,9 @@ public class FilterQueryBuilder {
                     .put(DatasetField.DESCRIPTION, DESCRIPTION_DB)
                     .put(DatasetField.TAGS, TAGS_DB)
                     .put(DatasetField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetField.CREATED_BY, CREATED_BY_DB)
                     .put(DatasetField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
@@ -320,7 +322,9 @@ public class FilterQueryBuilder {
                     .add(DatasetField.DESCRIPTION)
                     .add(DatasetField.TAGS)
                     .add(DatasetField.CREATED_AT)
+                    .add(DatasetField.CREATED_BY)
                     .add(DatasetField.LAST_UPDATED_AT)
+                    .add(DatasetField.LAST_UPDATED_BY)
                     .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
                     .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
                     .build()),

@@ -1514,10 +1514,12 @@ class PromptResourceTest {
                     // VERSION_COUNT field sorting
                     Arguments.of(
                             versionCountComparator.thenComparing(idComparatorReversed),
-                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.ASC).build()),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.ASC)
+                                    .build()),
                     Arguments.of(
                             versionCountComparator.reversed().thenComparing(idComparatorReversed),
-                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.DESC).build()),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.DESC)
+                                    .build()),
 
                     // TAGS field sorting
                     Arguments.of(
@@ -1620,7 +1622,8 @@ class PromptResourceTest {
                                     .operator(Operator.GREATER_THAN_EQUAL)
                                     .value(String.valueOf(random))
                                     .build(),
-                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream().filter(prompt -> prompt.versionCount() >= random)
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() >= random)
                                     .toList()),
                     Arguments.of(
                             (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
@@ -1628,7 +1631,8 @@ class PromptResourceTest {
                                     .operator(Operator.LESS_THAN_EQUAL)
                                     .value(String.valueOf(random))
                                     .build(),
-                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream().filter(prompt -> prompt.versionCount() <= random)
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() <= random)
                                     .toList()),
                     Arguments.of(
                             (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
