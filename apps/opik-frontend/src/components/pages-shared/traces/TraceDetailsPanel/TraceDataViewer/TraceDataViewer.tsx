@@ -4,7 +4,7 @@ import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
 import { Clock, Coins, Hash, PenLine } from "lucide-react";
 
-import { Span, Trace } from "@/types/traces";
+import { AgentGraphData, Span, Trace } from "@/types/traces";
 import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
@@ -31,8 +31,8 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 
 type TraceDataViewerProps = {
+  graphData?: AgentGraphData;
   data: Trace | Span;
-  trace?: Trace;
   projectId: string;
   traceId: string;
   spanId?: string;
@@ -42,8 +42,8 @@ type TraceDataViewerProps = {
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
+  graphData,
   data,
-  trace,
   projectId,
   traceId,
   spanId,
@@ -54,16 +54,19 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
 
-  const agentGraphData =
-    get(data, ["metadata", METADATA_AGENT_GRAPH_KEY], null) ||
-    get(trace, ["metadata", METADATA_AGENT_GRAPH_KEY], null);
-  const hasAgentGraph = Boolean(agentGraphData);
+  const agentGraphData = get(
+    data,
+    ["metadata", METADATA_AGENT_GRAPH_KEY],
+    null,
+  );
+  const hasSpanAgentGraph =
+    Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab = tab === "graph" && !hasAgentGraph ? "input" : tab;
+  const selectedTab = tab === "graph" && !hasSpanAgentGraph ? "input" : tab;
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -83,8 +86,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
 
   return (
-    <div className="size-full max-w-full overflow-auto p-4">
-      <div className="min-w-[400px] max-w-full overflow-x-hidden">
+    <div className="size-full max-w-full overflow-auto">
+      {graphData && (
+        <div className="h-72 min-w-[400px] max-w-full overflow-x-hidden border-b p-4">
+          <AgentGraphTab data={graphData} />
+        </div>
+      )}
+      <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
         <div className="mb-6 flex flex-col gap-1">
           <TraceDataViewerHeader
             title={
@@ -175,7 +183,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             <TabsTrigger variant="underline" value="metadata">
               Metadata
             </TabsTrigger>
-            {hasAgentGraph && (
+            {hasSpanAgentGraph && (
               <TabsTrigger variant="underline" value="graph">
                 Agent graph
               </TabsTrigger>
@@ -198,7 +206,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <TabsContent value="metadata">
             <MetadataTab data={data} />
           </TabsContent>
-          {hasAgentGraph && (
+          {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
             </TabsContent>
