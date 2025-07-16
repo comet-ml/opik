@@ -70,13 +70,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const hasSearch = Boolean(search && search.length);
   const hasFilter = Boolean(filters.length);
   const hasSearchOrFilter = hasSearch || hasFilter;
-  const title = !hasSearchOrFilter
-    ? "Trace"
-    : hasFilter && hasSearch
-      ? "Results"
-      : hasSearch
-        ? "Search results"
-        : "Filtered results";
+  const title = !hasSearchOrFilter ? "Trace" : "Results";
 
   const predicate = useCallback(
     (data: Span | Trace) =>
@@ -207,7 +201,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               ]}
             />
           </div>
-          <div className="flex items-center gap-x-1.5">
+          <div className="sticky right-0 top-0 flex items-center gap-x-1.5 bg-white pr-4 shadow-[-10px_0_10px_0_rgba(255,255,255,1)]">
             {!hasSearchOrFilter ? (
               <>
                 <SpanDetailsButton config={config} onConfigChange={setConfig} />
