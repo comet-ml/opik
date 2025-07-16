@@ -89,6 +89,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -547,11 +548,104 @@ class ProjectMetricsResourceTest {
                             e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
                                     .toList())));
         }
+    }
 
-        private static BigDecimal calcAverage(List<BigDecimal> scores) {
-            BigDecimal sum = scores.stream()
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
+    @Nested
+    @DisplayName("Thread feedback scores")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadFeedbackScoresTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var scoresMinus3 = createThreadFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
+                    names);
+            var scoresMinus1 = createThreadFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval),
+                    names);
+            var scores = createThreadFeedbackScores(projectName, marker, names);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, BigDecimal.class, scoresMinus3, scoresMinus1, scores);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
+        }
+
+        private Map<String, BigDecimal> createThreadFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
+            return IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        // create a thread with a unique thread_id
+                        String threadId = UUID.randomUUID().toString();
+
+                        // open the thread first
+                        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
+                                WORKSPACE_NAME);
+
+                        // create a trace in the thread to ensure the thread exists
+                        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .threadId(threadId)
+                                .startTime(marker.plus(i, ChronoUnit.SECONDS))
+                                .build();
+
+                        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+                        // close the thread
+                        traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
+                                WORKSPACE_NAME);
+
+                        // create several feedback scores for that thread
+                        List<FeedbackScoreBatchItemThread> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
+                                        .toBuilder()
+                                        .name(name)
+                                        .projectName(projectName)
+                                        .threadId(threadId)
+                                        .build())
+                                .collect(Collectors.toList());
+
+                        traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+                        return scores;
+                    }).flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
+                                    .toList())));
         }
     }
 
@@ -1221,6 +1315,12 @@ class ProjectMetricsResourceTest {
                                     .toList())
                             .build();
                 }).toList();
+    }
+
+    private static BigDecimal calcAverage(List<BigDecimal> scores) {
+        BigDecimal sum = scores.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
     }
 
     private static Instant subtract(Instant instant, int count, TimeInterval interval) {
