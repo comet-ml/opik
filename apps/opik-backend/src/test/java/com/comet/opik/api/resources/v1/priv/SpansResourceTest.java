@@ -4872,7 +4872,51 @@ class SpansResourceTest {
                             null,
                             podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
                     Arguments.of(null, null, null, null,
-                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
+                    // Test multimodal cost calculation with audio tokens
+                    Arguments.of(
+                            Map.of("original_usage.prompt_tokens_details.audio_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.completion_tokens_details.audio_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o-audio-preview", "openai",
+                            null, null),
+                    // Test multimodal cost calculation with image count
+                    Arguments.of(
+                            Map.of("image_count", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 10 + 1,
+                                    "completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null),
+                    // Test multimodal cost calculation with video seconds
+                    Arguments.of(
+                            Map.of("video_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 100 + 1,
+                                    "completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null),
+                    // Test multimodal cost calculation with audio seconds
+                    Arguments.of(
+                            Map.of("audio_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 100 + 1,
+                                    "completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o-audio-preview", "openai",
+                            null, null),
+                    // Test combined multimodal features
+                    Arguments.of(
+                            Map.of("original_usage.prompt_tokens_details.audio_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.completion_tokens_details.audio_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "image_count", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 5 + 1,
+                                    "video_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 50 + 1,
+                                    "audio_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class)) % 30 + 1,
+                                    "completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null));
         }
 
         @Test
