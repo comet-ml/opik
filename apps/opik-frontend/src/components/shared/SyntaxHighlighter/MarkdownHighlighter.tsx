@@ -75,10 +75,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         </>
       }
     >
-      <div
-        className="comet-markdown max-h-[300px] overflow-y-auto whitespace-pre-wrap p-3"
-        ref={containerRef}
-      >
+      <div className="p-3" ref={containerRef}>
         {markdownPreview}
       </div>
     </SyntaxHighlighterLayout>
