@@ -64,7 +64,7 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     projects_page.click_project("Demo chatbot 🤖")
 
     logger.info("Checking demo project has generated traces")
-    traces_page = TracesPage(page)
+    traces_page = TracesPage(page, traces_created=True)
     assert (
         traces_page.get_number_of_traces_on_page() > 0
     ), "No traces generated for demo project"

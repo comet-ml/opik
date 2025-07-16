@@ -6,7 +6,6 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
-import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.ErrorMessage;
@@ -136,7 +135,7 @@ public class SpanService {
                         //TODO: refactor to implement proper conflict resolution
                         .flatMap(project -> lockService.executeWithLock(
                                 new LockService.Lock(id, SPAN_KEY),
-                                Mono.defer(() -> spanDAO.getById(id)
+                                Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
                                         .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
                                         .switchIfEmpty(
                                                 Mono.defer(() -> spanDAO.partialInsert(id, project.id(), spanUpdate)))

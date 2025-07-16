@@ -9,7 +9,6 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
-import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
@@ -328,7 +327,7 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
-                countIf(s.type = 'llm') AS llm_span_count,
+                toInt64(countIf(s.type = 'llm')) AS llm_span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -497,7 +496,7 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
-                    countIf(type = 'llm') as llm_span_count
+                    toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -684,6 +683,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(trace_aggregation_filters)>
                     ,sumMap(s.usage) as usage
                     ,sum(s.total_estimated_cost) as total_estimated_cost
+                    ,toInt64(countIf(s.type = 'llm')) as llm_span_count
                     <endif>
                 FROM (
                     SELECT
@@ -728,7 +728,8 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT
                         trace_id,
                         usage,
-                        total_estimated_cost
+                        total_estimated_cost,
+                        type
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -905,7 +906,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -1041,6 +1043,7 @@ class TraceDAOImpl implements TraceDAO {
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
+                avg(s.llm_span_count) AS llm_span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
@@ -1120,6 +1123,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1166,6 +1170,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                     if(tt.status = 'unknown', 'active', tt.status) as status,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    tt.tags as tags,
                     fsagg.feedback_scores_list as feedback_scores_list,
                     fsagg.feedback_scores as feedback_scores
                 FROM (
@@ -1282,6 +1287,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1290,6 +1296,28 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+            ), comments_final AS (
+              SELECT
+                   entity_id,
+                   groupArray(tuple(*)) AS comments
+              FROM (
+                SELECT
+                    id,
+                    text,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    entity_id,
+                    workspace_id,
+                    project_id
+                FROM comments final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+              )
+              GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (
@@ -1325,8 +1353,10 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                tt.tags as tags,
                 fsagg.feedback_scores_list as feedback_scores_list,
-                fsagg.feedback_scores as feedback_scores
+                fsagg.feedback_scores as feedback_scores,
+                c.comments AS comments
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -1356,6 +1386,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+            LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
             WHERE workspace_id = :workspace_id
             <if(feedback_scores_filters)>
             AND thread_model_id IN (
@@ -1462,6 +1493,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1470,6 +1502,28 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
+            ), comments_final AS (
+              SELECT
+                   entity_id,
+                   groupArray(tuple(*)) AS comments
+              FROM (
+                SELECT
+                    id,
+                    text,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    entity_id,
+                    workspace_id,
+                    project_id
+                FROM comments final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+              )
+              GROUP BY workspace_id, project_id, entity_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -1489,8 +1543,10 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                tt.tags as tags,
                 fsagg.feedback_scores_list as feedback_scores_list,
-                fsagg.feedback_scores as feedback_scores
+                fsagg.feedback_scores as feedback_scores,
+                c.comments AS comments
             FROM (
                 SELECT
                     t.thread_id as thread_id,
@@ -1517,6 +1573,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+            LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
             """;
 
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
@@ -1909,6 +1966,7 @@ class TraceDAOImpl implements TraceDAO {
         }
         return sortFields.contains("usage")
                 || sortFields.contains("span_count")
+                || sortFields.contains("llm_span_count")
                 || sortFields.contains("total_estimated_cost");
     }
 
@@ -2354,8 +2412,11 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
                 .usage(row.get("usage", Map.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class))
+                .totalEstimatedCost(Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                        .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                        .orElse(null))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
@@ -2366,6 +2427,15 @@ class TraceDAOImpl implements TraceDAO {
                 .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
                         .filter(not(List::isEmpty))
                         .map(this::mapFeedbackScores)
+                        .orElse(null))
+                .comments(Optional
+                        .ofNullable(row.get("comments", List[].class))
+                        .map(CommentResultMapper::getComments)
+                        .orElse(null))
+                .tags(Optional
+                        .ofNullable(row.get("tags", String[].class))
+                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                        .filter(set -> !set.isEmpty())
                         .orElse(null))
                 .build());
     }

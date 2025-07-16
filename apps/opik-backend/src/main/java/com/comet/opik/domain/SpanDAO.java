@@ -5,7 +5,6 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.sorting.SortableFields;
@@ -551,6 +550,22 @@ class SpanDAO {
             ) AS fs ON s.id = fs.entity_id
             GROUP BY
                 s.*
+            ;
+            """;
+
+    private static final String SELECT_ONLY_SPAN_BY_ID = """
+            SELECT
+                *,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                        NULL) AS duration
+            FROM spans
+            WHERE id = :id
+            AND project_id = :project_id
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             ;
             """;
 
@@ -1236,6 +1251,24 @@ class SpanDAO {
                 .singleOrEmpty();
     }
 
+    @WithSpan
+    public Mono<Span> getOnlySpanDataById(@NonNull UUID id, @NonNull UUID projectId) {
+        log.info("Getting span by id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_ONLY_SPAN_BY_ID)
+                            .bind("id", id)
+                            .bind("project_id", projectId);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "select_only_span_by_id");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto)
+                .singleOrEmpty();
+    }
+
     private Publisher<? extends Result> getById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_BY_ID)
                 .bind("id", id);
@@ -1286,7 +1319,11 @@ class SpanDAO {
     }
 
     private <T> T getValue(Set<SpanField> exclude, SpanField field, Row row, String fieldName, Class<T> clazz) {
-        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+        if (exclude.contains(field) || !row.getMetadata().contains(fieldName)) {
+            return null;
+        }
+
+        return row.get(fieldName, clazz);
     }
 
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {

@@ -1,11 +1,13 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.PromptField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -18,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,8 +38,9 @@ public class FilterQueryBuilder {
 
     static final String JSONPATH_ROOT = "$";
 
-    private static final String ID_ANALYTICS_DB = "id";
-    private static final String NAME_ANALYTICS_DB = "name";
+    private static final String ID_DB = "id";
+    private static final String NAME_DB = "name";
+    private static final String DESCRIPTION_DB = "description";
     private static final String START_TIME_ANALYTICS_DB = "start_time";
     private static final String END_TIME_ANALYTICS_DB = "end_time";
     private static final String INPUT_ANALYTICS_DB = "input";
@@ -45,8 +49,9 @@ public class FilterQueryBuilder {
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
+    private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
     private static final String TYPE_ANALYTICS_DB = "type";
-    private static final String TAGS_ANALYTICS_DB = "tags";
+    private static final String TAGS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
@@ -55,8 +60,8 @@ public class FilterQueryBuilder {
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
-    private static final String CREATED_AT_ANALYTICS_DB = "created_at";
-    private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
+    private static final String CREATED_AT_DB = "created_at";
+    private static final String LAST_UPDATED_AT_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
@@ -68,19 +73,25 @@ public class FilterQueryBuilder {
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                             FieldType.DICTIONARY,
                             "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
-                            FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")))
+                            FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
-                            FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))")))
+                            FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
-                            FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))")))
+                            FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
+                            FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d",
                             FieldType.NUMBER, "%1$s = :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
@@ -89,7 +100,9 @@ public class FilterQueryBuilder {
                             FieldType.ENUM, "%1$s = :filter%2$d")))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
+                            FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d",
                             FieldType.NUMBER, "%1$s != :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
@@ -98,6 +111,7 @@ public class FilterQueryBuilder {
                             FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
@@ -105,11 +119,13 @@ public class FilterQueryBuilder {
                             "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)")))
                     .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s >= :filter%2$d",
                             FieldType.NUMBER, "%1$s >= :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d",
                             FieldType.NUMBER, "%1$s < :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
@@ -117,6 +133,7 @@ public class FilterQueryBuilder {
                             "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)")))
                     .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.DATE_TIME_STATE_DB, "%1$s <= :filter%2$d",
                             FieldType.NUMBER, "%1$s <= :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
@@ -134,15 +151,16 @@ public class FilterQueryBuilder {
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceField, String>builder()
-                    .put(TraceField.ID, ID_ANALYTICS_DB)
-                    .put(TraceField.NAME, NAME_ANALYTICS_DB)
+                    .put(TraceField.ID, ID_DB)
+                    .put(TraceField.NAME, NAME_DB)
                     .put(TraceField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(TraceField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceField.INPUT, INPUT_ANALYTICS_DB)
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
-                    .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
+                    .put(TraceField.TAGS, TAGS_DB)
                     .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
@@ -156,21 +174,22 @@ public class FilterQueryBuilder {
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceThreadField, String>builder()
-                    .put(TraceThreadField.ID, ID_ANALYTICS_DB)
+                    .put(TraceThreadField.ID, ID_DB)
                     .put(TraceThreadField.NUMBER_OF_MESSAGES, NUMBER_OF_MESSAGES_ANALYTICS_DB)
                     .put(TraceThreadField.FIRST_MESSAGE, FIRST_MESSAGE_ANALYTICS_DB)
                     .put(TraceThreadField.LAST_MESSAGE, LAST_MESSAGE_ANALYTICS_DB)
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
-                    .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
-                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
+                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
+                    .put(TraceThreadField.TAGS, TAGS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<SpanField, String>builder()
-                    .put(SpanField.ID, ID_ANALYTICS_DB)
-                    .put(SpanField.NAME, NAME_ANALYTICS_DB)
+                    .put(SpanField.ID, ID_DB)
+                    .put(SpanField.NAME, NAME_DB)
                     .put(SpanField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
@@ -179,7 +198,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.MODEL, MODEL_ANALYTICS_DB)
                     .put(SpanField.PROVIDER, PROVIDER_ANALYTICS_DB)
                     .put(SpanField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
-                    .put(SpanField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(SpanField.TAGS, TAGS_DB)
                     .put(SpanField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
@@ -192,6 +211,21 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentField, String>builder()
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<PromptField, String>builder()
+                    .put(PromptField.ID, ID_DB)
+                    .put(PromptField.NAME, NAME_DB)
+                    .put(PromptField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(PromptField.CREATED_AT, CREATED_AT_DB)
+                    .put(PromptField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(PromptField.TAGS, TAGS_DB)
+                    .build());
+
+    private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.TAGS, TAGS_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -221,6 +255,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.USAGE_PROMPT_TOKENS)
                     .add(TraceField.USAGE_TOTAL_TOKENS)
                     .add(TraceField.TOTAL_ESTIMATED_COST)
+                    .add(TraceField.LLM_SPAN_COUNT)
                     .build()),
             FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)
@@ -253,6 +288,17 @@ public class FilterQueryBuilder {
             FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
                     .add(ExperimentField.METADATA)
                     .build(),
+            FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
+                    .add(PromptField.ID)
+                    .add(PromptField.NAME)
+                    .add(PromptField.DESCRIPTION)
+                    .add(PromptField.CREATED_AT)
+                    .add(PromptField.LAST_UPDATED_AT)
+                    .add(PromptField.TAGS)
+                    .build(),
+            FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .add(DatasetField.TAGS)
+                    .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -262,6 +308,7 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
                     .add(TraceThreadField.STATUS)
+                    .add(TraceThreadField.TAGS)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -340,6 +387,8 @@ public class FilterQueryBuilder {
             case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
+            case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {
@@ -377,6 +426,16 @@ public class FilterQueryBuilder {
             }
         }
         return statement;
+    }
+
+    public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters) {
+        Map<String, Object> stateSQLMapping = new HashMap<>();
+        for (var i = 0; i < filters.size(); i++) {
+            var filter = filters.get(i);
+            stateSQLMapping.put("filter%d".formatted(i), filter.value());
+        }
+
+        return stateSQLMapping;
     }
 
     private String getKey(Filter filter) {

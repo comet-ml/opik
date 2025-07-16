@@ -1,15 +1,16 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
-import com.comet.opik.domain.AutomationRuleEvaluatorService;
-import com.comet.opik.domain.UserLog;
+import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -17,11 +18,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
-import org.redisson.api.stream.StreamAddArgs;
 import org.slf4j.Logger;
-import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -29,7 +26,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
@@ -45,35 +41,21 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 public class OnlineScoringSampler {
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
-    private final RedissonReactiveClient redisClient;
     private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
-    private final Map<AutomationRuleEvaluatorType, OnlineScoringConfig.StreamConfiguration> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OnlineScorePublisher onlineScorePublisher;
 
     @Inject
     public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
-            @NonNull RedissonReactiveClient redisClient,
-            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) throws NoSuchAlgorithmException {
+            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
+            @NonNull OnlineScorePublisher onlineScorePublisher) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
-        this.redisClient = redisClient;
+        this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
-        streamConfigurations = config.getStreams().stream()
-                .map(streamConfiguration -> {
-                    var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
-                    if (evaluatorType != null) {
-                        log.info("Redis Stream map: '{}' -> '{}'", evaluatorType, streamConfiguration);
-                        return Map.entry(evaluatorType, streamConfiguration);
-                    } else {
-                        log.warn("No such evaluator type '{}'", streamConfiguration.getScorer());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
@@ -113,7 +95,7 @@ public class OnlineScoringSampler {
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(tracesBatch, evaluator, messages);
-                        enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                        onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
                         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
@@ -122,7 +104,8 @@ public class OnlineScoringSampler {
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(tracesBatch, evaluator, messages);
-                            enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                            onlineScorePublisher.enqueueMessage(messages,
+                                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                         } else {
                             log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
                                     evaluator.getType());
@@ -187,33 +170,5 @@ public class OnlineScoringSampler {
                 messages.size(),
                 tracesBatch.traces().size(),
                 evaluator.getSamplingRate());
-    }
-
-    private void enqueueInRedis(List<?> messages, AutomationRuleEvaluatorType type) {
-        var config = streamConfigurations.get(type);
-        var codec = OnlineScoringCodecs.fromString(config.getCodec()).getCodec();
-        var llmAsJudgeStream = redisClient.getStream(config.getStreamName(), codec);
-        Flux.fromIterable(messages)
-                .flatMap(message -> llmAsJudgeStream
-                        .add(StreamAddArgs.entry(OnlineScoringConfig.PAYLOAD_FIELD, message))
-                        .doOnNext(id -> successLog(id, config))
-                        .doOnError(this::errorLog))
-                .subscribe(this::noop, this::logFluxCompletionError);
-    }
-
-    private void noop(StreamMessageId id) {
-        // no-op
-    }
-
-    private void logFluxCompletionError(Throwable throwable) {
-        log.error("Unexpected error when enqueueing messages into redis", throwable);
-    }
-
-    private void errorLog(Throwable throwable) {
-        log.error("Error sending message", throwable);
-    }
-
-    private void successLog(StreamMessageId id, OnlineScoringConfig.StreamConfiguration config) {
-        log.debug("Message sent with ID: '{}' into stream '{}'", id, config.getStreamName());
     }
 }

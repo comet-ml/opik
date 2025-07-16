@@ -20,6 +20,10 @@ NOT_USED = None
             batchers.AddTraceFeedbackScoresBatchMessageBatcher,
             messages.AddTraceFeedbackScoresBatchMessage,
         ),
+        (
+            batchers.AddThreadsFeedbackScoresBatchMessageBatcher,
+            messages.AddThreadsFeedbackScoresBatchMessage,
+        ),
     ],
 )
 def test_add_feedback_scores_batch_message_batcher__exactly_max_batch_size_reached__batch_is_flushed(
@@ -61,6 +65,10 @@ def test_add_feedback_scores_batch_message_batcher__exactly_max_batch_size_reach
         (
             batchers.AddTraceFeedbackScoresBatchMessageBatcher,
             messages.AddTraceFeedbackScoresBatchMessage,
+        ),
+        (
+            batchers.AddThreadsFeedbackScoresBatchMessageBatcher,
+            messages.AddThreadsFeedbackScoresBatchMessage,
         ),
     ],
 )
@@ -106,6 +114,7 @@ def test_add_feedback_scores_batch_message_batcher__more_than_max_batch_size_ite
     [
         batchers.AddSpanFeedbackScoresBatchMessageBatcher,
         batchers.AddTraceFeedbackScoresBatchMessageBatcher,
+        batchers.AddThreadsFeedbackScoresBatchMessageBatcher,
     ],
 )
 def test_add_feedback_scores_batch_message_batcher__batcher_doesnt_have_items__flush_is_called__flush_callback_NOT_called(
@@ -131,6 +140,7 @@ def test_add_feedback_scores_batch_message_batcher__batcher_doesnt_have_items__f
     [
         batchers.AddSpanFeedbackScoresBatchMessageBatcher,
         batchers.AddTraceFeedbackScoresBatchMessageBatcher,
+        batchers.AddThreadsFeedbackScoresBatchMessageBatcher,
     ],
 )
 def test_add_feedback_scores_batch_message_batcher__ready_to_flush_returns_True__is_flush_interval_passed(

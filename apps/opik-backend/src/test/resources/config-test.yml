@@ -69,6 +69,9 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000
+  # Default: false
+  # Description: Whether or not the ClickHouse database has replication enabled
+  hasReplicationEnabled: false
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -284,7 +287,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
-
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

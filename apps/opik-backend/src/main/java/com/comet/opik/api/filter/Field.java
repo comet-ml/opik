@@ -7,6 +7,7 @@ public interface Field {
 
     String ID_QUERY_PARAM = "id";
     String NAME_QUERY_PARAM = "name";
+    String DESCRIPTION_QUERY_PARAM = "description";
     String START_TIME_QUERY_PARAM = "start_time";
     String END_TIME_QUERY_PARAM = "end_time";
     String INPUT_QUERY_PARAM = "input";
@@ -32,6 +33,7 @@ public interface Field {
     String ERROR_INFO_QUERY_PARAM = "error_info";
     String STATUS_QUERY_PARAM = "status";
     String TYPE_QUERY_PARAM = "type";
+    String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
 
     @JsonValue
     String getQueryParamField();

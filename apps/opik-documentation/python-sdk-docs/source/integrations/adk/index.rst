@@ -30,3 +30,4 @@ You can learn more about the `OpikTracer` object in the following section:
    :titlesonly:
 
    OpikTracer
+   track_adk_agent_recursive

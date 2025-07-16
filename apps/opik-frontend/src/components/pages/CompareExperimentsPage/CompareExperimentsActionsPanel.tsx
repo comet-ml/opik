@@ -19,6 +19,7 @@ import {
   COLUMN_CREATED_AT_ID,
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_DURATION_ID,
 } from "@/types/shared";
 import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
@@ -28,6 +29,7 @@ import { Separator } from "@/components/ui/separator";
 const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   COLUMN_COMMENTS_ID,
+  COLUMN_DURATION_ID,
 ];
 const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
