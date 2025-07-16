@@ -88,6 +88,7 @@ Call opik api on http://localhost:5173/api
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| affinity | object | `{}` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
@@ -104,11 +105,54 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.serviceAccount.create | bool | `false` |  |
 | clickhouse.backup.serviceAccount.name | string | `""` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
+| clickhouse.backupServer.enabled | bool | `false` |  |
+| clickhouse.backupServer.env.ALLOW_EMPTY_BACKUPS | bool | `true` |  |
+| clickhouse.backupServer.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
+| clickhouse.backupServer.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
+| clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
+| clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
+| clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
+| clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
+| clickhouse.backupServer.monitoring.service.ports[0].name | string | `"ch-backup-rest"` |  |
+| clickhouse.backupServer.monitoring.service.ports[0].port | int | `80` |  |
+| clickhouse.backupServer.monitoring.service.ports[0].targetPort | int | `7171` |  |
+| clickhouse.backupServer.monitoring.service.type | string | `"ClusterIP"` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.additionalLabels | object | `{}` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.annotations | object | `{}` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.enabled | bool | `false` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.honorLabels | bool | `false` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.interval | string | `"60s"` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.metricRelabelings | list | `[]` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.namespace | string | `""` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.podTargetLabels | list | `[]` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.portName | string | `""` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
+| clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
+| clickhouse.backupServer.port | int | `7171` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
+| clickhouse.monitoring.additionalLabels | object | `{}` |  |
+| clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
+| clickhouse.monitoring.service.ports[0].port | int | `80` |  |
+| clickhouse.monitoring.service.ports[0].targetPort | int | `9363` |  |
+| clickhouse.monitoring.service.type | string | `"ClusterIP"` |  |
+| clickhouse.monitoring.serviceMonitor.additionalLabels | object | `{}` |  |
+| clickhouse.monitoring.serviceMonitor.annotations | object | `{}` |  |
+| clickhouse.monitoring.serviceMonitor.enabled | bool | `false` |  |
+| clickhouse.monitoring.serviceMonitor.honorLabels | bool | `false` |  |
+| clickhouse.monitoring.serviceMonitor.interval | string | `"60s"` |  |
+| clickhouse.monitoring.serviceMonitor.metricRelabelings | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.namespace | string | `""` |  |
+| clickhouse.monitoring.serviceMonitor.podTargetLabels | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.portName | string | `""` |  |
+| clickhouse.monitoring.serviceMonitor.relabelings | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
+| clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
@@ -281,6 +325,7 @@ Call opik api on http://localhost:5173/api
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
 | nameOverride | string | `"opik"` |  |
+| nodeSelector | object | `{}` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
 | redis.enabled | bool | `true` |  |
@@ -309,6 +354,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.create | bool | `false` |  |
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
+| tolerations | list | `[]` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |

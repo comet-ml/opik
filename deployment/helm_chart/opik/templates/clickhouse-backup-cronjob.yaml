@@ -64,12 +64,15 @@ spec:
             - name: SECRET_KEY
               value: ""
             {{- end }}
-
-          {{- with .Values.clickhouse.nodeSelector }}
+          {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.clickhouse.tolerations }}
+          {{- with ( default .Values.clickhouse.affinity .Values.clickhouse.backup.affinity ) }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with ( default .Values.clickhouse.tolerations .Values.clickhouse.backup.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
