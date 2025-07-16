@@ -90,7 +90,7 @@ public class CostService {
 
                 BigDecimal inputTextPrice = Optional.ofNullable(modelCost.inputTextCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal inputImagePrice = Optional.ofNullable(modelCost.inputImageCostPerImage())
+                BigDecimal inputImagePrice = Optional.ofNullable(modelCost.inputImageCost())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
                 BigDecimal inputAudioPrice = Optional.ofNullable(modelCost.inputAudioCostPerSecond())
