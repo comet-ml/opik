@@ -161,13 +161,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN (
                     SELECT
                         tt.id,
-                        t.start_time
+                        min(t.start_time) as start_time
                     FROM trace_threads tt final
-                    JOIN traces t final ON t.thread_id = tt.thread_id AND t.project_id = tt.project_id
+                    JOIN traces t final ON t.thread_id = tt.thread_id
+                        AND t.project_id = tt.project_id
+                        AND t.workspace_id = tt.workspace_id
                     WHERE tt.project_id = :project_id
                     AND tt.workspace_id = :workspace_id
                     AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    AND tt.status = 'inactive'
+                    GROUP BY tt.id
                 ) t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
