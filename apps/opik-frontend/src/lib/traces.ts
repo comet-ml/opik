@@ -318,6 +318,53 @@ const prettifyLangChainLogic = (
   }
 };
 
+/**
+ * Prettifies Demo project's blocks-based message format.
+ *
+ * Handles two formats:
+ * - Direct: { blocks: [{ block_type: "text", text: "..." }] }
+ * - Nested: { output: { blocks: [{ block_type: "text", text: "..." }] } }
+ */
+const prettifyDemoProjectLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  const extractTextFromBlocks = (blocks: unknown[]): string | undefined => {
+    const textBlocks = blocks.filter(
+      (block): block is { block_type: string; text: string } =>
+        isObject(block) &&
+        "block_type" in block &&
+        block.block_type === "text" &&
+        "text" in block &&
+        isString(block.text) &&
+        block.text.trim() !== "",
+    );
+
+    return textBlocks.length > 0
+      ? textBlocks.map((block) => block.text).join("\n\n")
+      : undefined;
+  };
+
+  // Handle direct blocks structure: { blocks: [...] }
+  if (isObject(message) && "blocks" in message && isArray(message.blocks)) {
+    return extractTextFromBlocks(message.blocks);
+  }
+
+  // Handle nested blocks structure: { output: { blocks: [...] } }
+  if (
+    config.type === "output" &&
+    isObject(message) &&
+    "output" in message &&
+    isObject(message.output) &&
+    "blocks" in message.output &&
+    isArray(message.output.blocks)
+  ) {
+    return extractTextFromBlocks(message.output.blocks);
+  }
+
+  return undefined;
+};
+
 const prettifyGenericLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -359,22 +406,6 @@ const prettifyGenericLogic = (
           return value;
         }
       }
-
-      if ("blocks" in unwrappedMessage && isArray(unwrappedMessage.blocks)) {
-        const textBlocks = unwrappedMessage.blocks.filter(
-          (block) =>
-            isObject(block) &&
-            "block_type" in block &&
-            block.block_type === "text" &&
-            "text" in block &&
-            isString(block.text) &&
-            block.text.trim() !== "",
-        );
-
-        if (textBlocks.length > 0) {
-          return textBlocks.map((block) => block.text).join("\n\n");
-        }
-      }
     }
   }
 };
@@ -408,6 +439,10 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyLangChainLogic(message, config);
+    }
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyDemoProjectLogic(message, config);
     }
 
     if (!isString(processedMessage)) {

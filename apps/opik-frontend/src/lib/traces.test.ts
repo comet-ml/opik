@@ -186,7 +186,7 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles blocks structure with text content", () => {
+  it("handles Demo project blocks structure with text content", () => {
     const message = {
       role: "assistant",
       blocks: [
@@ -204,7 +204,7 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles blocks structure with multiple text blocks", () => {
+  it("handles Demo project blocks structure with multiple text blocks", () => {
     const message = {
       role: "assistant",
       blocks: [
@@ -225,7 +225,7 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles blocks structure with mixed block types, extracting only text blocks", () => {
+  it("handles Demo project blocks structure with mixed block types, extracting only text blocks", () => {
     const message = {
       role: "assistant",
       blocks: [
@@ -251,7 +251,7 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles nested blocks structure under output property", () => {
+  it("handles Demo project nested blocks structure under output property", () => {
     const message = {
       output: {
         role: "assistant",
