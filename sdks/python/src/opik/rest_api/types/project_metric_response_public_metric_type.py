@@ -4,7 +4,15 @@ import typing
 
 ProjectMetricResponsePublicMetricType = typing.Union[
     typing.Literal[
-        "FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE", "DURATION", "COST", "GUARDRAILS_FAILED_COUNT", "THREAD_COUNT"
+        "FEEDBACK_SCORES",
+        "TRACE_COUNT",
+        "TOKEN_USAGE",
+        "DURATION",
+        "COST",
+        "GUARDRAILS_FAILED_COUNT",
+        "THREAD_COUNT",
+        "THREAD_DURATION",
+        "THREAD_FEEDBACK_SCORES",
     ],
     typing.Any,
 ]

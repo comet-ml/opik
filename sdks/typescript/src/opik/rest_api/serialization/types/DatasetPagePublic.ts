@@ -15,6 +15,7 @@ export const DatasetPagePublic: core.serialization.ObjectSchema<
     page: core.serialization.number().optional(),
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace DatasetPagePublic {
@@ -23,5 +24,6 @@ export declare namespace DatasetPagePublic {
         page?: number | null;
         size?: number | null;
         total?: number | null;
+        sortableBy?: string[] | null;
     }
 }
