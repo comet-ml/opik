@@ -303,21 +303,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             options: [
               {
                 value: SPAN_TYPE.general,
-                label: "General",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
               },
               {
                 value: SPAN_TYPE.tool,
-                label: "Tool",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
               },
               {
                 value: SPAN_TYPE.llm,
-                label: "LLM call",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
               },
               ...(isGuardrailsEnabled
                 ? [
                     {
                       value: SPAN_TYPE.guardrail,
-                      label: "Guardrail",
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
                     },
                   ]
                 : []),
