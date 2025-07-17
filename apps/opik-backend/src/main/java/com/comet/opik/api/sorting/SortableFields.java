@@ -39,4 +39,5 @@ public class SortableFields {
     public static final String FEEDBACK_SCORES = "feedback_scores.*";
     public static final String NUMBER_OF_MESSAGES = "number_of_messages";
     public static final String STATUS = "status";
+    public static final String VERSION_COUNT = "version_count";
 }
