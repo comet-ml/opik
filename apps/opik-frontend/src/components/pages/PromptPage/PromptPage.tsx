@@ -11,6 +11,7 @@ import CommitsTab from "@/components/pages/PromptPage/CommitsTab/CommitsTab";
 import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import PromptTagsList from "@/components/pages/PromptPage/PromptTagsList";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -41,10 +42,15 @@ const PromptPage: React.FunctionComponent = () => {
         </div>
 
         {prompt?.created_at && (
-          <div className="mb-1 flex gap-4 overflow-x-auto">
+          <div className="mb-2 flex gap-4 overflow-x-auto">
             <DateTag date={prompt?.created_at} />
           </div>
         )}
+        <PromptTagsList
+          tags={prompt?.tags ?? []}
+          promptId={promptId}
+          prompt={prompt}
+        />
       </div>
 
       <Tabs defaultValue="prompt" value={tab as string} onValueChange={setTab}>

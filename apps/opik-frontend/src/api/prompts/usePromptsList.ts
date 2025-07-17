@@ -1,9 +1,15 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Prompt } from "@/types/prompts";
+import { Filters } from "@/types/filters";
+import { processFilters } from "@/lib/filters";
+import { Sorting } from "@/types/sorting";
+import { processSorting } from "@/lib/sorting";
 
 type UsePromptsListParams = {
   workspaceName: string;
+  filters?: Filters;
+  sorting?: Sorting;
   search?: string;
   page: number;
   size: number;
@@ -11,17 +17,20 @@ type UsePromptsListParams = {
 
 type UsePromptsListResponse = {
   content: Prompt[];
+  sortable_by: string[];
   total: number;
 };
 
 const getPromptsList = async (
   { signal }: QueryFunctionContext,
-  { search, size, page }: UsePromptsListParams,
+  { filters, sorting, search, size, page }: UsePromptsListParams,
 ) => {
   const { data } = await api.get(PROMPTS_REST_ENDPOINT, {
     signal,
     params: {
       ...(search && { name: search }),
+      ...processFilters(filters),
+      ...processSorting(sorting),
       size,
       page,
     },
