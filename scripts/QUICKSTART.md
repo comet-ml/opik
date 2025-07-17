@@ -22,6 +22,7 @@ Run the development script:
 
 This will:
 - ✅ Start all required containers (MySQL, Redis, ClickHouse, etc.)
+- ✅ Configure nginx and frontend environment for local development
 - ✅ Build the backend with Maven (skipping tests)
 - ✅ Start the backend on http://localhost:8080
 - ✅ Start the frontend on http://localhost:5173

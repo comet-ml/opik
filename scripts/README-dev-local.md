@@ -58,6 +58,7 @@ This will:
   - `minio` - Object storage (S3-compatible)
   - `python-backend` - Python evaluation service
 
+- Configures nginx for local development (updates `nginx_default_local.conf`)
 - Waits for all containers to be healthy before proceeding
 - Uses the same container configuration as the main `opik.sh` script
 
@@ -72,8 +73,24 @@ This will:
 #### Frontend Setup
 - Changes to the `apps/opik-frontend` directory
 - Installs npm dependencies if `node_modules` doesn't exist
+- Configures `.env.development` with local development settings:
+  - `VITE_BASE_URL=/`
+  - `VITE_BASE_API_URL=http://localhost:8080`
 - Starts the Vite development server using `npm start`
 - Waits for the frontend to be accessible on http://localhost:5173
+
+### Configuration Files
+
+The script automatically configures the following files for local development:
+
+#### Frontend Environment (`.env.development`)
+```bash
+VITE_BASE_URL=/
+VITE_BASE_API_URL=http://localhost:8080
+```
+
+#### Nginx Configuration (`nginx_default_local.conf`)
+Updates the proxy_pass directive to use `host.docker.internal:8080` instead of `backend:8080` for local development.
 
 ### Environment Variables
 

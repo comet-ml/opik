@@ -70,6 +70,25 @@ check_requirements() {
     print_success "All requirements are met"
 }
 
+# Function to configure nginx for local development
+configure_nginx() {
+    print_status "Configuring nginx for local development..."
+    
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    project_root="$(dirname "$script_dir")"
+    nginx_config="$project_root/deployment/docker-compose/nginx_default_local.conf"
+    
+    # Update nginx configuration to use host.docker.internal for backend
+    if grep -q "proxy_pass http://backend:8080;" "$nginx_config"; then
+        sed -i 's|proxy_pass http://backend:8080;|proxy_pass http://host.docker.internal:8080;|' "$nginx_config"
+        print_success "Nginx configuration updated for local development"
+    elif grep -q "proxy_pass http://host.docker.internal:8080;" "$nginx_config"; then
+        print_status "Nginx configuration already set for local development"
+    else
+        print_warning "Could not find expected proxy_pass configuration in nginx file"
+    fi
+}
+
 # Function to start containers (excluding backend and frontend)
 start_containers() {
     print_status "Starting required containers (excluding backend and frontend)..."
@@ -80,6 +99,9 @@ start_containers() {
     
     # Change to project root
     cd "$project_root"
+    
+    # Configure nginx for local development
+    configure_nginx
     
     # Start containers using docker compose with port mapping override
     # We'll use docker compose directly to have more control
@@ -279,6 +301,20 @@ run_frontend() {
         print_status "Installing frontend dependencies..."
         npm install
     fi
+    
+    # Ensure .env.development has the correct configuration for local development
+    print_status "Configuring frontend for local development..."
+    if [ ! -f ".env.development" ]; then
+        print_warning ".env.development file not found, creating it..."
+    fi
+    
+    # Update .env.development with correct local development settings
+    cat > .env.development << EOF
+VITE_BASE_URL=/
+VITE_BASE_API_URL=http://localhost:8080
+EOF
+    
+    print_success "Frontend environment configured for local development"
     
     # Start the frontend development server
     print_status "Starting frontend development server..."
