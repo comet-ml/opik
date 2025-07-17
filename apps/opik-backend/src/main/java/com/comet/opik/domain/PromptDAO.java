@@ -119,14 +119,14 @@ interface PromptDAO {
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id")
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
 
-    @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy "
+    @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +
-            " <if(tags)>, tags = :tags <endif> " +
+            " tags = COALESCE(:tags, tags) " +
             " WHERE id = :bean.id AND workspace_id = :workspace_id")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     int update(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt updatedPrompt,
-            @Define("tags") @Bind("tags") Set<String> tags);
+            @Bind("tags") Set<String> tags);
 
     @SqlUpdate("DELETE FROM prompts WHERE id = :id AND workspace_id = :workspace_id")
     int delete(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);

@@ -2928,16 +2928,15 @@ class DatasetsResourceTest {
                             "description must not be blank"));
         }
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void updateDataset() {
+        void updateDataset(DatasetUpdate datasetUpdate) {
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build();
 
             var id = createAndAssert(dataset);
-
-            var datasetUpdate = factory.manufacturePojo(DatasetUpdate.class);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(id.toString())
@@ -2955,10 +2954,17 @@ class DatasetsResourceTest {
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
-                    .tags(datasetUpdate.tags())
+                    .tags(datasetUpdate.tags() == null ? dataset.tags() : datasetUpdate.tags())
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
+        }
+
+        Stream<Arguments> updateDataset() {
+            return Stream.of(
+                    arguments(factory.manufacturePojo(DatasetUpdate.class)),
+                    arguments(factory.manufacturePojo(DatasetUpdate.class).toBuilder().tags(Set.of()).build()),
+                    arguments(factory.manufacturePojo(DatasetUpdate.class).toBuilder().tags(null).build()));
         }
 
         @Test

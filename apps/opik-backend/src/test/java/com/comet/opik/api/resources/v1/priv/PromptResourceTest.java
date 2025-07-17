@@ -985,6 +985,10 @@ class PromptResourceTest {
 
             var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
+            updatedPrompt = updatedPrompt.toBuilder()
+                    .tags(updatedPrompt.tags() == null ? prompt.tags() : updatedPrompt.tags())
+                    .build();
+
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
@@ -1038,8 +1042,12 @@ class PromptResourceTest {
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().name(UUID.randomUUID().toString())
                             .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
-                            .description(UUID.randomUUID().toString()).build()),
+                            .description(UUID.randomUUID().toString())
+                            .tags(null)
+                            .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .tags(Set.of()).build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
                             .tags(PodamFactoryUtils.manufacturePojoSet(factory, String.class)).build()));
         }
