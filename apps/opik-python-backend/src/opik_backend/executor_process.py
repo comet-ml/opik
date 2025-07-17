@@ -255,7 +255,7 @@ class ProcessExecutor(CodeExecutorBase):
             logger.error("Timeout getting a worker from the pool.")
             raise RuntimeError("No available workers in the pool.")
 
-    def run_scoring(self, code: str, data: dict) -> dict:
+    def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
         worker = None
@@ -267,7 +267,7 @@ class ProcessExecutor(CodeExecutorBase):
                 raise Exception(f"Worker {worker_id} has no connection object.")
 
             start_exec_time = time.time()
-            connection.send({'code': code, 'data': data})
+            connection.send({'code': code, 'data': data, 'payload_type': payload_type})
 
             # Wait for result with timeout
             if connection.poll(timeout=self.exec_timeout):
