@@ -5842,6 +5842,10 @@ components:
         total:
           type: integer
           format: int64
+        sortableBy:
+          type: array
+          items:
+            type: string
     Dataset_Public:
       required:
       - name
@@ -8177,6 +8181,8 @@ components:
           - COST
           - GUARDRAILS_FAILED_COUNT
           - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -8209,6 +8215,8 @@ components:
           - COST
           - GUARDRAILS_FAILED_COUNT
           - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
