@@ -600,6 +600,8 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "    def score(\n" +
     "        self, conversation: types.Conversation, **kwargs: Any\n" +
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
+    "        # conversation is a List[Dict] where each dict has:\n" +
+    '        # {"role": "user" | "assistant", "content": "message text"}\n' +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
