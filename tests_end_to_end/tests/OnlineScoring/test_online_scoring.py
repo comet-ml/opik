@@ -88,6 +88,7 @@ class TestOnlineScoring:
 
     @pytest.mark.regression
     @pytest.mark.online_scoring
+    @pytest.mark.llm_models
     @allure.title("Basic online scoring Moderation full flow")
     def test_online_scoring_basic_moderation(
         self,
