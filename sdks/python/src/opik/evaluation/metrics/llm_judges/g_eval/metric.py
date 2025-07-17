@@ -1,7 +1,5 @@
-from functools import cached_property
 from typing import Any, Optional, Union
 import pydantic
-import asyncstdlib as a
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -50,21 +48,28 @@ class GEval(base_metric.BaseMetric):
         self.evaluation_criteria = evaluation_criteria
         self._log_probs_supported = False
 
-    @cached_property
-    def llm_chain_of_thought(self) -> str:
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
-            task_introduction=self.task_introduction,
-            evaluation_criteria=self.evaluation_criteria,
-        )
-        return self._model.generate_string(input=prompt)
+        self._chain_of_thought_response = ""
 
-    @a.cached_property
+    def llm_chain_of_thought(self) -> str:
+        if not self._chain_of_thought_response:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+
+            self._chain_of_thought_response = self._model.generate_string(input=prompt)
+
+        return self._chain_of_thought_response
+
     async def allm_chain_of_thought(self) -> str:
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
-            task_introduction=self.task_introduction,
-            evaluation_criteria=self.evaluation_criteria,
-        )
-        return await self._model.agenerate_string(input=prompt)
+        if not self._chain_of_thought_response:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+            self._chain_of_thought_response = await self._model.agenerate_string(input=prompt)
+
+        return self._chain_of_thought_response
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]
@@ -100,7 +105,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=self.llm_chain_of_thought,
+            chain_of_thought=self.llm_chain_of_thought(),
             input=output,
         )
 
@@ -141,7 +146,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=await self.allm_chain_of_thought,
+            chain_of_thought=await self.allm_chain_of_thought(),
             input=output,
         )
 

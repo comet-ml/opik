@@ -53,7 +53,6 @@ setup(
         "tqdm",
         "uuid6",
         "jinja2",
-        "asyncstdlib"
     ],
     extras_require={
         "proxy": [
