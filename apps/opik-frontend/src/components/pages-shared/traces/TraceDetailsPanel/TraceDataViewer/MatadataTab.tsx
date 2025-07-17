@@ -35,7 +35,11 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
         <AccordionItem value="usage">
           <AccordionTrigger>Token usage</AccordionTrigger>
           <AccordionContent>
-            <SyntaxHighlighter data={data.usage as object} />
+            <SyntaxHighlighter
+              data={data.usage as object}
+              withSearch
+              search={search}
+            />
           </AccordionContent>
         </AccordionItem>
       )}

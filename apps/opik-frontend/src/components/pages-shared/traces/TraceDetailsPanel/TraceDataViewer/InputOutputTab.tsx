@@ -48,6 +48,8 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               <SyntaxHighlighter
                 data={data.error_info!}
                 preserveKey="syntax-highlighter-trace-sidebar-error"
+                withSearch
+                search={search}
               />
             )}
           </AccordionContent>
