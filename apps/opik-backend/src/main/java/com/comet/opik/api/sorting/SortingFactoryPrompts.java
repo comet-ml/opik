@@ -10,6 +10,7 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.api.sorting.SortableFields.VERSION_COUNT;
 
 public class SortingFactoryPrompts extends SortingFactory {
     @Override
@@ -22,6 +23,7 @@ public class SortingFactoryPrompts extends SortingFactory {
                 LAST_UPDATED_AT,
                 CREATED_BY,
                 LAST_UPDATED_BY,
+                VERSION_COUNT,
                 TAGS);
     }
 }

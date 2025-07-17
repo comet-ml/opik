@@ -10,9 +10,13 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 
 type MetadataTabProps = {
   data: Trace | Span;
+  search?: string;
 };
 
-const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({ data }) => {
+const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
+  data,
+  search,
+}) => {
   const hasTokenUsage = Boolean(data.usage);
 
   const openSections = useMemo(() => {
@@ -24,14 +28,18 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({ data }) => {
       <AccordionItem value="metadata">
         <AccordionTrigger>Metadata</AccordionTrigger>
         <AccordionContent>
-          <SyntaxHighlighter data={data.metadata} />
+          <SyntaxHighlighter withSearch data={data.metadata} search={search} />
         </AccordionContent>
       </AccordionItem>
       {hasTokenUsage && (
         <AccordionItem value="usage">
           <AccordionTrigger>Token usage</AccordionTrigger>
           <AccordionContent>
-            <SyntaxHighlighter data={data.usage as object} />
+            <SyntaxHighlighter
+              data={data.usage as object}
+              withSearch
+              search={search}
+            />
           </AccordionContent>
         </AccordionItem>
       )}
