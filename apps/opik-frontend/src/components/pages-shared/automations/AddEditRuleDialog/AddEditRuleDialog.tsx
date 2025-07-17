@@ -183,24 +183,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
       const applyChange = () => {
-        if (value === EVALUATORS_RULE_SCOPE.thread) {
-          form.setValue("uiType", UI_EVALUATORS_RULE_TYPE.llm_judge);
-        }
-
         const { uiType } = form.getValues();
         const type = getBackendRuleType(value, uiType);
 
         form.setValue("scope", value);
         form.setValue("type", type);
 
-        form.resetField("llmJudgeDetails", {
-          defaultValue: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[value]),
-          keepDirty: false,
-        });
-        form.resetField("pythonCodeDetails", {
-          defaultValue: cloneDeep(DEFAULT_PYTHON_CODE_DATA[value]),
-          keepDirty: false,
-        });
+        form.setValue(
+          "llmJudgeDetails",
+          cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[value]),
+        );
+        form.setValue(
+          "pythonCodeDetails",
+          cloneDeep(DEFAULT_PYTHON_CODE_DATA[value]),
+        );
       };
 
       if (
@@ -464,7 +460,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   )}
                 />
 
-                {!isEdit && !isThreadScope && (
+                {!isEdit && (
                   <FormField
                     control={form.control}
                     name="uiType"
