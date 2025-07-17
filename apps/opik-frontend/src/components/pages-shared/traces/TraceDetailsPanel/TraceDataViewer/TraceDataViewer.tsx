@@ -39,6 +39,7 @@ type TraceDataViewerProps = {
   activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
+  search?: string;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -50,6 +51,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   activeSection,
   setActiveSection,
   isSpansLazyLoading,
+  search,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
@@ -190,7 +192,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
           </TabsList>
           <TabsContent value="input">
-            <InputOutputTab data={data} isLoading={isSpanInputOutputLoading} />
+            <InputOutputTab
+              data={data}
+              isLoading={isSpanInputOutputLoading}
+              search={search}
+            />
           </TabsContent>
           <TabsContent value="feedback_scores">
             <FeedbackScoreTab
@@ -204,7 +210,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="metadata">
-            <MetadataTab data={data} />
+            <MetadataTab data={data} search={search} />
           </TabsContent>
           {hasSpanAgentGraph && (
             <TabsContent value="graph">

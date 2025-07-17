@@ -1,10 +1,23 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
+import { cva, VariantProps } from "class-variance-authority";
+
+const searchInputVariants = cva("px-8", {
+  variants: {
+    size: {
+      default: "h-8",
+      sm: "h-7",
+    },
+  },
+  defaultVariants: {
+    size: "default",
+  },
+});
 
 type ExpandableSearchInputProps = {
   placeholder?: string;
@@ -12,6 +25,10 @@ type ExpandableSearchInputProps = {
   onChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
+  buttonVariant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: VariantProps<typeof searchInputVariants>["size"];
+  onPrev?: () => void;
+  onNext?: () => void;
 };
 
 const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
@@ -19,7 +36,11 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   value,
   onChange,
   className,
+  buttonVariant = "outline",
+  size = "default",
   disabled = false,
+  onPrev,
+  onNext,
 }) => {
   const [isExpanded, setIsExpanded] = useState(Boolean(value) && !disabled);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,7 +74,17 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
     if (e.key === "Escape") {
       handleCollapse();
     }
+    if (e.key === "ArrowUp" && onPrev) {
+      e.preventDefault();
+      onPrev();
+    }
+    if (e.key === "ArrowDown" && onNext) {
+      e.preventDefault();
+      onNext();
+    }
   };
+
+  const hasNextPrev = Boolean(onPrev || onNext);
 
   return (
     <div
@@ -66,7 +97,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
     >
       {!isExpanded && (
         <Button
-          variant="outline"
+          variant={buttonVariant}
           size="icon-sm"
           onClick={handleExpand}
           disabled={disabled}
@@ -85,16 +116,42 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
               onValueChange={(value) => handleInputChange(value as string)}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className="h-8 px-8"
+              className={cn(searchInputVariants({ size }), {
+                "pr-[60px]": hasNextPrev,
+              })}
             />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleCollapse}
-              className="absolute right-1 top-1/2 size-6 -translate-y-1/2 text-light-slate"
-            >
-              <X />
-            </Button>
+            <div className="absolute inset-y-0 right-1 flex h-full items-center justify-center gap-0.5">
+              {hasNextPrev && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onPrev}
+                    className="w-4 text-light-slate"
+                  >
+                    <ChevronUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onNext}
+                    className="w-4 text-light-slate"
+                  >
+                    <ChevronDown />
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleCollapse}
+                className={cn("text-light-slate", {
+                  "w-4 mr-1": hasNextPrev,
+                })}
+              >
+                <X />
+              </Button>
+            </div>
           </div>
         </div>
       )}

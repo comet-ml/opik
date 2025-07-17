@@ -4,15 +4,20 @@ import { useMemo } from "react";
 export const useSearchPanelTheme = () => {
   return useMemo(() => {
     return EditorView.theme({
-      "&.cm-focused": { outline: "none !important" }, // Remove focus outline
-      ".cm-cursor": { opacity: "0" }, // Hide cursor when not editable
+      "&.cm-focused": { outline: "none !important" },
+      ".cm-cursor": { opacity: "0" },
       ".cm-activeLine": {
         backgroundColor: "transparent",
-      }, // Active line highlight
-
-      // Flattened styles for the search panel
-      ".cm-panels": {
+      },
+      ".cm-searchMatch": {
+        background: "#FFDF20",
+      },
+      ".cm-searchMatch.cm-searchMatch-selected": {
+        background: "#FF8904",
+      },
+      "& .cm-panels": {
         backgroundColor: "hsl(var(--primary-foreground))",
+        border: "none",
       },
     });
   }, []);
