@@ -15,6 +15,7 @@ import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import DateTag from "@/components/shared/DateTag/DateTag";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
@@ -32,6 +33,7 @@ import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/Datase
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
+import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
@@ -275,8 +277,22 @@ const DatasetItemsPage = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">{dataset?.name}</h1>
+      <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="comet-title-l truncate break-words">
+            {dataset?.name}
+          </h1>
+        </div>
+        {dataset?.created_at && (
+          <div className="mb-2 flex gap-4 overflow-x-auto">
+            <DateTag date={dataset?.created_at} />
+          </div>
+        )}
+        <DatasetTagsList
+          tags={dataset?.tags ?? []}
+          dataset={dataset}
+          datasetId={datasetId}
+        />
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2"></div>

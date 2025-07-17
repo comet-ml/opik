@@ -3,20 +3,24 @@ import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Dataset } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
+import { Filters } from "@/types/filters";
+import { processFilters } from "@/lib/filters";
 
 type UseDatasetsListParams = {
   workspaceName: string;
   withExperimentsOnly?: boolean;
   withOptimizationsOnly?: boolean;
   promptId?: string;
-  search?: string;
+  filters?: Filters;
   sorting?: Sorting;
+  search?: string;
   page: number;
   size: number;
 };
 
 export type UseDatasetsListResponse = {
   content: Dataset[];
+  sortable_by: string[];
   total: number;
 };
 
@@ -27,8 +31,9 @@ const getDatasetsList = async (
     withExperimentsOnly,
     withOptimizationsOnly,
     promptId,
-    search,
+    filters,
     sorting,
+    search,
     size,
     page,
   }: UseDatasetsListParams,
@@ -43,6 +48,7 @@ const getDatasetsList = async (
       ...(withOptimizationsOnly && {
         with_optimizations_only: withOptimizationsOnly,
       }),
+      ...processFilters(filters),
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...(promptId && { prompt_id: promptId }),
