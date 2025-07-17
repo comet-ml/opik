@@ -32,11 +32,12 @@ import {
   COLUMN_TYPE,
   ColumnData,
   ColumnsStatistic,
+  DropdownOption,
   DynamicColumn,
   HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   isColumnSortable,
@@ -87,6 +88,9 @@ import {
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { GuardrailResult } from "@/types/guardrails";
+import { SelectItem } from "@/components/ui/select";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -294,6 +298,48 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
+        type: {
+          keyComponentProps: {
+            options: [
+              {
+                value: SPAN_TYPE.general,
+                label: "General",
+              },
+              {
+                value: SPAN_TYPE.tool,
+                label: "Tool",
+              },
+              {
+                value: SPAN_TYPE.llm,
+                label: "LLM call",
+              },
+              ...(isGuardrailsEnabled
+                ? [
+                    {
+                      value: SPAN_TYPE.guardrail,
+                      label: "Guardrail",
+                    },
+                  ]
+                : []),
+            ],
+            placeholder: "Select type",
+            renderOption: (option: DropdownOption<SPAN_TYPE>) => {
+              return (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  withoutCheck
+                  wrapperAsChild={true}
+                >
+                  <div className="flex w-full items-center gap-1.5">
+                    <BaseTraceDataTypeIcon type={option.value} />
+                    {option.label}
+                  </div>
+                </SelectItem>
+              );
+            },
+          },
+        },
         [COLUMN_METADATA_ID]: {
           keyComponent: TracesOrSpansPathsAutocomplete,
           keyComponentProps: {
@@ -323,7 +369,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
       },
     }),
-    [projectId, type],
+    [projectId, type, isGuardrailsEnabled],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -530,6 +576,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      ...(type === TRACE_DATA_TYPE.spans
+        ? [
+            {
+              id: "type",
+              label: "Type",
+              type: COLUMN_TYPE.category,
+              accessorFn: (row: BaseTraceData) => {
+                const type = get(row, "type", undefined);
+                if (!type) return "-";
+
+                return SPAN_TYPE_LABELS_MAP[type as SPAN_TYPE];
+              },
+            },
+          ]
+        : []),
       {
         id: "error_info",
         label: "Errors",
@@ -585,6 +646,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: "llm_span_count",
               label: "LLM calls count",
               type: COLUMN_TYPE.number,
+            },
+          ]
+        : []),
+      ...(type === TRACE_DATA_TYPE.spans
+        ? [
+            {
+              id: "type",
+              label: "Type",
+              type: COLUMN_TYPE.category,
             },
           ]
         : []),
@@ -720,7 +790,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           className="mb-4"
           {...(type === TRACE_DATA_TYPE.traces
             ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
-            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}
+            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_spans])}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer

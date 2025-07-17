@@ -11,3 +11,10 @@ export const SPANS_COLORS_MAP: Record<BASE_TRACE_DATA_TYPE, string> = {
   [SPAN_TYPE.tool]: "#BF399E",
   [SPAN_TYPE.guardrail]: "#FB9341",
 };
+
+export const SPAN_TYPE_LABELS_MAP: Record<SPAN_TYPE, string> = {
+  [SPAN_TYPE.llm]: "LLM",
+  [SPAN_TYPE.general]: "General",
+  [SPAN_TYPE.tool]: "Tool",
+  [SPAN_TYPE.guardrail]: "Guardrail",
+};
