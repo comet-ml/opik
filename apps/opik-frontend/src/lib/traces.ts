@@ -359,6 +359,22 @@ const prettifyGenericLogic = (
           return value;
         }
       }
+
+      if ("blocks" in unwrappedMessage && isArray(unwrappedMessage.blocks)) {
+        const textBlocks = unwrappedMessage.blocks.filter(
+          (block) =>
+            isObject(block) &&
+            "block_type" in block &&
+            block.block_type === "text" &&
+            "text" in block &&
+            isString(block.text) &&
+            block.text.trim() !== "",
+        );
+
+        if (textBlocks.length > 0) {
+          return textBlocks.map((block) => block.text).join("\n\n");
+        }
+      }
     }
   }
 };

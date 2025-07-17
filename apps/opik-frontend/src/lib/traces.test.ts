@@ -185,4 +185,89 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("handles blocks structure with text content", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "text",
+          text: "Opik is a tool that has been specifically designed to support high volumes of traces, making it suitable for monitoring production applications, particularly LLM applications.",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Opik is a tool that has been specifically designed to support high volumes of traces, making it suitable for monitoring production applications, particularly LLM applications.",
+      prettified: true,
+    });
+  });
+
+  it("handles blocks structure with multiple text blocks", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "text",
+          text: "First paragraph content.",
+        },
+        {
+          block_type: "text",
+          text: "Second paragraph content.",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "First paragraph content.\n\nSecond paragraph content.",
+      prettified: true,
+    });
+  });
+
+  it("handles blocks structure with mixed block types, extracting only text blocks", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "image",
+          url: "https://example.com/image.jpg",
+        },
+        {
+          block_type: "text",
+          text: "This is the text content.",
+        },
+        {
+          block_type: "code",
+          language: "python",
+          code: "print('hello')",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "This is the text content.",
+      prettified: true,
+    });
+  });
+
+  it("handles nested blocks structure under output property", () => {
+    const message = {
+      output: {
+        role: "assistant",
+        blocks: [
+          {
+            block_type: "text",
+            text: "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
+          },
+        ],
+      },
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
+      prettified: true,
+    });
+  });
 });
