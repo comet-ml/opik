@@ -2189,26 +2189,23 @@ class DatasetsResourceTest {
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.CREATED_BY)
                                     .operator(Operator.EQUAL)
-                                    .value(datasets.getFirst().createdBy())
+                                    .value(USER)
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.CREATED_BY)
                                     .operator(Operator.NOT_EQUAL)
-                                    .value(datasets.getFirst().createdBy())
+                                    .value(USER)
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.CREATED_BY)
                                     .operator(Operator.CONTAINS)
-                                    .value(datasets.getFirst().createdBy().substring(0, 3))
+                                    .value(USER.substring(0, 3))
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                    .filter(dataset -> dataset.createdBy()
-                                            .contains(datasets.getFirst().createdBy().substring(0, 3)))
-                                    .toList()),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
 
                     // LAST_UPDATED_AT field tests (following prompt test pattern)
                     Arguments.of(
@@ -2231,26 +2228,23 @@ class DatasetsResourceTest {
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.LAST_UPDATED_BY)
                                     .operator(Operator.EQUAL)
-                                    .value(datasets.getFirst().lastUpdatedBy())
+                                    .value(USER)
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.LAST_UPDATED_BY)
                                     .operator(Operator.NOT_EQUAL)
-                                    .value(datasets.getFirst().lastUpdatedBy())
+                                    .value(USER)
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.LAST_UPDATED_BY)
                                     .operator(Operator.CONTAINS)
-                                    .value(datasets.getFirst().lastUpdatedBy().substring(0, 3))
+                                    .value(USER.substring(0, 3))
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                    .filter(dataset -> dataset.lastUpdatedBy()
-                                            .contains(datasets.getFirst().lastUpdatedBy().substring(0, 3)))
-                                    .toList()),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
 
                     // LAST_CREATED_EXPERIMENT_AT field tests
                     Arguments.of(
