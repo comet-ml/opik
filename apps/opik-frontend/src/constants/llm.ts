@@ -585,14 +585,23 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
   metric:
     "from typing import Union, List, Any\n" +
     "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "from opik.evaluation.types import Conversation\n" +
+    "from opik.evaluation.metrics.conversation import conversation_thread_metric, types\n" +
     "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
+    "class MyCustomMetric(conversation_thread_metric.ConversationThreadMetric):\n" +
     '    """A custom metric for evaluating conversation threads."""\n' +
+    "    def __init__(\n" +
+    "        self,\n" +
+    '        name: str = "my_custom_thread_metric",\n' +
+    "    ):\n" +
+    "        super().__init__(\n" +
+    "            name=name,\n" +
+    "        )\n" +
     "\n" +
     "    def score(\n" +
-    "        self, conversation: Conversation, **kwargs: Any\n" +
+    "        self, conversation: types.Conversation, **kwargs: Any\n" +
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
+    "        # conversation is a List[Dict] where each dict has:\n" +
+    '        # {"role": "user" | "assistant", "content": "message text"}\n' +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
