@@ -9,13 +9,13 @@ import isBoolean from "lodash/isBoolean";
 
 import useTracesList from "@/api/traces/useTracesList";
 import useSpansList from "@/api/traces/useSpansList";
-import { Span, SPAN_TYPE, Trace } from "@/types/traces";
+import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
 
 export enum TRACE_DATA_TYPE {
   traces = "traces",
-  llm = "llm",
+  spans = "spans",
 }
 
 type UseTracesOrSpansListParams = {
@@ -71,7 +71,7 @@ export default function useTracesOrSpansList(
   } = useSpansList(
     {
       ...params,
-      type: SPAN_TYPE.llm,
+      type: undefined,
     },
     {
       ...config,

@@ -5,7 +5,7 @@ export enum EXPLAINER_ID {
   what_are_feedback_scores = "what_are_feedback_scores",
   i_created_a_project_now_what = "i_created_a_project_now_what",
   what_are_traces = "what_are_traces",
-  what_are_llm_calls = "what_are_llm_calls",
+  what_are_spans = "what_are_spans",
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
@@ -94,10 +94,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "A trace is a step-by-step record of how your LLM application processes a single input, including LLM calls and other operations.",
     docLink: "/tracing/log_traces",
   },
-  [EXPLAINER_ID.what_are_llm_calls]: {
-    id: EXPLAINER_ID.what_are_llm_calls,
+  [EXPLAINER_ID.what_are_spans]: {
+    id: EXPLAINER_ID.what_are_spans,
     description:
-      "An LLM call is a single interaction with a language model - usually a prompt and its response. Use LLM calls to debug, monitor, and evaluate model behavior.",
+      "A span represents a single step in the execution of a trace. Use spans to debug, monitor, and evaluate model behavior.",
   },
   [EXPLAINER_ID.what_are_threads]: {
     id: EXPLAINER_ID.what_are_threads,

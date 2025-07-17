@@ -18,7 +18,7 @@ const NoTracesPage = () => {
     switch (type) {
       case TRACE_DATA_TYPE.traces:
         return noDataTracesImageUrl;
-      case TRACE_DATA_TYPE.llm:
+      case TRACE_DATA_TYPE.spans:
         return noDataSpansImageUrl;
       case "metrics":
         return noDataMetricsImageUrl;
