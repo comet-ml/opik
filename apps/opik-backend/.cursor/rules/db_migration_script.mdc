@@ -1,0 +1,18 @@
+---
+description: MySQL transaction usage guidelines for opik-backend
+globs: 
+alwaysApply: true
+---
+when creating db migration script, make sure to use the right folders.
+Click house guidlines:
+- for clickhouse use /apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations
+- for every change, make sure that you add 'ON CLUSTER '{cluster}' check other sql scripts to understand the pattern
+- make sure to add only relevent indexes and explain why in comment
+- make sure to add empty line at the end of the script
+- make sure --changeset <author name>:.......
+
+Mysql guildlines:
+- for mysql use /apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations
+- make sure to add only relevent indexes and explain why in comment
+- make sure to add empty line at the end of the script
+- make sure --changeset <author name>:.......

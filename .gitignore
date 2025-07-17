@@ -60,7 +60,6 @@ pip-log.txt
 
 # VS Code
 .vscode
-.cursor
 
 # charts
 deployment/helm_chart/opik/charts
