@@ -385,10 +385,9 @@ def test_no_scores_returns_bad_request(client):
 
 # ConversationThreadMetric test definitions
 CONVERSATION_THREAD_METRIC = """
-from typing import Any, Union, List
-
-from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+from typing import Union, List, Any
 from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
 
 
 class TestConversationThreadMetric(conversation_thread_metric.ConversationThreadMetric):
@@ -398,12 +397,11 @@ class TestConversationThreadMetric(conversation_thread_metric.ConversationThread
     ):
         super().__init__(
             name=name,
-            track=False,
         )
 
     def score(
         self, conversation: types.Conversation, **kwargs: Any
-    ) -> score_result.ScoreResult:
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
         # Simple test metric that counts the number of messages in conversation
         message_count = len(conversation)
         # Score based on whether the conversation has an appropriate length
@@ -418,11 +416,12 @@ class TestConversationThreadMetric(conversation_thread_metric.ConversationThread
 CONVERSATION_THREAD_METRIC_LIST_RESPONSE = """
 from typing import Any, Union, List
 
-from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+from opik.evaluation.metrics.conversation.conversation_thread_metric import ConversationThreadMetric
+from opik.evaluation.metrics.conversation.types import Conversation
 from opik.evaluation.metrics import score_result
 
 
-class TestConversationThreadMetricList(conversation_thread_metric.ConversationThreadMetric):
+class TestConversationThreadMetricList(ConversationThreadMetric):
     def __init__(
         self,
         name: str = "test_conversation_thread_metric_list",
@@ -433,7 +432,7 @@ class TestConversationThreadMetricList(conversation_thread_metric.ConversationTh
         )
 
     def score(
-        self, conversation: types.Conversation, **kwargs: Any
+        self, conversation: Conversation, **kwargs: Any
     ) -> List[score_result.ScoreResult]:
         # Return multiple scores for testing list response
         message_count = len(conversation)

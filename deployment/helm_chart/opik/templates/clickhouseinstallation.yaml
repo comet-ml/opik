@@ -6,10 +6,10 @@ metadata:
   namespace: {{ .Release.namespace }}
   labels:
     component: clickhouse
-    {{- include "opik.labels" $  | nindent 4 }}
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- include "opik.clickhouse.labels" . | nindent 4 }}
 spec:
   defaults:
     templates:
@@ -80,26 +80,51 @@ spec:
             runAsUser: 101
             runAsGroup: 101
             fsGroup: 101
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/default-container: clickhouse
+            labels:
+            {{- include "opik.clickhouse.labels" . | nindent 14 }}
+        {{- if .Values.clickhouse.imagePullSecrets }}
+          imagePullSecrets:
+            {{- .Values.clickhouse.imagePullSecrets | toYaml | nindent 12 }}
+        {{- end }}
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
-            {{- with .Values.clickhouse.imagePullSecrets }}
-            imagePullSecrets:
-              {{- toYaml . | nindent 8 }}
-            {{- end }}
             {{- with .Values.clickhouse.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-          {{- with .Values.clickhouse.nodeSelector }}
+          {{- if and .Values.clickhouse.enabled .Values.clickhouse.backupServer.enabled }}
+          - name: clickhouse-backup
+            image: {{ .Values.clickhouse.backupServer.image }}
+            imagePullPolicy: {{ .Values.clickhouse.backupServer.imagePullPolicy | default "IfNotPresent" }}
+            {{- with .Values.clickhouse.backupServer.resources }}
+            resources:
+            {{- toYaml . | nindent 14 }}
+            {{- end }}
+            args: ["server"]
+            {{- with .Values.clickhouse.backupServer.env }}
+            env:
+            {{-   range $name, $value := . }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{-   end }}
+            {{- end }}
+            ports:
+            - name: ch-backup-rest
+              containerPort: {{ .Values.clickhouse.backupServer.port }}
+          {{- end }}
+          {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.clickhouse.affinity }}
+          {{- with ( .Values.clickhouse.affinity | default .Values.affinity ) }}
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.clickhouse.tolerations }}
+          {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
