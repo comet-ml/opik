@@ -54,8 +54,11 @@ def execute_evaluator_python():
     if data is None:
         abort(400, "Field 'data' is missing in the request")
 
+    # Extract type information for conversation thread metrics
+    payload_type = payload.get("type")
+
     # Get the executor from app context and run the code
-    response = get_executor().run_scoring(code, data)
+    response = get_executor().run_scoring(code, data, payload_type)
 
     if "error" in response:
         abort(response["code"], response["error"])

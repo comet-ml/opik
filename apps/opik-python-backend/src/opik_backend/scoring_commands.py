@@ -10,6 +10,8 @@ from typing import Type, Union, List, Any, Dict
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
+# Constants
+TRACE_THREAD_METRIC_TYPE = "trace_thread"  # Referenced in the payload_types.py as it's not available in the scoring_commands.py process
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
@@ -30,6 +32,7 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
 
 code = argv[1]
 data = json.loads(argv[2])
+payload_type = argv[3] if len(argv) > 3 else None
 
 module = ModuleType(str(uuid.uuid4()))
 
@@ -48,7 +51,13 @@ if metric_class is None:
 score_result : Union[ScoreResult, List[ScoreResult]] = []
 try:
     metric = metric_class()
-    score_result = metric.score(**data)
+    
+    # Handle trace_thread type differently - pass data as first positional argument
+    if payload_type == TRACE_THREAD_METRIC_TYPE:
+        score_result = metric.score(data)
+    else:
+        # Regular scoring - unpack data as keyword arguments
+        score_result = metric.score(**data)
 except Exception:
     stacktrace = "\\n".join(traceback.format_exc().splitlines()[2:])
     print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
