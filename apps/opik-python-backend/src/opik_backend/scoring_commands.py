@@ -11,8 +11,7 @@ from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
 # Constants
-TRACE_THREAD_METRIC_TYPE = "trace_thread"
-
+TRACE_THREAD_METRIC_TYPE = "trace_thread"  # Referenced in the payload_types.py as it's not available in the scoring_commands.py process
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):

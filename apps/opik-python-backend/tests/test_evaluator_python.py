@@ -1,7 +1,7 @@
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
-from opik_backend.constants import TRACE_THREAD_METRIC_TYPE
+from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
@@ -413,45 +413,9 @@ class TestConversationThreadMetric(conversation_thread_metric.ConversationThread
         )
 """
 
-CONVERSATION_THREAD_METRIC_LIST_RESPONSE = """
-from typing import Any, Union, List
-
-from opik.evaluation.metrics.conversation.conversation_thread_metric import ConversationThreadMetric
-from opik.evaluation.metrics.conversation.types import Conversation
-from opik.evaluation.metrics import score_result
 
 
-class TestConversationThreadMetricList(ConversationThreadMetric):
-    def __init__(
-        self,
-        name: str = "test_conversation_thread_metric_list",
-    ):
-        super().__init__(
-            name=name,
-            track=False,
-        )
-
-    def score(
-        self, conversation: Conversation, **kwargs: Any
-    ) -> List[score_result.ScoreResult]:
-        # Return multiple scores for testing list response
-        message_count = len(conversation)
-        user_messages = len([msg for msg in conversation if msg.get("role") == "user"])
-        assistant_messages = len([msg for msg in conversation if msg.get("role") == "assistant"])
-        
-        return [
-            score_result.ScoreResult(
-                value=float(user_messages) / message_count if message_count > 0 else 0.0, 
-                name=f"{self.name}_user_ratio"
-            ),
-            score_result.ScoreResult(
-                value=float(assistant_messages) / message_count if message_count > 0 else 0.0, 
-                name=f"{self.name}_assistant_ratio"
-            )
-        ]
-"""
-
-def test_conversation_thread_metric_wrong_data_structure_fails(client):
+def test_conversation_thread_metric_wrong_data_structure_fails(client, app):
     """Test that ConversationThreadMetric fails when data is a list without type: trace_thread."""
     # This demonstrates the WRONG way - data as a list without type: trace_thread
     wrong_payload = {
@@ -464,7 +428,7 @@ def test_conversation_thread_metric_wrong_data_structure_fails(client):
                 }
             },
             {
-                "role": "assistant", 
+                "role": "assistant",
                 "content": {
                     "output": "Let me help you with that."
                 }
@@ -473,18 +437,15 @@ def test_conversation_thread_metric_wrong_data_structure_fails(client):
         # ❌ Missing "type": "trace_thread" - so backend tries **data unpacking
         "code": CONVERSATION_THREAD_METRIC
     }
-    
+
     response = client.post(EVALUATORS_URL, json=wrong_payload)
-    
+
     # Should fail with 400 error about mapping vs list
     assert response.status_code == 400
     assert "argument after ** must be a mapping, not list" in response.json["error"]
 
 
-
-
-
-def test_conversation_thread_metric_with_trace_thread_type(client):
+def test_conversation_thread_metric_with_trace_thread_type(client, app):
     """Test that ConversationThreadMetric works with trace_thread type and direct data array."""
     # Test the NEW way - using type: trace_thread with data as direct array
     trace_thread_payload = {
@@ -497,18 +458,18 @@ def test_conversation_thread_metric_with_trace_thread_type(client):
                 }
             },
             {
-                "role": "assistant", 
+                "role": "assistant",
                 "content": {
                     "output": "Let me help you with that."
                 }
             }
         ],
-        "type": TRACE_THREAD_METRIC_TYPE,  # ✅ This tells backend to pass data as first positional arg
+        "type": PayloadType.TRACE_THREAD.value,  # ✅ This tells backend to pass data as first positional arg
         "code": CONVERSATION_THREAD_METRIC
     }
-    
+
     response = client.post(EVALUATORS_URL, json=trace_thread_payload)
-    
+
     # Should work correctly now
     assert response.status_code == 200
     scores = response.json['scores']

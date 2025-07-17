@@ -9,7 +9,7 @@ from typing import Type, Union, List
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from .constants import TRACE_THREAD_METRIC_TYPE
+from .payload_types import PayloadType
 
 # Set up logging for the worker
 logger = logging.getLogger("process_worker")
@@ -60,7 +60,7 @@ def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dic
         metric = metric_class()
         
         # Handle trace_thread type differently - pass data as first positional argument
-        if payload_type == TRACE_THREAD_METRIC_TYPE:
+        if payload_type == PayloadType.TRACE_THREAD.value:
             score_result = metric.score(data)
         else:
             # Regular scoring - unpack data as keyword arguments
