@@ -16,7 +16,7 @@ class GEval(base_metric.BaseMetric):
         self,
         task_introduction: str,
         evaluation_criteria: str,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
         name: str = "g_eval_metric",
         track: bool = True,
         project_name: Optional[str] = None,
