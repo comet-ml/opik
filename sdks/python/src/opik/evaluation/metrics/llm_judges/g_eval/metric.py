@@ -1,10 +1,8 @@
-from functools import cached_property
 from typing import Any, Optional, Union
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
-from opik.evaluation import models
 from . import template, parser
 
 
@@ -50,13 +48,28 @@ class GEval(base_metric.BaseMetric):
         self.evaluation_criteria = evaluation_criteria
         self._log_probs_supported = False
 
-    @cached_property
+        self._chain_of_thought_response = ""
+
     def llm_chain_of_thought(self) -> str:
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
-            task_introduction=self.task_introduction,
-            evaluation_criteria=self.evaluation_criteria,
-        )
-        return self._model.generate_string(input=prompt)
+        if not self._chain_of_thought_response:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+            self._chain_of_thought_response=self._model.generate_string(input=prompt)
+
+        return self._chain_of_thought_response
+
+
+    async def allm_chain_of_thought(self) -> str:
+        if not self._chain_of_thought_response:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+            self._chain_of_thought_response = await self._model.agenerate_string(input=prompt)
+
+        return self._chain_of_thought_response
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]
@@ -66,12 +79,12 @@ class GEval(base_metric.BaseMetric):
         else:
             self._model = models_factory.get(model_name=model)
 
-        if (
-            hasattr(self._model, "supported_params")
-            and "logprobs" in self._model.supported_params
-            and "top_logprobs" in self._model.supported_params
-        ):
-            self._log_probs_supported = True
+            if (
+                hasattr(self._model, "supported_params")
+                and "logprobs" in self._model.supported_params
+                and "top_logprobs" in self._model.supported_params
+            ):
+                self._log_probs_supported = True
 
     def score(
         self,
@@ -92,7 +105,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=self.llm_chain_of_thought,
+            chain_of_thought=self.llm_chain_of_thought(),
             input=output,
         )
 
@@ -103,24 +116,18 @@ class GEval(base_metric.BaseMetric):
             },
         ]
 
-        if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = self._model.generate_provider_response(
-                messages=request,
-                logprobs=self._log_probs_supported,
-                top_logprobs=20 if self._log_probs_supported else None,
-                response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
-
-        model_output_string = self._model.generate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+        model_output = self._model.generate_provider_response(
+            messages=request,
+            logprobs=self._log_probs_supported,
+            top_logprobs=20 if self._log_probs_supported else None,
+            response_format=GEvalScoreFormat,
         )
 
-        return parser.parse_model_output_string(model_output_string, self.name)
+        return parser.parse_model_output(
+            content=model_output,
+            name=self.name,
+            log_probs_supported=self._log_probs_supported,
+        )
 
     async def ascore(
         self, output: str, **ignored_kwargs: Any
@@ -139,7 +146,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=self.llm_chain_of_thought,
+            chain_of_thought=await self.allm_chain_of_thought(),
             input=output,
         )
 
@@ -150,21 +157,15 @@ class GEval(base_metric.BaseMetric):
             },
         ]
 
-        if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = await self._model.agenerate_provider_response(
-                messages=request,
-                logprobs=self._log_probs_supported,
-                top_logprobs=20 if self._log_probs_supported else None,
-                response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
-
-        model_output_string = await self._model.agenerate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+        model_output = await self._model.agenerate_provider_response(
+            messages=request,
+            logprobs=self._log_probs_supported,
+            top_logprobs=20 if self._log_probs_supported else None,
+            response_format=GEvalScoreFormat,
         )
 
-        return parser.parse_model_output_string(model_output_string, self.name)
+        return parser.parse_model_output(
+            content=model_output,
+            name=self.name,
+            log_probs_supported=self._log_probs_supported,
+        )
