@@ -28,6 +28,8 @@ public interface Field {
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
     String CREATED_AT_QUERY_PARAM = "created_at";
     String LAST_UPDATED_AT_QUERY_PARAM = "last_updated_at";
+    String CREATED_BY_QUERY_PARAM = "created_by";
+    String LAST_UPDATED_BY_QUERY_PARAM = "last_updated_by";
     String LAST_CREATED_EXPERIMENT_AT_QUERY_PARAM = "last_created_experiment_at";
     String LAST_CREATED_OPTIMIZATION_AT_QUERY_PARAM = "last_created_optimization_at";
     String GUARDRAILS_QUERY_PARAM = "guardrails";
@@ -36,6 +38,7 @@ public interface Field {
     String STATUS_QUERY_PARAM = "status";
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
+    String VERSION_COUNT_QUERY_PARAM = "version_count";
 
     @JsonValue
     String getQueryParamField();
