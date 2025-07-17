@@ -151,7 +151,7 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const prompts = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
-    () => data?.sortable_by ?? ["tags"], // TODO lala need to fix default sortable_by
+    () => data?.sortable_by ?? ["tags"],
     [data?.sortable_by],
   );
   const total = data?.total ?? 0;
