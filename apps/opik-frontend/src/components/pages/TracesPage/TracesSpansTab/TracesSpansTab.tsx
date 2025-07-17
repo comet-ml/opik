@@ -91,6 +91,7 @@ import { GuardrailResult } from "@/types/guardrails";
 import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -420,9 +421,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? `There are no ${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-      } yet`
+    ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
     : "No search results";
 
   const rows: Array<Span | Trace> = useMemo(
@@ -582,12 +581,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: "type",
               label: "Type",
               type: COLUMN_TYPE.category,
-              accessorFn: (row: BaseTraceData) => {
-                const type = get(row, "type", undefined);
-                if (!type) return "-";
-
-                return SPAN_TYPE_LABELS_MAP[type as SPAN_TYPE];
-              },
+              cell: SpanTypeCell as never,
             },
           ]
         : []),
@@ -825,7 +819,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
             content={`Refresh ${
-              type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
             } list`}
           >
             <Button
