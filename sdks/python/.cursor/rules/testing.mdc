@@ -6,6 +6,7 @@ alwaysApply: true
 - Always add tests for a new feature.
 - Be mindful regarding the path to the new test, it should follow the same principles as for other tests.
 - e2e tests modules split by features and located in `opik/sdks/python/tests/e2e`
+- Use and create verify_* functions from `opik/sdks/python/tests/e2e/verifiers.py` in e2e tests if there is a lot of similar assertion logic for the data structures of one kind.
 - library integration namespaces split by integrations and located in `opik/sdks/python/tests/library_integration`
 - unit tests partially replicate the structure of the opik package in order to find the tests for modules easily and located in `opik/sdks/python/tests/unit`
 - Organize tests by type: unit tests, library integration tests, end-to-end and library-end-to-end tests
