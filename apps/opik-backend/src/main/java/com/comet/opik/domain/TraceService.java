@@ -15,10 +15,10 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
-import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -52,7 +52,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
-import static com.comet.opik.api.attachment.EntityType.TRACE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -109,10 +108,6 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
-    private final @NonNull SpanService spanService;
-    private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
-    private final @NonNull CommentDAO commentDAO;
-    private final @NonNull AttachmentService attachmentService;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
@@ -326,11 +321,13 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id) {
         log.info("Deleting trace by id '{}'", id);
-        return feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id)
-                .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, Set.of(id))))
-                .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
-                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))));
+        return Mono.deferContextual(ctx -> template.nonTransaction(connection -> dao.delete(id, connection))
+                .doOnSuccess(__ -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    eventBus.post(new TracesDeleted(Set.of(id), workspaceId, userName));
+                    log.info("Published TracesDeleted event for trace id '{}' on workspace '{}'", id, workspaceId);
+                }));
     }
 
     @Override
@@ -338,12 +335,14 @@ class TraceServiceImpl implements TraceService {
     public Mono<Void> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
-        return template
-                .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
-                .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, ids)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, ids)))
-                .then(Mono.defer(() -> spanService.deleteByTraceIds(ids)))
-                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
+        return Mono.deferContextual(ctx -> template.nonTransaction(connection -> dao.delete(ids, connection))
+                .doOnSuccess(__ -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    eventBus.post(new TracesDeleted(ids, workspaceId, userName));
+                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'", ids.size(),
+                            workspaceId);
+                }));
     }
 
     @Override
