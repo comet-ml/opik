@@ -5,13 +5,13 @@ alwaysApply: true
 ---
 - Always add tests for a new feature.
 - Be mindful regarding the path to the new test, it should follow the same principles as for other tests.
-- e2e tests modules split by features
-- library integration namespaces split by integrations
-- unit tests partially replicate the structure of the opik package in order to find the tests for modules easily
+- e2e tests modules split by features and located in `opik/sdks/python/tests/e2e`
+- library integration namespaces split by integrations and located in `opik/sdks/python/tests/library_integration`
+- unit tests partially replicate the structure of the opik package in order to find the tests for modules easily and located in `opik/sdks/python/tests/unit`
 - Organize tests by type: unit tests, library integration tests, end-to-end and library-end-to-end tests
-- Use testlib when possible (`tests/testlib`).
+- Use testlib when possible (`opik/sdks/python/tests/testlib`).
 - Use `fake_backend` fixture to emulate real backend when testing creation of spans, traces and feedback
-scores in unit tests and library integration tests. Use TraceModel, SpanModel, FeedbackScoreModel and assertion helper functions. Extensive examples can be found in `tests/unit/decorator/test_tracker_outputs.py` and `tests/library_integration/openai/test_openai_responses.py`
+scores in unit tests and library integration tests. Use TraceModel, SpanModel, FeedbackScoreModel and assertion helper functions. Extensive examples can be found in `opik/sdks/python/tests/unit/decorator/test_tracker_outputs.py` and `opik/sdks/python/tests/library_integration/openai/test_openai_responses.py`
 - Use parameterized tests for testing multiple scenarios efficiently
 - Test both sync and async code paths where applicable
 - Use appropriate test fixtures for isolation

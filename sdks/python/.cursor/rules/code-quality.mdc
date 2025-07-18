@@ -18,3 +18,4 @@ alwaysApply: true
 - Use comprehensive docstrings for public APIs
 - Don't add over-verbose comments, write self-explanatory code and only add comment if there is something non-trivial or the reader person may ask the question "Why is it like that?"
 - Never violate access modifiers. If the method or attribute is used only inside its class - it should be protected. If the function or object used only inside its module - it should be protected. (Only classes may omit underscores in their names if they are used only in their modules)
+- If you don't know how some function/method/class is used, search for examples in `opik/sdks/python/src` and `opik/sdks/python/tests` folders.
