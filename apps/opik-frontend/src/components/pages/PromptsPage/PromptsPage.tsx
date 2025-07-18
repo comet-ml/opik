@@ -64,6 +64,11 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     cell: IdCell as never,
   },
   {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
@@ -81,13 +86,57 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     accessorFn: (row) => formatDate(row.last_updated_at),
   },
   {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.created_at),
+  },
+  {
     id: "created_by",
     label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "id",
+    label: "ID",
     type: COLUMN_TYPE.string,
   },
   {
     id: "description",
     label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "version_count",
+    label: "Versions",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
     type: COLUMN_TYPE.string,
   },
 ];
@@ -267,7 +316,7 @@ const PromptsPage: React.FunctionComponent = () => {
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={DEFAULT_COLUMNS}
+            columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
           />
