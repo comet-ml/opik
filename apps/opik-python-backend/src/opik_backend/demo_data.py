@@ -13510,7 +13510,6 @@ evaluation_traces = [
         "output": {"num_embeddings": 1},
         "metadata": {"created_from": "llama_index"},
         "duration": 595.426,
-        "feedback_scores": [],
     },
 ]
 
