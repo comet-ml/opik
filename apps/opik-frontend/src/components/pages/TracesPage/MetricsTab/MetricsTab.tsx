@@ -1,12 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import React, { useMemo, useRef, useState } from "react";
 import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import dayjs from "dayjs";
 import { StringParam, useQueryParam, withDefault } from "use-query-params";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
@@ -18,44 +16,25 @@ import { formatDuration } from "@/lib/date";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-
-enum DAYS_OPTION_TYPE {
-  ONE_DAY = "1",
-  THREE_DAYS = "3",
-  SEVEN_DAYS = "7",
-  THIRTY_DAYS = "30",
-}
-
-const DAYS_OPTIONS = [
-  {
-    value: DAYS_OPTION_TYPE.ONE_DAY,
-    label: "1 day",
-  },
-  {
-    value: DAYS_OPTION_TYPE.THREE_DAYS,
-    label: "3 days",
-  },
-  {
-    value: DAYS_OPTION_TYPE.SEVEN_DAYS,
-    label: "7 days",
-  },
-  {
-    value: DAYS_OPTION_TYPE.THIRTY_DAYS,
-    label: "30 days",
-  },
-];
+import { DateRangeValue } from "@/components/shared/DateRangeSelect/DateRangeSelect";
+import DateRangePicker from "@/components/shared/DateRangeSelect/DateRangePicker";
+import {
+  calculateIntervalStartAndEnd,
+  calculateIntervalType,
+  parseDateRangeFromURL,
+  serializeDateRange,
+} from "./utils";
+import {
+  DEFAULT_METRICS_DATE_RANGE,
+  MAX_METRICS_DATE,
+  MIN_METRICS_DATE,
+} from "./constants";
 
 const DURATION_LABELS_MAP = {
   "duration.p50": "Percentile 50",
   "duration.p90": "Percentile 90",
   "duration.p99": "Percentile 99",
 };
-
-const POSSIBLE_DAYS_OPTIONS = Object.values(DAYS_OPTION_TYPE);
-const DEFAULT_DAYS_VALUE = DAYS_OPTION_TYPE.THIRTY_DAYS;
-
-const nowUTC = dayjs().utc();
-const intervalEnd = nowUTC.format();
 
 const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   formatCost(value as number);
@@ -71,13 +50,19 @@ interface MetricsTabProps {
 }
 
 const MetricsTab = ({ projectId }: MetricsTabProps) => {
-  const [days, setDays] = useQueryParam(
-    "days",
-    withDefault(StringParam, DEFAULT_DAYS_VALUE),
+  const [dateRangeParam, setDateRangeParam] = useQueryParam(
+    "range",
+    withDefault(StringParam, serializeDateRange(DEFAULT_METRICS_DATE_RANGE)),
   );
+
   const [requestChartOpen, setRequestChartOpen] = useState(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+
+  const dateRange = useMemo(
+    () => parseDateRangeFromURL(dateRangeParam, DEFAULT_METRICS_DATE_RANGE),
+    [dateRangeParam],
   );
 
   const { data: traces } = useTracesList(
@@ -105,35 +90,27 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   );
 
   const resetKeyRef = useRef(0);
-  const numDays = Number(days);
-  const isValidDays = POSSIBLE_DAYS_OPTIONS.includes(days as DAYS_OPTION_TYPE);
   const hasTraces = Boolean(traces?.total);
   const hasThreads = Boolean(threads?.total);
 
-  const interval: INTERVAL_TYPE = useMemo(() => {
-    if (numDays <= 3) {
-      return INTERVAL_TYPE.HOURLY;
-    }
+  const interval: INTERVAL_TYPE = useMemo(
+    () => calculateIntervalType(dateRange),
+    [dateRange],
+  );
 
-    return INTERVAL_TYPE.DAILY;
-  }, [numDays]);
+  const { intervalStart, intervalEnd } = useMemo(
+    () => calculateIntervalStartAndEnd(dateRange),
+    [dateRange],
+  );
 
-  const intervalStart = useMemo(() => {
-    const startOf = numDays === 1 ? "hour" : "day";
-
-    return nowUTC.subtract(numDays, "days").startOf(startOf).format();
-  }, [numDays]);
+  const handleDateRangeChange = (newRange: DateRangeValue) => {
+    setDateRangeParam(serializeDateRange(newRange));
+  };
 
   const handleRequestChartOpen = (val: boolean) => {
     setRequestChartOpen(val);
     resetKeyRef.current += 1;
   };
-
-  useEffect(() => {
-    if (!isValidDays) {
-      setDays(DEFAULT_DAYS_VALUE);
-    }
-  }, [isValidDays, setDays]);
 
   if (!hasTraces && !hasThreads) {
     return <NoTracesPage />;
@@ -153,7 +130,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -166,7 +143,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -179,7 +156,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -199,7 +176,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -212,7 +189,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -225,7 +202,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -241,7 +218,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -254,7 +231,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               renderValue={renderCostTooltipValue}
               chartType="line"
             />,
@@ -272,7 +249,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
+              disableLoadingData={false}
               chartType="bar"
             />,
           ]
@@ -303,15 +280,12 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <ChartLineIcon className="mr-2 size-3.5" />
           Request a chart
         </Button>
-
-        <div className="w-48">
-          <SelectBox
-            value={days}
-            onChange={setDays}
-            options={DAYS_OPTIONS}
-            className="h-8"
-          />
-        </div>
+        <DateRangePicker
+          value={dateRange}
+          onChangeValue={handleDateRangeChange}
+          minDate={MIN_METRICS_DATE}
+          maxDate={MAX_METRICS_DATE}
+        />
       </div>
       <div
         className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"
