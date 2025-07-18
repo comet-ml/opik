@@ -4773,7 +4773,7 @@ class SpansResourceTest {
                                     ? model
                                     : Optional.ofNullable(metadata)
                                             .map(md -> md.get("model"))
-                                            .map(JsonNode::asText).orElse(""),
+                                            .orElse(""),
                             provider,
                             usage,
                             metadata);
@@ -4874,7 +4874,57 @@ class SpansResourceTest {
                             null,
                             podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
                     Arguments.of(null, null, null, null,
-                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
+                    // Test cases for multimodal fields (image, audio, video)
+                    Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "image_count", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "audio_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o-audio-preview", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "video_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "image_count", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "audio_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "video_seconds", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "image_count", 0,
+                                    "audio_seconds", 0,
+                                    "video_seconds", 0),
+                            "gpt-4o", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("original_usage.completion_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.prompt_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.image_count",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.audio_seconds",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.video_seconds",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.prompt_tokens_details.cached_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o", "openai",
+                            null, null));
         }
 
         @Test
