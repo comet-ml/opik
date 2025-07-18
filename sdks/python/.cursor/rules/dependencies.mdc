@@ -1,0 +1,12 @@
+---
+description: Dependency management and tech stack guidelines
+globs:
+alwaysApply: true
+---
+
+## Dependency Management
+- Prioritize keeping existing dependencies (stored in setup.py) and avoid adding new ones
+- Keep dependency versions flexible with appropriate bounds
+- Avoid adding heavy dependencies without strong justification
+- Use conditional imports for optional dependencies (usually the case for integrations)
+- Make sure the python versions specified in setup.py can execute new code

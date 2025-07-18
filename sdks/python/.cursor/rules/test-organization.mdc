@@ -1,0 +1,17 @@
+---
+description: Test structure, location, and organization guidelines
+globs:
+alwaysApply: true
+---
+
+## Test Structure and Location
+- Always add tests for new features
+- Follow the same path principles as existing tests
+- e2e tests: split by features, located in `opik/sdks/python/tests/e2e`
+- library integration tests: split by integrations, located in `opik/sdks/python/tests/library_integration`
+- unit tests: replicate the opik package structure, located in `opik/sdks/python/tests/unit`
+
+## Test Types and Organization
+- Organize tests by type: unit tests, library integration tests, end-to-end and library-end-to-end tests
+- Use testlib when possible (`opik/sdks/python/tests/testlib`)
+- Integrations that log traces, spans or feedback scores via `opik.Opik` must be tested via library_integration tests using `fake_backend` fixture
