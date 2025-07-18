@@ -267,11 +267,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ className, ...props }) => {
   const { range, setRange, minDate, maxDate } = useDateRangeSelectContext();
 
   const handleDateSelect = (dateRange: DateRange | undefined) => {
-    if (!dateRange || !dateRange.from || !dateRange.to) return;
+    if (!dateRange || !dateRange.from) return;
+
+    // If end date is not selected, set it to the same as start date
+    const endDate = dateRange.to || dateRange.from;
 
     setRange({
       from: dateRange.from,
-      to: dateRange.to,
+      to: endDate,
     });
   };
 
