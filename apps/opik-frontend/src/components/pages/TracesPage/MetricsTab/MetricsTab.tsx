@@ -16,8 +16,8 @@ import { formatDuration } from "@/lib/date";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect/DateRangeSelect";
-import DateRangePicker from "@/components/shared/DateRangeSelect/DateRangePicker";
+import { DateRangeValue } from "@/components/shared/DateRangeSelect/DateRangeNewSelect";
+import NewDateRangePicker from "@/components/shared/DateRangeSelect/NewDateRangePicker";
 import {
   calculateIntervalStartAndEnd,
   calculateIntervalType,
@@ -280,7 +280,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <ChartLineIcon className="mr-2 size-3.5" />
           Request a chart
         </Button>
-        <DateRangePicker
+        <NewDateRangePicker
           value={dateRange}
           onChangeValue={handleDateRangeChange}
           minDate={MIN_METRICS_DATE}
