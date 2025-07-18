@@ -1,11 +1,16 @@
 ---
-description: Guidelines for error handling
+description: Exception handling and error management patterns
 globs:
 alwaysApply: true
 ---
+
+## Exception Types and Hierarchy
 - Use specific exception types for different error categories
-- Inherit custom exceptions from appropriate base classes in `opik.exceptions`, add new ones if needed.
-- Raise `opik.exceptions.MetricComputationError` from `opik.evaluation.metrics.BaseMetric` subclasses instead of hiding or masking the missing data or errors happening under the hood.
+- Inherit custom exceptions from appropriate base classes in `opik.exceptions`
+- Add new exception types when existing ones don't fit the use case
+- Raise `opik.exceptions.MetricComputationError` from `opik.evaluation.metrics.BaseMetric` subclasses instead of hiding or masking missing data or errors
+
+## Error Information and Recovery
 - Use structured error information consistently
 - Collect comprehensive error information for debugging
 - Implement proper retry logic for transient failures
