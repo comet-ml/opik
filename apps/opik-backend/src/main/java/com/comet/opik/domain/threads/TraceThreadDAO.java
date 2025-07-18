@@ -138,13 +138,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.workspace_id,
                 tt.project_id
             FROM trace_threads tt final
-            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
             WHERE tt.status = 'active'
-            AND (
-                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at < timestamp_sub(parseDateTime64BestEffort(:now, 6), toIntervalSecond(pc.timeout_mark_thread_as_inactive)))
-            OR
-                (tt.last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6))
-            )
+            AND tt.last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
             ORDER BY tt.last_updated_at
             LIMIT :limit
             """;
@@ -154,7 +149,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             SELECT
                 workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL
             FROM trace_threads tt final
-            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
             WHERE tt.workspace_id = :workspace_id
             AND tt.project_id = :project_id
             AND tt.status != :status
@@ -255,16 +249,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             SELECT
                 workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at
             FROM trace_threads tt final
-            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
             WHERE tt.workspace_id = :workspace_id
             AND tt.project_id = :project_id
-            AND tt.status != :status
+            AND tt.status = :status
             <if(last_updated_at)>
-            AND (
-                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at \\< timestamp_sub(parseDateTime64BestEffort(:now, 6), pc.timeout_mark_thread_as_inactive))
-            OR
-                (tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6))
-            )
+            AND tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)
             <endif>
             ;
             """;
@@ -369,7 +358,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
                     .bind("last_updated_at",
                             lastUpdatedUntil.toString())
-                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("limit", limit);
 
             return Flux.from(statement.execute())
@@ -555,8 +543,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     .bind("project_id", projectId)
                     .bind("last_updated_at",
                             now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
+                    .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
