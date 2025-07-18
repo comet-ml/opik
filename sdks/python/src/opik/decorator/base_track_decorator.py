@@ -28,6 +28,38 @@ LOGGER = logging.getLogger(__name__)
 
 TRACES_CREATED_BY_DECORATOR: Set[str] = set()
 
+_is_runtime_tracing_enabled: Optional[bool] = None
+
+
+def set_tracing_active(active: bool) -> None:
+    """
+    Enable or disable Opik tracing globally at runtime.
+    This setting takes precedence over configuration from files or environment variables.
+
+    Args:
+        active: If True, tracing is enabled. If False, tracing is disabled.
+    """
+    global _is_runtime_tracing_enabled
+    _is_runtime_tracing_enabled = active
+
+
+def is_tracing_active() -> bool:
+    """
+    Check if Opik tracing is currently active.
+    The runtime setting from `set_tracing_active` takes precedence over config.
+
+    Returns:
+        True if tracing is active, False otherwise.
+    """
+    global _is_runtime_tracing_enabled
+
+    if _is_runtime_tracing_enabled is not None:
+        return _is_runtime_tracing_enabled
+
+    # If runtime is not set, fallback to config
+    config_ = config.OpikConfig()
+    return not config_.track_disable
+
 
 class BaseTrackDecorator(abc.ABC):
     """
@@ -197,13 +229,18 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
 
+            def after_call_for_gen(*args_ac: Any, **kwargs_ac: Any) -> None:
+                """A wrapper to inject the correct flush value for generators."""
+                kwargs_ac["flush"] = track_options.flush
+                self._after_call(*args_ac, **kwargs_ac)
+
             try:
                 result = generator_wrappers.SyncTrackedGenerator(
                     func(*args, **kwargs),
                     start_span_arguments=start_span_arguments,
                     opik_distributed_trace_headers=opik_distributed_trace_headers,
                     track_options=track_options,
-                    finally_callback=self._after_call,
+                    finally_callback=after_call_for_gen,
                 )
                 return result
             except Exception as exception:
@@ -245,13 +282,18 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
 
+            def after_call_for_gen(*args_ac: Any, **kwargs_ac: Any) -> None:
+                """A wrapper to inject the correct flush value for generators."""
+                kwargs_ac["flush"] = track_options.flush
+                self._after_call(*args_ac, **kwargs_ac)
+
             try:
                 result = generator_wrappers.AsyncTrackedGenerator(
                     func(*args, **kwargs),
                     start_span_arguments=start_span_arguments,
                     opik_distributed_trace_headers=opik_distributed_trace_headers,
                     track_options=track_options,
-                    finally_callback=self._after_call,
+                    finally_callback=after_call_for_gen,
                 )
                 return result
             except Exception as exception:
@@ -316,7 +358,6 @@ class BaseTrackDecorator(abc.ABC):
                     return result
 
         wrapper.opik_tracked = True  # type: ignore
-
         return wrapper
 
     def _tracked_async(
