@@ -27,6 +27,36 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
+# Local development uses specific services defined in LOCAL_DEVELOPMENT_SERVICES (excludes backend/frontend containers)
+# Note: demo-data-generator is excluded because it depends on frontend/python-backend containers
+$LOCAL_DEVELOPMENT_SERVICES = @("mysql", "redis", "clickhouse", "zookeeper", "minio", "mc")
+
+# Colored output functions for local development
+function Write-StatusInfo {
+    param([string]$Message)
+    Write-Host "[INFO] $Message" -ForegroundColor Blue
+}
+
+function Write-StatusSuccess {
+    param([string]$Message)
+    Write-Host "[SUCCESS] $Message" -ForegroundColor Green
+}
+
+function Write-StatusWarning {
+    param([string]$Message)
+    Write-Host "[WARNING] $Message" -ForegroundColor Yellow
+}
+
+function Write-StatusError {
+    param([string]$Message)
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+function Test-CommandExists {
+    param([string]$Command)
+    $null -ne (Get-Command $Command -ErrorAction SilentlyContinue)
+}
+
 function Get-Containers {
     $containers = $REQUIRED_CONTAINERS
     if ($GUARDRAILS_ENABLED) {
@@ -46,6 +76,8 @@ function Show-Usage {
     Write-Host '  --debug           Enable debug mode (verbose output) (can be combined with other flags)'
     Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
+    Write-Host '  --local           Start local development environment (containers + local backend/frontend)'
+    Write-Host '  --migrate         Run database migrations (use with --local)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
@@ -311,10 +343,332 @@ function Get-VerifyCommand {
     return ".\opik.ps1 --verify"
 }
 
+# Local development functions
+
+function Test-LocalRequirements {
+    Write-StatusInfo "Checking local development requirements..."
+
+    if (-not (Test-CommandExists "mvn")) {
+        Write-StatusError "Maven is not installed. Please install Maven first."
+        exit 1
+    }
+
+    if (-not (Test-CommandExists "node")) {
+        Write-StatusError "Node.js is not installed. Please install Node.js first."
+        exit 1
+    }
+
+    if (-not (Test-CommandExists "npm")) {
+        Write-StatusError "npm is not installed. Please install npm first."
+        exit 1
+    }
+
+    Write-StatusSuccess "All local development requirements are met"
+}
+
+function Set-NginxConfigLocal {
+    Write-StatusInfo "Configuring nginx for local development..."
+
+    $nginxConfig = Join-Path $scriptDir "deployment\docker-compose\nginx_default_local.conf"
+
+    if (Test-Path $nginxConfig) {
+        $content = Get-Content $nginxConfig -Raw
+        if ($content -match "proxy_pass http://backend:8080;") {
+            $content = $content -replace "proxy_pass http://backend:8080;", "proxy_pass http://host.docker.internal:8080;"
+            Set-Content -Path $nginxConfig -Value $content
+            Write-StatusSuccess "Nginx configuration updated for local development"
+        } elseif ($content -match "proxy_pass http://host.docker.internal:8080;") {
+            Write-StatusInfo "Nginx configuration already set for local development"
+        } else {
+            Write-StatusWarning "Could not find expected proxy_pass configuration in nginx file"
+        }
+    } else {
+        Write-StatusWarning "Nginx configuration file not found: $nginxConfig"
+    }
+}
+
+function Set-FrontendConfigLocal {
+    Write-StatusInfo "Configuring frontend for local development..."
+
+    $frontendDir = Join-Path $scriptDir "apps\opik-frontend"
+    $envFile = Join-Path $frontendDir ".env.development"
+
+    if (-not (Test-Path $envFile)) {
+        Write-StatusWarning ".env.development file not found, creating it..."
+    }
+
+    $envContent = @"
+VITE_BASE_URL=/
+VITE_BASE_API_URL=http://localhost:8080
+"@
+
+    Set-Content -Path $envFile -Value $envContent
+    Write-StatusSuccess "Frontend environment configured for local development"
+}
+
+function Start-LocalContainers {
+    Write-StatusInfo "Starting required containers for local development (supporting services only, excluding backend/frontend/python-backend containers)..."
+
+    # Change to script directory
+    Set-Location $scriptDir
+
+    # Configure nginx and frontend for local development
+    Set-NginxConfigLocal
+    Set-FrontendConfigLocal
+
+    # Start containers using docker compose with port mapping override
+    # Force port mapping to true for local development
+    $dockerArgs = @(
+        "compose",
+        "-f", "deployment\docker-compose\docker-compose.yaml",
+        "-f", "deployment\docker-compose\docker-compose.override.yaml",
+        "up", "-d"
+    ) + $LOCAL_DEVELOPMENT_SERVICES
+
+    docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
+
+    Write-StatusInfo "Waiting for containers to be healthy..."
+
+    # Wait for containers to be healthy
+    $maxRetries = 60
+    $interval = 2
+
+    # Check container health
+    # Check container health for supporting services only
+    $containerHealthChecks = @("opik-mysql-1", "opik-redis-1", "opik-clickhouse-1", "opik-zookeeper-1", "opik-minio-1")
+    
+    foreach ($container in $containerHealthChecks) {
+        Write-StatusInfo "Waiting for $container..."
+        for ($i = 1; $i -le $maxRetries; $i++) {
+            $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
+            if ($health -eq "healthy") {
+                Write-StatusSuccess "$container is healthy"
+                break
+            }
+            if ($i -eq $maxRetries) {
+                if ($container -eq "opik-python-backend-1") {
+                    Write-StatusWarning "$container may not be fully healthy, but continuing..."
+                } else {
+                    Write-StatusError "$container failed to become healthy after $maxRetries attempts"
+                    exit 1
+                }
+            }
+            Start-Sleep -Seconds $interval
+        }
+    }
+
+    Write-StatusSuccess "All required containers for local development are running"
+}
+
+function Build-BackendLocal {
+    Write-StatusInfo "Building backend with Maven (skipping tests)..."
+
+    $backendDir = Join-Path $scriptDir "apps\opik-backend"
+    Set-Location $backendDir
+
+    # Clean and install, skipping tests
+    & mvn clean install -DskipTests
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-StatusSuccess "Backend built successfully"
+    } else {
+        Write-StatusError "Backend build failed"
+        exit 1
+    }
+}
+
+function Start-BackendLocal {
+    Write-StatusInfo "Starting backend locally..."
+
+    $backendDir = Join-Path $scriptDir "apps\opik-backend"
+    Set-Location $backendDir
+
+    # Set environment variables for local development
+    $env:CORS = "true"
+    $env:STATE_DB_PROTOCOL = "jdbc:mysql://"
+    $env:STATE_DB_URL = "localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+    $env:STATE_DB_DATABASE_NAME = "opik"
+    $env:STATE_DB_USER = "opik"
+    $env:STATE_DB_PASS = "opik"
+    $env:ANALYTICS_DB_MIGRATIONS_URL = "jdbc:clickhouse://localhost:8123"
+    $env:ANALYTICS_DB_MIGRATIONS_USER = "opik"
+    $env:ANALYTICS_DB_MIGRATIONS_PASS = "opik"
+    $env:ANALYTICS_DB_PROTOCOL = "HTTP"
+    $env:ANALYTICS_DB_HOST = "localhost"
+    $env:ANALYTICS_DB_PORT = "8123"
+    $env:ANALYTICS_DB_DATABASE_NAME = "opik"
+    $env:ANALYTICS_DB_USERNAME = "opik"
+    $env:ANALYTICS_DB_PASS = "opik"
+    $env:JAVA_OPTS = "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
+    $env:REDIS_URL = "redis://:opik@localhost:6379/"
+
+    # Run database migrations if --migrate flag is specified
+    if ($RUN_MIGRATIONS) {
+        Write-StatusInfo "Running database migrations..."
+        # Set OPIK_VERSION for the migration script and create symlink
+        $jarFile = Get-ChildItem "target\opik-backend-*.jar" | Where-Object { $_.Name -notlike "*sources*" -and $_.Name -notlike "original-*" } | Select-Object -First 1
+        $migrationJar = $null
+        if ($jarFile) {
+            # Extract version from JAR filename (e.g., opik-backend-1.0-SNAPSHOT.jar -> 1.0-SNAPSHOT)
+            $env:OPIK_VERSION = $jarFile.BaseName -replace '^opik-backend-', ''
+            
+            # Create symlink for migration script (it expects JAR in current directory)
+            $migrationJar = "opik-backend-$($env:OPIK_VERSION).jar"
+            if (-not (Test-Path $migrationJar)) {
+                New-Item -ItemType SymbolicLink -Path $migrationJar -Target $jarFile.FullName -Force | Out-Null
+            }
+        }
+        if (Test-Path "run_db_migrations.ps1") {
+            & .\run_db_migrations.ps1
+        } elseif (Test-Path "run_db_migrations.sh") {
+            & bash .\run_db_migrations.sh
+        } else {
+            Write-StatusWarning "Database migration script not found, skipping..."
+        }
+        
+        # Clean up symlink after migrations
+        if ($migrationJar -and (Test-Path $migrationJar) -and ((Get-Item $migrationJar).LinkType -eq "SymbolicLink")) {
+            Remove-Item $migrationJar -Force
+        }
+    } else {
+        Write-StatusInfo "Skipping database migrations (use --migrate flag to run them)"
+    }
+
+    # Start the backend
+    Write-StatusInfo "Starting backend server..."
+    # Use wildcard pattern for JAR filename to avoid hardcoding version
+    $jarFile = Get-ChildItem "target\opik-backend-*.jar" | Where-Object { $_.Name -notlike "*sources*" -and $_.Name -notlike "original-*" } | Select-Object -First 1
+    if (-not $jarFile) {
+        Write-StatusError "No backend JAR file found in target directory. Please build the backend first."
+        return $false
+    }
+    Write-StatusInfo "Using JAR file: $($jarFile.FullName)"
+    $backendProcess = Start-Process -FilePath "java" -ArgumentList "$env:JAVA_OPTS", "-jar", "$($jarFile.FullName)", "server", "config.yml" -PassThru -NoNewWindow
+
+    # Wait for backend to start
+    Write-StatusInfo "Waiting for backend to start..."
+    for ($i = 1; $i -le 30; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8080/health-check" -UseBasicParsing -TimeoutSec 2
+            if ($response.StatusCode -eq 200) {
+                Write-StatusSuccess "Backend is running on http://localhost:8080"
+                return $backendProcess
+            }
+        } catch {
+            # Continue waiting
+        }
+        if ($i -eq 30) {
+            Write-StatusError "Backend failed to start after 30 attempts"
+            if ($backendProcess -and -not $backendProcess.HasExited) {
+                $backendProcess.Kill()
+            }
+            exit 1
+        }
+        Start-Sleep -Seconds 2
+    }
+}
+
+function Start-FrontendLocal {
+    Write-StatusInfo "Starting frontend locally..."
+
+    $frontendDir = Join-Path $scriptDir "apps\opik-frontend"
+    Set-Location $frontendDir
+
+    # Install dependencies if node_modules doesn't exist
+    if (-not (Test-Path "node_modules")) {
+        Write-StatusInfo "Installing frontend dependencies..."
+        & npm install
+    }
+
+    # Frontend environment is already configured in Start-LocalContainers
+
+    # Start the frontend development server
+    Write-StatusInfo "Starting frontend development server..."
+    $frontendProcess = Start-Process -FilePath "npm" -ArgumentList "start" -PassThru -NoNewWindow
+
+    # Wait for frontend to start
+    Write-StatusInfo "Waiting for frontend to start..."
+    for ($i = 1; $i -le 30; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:5174" -UseBasicParsing -TimeoutSec 2
+            if ($response.StatusCode -eq 200) {
+                Write-StatusSuccess "Frontend is running on http://localhost:5174"
+                return $frontendProcess
+            }
+        } catch {
+            # Continue waiting
+        }
+        if ($i -eq 30) {
+            Write-StatusError "Frontend failed to start after 30 attempts"
+            if ($frontendProcess -and -not $frontendProcess.HasExited) {
+                $frontendProcess.Kill()
+            }
+            exit 1
+        }
+        Start-Sleep -Seconds 2
+    }
+}
+
+function Stop-LocalProcesses {
+    param(
+        [System.Diagnostics.Process]$BackendProcess,
+        [System.Diagnostics.Process]$FrontendProcess
+    )
+    
+    Write-StatusInfo "Cleaning up local development environment..."
+
+    if ($BackendProcess -and -not $BackendProcess.HasExited) {
+        Write-StatusInfo "Stopping backend..."
+        $BackendProcess.Kill()
+    }
+
+    if ($FrontendProcess -and -not $FrontendProcess.HasExited) {
+        Write-StatusInfo "Stopping frontend..."
+        $FrontendProcess.Kill()
+    }
+
+    Write-StatusSuccess "Local development cleanup completed"
+}
+
+function Start-LocalDevelopment {
+    Write-StatusInfo "Starting OPIK local development environment..."
+
+    # Check requirements
+    Test-LocalRequirements
+    Test-DockerStatus
+
+    # Start containers for local development
+    Start-LocalContainers
+
+    # Build and run backend and frontend
+    Build-BackendLocal
+    $backendProcess = Start-BackendLocal
+    $frontendProcess = Start-FrontendLocal
+
+    Write-StatusSuccess "OPIK local development environment is ready!"
+    Write-StatusInfo "Backend: http://localhost:8080"
+    Write-StatusInfo "Frontend: http://localhost:5174"
+    Write-StatusInfo "Press Ctrl+C to stop all services"
+
+    # Set up cleanup on exit
+    Register-EngineEvent PowerShell.Exiting -Action {
+        Stop-LocalProcesses -BackendProcess $backendProcess -FrontendProcess $frontendProcess
+    }
+
+    # Wait for user to stop
+    try {
+        Write-Host "Press any key to stop all services..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    } finally {
+        Stop-LocalProcesses -BackendProcess $backendProcess -FrontendProcess $frontendProcess
+    }
+}
+
 $BUILD_MODE = $false
 $DEBUG_MODE = $false
 $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
+$LOCAL_MODE = $false
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 
@@ -353,6 +707,16 @@ if ($options -contains '--guardrails') {
     $options = $options | Where-Object { $_ -ne '--guardrails' }
 }
 
+if ($options -contains '--local') {
+    $LOCAL_MODE = $true
+    $options = $options | Where-Object { $_ -ne '--local' }
+}
+
+if ($options -contains '--migrate') {
+    $RUN_MIGRATIONS = $true
+    $options = $options | Where-Object { $_ -ne '--migrate' }
+}
+
 # Get the first remaining option
 $option = if ($options.Count -gt 0) { $options[0] } else { '' }
 
@@ -381,6 +745,13 @@ switch ($option) {
         exit 0
     }
     '' {
+        # Handle local development mode
+        if ($LOCAL_MODE) {
+            Start-LocalDevelopment
+            exit 0
+        }
+        
+        # Original logic for normal mode
         Write-Host '[DEBUG] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
