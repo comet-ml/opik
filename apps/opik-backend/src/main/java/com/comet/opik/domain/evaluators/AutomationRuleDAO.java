@@ -24,21 +24,23 @@ import java.util.UUID;
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) " +
-            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
+    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate, enabled) " +
+            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled)")
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules
             SET name = :name,
-                sampling_rate = :samplingRate
+                sampling_rate = :samplingRate,
+                enabled = :enabled
             WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
             """)
     int updateBaseRule(@Bind("id") UUID id,
             @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
-            @Bind("samplingRate") float samplingRate);
+            @Bind("samplingRate") float samplingRate,
+            @Bind("enabled") boolean enabled);
 
     @SqlUpdate("""
             DELETE FROM automation_rules

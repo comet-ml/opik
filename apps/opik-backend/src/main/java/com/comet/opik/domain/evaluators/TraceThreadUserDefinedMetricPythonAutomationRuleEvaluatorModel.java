@@ -16,6 +16,7 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         String projectName,
         String name,
         Float samplingRate,
+        boolean enabled,
         @Json TraceThreadUserDefinedMetricPythonCode code,
         Instant createdAt,
         String createdBy,

@@ -40,13 +40,16 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
 
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "code", "createdAt", "createdBy",
+    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "code", "createdAt",
+            "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorTraceThreadLlmAsJudge(UUID id, @NotNull UUID projectId, String projectName,
             @NotBlank String name,
-            float samplingRate, @NotNull TraceThreadLlmAsJudgeCode code, Instant createdAt, String createdBy,
+            float samplingRate, boolean enabled, @NotNull TraceThreadLlmAsJudgeCode code, Instant createdAt,
+            String createdBy,
             Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
+                lastUpdatedBy);
     }
 
     @JsonView({View.Public.class, View.Write.class})

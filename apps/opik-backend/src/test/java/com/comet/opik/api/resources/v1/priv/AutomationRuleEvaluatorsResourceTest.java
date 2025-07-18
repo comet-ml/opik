@@ -791,7 +791,8 @@ class AutomationRuleEvaluatorsResourceTest {
                             factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)),
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class),
-                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)),
+                            factory.manufacturePojo(
+                                    AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)),
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class),
                             factory.manufacturePojo(AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class)),
@@ -822,6 +823,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .lastUpdatedBy(USER)
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
+                    .enabled(updatedEvaluator.isEnabled())
                     .code(updatedEvaluator.getCode())
                     .build();
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
@@ -833,6 +835,44 @@ class AutomationRuleEvaluatorsResourceTest {
                         .isEqualTo(expectedAutomationRuleEvaluator);
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Should update enabled status correctly")
+        void updateEnabledStatus(boolean initialEnabled, boolean targetEnabled, String scenarioDescription) {
+            // Create a rule with initial enabled state
+            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .enabled(initialEnabled)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            // Update to target enabled state
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)
+                    .toBuilder()
+                    .projectId(automationRuleEvaluator.getProjectId())
+                    .enabled(targetEnabled)
+                    .build();
+
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, updatedEvaluator, API_KEY, HttpStatus.SC_NO_CONTENT)) {
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            // Verify the rule has the expected enabled state
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.isEnabled()).isEqualTo(targetEnabled);
+                assertThat(actualAutomationRuleEvaluator.getName()).isEqualTo(updatedEvaluator.getName());
+            }
+        }
+
+        static Stream<Arguments> updateEnabledStatus() {
+            return Stream.of(
+                    Arguments.of(true, false, "enabled to disabled"),
+                    Arguments.of(false, true, "disabled to enabled"));
         }
     }
 
@@ -1170,6 +1210,221 @@ class AutomationRuleEvaluatorsResourceTest {
 
     }
 
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DisabledRulesTest {
+
+        @Test
+        void createEvaluatorWithDefaultEnabledTrue() {
+            // Create a rule without explicitly setting enabled - should default to true
+            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                // Should default to enabled if not explicitly set
+                assertThat(actualAutomationRuleEvaluator.isEnabled()).isTrue();
+            }
+        }
+
+        @Test
+        void createDisabledEvaluator() {
+            // Create a disabled rule explicitly
+            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .enabled(false)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.isEnabled()).isFalse();
+            }
+        }
+
+        @Test
+        void getLogsTraceSkippedDueToDisabledRule() {
+            // Test that disabled rules generate appropriate log messages (different from sampling rate messages)
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create a disabled Python rule with high sampling rate (to distinguish from sampling rate issues)
+            var evaluatorPython = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(1.0f) // High sampling rate, but rule is disabled
+                    .enabled(false)
+                    .projectId(projectId)
+                    .build();
+            var idPython = evaluatorsResourceClient.createEvaluator(evaluatorPython, WORKSPACE_NAME, API_KEY);
+
+            // Create a disabled LLM rule with high sampling rate
+            var evaluatorLlm = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .samplingRate(1.0f) // High sampling rate, but rule is disabled
+                    .enabled(false)
+                    .projectId(projectId)
+                    .build();
+            var idLlm = evaluatorsResourceClient.createEvaluator(evaluatorLlm, WORKSPACE_NAME, API_KEY);
+
+            // Send a trace that should be skipped due to disabled rules (not sampling rate)
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .threadId(null)
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                var logPagePython = evaluatorsResourceClient.getLogs(idPython, WORKSPACE_NAME, API_KEY);
+                assertDisabledRuleLogResponse(logPagePython, idPython, evaluatorPython, trace);
+                var logPageLlm = evaluatorsResourceClient.getLogs(idLlm, WORKSPACE_NAME, API_KEY);
+                assertDisabledRuleLogResponse(logPageLlm, idLlm, evaluatorLlm, trace);
+            });
+        }
+
+        @Test
+        void getLogsTraceThreadSkippedDueToDisabledRule() {
+            // Test trace thread handling for disabled rules
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create disabled trace thread rules with high sampling rates
+            var evaluatorPython = Optional.ofNullable(factory
+                    .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(1.0f) // High sampling rate, but rule is disabled
+                    .enabled(false)
+                    .projectId(projectId)
+                    .build())
+                    .map(evaluator -> evaluator.toBuilder()
+                            .id(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY))
+                            .build())
+                    .get();
+
+            var evaluatorLlm = Optional.ofNullable(
+                    factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
+                            .toBuilder()
+                            .samplingRate(1.0f) // High sampling rate, but rule is disabled
+                            .enabled(false)
+                            .projectId(projectId)
+                            .build())
+                    .map(evaluator -> evaluator.toBuilder()
+                            .id(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY))
+                            .build())
+                    .get();
+
+            // Send a trace that should create a thread but be skipped due to disabled rules
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            Instant createdAt = trace.createdAt();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
+                        WORKSPACE_NAME);
+
+                var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
+                var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
+
+                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
+                        .map(Object::toString)
+                        .orElseThrow();
+
+                Map<String, String> markers = Map.of("thread_model_id", threadModelId);
+                String disabledMessage = "The threadModelId '%s' was skipped for rule: '%s' as the rule is disabled";
+
+                assertTraceThreadDisabledLogResponse(logPagePython, threadModelId, evaluatorPython, markers, createdAt,
+                        disabledMessage);
+                assertTraceThreadDisabledLogResponse(logPageLlm, threadModelId, evaluatorLlm, markers, createdAt,
+                        disabledMessage);
+            });
+        }
+
+        @Test
+        void mixedEnabledAndDisabledRules() {
+            // Test scenario with both enabled and disabled rules in same project
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create one enabled rule
+            var enabledRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .samplingRate(0f) // Low sampling rate to avoid actual processing
+                    .enabled(true)
+                    .projectId(projectId)
+                    .build();
+            var enabledId = evaluatorsResourceClient.createEvaluator(enabledRule, WORKSPACE_NAME, API_KEY);
+
+            // Create one disabled rule
+            var disabledRule = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(1.0f) // High sampling rate, but rule is disabled
+                    .enabled(false)
+                    .projectId(projectId)
+                    .build();
+            var disabledId = evaluatorsResourceClient.createEvaluator(disabledRule, WORKSPACE_NAME, API_KEY);
+
+            // Send a trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .threadId(null)
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                // Enabled rule should generate sampling rate message (skipped due to 0% rate)
+                var enabledLogPage = evaluatorsResourceClient.getLogs(enabledId, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(enabledLogPage, enabledId, enabledRule, trace);
+
+                // Disabled rule should generate disabled message
+                var disabledLogPage = evaluatorsResourceClient.getLogs(disabledId, WORKSPACE_NAME, API_KEY);
+                assertDisabledRuleLogResponse(disabledLogPage, disabledId, disabledRule, trace);
+            });
+        }
+
+        @Test
+        void disabledRuleDoesNotConsumeResources() {
+            // Verify that disabled rules are skipped early and don't go through sampling logic
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create disabled rule with 100% sampling rate
+            var disabledRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .samplingRate(1.0f) // 100% sampling rate
+                    .enabled(false) // But disabled
+                    .projectId(projectId)
+                    .build();
+            var disabledId = evaluatorsResourceClient.createEvaluator(disabledRule, WORKSPACE_NAME, API_KEY);
+
+            // Send multiple traces
+            for (int i = 0; i < 5; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .threadId(null)
+                        .build();
+                traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            }
+
+            // All traces should be skipped with "disabled" message, none with sampling rate message
+            Awaitility.await().untilAsserted(() -> {
+                var logPage = evaluatorsResourceClient.getLogs(disabledId, WORKSPACE_NAME, API_KEY);
+                assertLogPage(logPage, 5); // Should have 5 log entries
+
+                // All log messages should be about rule being disabled, not sampling rate
+                assertThat(logPage.content())
+                        .allSatisfy(log -> {
+                            assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                            assertThat(log.message()).contains("as the rule is disabled");
+                            assertThat(log.message()).doesNotContain("per the sampling rate");
+                        });
+            });
+        }
+    }
+
     private void assertTraceThreadLogResponse(LogPage logPage, String threadModelId, AutomationRuleEvaluator<?> rule,
             Map<String, String> markers,
             Instant createdAt, String message) {
@@ -1304,5 +1559,40 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(logPage.content().getFirst().message())
                 .isEqualTo("The traceId '%s' was skipped for rule: '%s' and per the sampling rate '0.0'".formatted(
                         trace.id(), rule.getName()));
+    }
+
+    private void assertDisabledRuleLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?> rule,
+            Trace trace) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(trace.createdAt(), Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(ruleId);
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                });
+
+        // Verify the message specifically mentions rule being disabled
+        assertThat(logPage.content().getFirst().message())
+                .isEqualTo("The traceId '%s' was skipped for rule: '%s' as the rule is disabled".formatted(
+                        trace.id(), rule.getName()));
+    }
+
+    private void assertTraceThreadDisabledLogResponse(LogPage logPage, String threadModelId,
+            AutomationRuleEvaluator<?> rule,
+            Map<String, String> markers, Instant createdAt, String messageTemplate) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(createdAt, Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(rule.getId());
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(markers);
+                });
+
+        assertThat(logPage.content().getFirst().message())
+                .isEqualTo(messageTemplate.formatted(threadModelId, rule.getName()));
     }
 }
