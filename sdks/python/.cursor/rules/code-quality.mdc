@@ -1,0 +1,20 @@
+---
+description: Code quality and design guidelines
+globs:
+alwaysApply: true
+---
+- Follow SOLID principles.
+- Always look for similar API which already exists and make the new one consistent with it
+- Organize modules by functionality, avoid generic utility modules
+- Use meaningful module and class names that reflect their purpose, no shortcuts
+- Use builder functions for creating complex objects, tend to follow dependency injection principles
+- Keep modules, classes and functions focused on single responsibilities
+- Always import modules, not names. Unless you're importing from `typing` or similar commonly used modules. Keep the namespace clean.
+- Group imports: standard library, third-party, local imports
+- Maintain backward compatibility for public interfaces
+- Don't add default parameter values if it is not required. Default values should exist in high-level APIs only.
+- Follow established code formatting and linting standards
+- Use comprehensive type hints
+- Use comprehensive docstrings for public APIs
+- Don't add over-verbose comments, write self-explanatory code and only add comment if there is something non-trivial or the reader person may ask the question "Why is it like that?"
+- Never violate access modifiers. If the method or attribute is used only inside its class - it should be protected. If the function or object used only inside its module - it should be protected. (Only classes may omit underscores in their names if they are used only in their modules)

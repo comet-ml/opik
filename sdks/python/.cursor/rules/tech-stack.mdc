@@ -1,0 +1,10 @@
+---
+description: Guidelines to follow when choosing a tool to solve the task
+globs:
+alwaysApply: true
+---
+- Prioritize keeping the existing dependencies (stored setup.py) and not adding the new ones
+- Keep dependency versions flexible with appropriate bounds
+- Avoid adding heavy dependencies without strong justification
+- Use conditional imports for optional dependencies (it's usually the case for integrations)
+- Make sure the python versions specified in setup.py can execute new code

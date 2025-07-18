@@ -1,0 +1,12 @@
+---
+description: Guidelines for error handling
+globs:
+alwaysApply: true
+---
+- Use specific exception types for different error categories
+- Inherit custom exceptions from appropriate base classes in `opik.exceptions`, add new ones if needed.
+- Raise `opik.exceptions.MetricComputationError` from `opik.evaluation.metrics.BaseMetric` subclasses instead of hiding or masking the missing data or errors happening under the hood.
+- Use structured error information consistently
+- Collect comprehensive error information for debugging
+- Implement proper retry logic for transient failures
+- Handle provider-specific errors in integrations

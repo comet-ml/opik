@@ -1,0 +1,13 @@
+---
+description: Guidelines for logging
+globs:
+alwaysApply: true
+---
+
+- Use structured logging with proper logger hierarchies
+- Configure logging with customizable formatters
+- Use appropriate log levels: DEBUG for detailed info, INFO and WARNING for user messages, ERROR for problems
+- Create module-level loggers consistently with the variable name LOGGER
+- Implement log-once patterns for repeated messages
+- Include relevant context without exposing sensitive information
+- Include timing information for API calls and processing
