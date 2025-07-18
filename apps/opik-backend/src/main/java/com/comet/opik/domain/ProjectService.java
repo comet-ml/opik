@@ -33,7 +33,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -127,7 +126,6 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
-    private final @NonNull ProjectConfigDAO projectConfigDAO;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -141,19 +139,8 @@ class ProjectServiceImpl implements ProjectService {
         UUID projectId = idGenerator.generateId();
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
-        Configuration configuration = project.configuration();
 
-        project = createProject(project, projectId, userName, workspaceId).toBuilder()
-                .configuration(configuration)
-                .build();
-
-        if (project.configuration() != null) {
-            projectConfigDAO.upsertConfigurations(project)
-                    .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                    .block();
-        }
-
-        return project;
+        return createProject(project, projectId, userName, workspaceId);
     }
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
@@ -246,13 +233,8 @@ class ProjectServiceImpl implements ProjectService {
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(Set.of(id), workspaceId, connection))
                 .block();
 
-        Configuration configuration = projectConfigDAO.getConfigurations(id)
-                .contextWrite(ctx -> setContext(ctx, workspaceId, "unused")) // userName is not used in this context
-                .block();
-
         return project.toBuilder()
                 .lastUpdatedTraceAt(lastUpdatedTraceAt.get(project.id()))
-                .configuration(configuration)
                 .build();
     }
 
@@ -283,13 +265,7 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        Project project = get(projectId).toBuilder()
-                .configuration(configuration)
-                .build();
-
-        projectConfigDAO.upsertConfigurations(project)
-                .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                .block();
+        Project project = get(projectId);
     }
 
     private ProjectStatsSummaryItem getStats(UUID projectId, Map<String, Object> projectStats) {
@@ -326,11 +302,6 @@ class ProjectServiceImpl implements ProjectService {
             // Void return
             return null;
         });
-
-        projectConfigDAO.deleteConfigurationsByProjectId(List.of(id))
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
     }
 
     @Override
@@ -347,14 +318,6 @@ class ProjectServiceImpl implements ProjectService {
             handle.attach(ProjectDAO.class).delete(ids, workspaceId);
             return null;
         });
-
-        projectConfigDAO.deleteConfigurationsByProjectId(List.copyOf(ids))
-                .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                .block();
-    }
-
-    private static Context setContext(Context ctx, String workspaceId, String userName) {
-        return ctx.put(RequestContext.WORKSPACE_ID, workspaceId).put(RequestContext.USER_NAME, userName);
     }
 
     @Override
@@ -363,7 +326,6 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
-        String userName = requestContext.get().getUserName();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -391,19 +353,12 @@ class ProjectServiceImpl implements ProjectService {
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection))
                 .block();
 
-        Map<UUID, Configuration> projectsConfigurations = projectConfigDAO
-                .getConfigurationsByIds(projectRecordSet.content().stream().map(Project::id).collect(toSet()))
-                .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                .block();
-
         List<Project> projects = projectRecordSet.content()
                 .stream()
                 .map(project -> {
                     Instant lastUpdatedTraceAt = projectLastUpdatedTraceAtMap.get(project.id());
-                    Configuration configuration = projectsConfigurations.get(project.id());
                     return project.toBuilder()
                             .lastUpdatedTraceAt(lastUpdatedTraceAt)
-                            .configuration(configuration)
                             .build();
                 })
                 .toList();
@@ -481,17 +436,11 @@ class ProjectServiceImpl implements ProjectService {
             return repository.findByIds(new HashSet<>(finalIds), workspaceId);
         }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
 
-        Map<UUID, Configuration> projectsConfigurations = projectConfigDAO
-                .getConfigurationsByIds(allProjectIds)
-                .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                .block();
-
         // compose the final projects list by the correct order and add last trace to it
         List<Project> projects = finalIds.stream()
                 .map(projectsById::get)
                 .map(project -> project.toBuilder()
                         .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
-                        .configuration(projectsConfigurations.get(project.id()))
                         .build())
                 .toList();
 
@@ -585,10 +534,6 @@ class ProjectServiceImpl implements ProjectService {
                     Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
                             workspaceId);
 
-                    Configuration configuration = projectConfigDAO.getConfigurations(project.id())
-                            .contextWrite(ctx -> setContext(ctx, workspaceId, userName))
-                            .block();
-
                     return project.toBuilder()
                             .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
                             .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
@@ -602,7 +547,6 @@ class ProjectServiceImpl implements ProjectService {
                             .guardrailsFailedCount(
                                     StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
                             .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
-                            .configuration(configuration)
                             .build();
                 })
                 .orElseThrow(this::createNotFoundError);
