@@ -2076,46 +2076,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detailed"
-  /v1/private/projects/{id}/configurations:
-    put:
-      tags:
-      - Projects
-      summary: Upsert project configurations
-      description: Upsert project configurations
-      operationId: upsertProjectConfigurations
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Configuration"
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "422":
-          description: Unprocessable Content
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/prompts:
     get:
       tags:
@@ -7843,53 +7803,6 @@ components:
           - running
           - completed
           - cancelled
-    Configuration:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -7971,55 +7884,6 @@ components:
           readOnly: true
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation"
-        configuration:
-          $ref: "#/components/schemas/Configuration"
-    Configuration_Write:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     Project_Write:
       required:
       - name
@@ -8035,55 +7899,6 @@ components:
           - public
         description:
           type: string
-        configuration:
-          $ref: "#/components/schemas/Configuration_Write"
-    Configuration_Public:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ProjectPage_Public:
       type: object
       properties:
@@ -8141,8 +7956,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-        configuration:
-          $ref: "#/components/schemas/Configuration_Public"
     FeedbackScoreNames:
       type: object
       properties:
@@ -8267,53 +8080,6 @@ components:
           format: int64
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation"
-    Configuration_Detailed:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ErrorCountWithDeviation_Detailed:
       type: object
       properties:
@@ -8418,8 +8184,6 @@ components:
           readOnly: true
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation_Detailed"
-        configuration:
-          $ref: "#/components/schemas/Configuration_Detailed"
     ErrorMessage_Detailed:
       type: object
       properties:

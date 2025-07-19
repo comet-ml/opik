@@ -9,7 +9,6 @@ import { ProjectVisibility } from "./ProjectVisibility";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { PercentageValues } from "./PercentageValues";
 import { ErrorCountWithDeviation } from "./ErrorCountWithDeviation";
-import { Configuration } from "./Configuration";
 
 export const Project: core.serialization.ObjectSchema<serializers.Project.Raw, OpikApi.Project> =
     core.serialization.object({
@@ -39,7 +38,6 @@ export const Project: core.serialization.ObjectSchema<serializers.Project.Raw, O
             core.serialization.number().optional(),
         ),
         errorCount: core.serialization.property("error_count", ErrorCountWithDeviation.optional()),
-        configuration: Configuration.optional(),
     });
 
 export declare namespace Project {
@@ -61,6 +59,5 @@ export declare namespace Project {
         trace_count?: number | null;
         guardrails_failed_count?: number | null;
         error_count?: ErrorCountWithDeviation.Raw | null;
-        configuration?: Configuration.Raw | null;
     }
 }

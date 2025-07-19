@@ -6,14 +6,12 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { ProjectWriteVisibility } from "../../types/ProjectWriteVisibility";
-import { ConfigurationWrite } from "../../../../types/ConfigurationWrite";
 
 export const ProjectWrite: core.serialization.Schema<serializers.ProjectWrite.Raw, OpikApi.ProjectWrite> =
     core.serialization.object({
         name: core.serialization.string(),
         visibility: ProjectWriteVisibility.optional(),
         description: core.serialization.string().optional(),
-        configuration: ConfigurationWrite.optional(),
     });
 
 export declare namespace ProjectWrite {
@@ -21,6 +19,5 @@ export declare namespace ProjectWrite {
         name: string;
         visibility?: ProjectWriteVisibility.Raw | null;
         description?: string | null;
-        configuration?: ConfigurationWrite.Raw | null;
     }
 }
