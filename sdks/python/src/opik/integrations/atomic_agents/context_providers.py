@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 try:
-    from atomic_agents.lib.components.system_prompt_generator import \
-        SystemPromptContextProviderBase  # type: ignore
+    from atomic_agents.lib.components.system_prompt_generator import (
+        SystemPromptContextProviderBase,
+    )  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
     SystemPromptContextProviderBase = object  # type: ignore
 

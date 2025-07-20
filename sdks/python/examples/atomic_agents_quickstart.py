@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# Compatibility with latest Atomic Agents (>=1.1)
+from atomic_agents.agents.base_agent import BaseAgent as BaseChatAgent
+from atomic_agents.agents.base_agent import BaseAgentConfig as BaseChatAgentConfig
+from atomic_agents.lib.base.base_io_schema import BaseIOSchema
+
+# Minimal Instructor client (no actual LLM calls) to satisfy BaseAgentConfig
+from instructor.client import Instructor
+from opik.integrations.atomic_agents import OpikContextProvider, track_atomic_agents
+
+from pydantic import Field
+
 # %% [markdown]
 """
 # Atomic Agents × Opik – Quick-Start
@@ -12,21 +23,9 @@ UI (assuming you configured the SDK environment variables).
 # %% [markdown]
 """## Installation (commented for CI)
 ```bash
-pip install "opik[atomic_agents]" atomic-agents 
+pip install "opik[atomic_agents]" atomic-agents
 ```
 """
-
-# Compatibility with latest Atomic Agents (>=1.1)
-from atomic_agents.agents.base_agent import BaseAgent as BaseChatAgent
-from atomic_agents.agents.base_agent import \
-    BaseAgentConfig as BaseChatAgentConfig
-from atomic_agents.lib.base.base_io_schema import BaseIOSchema
-# Minimal Instructor client (no actual LLM calls) to satisfy BaseAgentConfig
-from instructor.client import Instructor
-from opik.integrations.atomic_agents import (OpikContextProvider,
-                                             track_atomic_agents)
-# %% Imports
-from pydantic import Field
 
 # %% Enable Opik auto-tracking once
 track_atomic_agents(project_name="atomic-quickstart")

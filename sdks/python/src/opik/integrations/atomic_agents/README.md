@@ -67,7 +67,7 @@ class EchoAgent(BaseChatAgent):
 
 agent = EchoAgent(
     config=BaseChatAgentConfig(
-        model=os.getenv("OPIK_TEST_MODEL", "gpt-3.5-turbo"), 
+        model=os.getenv("OPIK_TEST_MODEL", "gpt-3.5-turbo"),
         tools=[GreetingTool()]
     )
 )

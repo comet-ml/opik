@@ -81,7 +81,9 @@ def _patch_atomic_tools() -> None:
     original_run = BaseTool.run  # type: ignore[attr-defined]
 
     from opik.decorator import (  # local import to avoid cycles
-        arguments_helpers, span_creation_handler)
+        arguments_helpers,
+        span_creation_handler,
+    )
 
     from opik import context_storage
 

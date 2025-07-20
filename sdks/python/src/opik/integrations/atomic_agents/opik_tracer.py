@@ -91,7 +91,11 @@ class OpikAtomicAgentsTracer:
         return self
 
     def __exit__(self, exc_type, exc_val: Optional[BaseException], exc_tb) -> bool:  # type: ignore
-        error = error_info_collector.collect(exc_val) if exc_val else None
+        error = (
+            error_info_collector.collect(exc_val)
+            if exc_val and isinstance(exc_val, Exception)
+            else None
+        )
         self.end(error_info=error)
         return False
 
