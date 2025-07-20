@@ -33,7 +33,7 @@ def track_atomic_agents(
 
     original_run = BaseAgent.run  # type: ignore[attr-defined]
 
-    def _agent_run(self, *args, **kwargs):  # type: ignore[no-self-use]
+    def _agent_run(self: Any, *args: Any, **kwargs: Any) -> Any:  # type: ignore[no-self-use]
         tracer = OpikAtomicAgentsTracer(
             project_name=project_name,
             tags=tags,
@@ -85,7 +85,7 @@ def _patch_atomic_tools() -> None:
 
     from opik import context_storage
 
-    def _tool_run(self, *args, **kwargs):  # type: ignore[no-self-use]
+    def _tool_run(self: Any, *args: Any, **kwargs: Any) -> Any:  # type: ignore[no-self-use]
         payload: Any = args[0] if args else kwargs or None
         input_dict = payload if isinstance(payload, dict) else {"input": str(payload)}
 
@@ -148,11 +148,20 @@ def _patch_atomic_llms() -> None:
 
     from opik import context_storage
 
-    def _llm_get_response(self, *args, **kwargs):
+    def _llm_get_response(self: Any, *args: Any, **kwargs: Any) -> Any:
         messages = kwargs.get("messages") or args[0] if args else []
 
+        # Try to get model name from various possible locations
+        model_name = "unknown_model"
+        if hasattr(self, "config") and hasattr(self.config, "model"):
+            model_name = self.config.model
+        elif hasattr(self, "model"):
+            model_name = self.model
+        elif hasattr(self, "_config") and hasattr(self._config, "model"):
+            model_name = self._config.model
+
         start_params = arguments_helpers.StartSpanParameters(
-            name=getattr(self, "model", "unknown_model"),
+            name=model_name,
             type="llm",
             input={"messages": messages},
         )

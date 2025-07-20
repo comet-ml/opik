@@ -33,6 +33,8 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/crewai.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/instructor.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/atomic_agents_quickstart.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/atomic_agents_context_provider.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
       OPIK_SENTRY_ENABLE: False

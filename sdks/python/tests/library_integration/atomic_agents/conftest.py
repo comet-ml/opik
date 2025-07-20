@@ -76,10 +76,13 @@ def stub_atomic_agents(monkeypatch):
         def _get_and_handle_response(self, messages):
             return {"content": "world"}
 
+        def get_response(self, messages):
+            return {"content": "world"}
+
         def run(self, payload):
             if payload == "error":
                 raise ValueError("boom")
-            return self._get_and_handle_response([])
+            return self.get_response([])
 
     base_agent_pkg.BaseChatAgent = BaseChatAgent
     base_agent_pkg.BaseAgent = BaseChatAgent

@@ -101,7 +101,7 @@ class OpikAtomicAgentsTracer:
             from pydantic import BaseModel  # type: ignore
 
             if isinstance(model_cls, type) and issubclass(model_cls, BaseModel):
-                return model_cls.model_json_schema()
+                return model_cls.model_json_schema()  # type: ignore[attr-defined]
         except Exception:
             return None
         return None

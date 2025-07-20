@@ -14,8 +14,8 @@ def test_tool_span_created(fake_backend):
 
     base_agent_module = sys.modules["atomic_agents.agents.base_agent"]
 
-    # Store the original get_and_handle_response
-    original_method = base_agent_module.BaseChatAgent._get_and_handle_response
+    # Store the original get_response
+    original_method = base_agent_module.BaseChatAgent.get_response
 
     def _enhanced_get_response(self, messages):
         # Call the original method first
@@ -27,7 +27,7 @@ def test_tool_span_created(fake_backend):
         return result
 
     # Patch the method before tracking is enabled
-    base_agent_module.BaseChatAgent._get_and_handle_response = _enhanced_get_response
+    base_agent_module.BaseChatAgent.get_response = _enhanced_get_response
 
     try:
         # First apply tracking to ensure all patching is done
@@ -59,4 +59,4 @@ def test_tool_span_created(fake_backend):
         assert tool_spans[0].name == "MyTool"
     finally:
         # Restore original method
-        base_agent_module.BaseChatAgent._get_and_handle_response = original_method
+        base_agent_module.BaseChatAgent.get_response = original_method

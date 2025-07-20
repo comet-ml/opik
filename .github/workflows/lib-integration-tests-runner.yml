@@ -24,17 +24,18 @@ on:
           - crewai
           - genai
           - adk
+          - atomic_agents
           - metrics
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
     paths:
-    - 'sdks/python/**'
+      - "sdks/python/**"
   push:
-    branches: 
-      - 'main'
+    branches:
+      - "main"
     paths:
-      - 'sdks/python/**'
+      - "sdks/python/**"
 
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
@@ -59,13 +60,13 @@ jobs:
     if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-openai-tests.yml
     secrets: inherit
-  
+
   langchain_tests:
     needs: [init_environment]
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-tests.yml
     secrets: inherit
-  
+
   llama_index_tests:
     needs: [init_environment]
     if: contains(fromJSON('["llama_index", "all"]'), needs.init_environment.outputs.LIBS)
@@ -107,7 +108,7 @@ jobs:
     if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-crewai-tests.yml
     secrets: inherit
-  
+
   genai_tests:
     needs: [init_environment]
     if: contains(fromJSON('["genai", "all"]'), needs.init_environment.outputs.LIBS)
@@ -118,6 +119,12 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-adk-tests.yml
+    secrets: inherit
+
+  atomic_agents_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["atomic_agents", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-atomic-agents-tests.yml
     secrets: inherit
 
   evaluation_metrics_tests:
