@@ -9,4 +9,5 @@ export interface PromptPagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.PromptPublic[];
+    sortableBy?: string[];
 }

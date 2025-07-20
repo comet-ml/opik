@@ -8,7 +8,10 @@ export type ProjectMetricRequestPublicMetricType =
     | "TOKEN_USAGE"
     | "DURATION"
     | "COST"
-    | "GUARDRAILS_FAILED_COUNT";
+    | "GUARDRAILS_FAILED_COUNT"
+    | "THREAD_COUNT"
+    | "THREAD_DURATION"
+    | "THREAD_FEEDBACK_SCORES";
 export const ProjectMetricRequestPublicMetricType = {
     FeedbackScores: "FEEDBACK_SCORES",
     TraceCount: "TRACE_COUNT",
@@ -16,4 +19,7 @@ export const ProjectMetricRequestPublicMetricType = {
     Duration: "DURATION",
     Cost: "COST",
     GuardrailsFailedCount: "GUARDRAILS_FAILED_COUNT",
+    ThreadCount: "THREAD_COUNT",
+    ThreadDuration: "THREAD_DURATION",
+    ThreadFeedbackScores: "THREAD_FEEDBACK_SCORES",
 } as const;

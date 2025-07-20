@@ -5,7 +5,7 @@ export interface Prompt {
   last_updated_at: string;
   created_at: string;
   version_count: number;
-
+  tags: string[];
   latest_version?: PromptVersion;
 }
 

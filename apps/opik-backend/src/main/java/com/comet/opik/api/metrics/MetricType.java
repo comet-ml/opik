@@ -7,4 +7,7 @@ public enum MetricType {
     DURATION,
     COST,
     GUARDRAILS_FAILED_COUNT,
+    THREAD_COUNT,
+    THREAD_DURATION,
+    THREAD_FEEDBACK_SCORES,
 }

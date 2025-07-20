@@ -27,7 +27,7 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
         <Tabs defaultValue="logLLM" className="flex w-full flex-1 flex-col">
           <TabsList className="mb-8 w-auto self-center">
             <TabsTrigger className="w-[200px]" value="logLLM">
-              Log LLM calls
+              Log a trace
             </TabsTrigger>
             <TabsTrigger className="w-[200px]" value="runEvaluations">
               Run evaluations

@@ -36,7 +36,7 @@ const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
         title="Delete evaluation rules"
         description={`Deleting online evaluation rules will stop scoring for all new traces. Existing traces that have already been scores won’t be affected. This action can’t be undone. Are you sure you want to continue?
 
-Tip: To pause scoring without deleting, set the sampling rate to 0%.`}
+Tip: To pause scoring without deleting, disable the rules.`}
         confirmText="Delete evaluation rules"
         confirmButtonVariant="destructive"
       />

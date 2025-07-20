@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
@@ -41,10 +42,11 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
 
     @Override
     protected Mono<Void> processEvent(ProjectWithPendingClosureTraceThreads message) {
-        var lastUpdatedUntil = Instant.now().minus(config.getTimeoutToMarkThreadAsInactive().toJavaDuration());
+        Instant now = Instant.now();
+        Duration timeoutToMarkThreadAsInactive = config.getTimeoutToMarkThreadAsInactive().toJavaDuration();
 
         return traceThreadService
-                .processProjectWithTraceThreadsPendingClosure(message.projectId(), lastUpdatedUntil)
+                .processProjectWithTraceThreadsPendingClosure(message.projectId(), now, timeoutToMarkThreadAsInactive)
                 .contextWrite(context -> context.put(USER_NAME, DEFAULT_USER)
                         .put(WORKSPACE_ID, message.workspaceId()));
     }

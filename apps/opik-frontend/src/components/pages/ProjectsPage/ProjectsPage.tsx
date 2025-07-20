@@ -37,6 +37,7 @@ import {
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
+  HeaderIconType,
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
@@ -99,7 +100,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (p50)",
+        label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -204,7 +205,8 @@ const ProjectsPage: React.FunctionComponent = () => {
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
+              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: ProjectWithStatistic) =>
                 row.guardrails_failed_count &&
                 isNumber(row.guardrails_failed_count)

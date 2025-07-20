@@ -18,7 +18,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -58,12 +57,15 @@ public class TraceThreadsClosingJob extends Job {
     private Mono<Void> lockAndProcessJob(Lock lock, Duration timeoutToMarkThreadAsInactive, int limit) {
         return lockService.bestEffortLock(
                 lock,
-                Mono.defer(() -> enqueueInRedis(
-                        traceThreadService
-                                .getProjectsWithPendingClosureThreads(
-                                        Instant.now().minus(timeoutToMarkThreadAsInactive)
-                                                .truncatedTo(ChronoUnit.MICROS),
-                                        limit))),
+                Mono.defer(() -> {
+                    var now = Instant.now();
+                    return enqueueInRedis(
+                            traceThreadService
+                                    .getProjectsWithPendingClosureThreads(
+                                            now,
+                                            timeoutToMarkThreadAsInactive,
+                                            limit));
+                }),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
                     return null;

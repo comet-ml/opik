@@ -1,12 +1,14 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 
 /**
  * This information is taken from <a href="https://docs.anthropic.com/en/docs/about-claude/models">Anthropic docs</a>
  */
 @RequiredArgsConstructor
-public enum AnthropicModelName {
+public enum AnthropicModelName implements StructuredOutputSupported {
+    CLAUDE_4_SONNET("claude-4-sonnet"),
     CLAUDE_3_5_SONNET_LATEST("claude-3-5-sonnet-latest"),
     CLAUDE_3_5_SONNET_20241022("claude-3-5-sonnet-20241022"),
     CLAUDE_3_5_HAIKU_LATEST("claude-3-5-haiku-latest"),
@@ -23,5 +25,10 @@ public enum AnthropicModelName {
     @Override
     public String toString() {
         return value;
+    }
+
+    @Override
+    public boolean isStructuredOutputSupported() {
+        return false;
     }
 }

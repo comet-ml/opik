@@ -12,6 +12,7 @@ export const DatasetPublic: core.serialization.ObjectSchema<serializers.DatasetP
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
         visibility: DatasetPublicVisibility.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         description: core.serialization.string().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -43,6 +44,7 @@ export declare namespace DatasetPublic {
         id?: string | null;
         name: string;
         visibility?: DatasetPublicVisibility.Raw | null;
+        tags?: string[] | null;
         description?: string | null;
         created_at?: string | null;
         created_by?: string | null;

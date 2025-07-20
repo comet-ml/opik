@@ -1,50 +1,72 @@
-from opik.api_objects.opik_client import get_client_cached
+import opik
 from opik.integrations.crewai import track_crewai
-from .crew import LatestAiDevelopmentCrew
+from crewai import Agent, Crew, Process, Task
 from ...testlib import (
     ANY_BUT_NONE,
-    ANY_DICT,
     ANY_STRING,
+    ANY_DICT,
     SpanModel,
     TraceModel,
     assert_equal,
 )
-
-EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens": ANY_BUT_NONE,
-    "original_usage.total_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
-}
+from . import constants
 
 
-def test_crewai__happyflow(
+def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
     fake_backend,
 ):
-    project_name = "crewai-integration-test"
+    project_name = "crewai-test"
 
     track_crewai(project_name=project_name)
 
-    inputs = {"topic": "AI Agents"}
-    c = LatestAiDevelopmentCrew()
-    c = c.crew()
-    _ = c.kickoff(inputs=inputs)
+    researcher = Agent(
+        role="Test Researcher",
+        goal="Find basic information",
+        backstory="You are a test agent for unit testing.",
+        verbose=True,
+        llm=constants.MODEL_NAME_SHORT,
+    )
 
-    opik_client = get_client_cached()
-    opik_client.flush()
+    writer = Agent(
+        role="Test Writer",
+        goal="Write summaries based on research",
+        backstory="You are a test writer for unit testing.",
+        verbose=True,
+        llm=constants.MODEL_NAME_SHORT,
+    )
+
+    research_task = Task(
+        name="simple_research_task",
+        description="Briefly explain what {topic} is in 2-3 sentences.",
+        expected_output="A very short explanation of {topic}.",
+        agent=researcher,
+    )
+
+    # IMPORTANT: context=[research_task] creates a cyclic reference in pydantic
+    # which requires special handling during the serialization
+    summary_task = Task(
+        name="summary_task",
+        description="Summarize the research about {topic} in one sentence.",
+        expected_output="A one-sentence summary of {topic}.",
+        agent=writer,
+        context=[research_task],
+    )
+
+    crew = Crew(
+        agents=[researcher, writer],
+        tasks=[research_task, summary_task],
+        process=Process.sequential,
+        verbose=True,
+    )
+
+    inputs = {"topic": "AI"}
+    crew.kickoff(inputs=inputs)
+    opik.flush_tracker()
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
         id=ANY_STRING,
-        input={"topic": "AI Agents"},
+        input=inputs,
         metadata={"created_from": "crewai"},
         name="kickoff",
         output=ANY_DICT,
@@ -56,7 +78,7 @@ def test_crewai__happyflow(
             SpanModel(
                 end_time=ANY_BUT_NONE,
                 id=ANY_STRING,
-                input=ANY_DICT,
+                input=inputs,
                 metadata={"created_from": "crewai"},
                 name="kickoff",
                 output=ANY_DICT,
@@ -65,12 +87,13 @@ def test_crewai__happyflow(
                 tags=["crewai"],
                 type="general",
                 spans=[
+                    # First task - research task
                     SpanModel(
                         end_time=ANY_BUT_NONE,
                         id=ANY_STRING,
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
-                        name="Task: research_task",
+                        name="Task: simple_research_task",
                         output=ANY_DICT,
                         project_name=project_name,
                         start_time=ANY_BUT_NONE,
@@ -81,12 +104,11 @@ def test_crewai__happyflow(
                                 id=ANY_STRING,
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
-                                name="AI Agents Senior Data Researcher",
+                                name="Test Researcher",
                                 output=ANY_DICT,
                                 project_name=project_name,
                                 start_time=ANY_BUT_NONE,
                                 tags=["crewai"],
-                                type="general",
                                 spans=[
                                     SpanModel(
                                         end_time=ANY_BUT_NONE,
@@ -96,7 +118,9 @@ def test_crewai__happyflow(
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with(
+                                            constants.MODEL_NAME_SHORT
+                                        ),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
@@ -104,19 +128,20 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],
                             )
                         ],
                     ),
+                    # Second task - summary task
                     SpanModel(
                         end_time=ANY_BUT_NONE,
                         id=ANY_STRING,
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
-                        name="Task: reporting_task",
+                        name="Task: summary_task",
                         output=ANY_DICT,
                         project_name=project_name,
                         start_time=ANY_BUT_NONE,
@@ -127,12 +152,11 @@ def test_crewai__happyflow(
                                 id=ANY_STRING,
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
-                                name="AI Agents Reporting Analyst",
+                                name="Test Writer",
                                 output=ANY_DICT,
                                 project_name=project_name,
                                 start_time=ANY_BUT_NONE,
                                 tags=["crewai"],
-                                type="general",
                                 spans=[
                                     SpanModel(
                                         end_time=ANY_BUT_NONE,
@@ -142,7 +166,9 @@ def test_crewai__happyflow(
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with(
+                                            constants.MODEL_NAME_SHORT
+                                        ),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
@@ -150,7 +176,7 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],

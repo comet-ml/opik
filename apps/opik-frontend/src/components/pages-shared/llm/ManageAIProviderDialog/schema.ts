@@ -1,16 +1,17 @@
 import { z } from "zod";
-import { PROVIDER_LOCATION_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import uniq from "lodash/uniq";
 
-const ProviderSchema = z
-  .union([z.nativeEnum(PROVIDER_TYPE), z.string().length(0)], {
-    required_error: "Provider is required",
-  })
-  .refine((model) => model.length >= 1, { message: "Provider is required" });
+import { PROVIDER_TYPE } from "@/types/providers";
 
 export const CloudAIProviderDetailsFormSchema = z.object({
-  provider: ProviderSchema,
-  locationType: z.literal(PROVIDER_LOCATION_TYPE.cloud),
+  provider: z.enum(
+    Object.values(PROVIDER_TYPE).filter(
+      (v) => v !== PROVIDER_TYPE.VERTEX_AI && v !== PROVIDER_TYPE.CUSTOM,
+    ) as [string, ...string[]],
+    {
+      message: "Provider is required",
+    },
+  ),
   apiKey: z
     .string({
       required_error: "API key is required",
@@ -18,9 +19,23 @@ export const CloudAIProviderDetailsFormSchema = z.object({
     .min(1, { message: "API key is required" }),
 });
 
-export const LocalAIProviderDetailsFormSchema = z.object({
-  provider: ProviderSchema,
-  locationType: z.literal(PROVIDER_LOCATION_TYPE.local),
+export const VertexAIProviderDetailsFormSchema = z.object({
+  provider: z.enum([PROVIDER_TYPE.VERTEX_AI], {
+    message: "Provider is required",
+  }),
+  apiKey: z
+    .string({
+      required_error: "API key is required",
+    })
+    .min(1, { message: "API key is required" }),
+  location: z.string(),
+});
+
+export const CustomProviderDetailsFormSchema = z.object({
+  provider: z.enum([PROVIDER_TYPE.CUSTOM], {
+    message: "Provider is required",
+  }),
+  apiKey: z.string(),
   url: z.string().url(),
   models: z
     .string()
@@ -35,21 +50,10 @@ export const LocalAIProviderDetailsFormSchema = z.object({
     ),
 });
 
-export const VertexAIProviderDetailsFormSchema = z.object({
-  provider: ProviderSchema,
-  locationType: z.literal(PROVIDER_LOCATION_TYPE.cloud),
-  apiKey: z
-    .string({
-      required_error: "API key is required",
-    })
-    .min(1, { message: "API key is required" }),
-  location: z.string(),
-});
-
 export const AIProviderFormSchema = z.union([
   CloudAIProviderDetailsFormSchema,
   VertexAIProviderDetailsFormSchema,
-  LocalAIProviderDetailsFormSchema,
+  CustomProviderDetailsFormSchema,
 ]);
 
 export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;

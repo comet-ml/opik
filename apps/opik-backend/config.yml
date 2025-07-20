@@ -84,6 +84,7 @@ databaseAnalytics:
   #  Description: query parameters that will be added to the connection string
   queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
 
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -271,6 +272,12 @@ onlineScoring:
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
+    - scorer: trace_thread_llm_as_judge
+      streamName: stream_scoring_trace_thread_llm_as_judge
+      codec: java
+    - scorer: trace_thread_user_defined_metric_python
+      streamName: stream_scoring_trace_thread_user_defined_metric_python
+      codec: java
 
 # LLM providers client configuration
 llmProviderClient:
@@ -380,6 +387,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

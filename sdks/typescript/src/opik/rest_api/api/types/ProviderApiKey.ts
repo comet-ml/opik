@@ -7,7 +7,7 @@ import * as OpikApi from "../index";
 export interface ProviderApiKey {
     id?: string;
     provider: OpikApi.ProviderApiKeyProvider;
-    apiKey: string;
+    apiKey?: string;
     name?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;

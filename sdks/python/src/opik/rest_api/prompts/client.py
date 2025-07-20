@@ -37,6 +37,8 @@ class PromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptPagePublic:
         """
@@ -49,6 +51,10 @@ class PromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -64,7 +70,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompts()
         """
-        _response = self._raw_client.get_prompts(page=page, size=size, name=name, request_options=request_options)
+        _response = self._raw_client.get_prompts(
+            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
+        )
         return _response.data
 
     def create_prompt(
@@ -77,6 +85,7 @@ class PromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -97,6 +106,8 @@ class PromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -119,6 +130,7 @@ class PromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            tags=tags,
             request_options=request_options,
         )
         return _response.data
@@ -184,6 +196,7 @@ class PromptsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -196,6 +209,8 @@ class PromptsClient:
         name : str
 
         description : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -211,7 +226,7 @@ class PromptsClient:
         client.prompts.update_prompt(id='id', name='name', )
         """
         _response = self._raw_client.update_prompt(
-            id, name=name, description=description, request_options=request_options
+            id, name=name, description=description, tags=tags, request_options=request_options
         )
         return _response.data
 
@@ -379,6 +394,8 @@ class AsyncPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptPagePublic:
         """
@@ -391,6 +408,10 @@ class AsyncPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -409,7 +430,9 @@ class AsyncPromptsClient:
             await client.prompts.get_prompts()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_prompts(page=page, size=size, name=name, request_options=request_options)
+        _response = await self._raw_client.get_prompts(
+            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
+        )
         return _response.data
 
     async def create_prompt(
@@ -422,6 +445,7 @@ class AsyncPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -442,6 +466,8 @@ class AsyncPromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -467,6 +493,7 @@ class AsyncPromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            tags=tags,
             request_options=request_options,
         )
         return _response.data
@@ -542,6 +569,7 @@ class AsyncPromptsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -554,6 +582,8 @@ class AsyncPromptsClient:
         name : str
 
         description : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -572,7 +602,7 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_prompt(
-            id, name=name, description=description, request_options=request_options
+            id, name=name, description=description, tags=tags, request_options=request_options
         )
         return _response.data
 

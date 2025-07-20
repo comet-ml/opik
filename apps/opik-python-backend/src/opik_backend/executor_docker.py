@@ -211,7 +211,7 @@ class DockerExecutor(CodeExecutorBase):
                     
                 logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
-    def run_scoring(self, code: str, data: dict) -> dict:
+    def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
             
@@ -220,7 +220,7 @@ class DockerExecutor(CodeExecutorBase):
             with concurrent.futures.ThreadPoolExecutor() as command_executor:
                 future = command_executor.submit(
                     container.exec_run,
-                    cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data)],
+                    cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
                     detach=False,
                     stdin=False,
                     tty=False

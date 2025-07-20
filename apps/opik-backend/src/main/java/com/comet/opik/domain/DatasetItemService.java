@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
-import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;

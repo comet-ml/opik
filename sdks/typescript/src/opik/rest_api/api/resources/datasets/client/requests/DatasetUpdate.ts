@@ -14,4 +14,5 @@ export interface DatasetUpdate {
     name: string;
     description?: string;
     visibility?: OpikApi.DatasetUpdateVisibility;
+    tags?: string[];
 }

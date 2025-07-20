@@ -3,7 +3,7 @@ import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
-import { CLOUD_PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
+import { PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/components/shared/EyeInput/EyeInput";
 import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
@@ -59,9 +59,7 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           Get your {providerName} API key{" "}
           <Button variant="link" size="sm" asChild className="px-0">
             <a
-              href={
-                (PROVIDERS[provider] as CLOUD_PROVIDER_OPTION_TYPE)?.apiKeyURL
-              }
+              href={(PROVIDERS[provider] as PROVIDER_OPTION_TYPE)?.apiKeyURL}
               target="_blank"
               rel="noreferrer"
             >

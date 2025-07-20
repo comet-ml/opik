@@ -12,6 +12,7 @@ export const DatasetWrite: core.serialization.Schema<serializers.DatasetWrite.Ra
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
         visibility: DatasetWriteVisibility.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         description: core.serialization.string().optional(),
     });
 
@@ -20,6 +21,7 @@ export declare namespace DatasetWrite {
         id?: string | null;
         name: string;
         visibility?: DatasetWriteVisibility.Raw | null;
+        tags?: string[] | null;
         description?: string | null;
     }
 }

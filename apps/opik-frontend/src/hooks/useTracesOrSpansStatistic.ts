@@ -4,7 +4,6 @@ import {
   RefetchOptions,
   UseQueryOptions,
 } from "@tanstack/react-query";
-import { SPAN_TYPE } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { ColumnsStatistic } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -57,7 +56,7 @@ export default function useTracesOrSpansStatistic(
   } = useSpansStatistic(
     {
       ...params,
-      type: SPAN_TYPE.llm,
+      type: undefined,
     },
     {
       ...config,

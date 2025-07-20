@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
@@ -27,6 +28,8 @@ interface TraceThreadIdService {
     Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId);
 
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
+
+    Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(UUID threadModelId);
 
 }
 
@@ -49,6 +52,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
                         .switchIfEmpty(createThread(threadId, projectId)))
+                .subscribeOn(Schedulers.boundedElastic())
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
     }
 
@@ -61,11 +65,20 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
                         .map(TraceThreadIdModel::id))
+                .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(NotFoundException.class, throwable -> {
                     log.warn("Thread ID not found for project '{}' and thread ID '{}'", projectId, threadId, throwable);
                     return Mono.empty();
                 });
 
+    }
+
+    @Override
+    @Cacheable(name = "GET_TRACE_THREAD_ID_BY_THREAD_MODEL_ID", key = "$threadModelId", returnType = TraceThreadIdModel.class)
+    public Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(@NonNull UUID threadModelId) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelId(threadModelId)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {

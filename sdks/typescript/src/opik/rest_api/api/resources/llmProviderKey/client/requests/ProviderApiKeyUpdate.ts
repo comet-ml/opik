@@ -4,11 +4,12 @@
 
 /**
  * @example
- *     {
- *         apiKey: "api_key"
- *     }
+ *     {}
  */
 export interface ProviderApiKeyUpdate {
-    apiKey: string;
+    apiKey?: string;
     name?: string;
+    headers?: Record<string, string>;
+    configuration?: Record<string, string>;
+    baseUrl?: string;
 }

@@ -22,7 +22,10 @@ export async function validateCsvFile(
 
   try {
     const text = await file.text();
-    const parsed = await csv2json(text, {
+
+    const normalizedText = text.replace(/\r\n|\r/g, "\n");
+
+    const parsed = await csv2json(normalizedText, {
       excelBOM: true,
       trimHeaderFields: true,
       trimFieldValues: true,

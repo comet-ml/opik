@@ -1,10 +1,8 @@
-import { AggregatedFeedbackScore, UsageData } from "@/types/shared";
-
-export interface ProjectDuration {
-  p50: number;
-  p90: number;
-  p99: number;
-}
+import {
+  AggregatedDuration,
+  AggregatedFeedbackScore,
+  UsageData,
+} from "@/types/shared";
 
 export interface Project {
   id: string;
@@ -20,6 +18,7 @@ export interface Project {
 export type ProjectErrorCount = {
   count: number;
   deviation: number;
+  deviation_percentage: number;
 };
 
 export interface ProjectStatistic {
@@ -27,7 +26,7 @@ export interface ProjectStatistic {
   usage?: UsageData;
   feedback_scores?: AggregatedFeedbackScore[];
   total_estimated_cost_sum?: number;
-  duration?: ProjectDuration;
+  duration?: AggregatedDuration;
   guardrails_failed_count?: number;
   error_count?: ProjectErrorCount;
 }

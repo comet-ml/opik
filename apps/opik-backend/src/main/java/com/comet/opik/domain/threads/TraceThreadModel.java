@@ -4,6 +4,8 @@ import com.comet.opik.api.TraceThreadStatus;
 import lombok.Builder;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -22,6 +24,12 @@ public record TraceThreadModel(
         String createdBy,
         String lastUpdatedBy,
         Instant createdAt,
-        Instant lastUpdatedAt) {
+        Instant lastUpdatedAt,
+        Set<String> tags,
+        Map<UUID, Boolean> sampling,
+        Instant scoredAt) {
 
+    public boolean isInactive() {
+        return status == TraceThreadStatus.INACTIVE;
+    }
 }

@@ -17,6 +17,7 @@ public enum TraceThreadField implements Field {
     END_TIME(END_TIME_QUERY_PARAM, FieldType.DATE_TIME),
     FEEDBACK_SCORES(FEEDBACK_SCORES_QUERY_PARAM, FieldType.FEEDBACK_SCORES_NUMBER),
     STATUS(STATUS_QUERY_PARAM, FieldType.ENUM),
+    TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ;
 
     private final String queryParamField;

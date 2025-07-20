@@ -149,4 +149,5 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
+
 }

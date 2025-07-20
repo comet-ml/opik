@@ -44,6 +44,7 @@ class DatasetsClient:
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
         """
@@ -64,6 +65,8 @@ class DatasetsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -87,6 +90,7 @@ class DatasetsClient:
             prompt_id=prompt_id,
             name=name,
             sorting=sorting,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data
@@ -97,6 +101,7 @@ class DatasetsClient:
         name: str,
         id: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -110,6 +115,8 @@ class DatasetsClient:
         id : typing.Optional[str]
 
         visibility : typing.Optional[DatasetWriteVisibility]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         description : typing.Optional[str]
 
@@ -127,7 +134,7 @@ class DatasetsClient:
         client.datasets.create_dataset(name='name', )
         """
         _response = self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, description=description, request_options=request_options
+            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
         )
         return _response.data
 
@@ -204,6 +211,7 @@ class DatasetsClient:
         name: str,
         description: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -219,6 +227,8 @@ class DatasetsClient:
 
         visibility : typing.Optional[DatasetUpdateVisibility]
 
+        tags : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -233,7 +243,7 @@ class DatasetsClient:
         client.datasets.update_dataset(id='id', name='name', )
         """
         _response = self._raw_client.update_dataset(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id, name=name, description=description, visibility=visibility, tags=tags, request_options=request_options
         )
         return _response.data
 
@@ -585,6 +595,7 @@ class AsyncDatasetsClient:
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
         """
@@ -605,6 +616,8 @@ class AsyncDatasetsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -631,6 +644,7 @@ class AsyncDatasetsClient:
             prompt_id=prompt_id,
             name=name,
             sorting=sorting,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data
@@ -641,6 +655,7 @@ class AsyncDatasetsClient:
         name: str,
         id: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -654,6 +669,8 @@ class AsyncDatasetsClient:
         id : typing.Optional[str]
 
         visibility : typing.Optional[DatasetWriteVisibility]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         description : typing.Optional[str]
 
@@ -674,7 +691,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, description=description, request_options=request_options
+            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
         )
         return _response.data
 
@@ -759,6 +776,7 @@ class AsyncDatasetsClient:
         name: str,
         description: typing.Optional[str] = OMIT,
         visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -773,6 +791,8 @@ class AsyncDatasetsClient:
         description : typing.Optional[str]
 
         visibility : typing.Optional[DatasetUpdateVisibility]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -791,7 +811,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_dataset(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id, name=name, description=description, visibility=visibility, tags=tags, request_options=request_options
         )
         return _response.data
 

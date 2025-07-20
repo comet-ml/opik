@@ -39,7 +39,10 @@ const usePromptUpdateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: () => {
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["prompt", { promptId: variables.prompt.id }],
+      });
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });

@@ -22,4 +22,5 @@ export interface ProjectDetailed {
     traceCount?: number;
     guardrailsFailedCount?: number;
     errorCount?: OpikApi.ErrorCountWithDeviationDetailed;
+    configuration?: OpikApi.ConfigurationDetailed;
 }

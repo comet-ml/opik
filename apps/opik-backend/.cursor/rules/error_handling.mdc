@@ -1,0 +1,7 @@
+---
+description: Error handling best practices
+globs:
+alwaysApply: true
+---
+- Graceful exception handling
+- for `catch` statements, avoid catching generic `Exception` or `Throwable`, try to catch specific exceptions

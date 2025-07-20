@@ -40,9 +40,12 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import RuleEnabledCell from "@/components/pages-shared/automations/RuleEnabledCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { capitalizeFirstLetter } from "@/lib/utils";
+import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -87,6 +90,18 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
+  {
+    id: "scope",
+    label: "Scope",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  },
+  {
+    id: "enabled",
+    label: "State",
+    type: COLUMN_TYPE.string,
+    cell: RuleEnabledCell as never,
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -99,7 +114,9 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
+  "enabled",
   "project",
+  "scope",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";

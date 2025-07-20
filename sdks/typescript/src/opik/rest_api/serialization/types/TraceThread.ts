@@ -5,21 +5,33 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNode } from "./JsonNode";
+import { JsonListString } from "./JsonListString";
+import { FeedbackScore } from "./FeedbackScore";
+import { TraceThreadStatus } from "./TraceThreadStatus";
+import { Comment } from "./Comment";
 
 export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThread.Raw, OpikApi.TraceThread> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        threadModelId: core.serialization.property("thread_model_id", core.serialization.string().optional()),
         startTime: core.serialization.property("start_time", core.serialization.date().optional()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         duration: core.serialization.number().optional(),
-        firstMessage: core.serialization.property("first_message", JsonNode.optional()),
-        lastMessage: core.serialization.property("last_message", JsonNode.optional()),
+        firstMessage: core.serialization.property("first_message", JsonListString.optional()),
+        lastMessage: core.serialization.property("last_message", JsonListString.optional()),
+        feedbackScores: core.serialization.property(
+            "feedback_scores",
+            core.serialization.list(FeedbackScore).optional(),
+        ),
+        status: TraceThreadStatus.optional(),
         numberOfMessages: core.serialization.property("number_of_messages", core.serialization.number().optional()),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        comments: core.serialization.list(Comment).optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+        lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     });
@@ -28,15 +40,21 @@ export declare namespace TraceThread {
     export interface Raw {
         id?: string | null;
         project_id?: string | null;
+        thread_model_id?: string | null;
         start_time?: string | null;
         end_time?: string | null;
         duration?: number | null;
-        first_message?: JsonNode.Raw | null;
-        last_message?: JsonNode.Raw | null;
+        first_message?: JsonListString.Raw | null;
+        last_message?: JsonListString.Raw | null;
+        feedback_scores?: FeedbackScore.Raw[] | null;
+        status?: TraceThreadStatus.Raw | null;
         number_of_messages?: number | null;
         total_estimated_cost?: number | null;
         usage?: Record<string, number> | null;
+        comments?: Comment.Raw[] | null;
+        tags?: string[] | null;
         last_updated_at?: string | null;
+        last_updated_by?: string | null;
         created_by?: string | null;
         created_at?: string | null;
     }

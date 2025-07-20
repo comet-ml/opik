@@ -115,7 +115,10 @@ export const LoadableSelectBox = ({
     <Popover onOpenChange={openChangeHandler} open={isOpen} modal>
       <PopoverTrigger asChild>
         <Button
-          className={cn("justify-between", buttonClassName)}
+          className={cn("justify-between", buttonClassName, {
+            "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
+              disabled,
+          })}
           size={buttonSize}
           variant="outline"
           disabled={disabled}

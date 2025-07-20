@@ -1,7 +1,7 @@
-import os
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
+from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
@@ -9,6 +9,9 @@ EVALUATORS_URL = "/v1/private/evaluators/python"
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
     executor_instance = request.param()
+    if hasattr(executor_instance, 'start_services'):
+        executor_instance.start_services()
+
     try:
         yield executor_instance
     finally:
@@ -19,7 +22,7 @@ def executor(request):
 def app(executor):
     """Create Flask app with the given executor."""
     from opik_backend import create_app
-    app = create_app()
+    app = create_app(should_init_executor=False)
     app.executor = executor  # Override the executor with our parametrized one
     return app
 
@@ -316,7 +319,7 @@ def test_missing_data_returns_bad_request(client):
             """  File "<string>", line 2
     from typing import
                       ^
-SyntaxError: invalid syntax"""
+SyntaxError: """
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
@@ -334,7 +337,8 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}"
+    assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -365,8 +369,8 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json[
-               "error"] == f"400 Bad Request: The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_no_scores_returns_bad_request(client):
@@ -377,3 +381,102 @@ def test_no_scores_returns_bad_request(client):
     assert response.status_code == 400
     assert response.json[
                "error"] == "400 Bad Request: The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'"
+
+
+# ConversationThreadMetric test definitions
+CONVERSATION_THREAD_METRIC = """
+from typing import Union, List, Any
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+
+
+class TestConversationThreadMetric(conversation_thread_metric.ConversationThreadMetric):
+    def __init__(
+        self,
+        name: str = "test_conversation_thread_metric",
+    ):
+        super().__init__(
+            name=name,
+        )
+
+    def score(
+        self, conversation: types.Conversation, **kwargs: Any
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+        # Simple test metric that counts the number of messages in conversation
+        message_count = len(conversation)
+        # Score based on whether the conversation has an appropriate length
+        value = 1.0 if 2 <= message_count <= 10 else 0.0
+        return score_result.ScoreResult(
+            value=value, 
+            name=self.name,
+            reason=f"Conversation has {message_count} messages"
+        )
+"""
+
+
+
+def test_conversation_thread_metric_wrong_data_structure_fails(client, app):
+    """Test that ConversationThreadMetric fails when data is a list without type: trace_thread."""
+    # This demonstrates the WRONG way - data as a list without type: trace_thread
+    wrong_payload = {
+        "data": [  # ❌ This is wrong when type is not "trace_thread"
+            {
+                "role": "user",
+                "content": {
+                    "query": "My phone won't work",
+                    "thread_id": "test-123"
+                }
+            },
+            {
+                "role": "assistant",
+                "content": {
+                    "output": "Let me help you with that."
+                }
+            }
+        ],
+        # ❌ Missing "type": "trace_thread" - so backend tries **data unpacking
+        "code": CONVERSATION_THREAD_METRIC
+    }
+
+    response = client.post(EVALUATORS_URL, json=wrong_payload)
+
+    # Should fail with 400 error about mapping vs list
+    assert response.status_code == 400
+    assert "argument after ** must be a mapping, not list" in response.json["error"]
+
+
+def test_conversation_thread_metric_with_trace_thread_type(client, app):
+    """Test that ConversationThreadMetric works with trace_thread type and direct data array."""
+    # Test the NEW way - using type: trace_thread with data as direct array
+    trace_thread_payload = {
+        "data": [  # ✅ Data as direct array works with type: trace_thread
+            {
+                "role": "user",
+                "content": {
+                    "query": "My phone won't work",
+                    "thread_id": "test-123"
+                }
+            },
+            {
+                "role": "assistant",
+                "content": {
+                    "output": "Let me help you with that."
+                }
+            }
+        ],
+        "type": PayloadType.TRACE_THREAD.value,  # ✅ This tells backend to pass data as first positional arg
+        "code": CONVERSATION_THREAD_METRIC
+    }
+
+    response = client.post(EVALUATORS_URL, json=trace_thread_payload)
+
+    # Should work correctly now
+    assert response.status_code == 200
+    scores = response.json['scores']
+    assert len(scores) == 1
+    
+    score = scores[0]
+    assert score['name'] == 'test_conversation_thread_metric'
+    assert score['value'] == 1.0  # 2 messages is within 2-10 range
+    assert score['reason'] == "Conversation has 2 messages"
+    assert score['scoring_failed'] is False

@@ -36,4 +36,5 @@ public class DatabaseAnalyticsFactory {
 
         private final String value;
     }
+
 }

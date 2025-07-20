@@ -18,6 +18,7 @@ class Prompt(UniversalBaseModel):
     metadata: typing.Optional[JsonNode] = None
     change_description: typing.Optional[str] = None
     type: typing.Optional[PromptType] = None
+    tags: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

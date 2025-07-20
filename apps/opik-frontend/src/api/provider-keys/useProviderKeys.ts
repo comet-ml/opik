@@ -5,7 +5,6 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { ProviderKey } from "@/types/providers";
-import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
 
 type UseProviderKeysListParams = {
   workspaceName: string;
@@ -16,28 +15,21 @@ type UseProviderKeysListResponse = {
   total: number;
 };
 
-const getProviderKeys = async (
-  { signal }: QueryFunctionContext,
-  extendWithLocalData: (
-    data: UseProviderKeysListResponse,
-  ) => UseProviderKeysListResponse,
-) => {
+const getProviderKeys = async ({ signal }: QueryFunctionContext) => {
   const { data } = await api.get(PROVIDER_KEYS_REST_ENDPOINT, {
     signal,
   });
 
-  return extendWithLocalData(data);
+  return data;
 };
 
 export default function useProviderKeys(
   params: UseProviderKeysListParams,
   options?: QueryConfig<UseProviderKeysListResponse>,
 ) {
-  const { extendWithLocalData } = useLocalAIProviderData();
-
   return useQuery({
     queryKey: [PROVIDERS_KEYS_KEY, params],
-    queryFn: (context) => getProviderKeys(context, extendWithLocalData),
+    queryFn: (context) => getProviderKeys(context),
     ...options,
   });
 }

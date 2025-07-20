@@ -124,4 +124,5 @@ public class ProjectResourceClient {
 
         return actualResponse.readEntity(ProjectStatsSummary.class);
     }
+
 }

@@ -1,0 +1,11 @@
+---
+description: Guidelines for API design
+globs:
+alwaysApply: true
+---
+- Define REST endpoints clearly and document them
+- Ensure DTOs are consistent with existing models and naming patterns
+- use @Valid and Jakarta validations
+- use Swagger annotations to document APIs
+- use JsonView annotations to control serialization
+

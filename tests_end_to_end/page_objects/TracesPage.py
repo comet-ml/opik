@@ -1,10 +1,13 @@
 from playwright.sync_api import Page, expect, Locator
 import re
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TracesPage:
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, traces_created: bool = False):
         self.page = page
         self.traces_table = self.page.get_by_role("table")
         self.trace_names_selector = "tr td:nth-child(3) div span"
@@ -17,14 +20,31 @@ class TracesPage:
         )
         self.delete_button_locator = (
             self.page.locator("div")
-            .filter(has_text=re.compile(r"^Add to dataset$"))
+            .filter(has_text=re.compile(r"^Add to datasetAdd tags$"))
             .get_by_role("button")
-            .nth(2)
+            .nth(3)
         )
         self.attachments_submenu_button = self.page.get_by_role(
             "button", name="Attachments"
         )
         self.attachment_container = self.page.get_by_label("Attachments")
+
+        self.page.wait_for_timeout(1000)
+        if traces_created:
+            try:
+                self.page.get_by_role("button", name="Columns").click(timeout=5000)
+            except Exception as _:
+                self.page.reload()
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+                self.page.get_by_role("button", name="Columns").click(timeout=5000)
+            # Enable the Name column by default
+            try:
+                expect(
+                    self.page.get_by_role("button", name="Name").get_by_role("checkbox")
+                ).to_be_checked(timeout=2000)
+            except Exception as _:
+                self.page.get_by_role("button", name="Name").click()
+            self.page.keyboard.press(key="Escape")
 
     def get_all_trace_names_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
@@ -135,3 +155,25 @@ class TracesPage:
         self.page.get_by_role("button", name="Create new dataset").click()
         self.page.get_by_placeholder("Dataset name").fill(dataset_name)
         self.page.get_by_role("button", name="Create dataset").click()
+
+    def navigate_to_project(self, project_name: str):
+        """
+        Navigate to a specific project's traces page.
+
+        Args:
+            project_name: The project name to navigate to
+        """
+        from page_objects.ProjectsPage import ProjectsPage
+
+        logger.info(f"Navigating to traces page for project {project_name}")
+        projects_page = ProjectsPage(self.page)
+        try:
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
+            logger.info("Successfully navigated to project traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to navigate to project traces.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e

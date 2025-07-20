@@ -46,8 +46,17 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             if isinstance(obj, type_):
                 return encode(encoder(obj), seen)
 
-        if dataclasses.is_dataclass(obj) or isinstance(obj, pydantic.BaseModel):
+        if dataclasses.is_dataclass(obj):
             obj_dict = obj.__dict__
+            return encode(obj_dict, seen)
+
+        if isinstance(obj, pydantic.BaseModel):
+            obj_dict = {**obj.__dict__}
+            obj_dict.update(
+                obj.__pydantic_extra__
+                if isinstance(obj.__pydantic_extra__, dict)
+                else {}
+            )
             return encode(obj_dict, seen)
 
         if isinstance(obj, Enum):

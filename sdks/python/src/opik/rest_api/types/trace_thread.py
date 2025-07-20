@@ -5,21 +5,30 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .json_node import JsonNode
+from .comment import Comment
+from .feedback_score import FeedbackScore
+from .json_list_string import JsonListString
+from .trace_thread_status import TraceThreadStatus
 
 
 class TraceThread(UniversalBaseModel):
     id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
+    thread_model_id: typing.Optional[str] = None
     start_time: typing.Optional[dt.datetime] = None
     end_time: typing.Optional[dt.datetime] = None
     duration: typing.Optional[float] = None
-    first_message: typing.Optional[JsonNode] = None
-    last_message: typing.Optional[JsonNode] = None
+    first_message: typing.Optional[JsonListString] = None
+    last_message: typing.Optional[JsonListString] = None
+    feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
+    status: typing.Optional[TraceThreadStatus] = None
     number_of_messages: typing.Optional[int] = None
     total_estimated_cost: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
+    comments: typing.Optional[typing.List[Comment]] = None
+    tags: typing.Optional[typing.List[str]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
+    last_updated_by: typing.Optional[str] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
 

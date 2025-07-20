@@ -15,7 +15,7 @@ const MAX_LEFT_POSITION = 0.8;
 type ArrowNavigationConfig = {
   hasPrevious: boolean;
   hasNext: boolean;
-  onChange: (shift: number) => void;
+  onChange: (shift: 1 | -1) => void;
   previousTooltip?: string;
   nextTooltip?: string;
 };
@@ -25,10 +25,10 @@ type ResizableSidePanelProps = {
   children: React.ReactNode;
   entity?: string;
   headerContent?: React.ReactNode;
-  navigationContent?: React.ReactNode;
   open?: boolean;
   onClose: () => void;
   initialWidth?: number;
+  minWidth?: number;
   ignoreHotkeys?: boolean;
   closeOnClickOutside?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
@@ -41,8 +41,15 @@ const LEFT_HOTKEYS = ["←"];
 const RIGHT_HOTKEYS = ["→"];
 const ESC_HOTKEYS = ["Esc"];
 
-const calculateLeftPosition = (percentage: number) => {
-  return window.innerWidth * percentage;
+const calculateLeftPosition = (percentage: number, minWidth?: number) => {
+  if (minWidth) {
+    return Math.min(
+      window.innerWidth * percentage,
+      window.innerWidth - minWidth,
+    );
+  } else {
+    return window.innerWidth * percentage;
+  }
 };
 
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
@@ -50,10 +57,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   children,
   entity = "",
   headerContent,
-  navigationContent,
   open = false,
   onClose,
   initialWidth = INITIAL_WIDTH,
+  minWidth,
   ignoreHotkeys = false,
   closeOnClickOutside = true,
   horizontalNavigation,
@@ -67,7 +74,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   const resizeHandleRef = useRef<null | HTMLDivElement>(null);
   const leftRef = useRef<number>(width);
   const [left, setLeft] = useState<number>(
-    calculateLeftPosition(leftRef.current),
+    calculateLeftPosition(leftRef.current, minWidth),
   );
 
   const startResizing = useCallback((event: MouseEvent) => {
@@ -84,6 +91,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     (keyboardEvent: KeyboardEvent) => {
       if (!open) return;
       keyboardEvent.stopPropagation();
+      keyboardEvent.preventDefault();
       switch (keyboardEvent.code) {
         case "ArrowLeft":
           isFunction(horizontalNavigation?.onChange) &&
@@ -122,7 +130,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           MIN_LEFT_POSITION,
           Math.min(MAX_LEFT_POSITION, leftRef.current),
         );
-        setLeft(calculateLeftPosition(left));
+        setLeft(calculateLeftPosition(left, minWidth));
       }
     };
 
@@ -142,7 +150,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         MIN_LEFT_POSITION,
         Math.min(MAX_LEFT_POSITION, leftRef.current),
       );
-      setLeft(calculateLeftPosition(left));
+      setLeft(calculateLeftPosition(left, minWidth));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -153,14 +161,14 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       window.removeEventListener("mouseup", handleMouseUp);
       window.removeEventListener("resize", handleResize);
     };
-  }, [localStorageKey]);
+  }, [localStorageKey, minWidth]);
 
   const renderNavigation = () => {
     if (!horizontalNavigation && !verticalNavigation) return null;
 
     return (
       <>
-        <Separator orientation="vertical" className="mx-2 h-8" />
+        <Separator orientation="vertical" className="mx-1 h-4" />
         {horizontalNavigation && (
           <div className="flex shrink-0 items-center">
             <TooltipWrapper
@@ -252,8 +260,8 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               onMouseDown={startResizing as never}
             ></div>
             <div className="relative flex size-full">
-              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
-                <div className="flex gap-2">
+              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center pl-6 pr-5">
+                <div className="flex items-center gap-2">
                   <TooltipWrapper
                     content={`Close ${entity}`}
                     hotkeys={ESC_HOTKEYS}
@@ -268,9 +276,8 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                     </Button>
                   </TooltipWrapper>
                   {renderNavigation()}
-                  {navigationContent}
                 </div>
-                {headerContent && <div>{headerContent}</div>}
+                {headerContent && headerContent}
               </div>
               <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
                 {children}

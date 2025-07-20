@@ -34,7 +34,10 @@ const useDatasetUpdateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: () => {
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.dataset.id }],
+      });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

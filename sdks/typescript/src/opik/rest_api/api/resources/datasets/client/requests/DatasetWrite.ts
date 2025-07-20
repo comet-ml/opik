@@ -14,5 +14,6 @@ export interface DatasetWrite {
     id?: string;
     name: string;
     visibility?: OpikApi.DatasetWriteVisibility;
+    tags?: string[];
     description?: string;
 }

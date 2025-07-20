@@ -9,6 +9,7 @@ import { ProjectDetailedVisibility } from "./ProjectDetailedVisibility";
 import { FeedbackScoreAverageDetailed } from "./FeedbackScoreAverageDetailed";
 import { PercentageValuesDetailed } from "./PercentageValuesDetailed";
 import { ErrorCountWithDeviationDetailed } from "./ErrorCountWithDeviationDetailed";
+import { ConfigurationDetailed } from "./ConfigurationDetailed";
 
 export const ProjectDetailed: core.serialization.ObjectSchema<
     serializers.ProjectDetailed.Raw,
@@ -40,6 +41,7 @@ export const ProjectDetailed: core.serialization.ObjectSchema<
         core.serialization.number().optional(),
     ),
     errorCount: core.serialization.property("error_count", ErrorCountWithDeviationDetailed.optional()),
+    configuration: ConfigurationDetailed.optional(),
 });
 
 export declare namespace ProjectDetailed {
@@ -61,5 +63,6 @@ export declare namespace ProjectDetailed {
         trace_count?: number | null;
         guardrails_failed_count?: number | null;
         error_count?: ErrorCountWithDeviationDetailed.Raw | null;
+        configuration?: ConfigurationDetailed.Raw | null;
     }
 }
