@@ -1,3 +1,4 @@
+from __future__ import annotations
 # %% [markdown]
 """
 # Atomic Agents × Opik – Quick-Start
@@ -15,15 +16,22 @@ pip install "opik[atomic_agents]" atomic-agents
 """
 
 # %% Imports
-from __future__ import annotations
+# from __future__ import annotations  # Moved to file top
 
 from pydantic import BaseModel, Field
 
-from atomic_agents.agents.base_agent import BaseChatAgent, BaseChatAgentConfig
+# Compatibility with latest Atomic Agents (>=1.1)
+from atomic_agents.agents.base_agent import BaseAgent as BaseChatAgent, BaseAgentConfig as BaseChatAgentConfig
 from opik.integrations.atomic_agents import (
     OpikContextProvider,
     track_atomic_agents,
 )
+
+# Minimal Instructor client (no actual LLM calls) to satisfy BaseAgentConfig
+from instructor.client import Instructor
+
+
+dummy_instructor_client = Instructor(client=None, create=lambda **kwargs: None)
 
 # %% Enable Opik auto-tracking once
 track_atomic_agents(project_name="atomic-quickstart")
@@ -48,7 +56,7 @@ class EchoAgent(BaseChatAgent):
 
 # %% Instantiate & run agent
 agent = EchoAgent(
-    config=BaseChatAgentConfig(model="gpt-3.5-turbo"),
+    config=BaseChatAgentConfig(model="gpt-3.5-turbo", client=dummy_instructor_client),
 )
 
 result = agent.run(InputSchema(chat_message="Hello Atomic Agents!"))

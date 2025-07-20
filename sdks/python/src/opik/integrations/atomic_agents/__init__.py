@@ -11,7 +11,5 @@ from .decorators import track_atomic_agents  # noqa: F401
 from .context_providers import OpikContextProvider  # noqa: F401
 
 __all__ = [
-    "OpikAtomicAgentsTracer",
+    "OpikAtomicAgentsTracer", "track_atomic_agents", "OpikContextProvider"
 ]
-__all__.append("track_atomic_agents")
-__all__.append("OpikContextProvider") 
