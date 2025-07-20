@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
 
@@ -42,6 +43,9 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
     @NotBlank private final String name;
 
     private final float samplingRate;
+
+    @Builder.Default
+    private final boolean enabled = true;
 
     @JsonIgnore
     @NotNull private final T code;

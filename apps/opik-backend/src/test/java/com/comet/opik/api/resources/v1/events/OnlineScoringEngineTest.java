@@ -395,6 +395,7 @@ class OnlineScoringEngineTest {
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
                 .samplingRate(1.0f)
+                .enabled(true)
                 .build();
     }
 

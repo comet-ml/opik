@@ -39,6 +39,7 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import RuleEnabledCell from "@/components/pages-shared/automations/RuleEnabledCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
@@ -85,6 +86,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
     accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
   },
+  {
+    id: "enabled",
+    label: "State",
+    type: COLUMN_TYPE.string,
+    cell: RuleEnabledCell as never,
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -98,6 +105,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "sampling_rate",
   "scope",
+  "enabled",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
