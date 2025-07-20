@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from opik.integrations.atomic_agents.opik_tracer import OpikAtomicAgentsTracer
 from opik.decorator import error_info_collector  # type: ignore
+from opik.api_objects import opik_client
 
 try:
     from atomic_agents.agents.base_agent import BaseAgent  # type: ignore
@@ -104,6 +105,60 @@ def track_atomic_agents(
             raise
 
     BaseAgent.run = _wrapped_run  # type: ignore[assignment]
+
+    # ------------------------------------------------------------------
+    # Patch tools so that individual tool executions create `tool` spans
+    # ------------------------------------------------------------------
+    try:
+        from atomic_agents.tools.base_tool import BaseTool  # type: ignore
+
+        if not getattr(BaseTool, "__opik_opik_patched__", False):  # noqa: getattr-with-default
+            original_tool_run = BaseTool.run  # type: ignore[attr-defined]
+
+            def _wrapped_tool_run(self, *args, **kwargs):  # noqa: D401, ANN001
+                from opik.decorator import arguments_helpers, span_creation_handler  # inline import to avoid cycles
+                from opik import context_storage
+
+                # Build StartSpanParameters for tool span
+                input_payload = args[0] if args else kwargs or None
+
+                start_params = arguments_helpers.StartSpanParameters(
+                    name=getattr(self, "name", self.__class__.__name__),
+                    type="tool",
+                    input=input_payload if isinstance(input_payload, dict) else {"input": str(input_payload)},
+                )
+
+                _, span_data = span_creation_handler.create_span_respecting_context(
+                    start_span_arguments=start_params,
+                    distributed_trace_headers=None,
+                    opik_context_storage=context_storage.get_current_context_instance(),
+                )
+
+                client = opik_client.get_client_cached()
+
+                if client.config.log_start_trace_span:
+                    client.span(**span_data.as_start_parameters)
+
+                context_storage.add_span_data(span_data)
+
+                try:
+                    result = original_tool_run(self, *args, **kwargs)
+                    span_data.init_end_time().update(output=result if isinstance(result, dict) else {"output": result})
+                    client.span(**span_data.as_parameters)
+                    return result
+                except Exception as exc:  # noqa: BLE001
+                    from opik.decorator import error_info_collector
+
+                    span_data.init_end_time().update(error_info=error_info_collector.collect(exc))
+                    client.span(**span_data.as_parameters)
+                    raise
+                finally:
+                    context_storage.pop_span_data(ensure_id=span_data.id)
+
+            BaseTool.run = _wrapped_tool_run  # type: ignore[assignment]
+            BaseTool.__opik_opik_patched__ = True  # type: ignore[attr-defined]
+    except ModuleNotFoundError:  # pragma: no cover
+        pass
 
     __IS_TRACKING_ENABLED = True
 
