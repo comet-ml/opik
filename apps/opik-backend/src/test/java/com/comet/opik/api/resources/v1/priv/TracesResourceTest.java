@@ -6162,6 +6162,42 @@ class TracesResourceTest {
                     List.of(), exclude);
 
         }
+
+        @Test
+        @DisplayName("should handle filter with percent characters in value correctly")
+        void shouldHandleTracesWithPercentCharactersInName() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traceName = "test%";
+
+            // Create a trace with % characters in the name
+            var traces = List.of(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name(traceName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .threadId(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create a filter to search for the trace by name
+            var filter = TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value(traceName)
+                    .build();
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(filter), traces, traces, List.of(),
+                    apiKey, null, Set.of());
+        }
     }
 
     private Integer randomNumber() {
