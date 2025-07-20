@@ -36,13 +36,16 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
         public static final String CONTEXT_ARG_NAME = "context";
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "code", "createdAt", "createdBy",
+    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "code", "createdAt",
+            "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, @NotNull UUID projectId,
             String projectName,
-            @NotBlank String name, float samplingRate, @NotNull TraceThreadUserDefinedMetricPythonCode code,
+            @NotBlank String name, float samplingRate, boolean enabled,
+            @NotNull TraceThreadUserDefinedMetricPythonCode code,
             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
+                lastUpdatedBy);
     }
 
     @JsonView({View.Public.class, View.Write.class})

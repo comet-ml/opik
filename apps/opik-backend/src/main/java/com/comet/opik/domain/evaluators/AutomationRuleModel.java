@@ -12,6 +12,7 @@ public sealed interface AutomationRuleModel
     String name();
 
     Float samplingRate();
+    boolean enabled();
 
     String createdBy();
     String lastUpdatedBy();
