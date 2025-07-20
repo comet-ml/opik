@@ -7,9 +7,6 @@ public enum SpanType {
     tool,
     llm,
     guardrail,
-    atomic_agent,
-    atomic_tool,
-    atomic_chain,
     ;
 
     /**
