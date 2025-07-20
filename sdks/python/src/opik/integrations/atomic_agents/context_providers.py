@@ -26,12 +26,13 @@ class OpikContextProvider(SystemPromptContextProviderBase):  # type: ignore[misc
         project_name: Optional[str] = None,
         include_metadata: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
     ) -> None:
         super().__init__(title="opik_context")  # type: ignore[call-arg]
         self._project_name = project_name
         self._include_metadata = include_metadata
         self._metadata = metadata or {}
-        self._trace_id: Optional[str] = None
+        self._trace_id: Optional[str] = trace_id
 
     # Consumers may call this once they have the trace id.
     def set_trace_id(self, trace_id: str) -> None:  # noqa: D401
