@@ -54,7 +54,13 @@ class OpikAtomicAgentsTracer:  # pylint: disable=too-few-public-methods
     # ------------------------------------------------------------------
     # Public API – explicit calls
     # ------------------------------------------------------------------
-    def start(self, *, name: str, input: Optional[Dict[str, Any]] = None) -> None:
+    def start(
+        self,
+        *,
+        name: str,
+        input: Optional[Dict[str, Any]] = None,
+        agent_instance: Optional[Any] = None,
+    ) -> None:
         """Begin a new Opik trace.
 
         Parameters
@@ -67,10 +73,17 @@ class OpikAtomicAgentsTracer:  # pylint: disable=too-few-public-methods
         if self._trace_data is not None:  # pragma: no cover – misuse safeguard
             raise RuntimeError("Tracer already started – call .end() first")
 
+        # Clone metadata so we don't mutate the original dict passed in __init__
+        metadata = dict(self.metadata)
+
+        # Attempt to capture agent input/output schemas for richer inspection
+        if agent_instance is not None:
+            self._attach_agent_schemas(agent_instance, metadata)
+
         self._trace_data = trace.TraceData(
             name=name,
             input=input,
-            metadata=self.metadata,
+            metadata=metadata,
             tags=self.tags,
             project_name=self.project_name,
         )
@@ -133,3 +146,37 @@ class OpikAtomicAgentsTracer:  # pylint: disable=too-few-public-methods
     def __repr__(self) -> str:  # noqa: D401
         project = self.project_name or "<default>"
         return f"<OpikAtomicAgentsTracer project={project}>" 
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _extract_json_schema(self, model_cls: Any) -> Optional[Dict[str, Any]]:  # noqa: ANN401
+        """Return JSON schema for a Pydantic model class, if possible."""
+        try:
+            from pydantic import BaseModel  # type: ignore
+
+            if isinstance(model_cls, type) and issubclass(model_cls, BaseModel):
+                return model_cls.model_json_schema()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover – optional dependency or failure
+            pass
+        return None
+
+    def _attach_agent_schemas(self, agent_instance: Any, meta: Dict[str, Any]) -> None:  # noqa: ANN401
+        """Inject input/output schema JSON into metadata if available."""
+
+        input_schema_json: Optional[Dict[str, Any]] = None
+        output_schema_json: Optional[Dict[str, Any]] = None
+
+        # Atomic Agents convention: attributes on class
+        if hasattr(agent_instance, "input_schema"):
+            input_schema_json = self._extract_json_schema(agent_instance.input_schema)  # type: ignore[arg-type]
+
+        if hasattr(agent_instance, "output_schema"):
+            output_schema_json = self._extract_json_schema(agent_instance.output_schema)  # type: ignore[arg-type]
+
+        if input_schema_json is not None:
+            meta["atomic_input_schema"] = input_schema_json
+
+        if output_schema_json is not None:
+            meta["atomic_output_schema"] = output_schema_json 

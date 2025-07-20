@@ -89,7 +89,11 @@ def track_atomic_agents(
             # Atomic Agents typically uses single positional; fall back to kwargs.
             input_payload = {k: _serialize_input(v) for k, v in kwargs.items()}
 
-        tracer.start(name=self.__class__.__name__, input=input_payload)  # type: ignore[attr-defined]
+        tracer.start(
+            name=self.__class__.__name__,
+            input=input_payload,
+            agent_instance=self,
+        )  # type: ignore[attr-defined]
 
         try:
             result = original_run(self, *args, **kwargs)
