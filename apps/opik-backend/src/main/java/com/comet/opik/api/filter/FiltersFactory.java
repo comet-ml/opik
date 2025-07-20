@@ -15,8 +15,6 @@ import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
@@ -114,7 +112,7 @@ public class FiltersFactory {
 
     private Filter toValidAndDecoded(Filter filter) {
         // Decode the value as first thing prior to any validation
-        filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
+        filter = filter.build(filter.value());
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
             throw new BadRequestException("Invalid operator '%s' for field '%s' of type '%s'"
                     .formatted(filter.operator().getQueryParamOperator(), filter.field().getQueryParamField(),
