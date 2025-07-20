@@ -24,11 +24,11 @@ public final class AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge
         extends
             AutomationRuleEvaluatorUpdate<TraceThreadLlmAsJudgeCode> {
 
-    @ConstructorProperties({"name", "samplingRate", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge(
-            @NotBlank String name, float samplingRate, @NotNull TraceThreadLlmAsJudgeCode code,
+            @NotBlank String name, float samplingRate, boolean enabled, @NotNull TraceThreadLlmAsJudgeCode code,
             @NotNull UUID projectId) {
-        super(name, samplingRate, code, projectId);
+        super(name, samplingRate, enabled, code, projectId);
     }
 
     /**

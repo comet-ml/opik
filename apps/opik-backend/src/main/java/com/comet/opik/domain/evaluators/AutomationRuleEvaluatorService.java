@@ -170,7 +170,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             try {
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate());
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled());
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
