@@ -1,0 +1,55 @@
+---
+title: Atomic Agents
+slug: atomic_agents
+---
+
+import Callout from "@theme/Callout";
+
+<Callout variant="info">
+  This integration is **beta** – currently supports root trace + schema capture.  Tool-level spans ship soon.
+</Callout>
+
+## Overview
+[Atomic Agents](https://github.com/BrainBlend-AI/atomic-agents) is a lightweight framework for composing agentic pipelines using Pydantic I/O schemas.  With **one line of code** you can stream every agent execution to Opik for rich observability.
+
+```python title="Enable tracing"
+from opik.integrations.atomic_agents import track_atomic_agents
+track_atomic_agents(project_name="my-project")
+```
+
+Once enabled, every `BaseAgent.run()` call automatically:
+
+1. Starts an Opik trace + root span
+2. Captures the agent’s *input/output* Pydantic schemas in trace metadata
+3. Logs cost & token usage (when available)
+
+## Quick-start script
+Execute the interactive script in the repo:
+
+```bash
+python sdks/python/examples/atomic_agents_quickstart.py
+```
+
+It creates a toy EchoAgent, runs it, and prints the generated trace id.
+
+## Context Provider
+Inject trace context into prompts:
+
+```python
+from opik.integrations.atomic_agents import OpikContextProvider
+provider = OpikContextProvider(project_name="my-project", trace_id="<trace-id>")
+agent.register_context_provider("opik", provider)
+```
+
+Renders inside the system prompt:
+```
+[Opik Trace Info]
+trace_id: <trace-id>
+project:  my-project
+```
+
+## Troubleshooting
+* No traces appear → ensure `OPIK_API_KEY` env var is set.
+* Double traces → call `track_atomic_agents()` **once** at startup.
+
+Need more help? Join the community Slack or open an issue. 

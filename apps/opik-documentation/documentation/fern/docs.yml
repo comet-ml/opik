@@ -229,6 +229,9 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
+              - page: Atomic Agents
+                path: docs/tracing/integrations/atomic_agents.mdx
+                slug: atomic_agents
           - section: OpenTelemetry
             slug: /opentelemetry
             contents:
