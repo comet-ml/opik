@@ -6,10 +6,12 @@ Concrete implementation will be added incrementally.
 
 from __future__ import annotations
 
-from .opik_tracer import OpikAtomicAgentsTracer  # noqa: F401
-from .decorators import track_atomic_agents  # noqa: F401
-from .context_providers import OpikContextProvider  # noqa: F401
+from .context_providers import OpikContextProvider
+from .decorators import track_atomic_agents
+from .opik_tracer import OpikAtomicAgentsTracer
 
 __all__ = [
-    "OpikAtomicAgentsTracer", "track_atomic_agents", "OpikContextProvider"
+    "OpikAtomicAgentsTracer",
+    "track_atomic_agents",
+    "OpikContextProvider",
 ]

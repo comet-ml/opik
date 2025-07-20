@@ -1,6 +1,17 @@
 [project]
 name = "opik"
-dynamic = ["version"]
+dynamic = [
+    "version",
+    "description",
+    "readme",
+    "requires-python",
+    "license",
+    "authors",
+    "keywords",
+    "classifiers",
+    "urls",
+    "dependencies",
+]
 
 [tool.mypy]
 follow_imports = "skip"
@@ -13,4 +24,8 @@ check_untyped_defs = true
 managed = false
 
 [project.optional-dependencies]
-atomic_agents = ["atomic-agents>=1.1.0,<2.0.0", "pydantic>=2.6,<3.0"]
+atomic_agents = [
+    "atomic-agents>=1.1.0,<2.0.0",
+    "pydantic>=2.6,<3.0",
+    "deepdiff>=6.7,<7.0",
+]

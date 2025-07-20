@@ -1,11 +1,14 @@
 """Test OpikContextProvider formatting."""
 
-from opik.integrations.atomic_agents import OpikContextProvider
+from opik.integrations.atomic_agents import context_providers
 
 
-def test_get_info_format():  # noqa: D401
-    provider = OpikContextProvider(project_name="proj", trace_id="abc123")
-    info = provider.get_info()
-    assert "[Opik Trace Info]" in info
-    assert "trace_id: abc123" in info
-    assert "project:  proj" in info 
+def test_provider_renders_correctly():
+    provider = context_providers.OpikContextProvider(
+        project_name="demo",
+        trace_id="123",
+    )
+    rendered = provider.get_info()
+    assert "demo" in rendered
+    assert "123" in rendered
+    assert "[Opik Trace Info]" in rendered

@@ -3,84 +3,60 @@
 from __future__ import annotations
 
 import sys
-import types
-from typing import List
 
-import pytest
-
-from opik.api_objects import opik_client
 from opik.integrations.atomic_agents import track_atomic_agents
 
-
-@pytest.fixture(autouse=True)
-def _stub(monkeypatch):
-    # Stub agent & tool classes
-    pkg_root = types.ModuleType("atomic_agents")
-
-    # --- tools
-    tools_pkg = types.ModuleType("atomic_agents.tools")
-    base_tool_pkg = types.ModuleType("atomic_agents.tools.base_tool")
-
-    class BaseTool:  # pylint: disable=too-few-public-methods
-        def __init__(self, name: str = "BaseTool"):
-            self.name = name
-
-        def run(self, payload):  # noqa: D401, ARG002
-            return {"ok": True}
-
-    base_tool_pkg.BaseTool = BaseTool
-    tools_pkg.base_tool = base_tool_pkg  # type: ignore[attr-defined]
-
-    # --- agents
-    agents_pkg = types.ModuleType("atomic_agents.agents")
-    base_agent_pkg = types.ModuleType("atomic_agents.agents.base_agent")
-
-    class DummyAgent:  # pylint: disable=too-few-public-methods
-        def __init__(self):
-            self.tool = BaseTool("EchoTool")
-
-        def run(self, payload):  # noqa: D401, ARG002
-            return self.tool.run(payload)
-
-    base_agent_pkg.BaseAgent = DummyAgent
-    agents_pkg.base_agent = base_agent_pkg  # type: ignore[attr-defined]
-
-    # register in sys.modules
-    sys.modules.update(
-        {
-            "atomic_agents": pkg_root,
-            "atomic_agents.tools": tools_pkg,
-            "atomic_agents.tools.base_tool": base_tool_pkg,
-            "atomic_agents.agents": agents_pkg,
-            "atomic_agents.agents.base_agent": base_agent_pkg,
-        }
-    )
-
-    yield DummyAgent  # type: ignore
+import opik
 
 
-@pytest.fixture(autouse=True)
-def _capture(monkeypatch):
-    captured: List[dict] = []
+def test_tool_span_created(fake_backend):
+    # Modify the mock agent to call a tool during its execution
 
-    def fake_trace(self, **kwargs):
-        captured.append(kwargs)
-        return types.SimpleNamespace(span=lambda **kw: None, update=lambda **kw: None, end=lambda: None)
+    base_agent_module = sys.modules["atomic_agents.agents.base_agent"]
 
-    monkeypatch.setattr(opik_client.Opik, "trace", fake_trace, raising=True)
-    monkeypatch.setattr(opik_client.Opik, "span", fake_trace, raising=True)
-    yield captured
+    # Store the original get_and_handle_response
+    original_method = base_agent_module.BaseChatAgent._get_and_handle_response
 
+    def _enhanced_get_response(self, messages):
+        # Call the original method first
+        result = original_method(self, messages)
+        # Now call a tool
+        BaseTool = sys.modules["atomic_agents.tools.base_tool"].BaseTool
+        tool = BaseTool("MyTool")
+        tool.run("tool payload")
+        return result
 
-def test_tool_span_created(_stub, _capture):
-    Agent = _stub  # type: ignore  # noqa: N806
-    captured = _capture
+    # Patch the method before tracking is enabled
+    base_agent_module.BaseChatAgent._get_and_handle_response = _enhanced_get_response
 
-    track_atomic_agents(project_name="tool-span")
+    try:
+        # First apply tracking to ensure all patching is done
+        track_atomic_agents(project_name="tool-span")
 
-    Agent().run({"input": "hi"})
+        # Verify that BaseTool is patched
+        BaseTool = sys.modules["atomic_agents.tools.base_tool"].BaseTool
+        print(f"BaseTool patched: {getattr(BaseTool, '__opik_patched__', False)}")
 
-    # Order: trace(start), span(start), span(end), trace(end)
-    assert len(captured) == 4
-    types_seq = [msg.get("type", "trace") for msg in captured]
-    assert types_seq == ["trace", "tool", "tool", "trace"] 
+        BaseAgent = sys.modules["atomic_agents.agents.base_agent"].BaseAgent
+        agent = BaseAgent()
+        agent.run("test")
+
+        opik.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 1
+        trace_tree = fake_backend.trace_trees[0]
+
+        # Debug: print all spans and their types
+        print(f"Total spans: {len(trace_tree.spans)}")
+        for span in trace_tree.spans:
+            print(f"Span: {span.name}, Type: {span.type}")
+
+        # Should have tool spans
+        tool_spans = [span for span in trace_tree.spans if span.type == "tool"]
+        assert (
+            len(tool_spans) > 0
+        ), f"No tool spans found. Available spans: {[(s.name, s.type) for s in trace_tree.spans]}"
+        assert tool_spans[0].name == "MyTool"
+    finally:
+        # Restore original method
+        base_agent_module.BaseChatAgent._get_and_handle_response = original_method

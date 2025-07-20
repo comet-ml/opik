@@ -8,52 +8,37 @@ commits.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from opik import context_storage  # type: ignore
 from opik.api_objects import opik_client, trace
-from opik.decorator import error_info_collector  # type: ignore
-from opik.opik_context import trace_context  # type: ignore
+from opik.decorator import error_info_collector
 
-if TYPE_CHECKING:  # pragma: no cover
-    from opik.types import ErrorInfoDict  # pylint: disable=ungrouped-imports
+from opik import context_storage
+
+if TYPE_CHECKING:
+    from opik.types import ErrorInfoDict
 
 
-class OpikAtomicAgentsTracer:  # pylint: disable=too-few-public-methods
-    """Bridge Atomic Agents executions with Opik traces.
+class OpikAtomicAgentsTracer:
+    """Trace Atomic Agents workflows as standard Opik traces/spans."""
 
-    Notes
-    -----
-    *   Only the *root* trace/span is handled in this commit – no child spans yet.
-    *   Designed to be used as a context-manager **or** via explicit :py:meth:`start`
-        / :py:meth:`end` calls (decorators will leverage that later).
-    """
-
-    _CREATED_FROM = "atomic_agents"
-
-    # ---------------------------------------------------------------------
-    # Construction helpers
-    # ---------------------------------------------------------------------
     def __init__(
         self,
         project_name: Optional[str] = None,
         *,
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:  # noqa: D401  (simple init)
+    ) -> None:
         self.project_name = project_name
         self.tags = tags or []
         self.metadata: Dict[str, Any] = metadata.copy() if metadata else {}
-        self.metadata.setdefault("created_from", self._CREATED_FROM)
+        self.metadata.setdefault("created_from", "atomic_agents")
 
         self._opik_client = opik_client.get_client_cached()
         self._context_storage = context_storage.get_current_context_instance()
-
         self._trace_data: Optional[trace.TraceData] = None
 
-    # ------------------------------------------------------------------
-    # Public API – explicit calls
-    # ------------------------------------------------------------------
+    # Public API ---------------------------------------------------------
     def start(
         self,
         *,
@@ -61,122 +46,73 @@ class OpikAtomicAgentsTracer:  # pylint: disable=too-few-public-methods
         input: Optional[Dict[str, Any]] = None,
         agent_instance: Optional[Any] = None,
     ) -> None:
-        """Begin a new Opik trace.
-
-        Parameters
-        ----------
-        name
-            Human-readable name for the trace (usually the agent class / task).
-        input
-            Input payload forwarded to the agent.  Saved to trace `input` field.
-        """
-        if self._trace_data is not None:  # pragma: no cover – misuse safeguard
+        if self._trace_data is not None:
             raise RuntimeError("Tracer already started – call .end() first")
 
-        # Clone metadata so we don't mutate the original dict passed in __init__
-        metadata = dict(self.metadata)
-
-        # Attempt to capture agent input/output schemas for richer inspection
+        meta = dict(self.metadata)
         if agent_instance is not None:
-            self._attach_agent_schemas(agent_instance, metadata)
+            self._attach_agent_schemas(agent_instance, meta)
 
         self._trace_data = trace.TraceData(
             name=name,
             input=input,
-            metadata=metadata,
+            metadata=meta,
             tags=self.tags,
             project_name=self.project_name,
         )
 
-        # Push into context so nested spans (added later) have a parent.
         self._context_storage.set_trace_data(self._trace_data)
 
-        if self._opik_client.config.log_start_trace_span:  # type: ignore[attr-defined]
+        if self._opik_client.config.log_start_trace_span:
             self._opik_client.trace(**self._trace_data.as_start_parameters)
 
     def end(
         self,
         *,
         output: Optional[Dict[str, Any]] = None,
-        error_info: "Optional[ErrorInfoDict]" = None,
+        error_info: Optional["ErrorInfoDict"] = None,
     ) -> None:
-        """Finalize the trace and flush to Opik backend."""
-        if self._trace_data is None:  # pragma: no cover – misuse safeguard
-            return  # Nothing to end
+        if self._trace_data is None:
+            return
 
-        # Update data & timestamps
         self._trace_data.init_end_time().update(output=output, error_info=error_info)
         self._opik_client.trace(**self._trace_data.as_parameters)
 
-        # Pop from context if still top
         try:
-            self._context_storage.pop_trace_data(ensure_id=self._trace_data.id)  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover – context maybe already cleared
+            self._context_storage.pop_trace_data(ensure_id=self._trace_data.id)
+        except Exception:
             self._context_storage.set_trace_data(None)
 
-        # Clear local reference so tracer can be reused if desired
         self._trace_data = None
 
-    # ------------------------------------------------------------------
-    # Context-manager helpers
-    # ------------------------------------------------------------------
-    def __enter__(self) -> "OpikAtomicAgentsTracer":  # noqa: D401
-        # Default name – can be overridden via explicit .start()
+    # Context manager ----------------------------------------------------
+    def __enter__(self) -> "OpikAtomicAgentsTracer":
         self.start(name="atomic_agents_run")
         return self
 
-    def __exit__(
-        self,
-        exc_type,  # pylint: disable=unused-argument
-        exc_val: Optional[BaseException],  # noqa: D401
-        exc_tb,  # pylint: disable=unused-argument
-    ) -> bool:  # True → suppress exception? we propagate, so False
-        error_info: "Optional[ErrorInfoDict]" = None
-        if exc_val is not None:
-            # Collect structured error details.
-            error_info = error_info_collector.collect(exc_val)  # type: ignore[arg-type]
-
-        self.end(error_info=error_info)
-        # Do NOT suppress exceptions – return False
+    def __exit__(self, exc_type, exc_val: Optional[BaseException], exc_tb) -> bool:  # type: ignore
+        error = error_info_collector.collect(exc_val) if exc_val else None
+        self.end(error_info=error)
         return False
 
-    # ------------------------------------------------------------------
-    # String helpers
-    # ------------------------------------------------------------------
-    def __repr__(self) -> str:  # noqa: D401
-        project = self.project_name or "<default>"
-        return f"<OpikAtomicAgentsTracer project={project}>" 
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    def _extract_json_schema(self, model_cls: Any) -> Optional[Dict[str, Any]]:  # noqa: ANN401
-        """Return JSON schema for a Pydantic model class, if possible."""
+    # --------------------------------------------------------------------
+    def _extract_json_schema(self, model_cls: Any) -> Optional[Dict[str, Any]]:
         try:
             from pydantic import BaseModel  # type: ignore
 
             if isinstance(model_cls, type) and issubclass(model_cls, BaseModel):
-                return model_cls.model_json_schema()  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover – optional dependency or failure
-            pass
+                return model_cls.model_json_schema()
+        except Exception:
+            return None
         return None
 
-    def _attach_agent_schemas(self, agent_instance: Any, meta: Dict[str, Any]) -> None:  # noqa: ANN401
-        """Inject input/output schema JSON into metadata if available."""
-
-        input_schema_json: Optional[Dict[str, Any]] = None
-        output_schema_json: Optional[Dict[str, Any]] = None
-
-        # Atomic Agents convention: attributes on class
+    def _attach_agent_schemas(self, agent_instance: Any, meta: Dict[str, Any]) -> None:
         if hasattr(agent_instance, "input_schema"):
-            input_schema_json = self._extract_json_schema(agent_instance.input_schema)  # type: ignore[arg-type]
+            schema = self._extract_json_schema(agent_instance.input_schema)
+            if schema:
+                meta["atomic_input_schema"] = schema
 
         if hasattr(agent_instance, "output_schema"):
-            output_schema_json = self._extract_json_schema(agent_instance.output_schema)  # type: ignore[arg-type]
-
-        if input_schema_json is not None:
-            meta["atomic_input_schema"] = input_schema_json
-
-        if output_schema_json is not None:
-            meta["atomic_output_schema"] = output_schema_json 
+            schema = self._extract_json_schema(agent_instance.output_schema)
+            if schema:
+                meta["atomic_output_schema"] = schema

@@ -73,3 +73,4 @@ opik-sandbox-executor-python.tar.gz
 # Update span cost workflow
 response.txt
 *.log
+.atomic-test-venv/
