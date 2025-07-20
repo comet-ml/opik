@@ -111,7 +111,6 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
-        // Decode the value as first thing prior to any validation
         filter = filter.build(filter.value());
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
             throw new BadRequestException("Invalid operator '%s' for field '%s' of type '%s'"
