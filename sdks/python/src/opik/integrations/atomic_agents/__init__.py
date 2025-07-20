@@ -7,7 +7,9 @@ Concrete implementation will be added incrementally.
 from __future__ import annotations
 
 from .opik_tracer import OpikAtomicAgentsTracer  # noqa: F401
+from .decorators import track_atomic_agents  # noqa: F401
 
 __all__ = [
     "OpikAtomicAgentsTracer",
-] 
+]
+__all__.append("track_atomic_agents") 
