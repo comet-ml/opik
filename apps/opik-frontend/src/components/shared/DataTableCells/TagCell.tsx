@@ -21,7 +21,7 @@ const TagCell = (context: CellContext<unknown, string>) => {
       {colored ? (
         <ColoredTag label={value}></ColoredTag>
       ) : (
-        <Tag size="lg">{value}</Tag>
+        <Tag size="md">{value}</Tag>
       )}
     </CellWrapper>
   );
