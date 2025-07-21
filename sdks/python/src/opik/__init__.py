@@ -17,6 +17,11 @@ from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
 from . import opik_context
+from .runtime_config import (
+    set_tracing_active,
+    is_tracing_active,
+    reset_tracing_to_config_default,
+)
 
 _logging.setup()
 
@@ -41,6 +46,9 @@ __all__ = [
     "Prompt",
     "PromptType",
     "LLMProvider",
+    "reset_tracing_to_config_default",
+    "set_tracing_active",
+    "is_tracing_active",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()
