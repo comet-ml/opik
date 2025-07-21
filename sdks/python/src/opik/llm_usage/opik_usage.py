@@ -177,7 +177,7 @@ class OpikUsage(pydantic.BaseModel):
 
         if provider_usage.output_token_details is not None:
             completion_tokens = (
-                provider_usage.output_token
+                provider_usage.output_tokens
                 + provider_usage.output_token_details.reasoning
             )
         else:

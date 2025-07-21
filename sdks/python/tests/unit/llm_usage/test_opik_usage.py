@@ -120,3 +120,23 @@ def test_opik_usage__invalid_data_passed__validation_error_is_raised():
         OpikUsage.from_google_dict(usage_data)
     with pytest.raises(pydantic.ValidationError):
         OpikUsage.from_anthropic_dict(usage_data)
+
+
+def test_opik_usage__from_langchain_response_dict__happy_flow():
+    usage_dict = {
+        "input_tokens": 2,
+        "output_tokens": 9,
+        "total_tokens": 1121,
+        "input_token_details": {"cache_read": 0},
+        "output_token_details": {"reasoning": 1110},
+    }
+
+    usage = OpikUsage.from_langchain_response_dict(usage_dict)
+    assert usage.completion_tokens == 9 + 1110
+    assert usage.prompt_tokens == 2
+    assert usage.total_tokens == 1121
+    assert usage.provider_usage.input_tokens == 2
+    assert usage.provider_usage.output_tokens == 9
+    assert usage.provider_usage.total_tokens == 1121
+    assert usage.provider_usage.input_token_details.cache_read == 0
+    assert usage.provider_usage.output_token_details.reasoning == 1110
