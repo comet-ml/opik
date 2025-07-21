@@ -143,6 +143,8 @@ class OpikTracer:
                 )
 
                 self._start_trace(trace_data=current_trace)
+                # Debug log for newly created trace
+                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🆕 CREATED TRACE: {current_trace.id}")
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=name,
@@ -161,9 +163,8 @@ class OpikTracer:
                 )
 
                 self._start_span(span_data=opik_span_data)
-            
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id}")
+                # Debug log for newly created span
+                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🆕 CREATED SPAN: {opik_span_data.id} | Parent Trace: {current_trace_data.id}")
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -182,20 +183,29 @@ class OpikTracer:
             if (span_data := self._context_storage.top_span_data()) is not None:
                 if span_data.id in self._opik_created_spans:
                     span_data.update(output=output)
+                    finalized_span_id = span_data.id
                     self._end_current_span()
                     self._opik_created_spans.discard(span_data.id)
+                    # Debug log for finalized span
+                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
+                else:
+                    # Debug log for no action taken
+                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | ⏸️ NO ACTION (span not created by opik) | Span: {span_data.id} | Trace: {trace_id}")
             else:
                 trace_data = self._context_storage.get_trace_data()
                 assert trace_data is not None
 
                 if trace_data.id == self._current_trace_created_by_opik_tracer.get():
+                    finalized_trace_id = trace_data.id
                     trace_data.update(output=output)
                     self._end_current_trace()
                     self._current_trace_created_by_opik_tracer.set(None)
                     self._last_model_output = None
-            
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id}")
+                    # Debug log for finalized trace
+                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🏁 FINALIZED TRACE: {finalized_trace_id}")
+                else:
+                    # Debug log for no action taken
+                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | ⏸️ NO ACTION (trace not created by opik) | Trace: {trace_data.id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
@@ -235,8 +245,8 @@ class OpikTracer:
 
             self._start_span(span_data=span_data)
             
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ BEFORE_MODEL_CALLBACK finished | Model: {llm_request.model} | Trace ID: {trace_id} | Span ID: {span_id}")
+            # Debug log for newly created span
+            LOGGER.debug(f"✅ BEFORE_MODEL_CALLBACK finished | Model: {llm_request.model} | 🆕 CREATED SPAN: {span_data.id} | Parent Trace: {trace_id}")
 
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
@@ -296,6 +306,7 @@ class OpikTracer:
             assert span_data is not None
 
             if span_data.id in self._opik_created_spans:
+                finalized_span_id = span_data.id
                 span_data.update(
                     output=output,
                     usage=usage,
@@ -304,9 +315,11 @@ class OpikTracer:
                 )
                 self._end_current_span()
                 self._opik_created_spans.discard(span_data.id)
-            
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | Trace ID: {trace_id} | Span ID: {span_id}")
+                # Debug log for finalized span
+                LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
+            else:
+                # Debug log for no action taken
+                LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | ⏸️ NO ACTION (span not created by opik) | Span: {span_data.id} | Trace: {trace_id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
@@ -344,8 +357,8 @@ class OpikTracer:
 
             self._start_span(span_data=span_data)
             
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ BEFORE_TOOL_CALLBACK finished | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id}")
+            # Debug log for newly created span
+            LOGGER.debug(f"✅ BEFORE_TOOL_CALLBACK finished | Tool: {tool.name} | 🆕 CREATED SPAN: {span_data.id} | Parent Trace: {trace_id}")
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
@@ -375,12 +388,15 @@ class OpikTracer:
                 else {"output": tool_response}
             )
             if current_span_data.id in self._opik_created_spans:
+                finalized_span_id = current_span_data.id
                 current_span_data.update(output=output)
                 self._end_current_span()
                 self._opik_created_spans.discard(current_span_data.id)
-            
-            # Debug log for callback completion
-            LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id}")
+                # Debug log for finalized span
+                LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
+            else:
+                # Debug log for no action taken
+                LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | ⏸️ NO ACTION (span not created by opik) | Span: {current_span_data.id} | Trace: {trace_id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
