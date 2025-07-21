@@ -28,6 +28,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.Operator;
@@ -49,6 +50,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.events.TraceDeletedListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -101,6 +103,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -122,6 +125,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -228,12 +232,14 @@ class ExperimentsResourceTest {
     private TraceResourceClient traceResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private SpanResourceClient spanResourceClient;
+    private TraceDeletedListener traceDeletedListener;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, TraceDeletedListener traceDeletedListener) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.traceDeletedListener = traceDeletedListener;
 
         ClientSupportUtils.config(client);
         defaultEventBus = contextConfig.mockEventBus();
@@ -1317,6 +1323,14 @@ class ExperimentsResourceTest {
 
             deleteTrace(trace6.id(), apiKey, workspaceName);
 
+            // Since we mock the EventBus, we need to manually trigger the deletion of the trace items
+            ArgumentCaptor<TracesDeleted> experimentCaptor = ArgumentCaptor.forClass(TracesDeleted.class);
+            Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+            assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
+            assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
+
+            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
                     .filter(item -> !item.traceId().equals(trace6.id()))
@@ -1328,34 +1342,36 @@ class ExperimentsResourceTest {
             var page = 1;
             var pageSize = 1;
 
-            try (var actualResponse = client.target(getExperimentsPath())
-                    .queryParam("page", page)
-                    .queryParam("size", pageSize)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                try (var actualResponse = client.target(getExperimentsPath())
+                        .queryParam("page", page)
+                        .queryParam("size", pageSize)
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, apiKey)
+                        .header(WORKSPACE_HEADER, workspaceName)
+                        .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                var actualPage = actualResponse.readEntity(ExperimentPage.class);
-                var actualExperiments = actualPage.content();
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    var actualPage = actualResponse.readEntity(ExperimentPage.class);
+                    var actualExperiments = actualPage.content();
 
-                assertThat(actualPage.page()).isEqualTo(page);
-                assertThat(actualPage.size()).isEqualTo(pageSize);
-                assertThat(actualPage.total()).isEqualTo(pageSize);
-                assertThat(actualExperiments).hasSize(pageSize);
+                    assertThat(actualPage.page()).isEqualTo(page);
+                    assertThat(actualPage.size()).isEqualTo(pageSize);
+                    assertThat(actualPage.total()).isEqualTo(pageSize);
+                    assertThat(actualExperiments).hasSize(pageSize);
 
-                for (Experiment experiment : actualExperiments) {
-                    var expectedScores = expectedScoresPerExperiment.get(experiment.id());
-                    var actualScores = getScoresMap(experiment);
+                    for (Experiment experiment : actualExperiments) {
+                        var expectedScores = expectedScoresPerExperiment.get(experiment.id());
+                        var actualScores = getScoresMap(experiment);
 
-                    assertThat(actualScores)
-                            .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                    .build())
-                            .isEqualTo(expectedScores);
+                        assertThat(actualScores)
+                                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                        .build())
+                                .isEqualTo(expectedScores);
+                    }
                 }
-            }
+            });
         }
 
         @Test
@@ -2831,6 +2847,14 @@ class ExperimentsResourceTest {
 
             deleteTrace(trace6.id(), apiKey, workspaceName);
 
+            // Since we mock the EventBus, we need to manually trigger the deletion of the trace items
+            ArgumentCaptor<TracesDeleted> experimentCaptor = ArgumentCaptor.forClass(TracesDeleted.class);
+            Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+            assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
+            assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
+
+            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 
             var expectedExperiment = experiment.toBuilder()
@@ -2843,17 +2867,19 @@ class ExperimentsResourceTest {
                             .filter(e -> !e.getKey().equals(trace6.id()))
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
 
-            Experiment actualExperiment = getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Experiment actualExperiment = getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
 
-            assertThat(actualExperiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
+                assertThat(actualExperiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
 
-            Map<String, BigDecimal> actual = getScoresMap(actualExperiment);
+                Map<String, BigDecimal> actual = getScoresMap(actualExperiment);
 
-            assertThat(actual)
-                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                            .build())
-                    .isEqualTo(expectedScores);
+                assertThat(actual)
+                        .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .build())
+                        .isEqualTo(expectedScores);
+            });
         }
 
         @Test
