@@ -8,6 +8,7 @@ export interface DatasetPublic {
     id?: string;
     name: string;
     visibility?: OpikApi.DatasetPublicVisibility;
+    tags?: string[];
     description?: string;
     createdAt?: Date;
     createdBy?: string;

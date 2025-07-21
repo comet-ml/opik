@@ -100,6 +100,8 @@ export enum FILTER_FIELDS {
   INPUT = "input",
   OUTPUT = "output",
   METADATA = "metadata",
+  TOKEN_USAGE = "usage",
+  ERROR_INFO = "error_info",
 }
 
 const getData = (field: FILTER_FIELDS, data: Trace | Span): string => {
@@ -112,6 +114,8 @@ const getData = (field: FILTER_FIELDS, data: Trace | Span): string => {
       return toLower(get(data, field, ""));
     case FILTER_FIELDS.INPUT:
     case FILTER_FIELDS.OUTPUT:
+    case FILTER_FIELDS.TOKEN_USAGE:
+    case FILTER_FIELDS.ERROR_INFO:
     case FILTER_FIELDS.METADATA: {
       const value = get(data, field, false);
       return value ? toLower(JSON.stringify(value)) : "";
@@ -151,7 +155,13 @@ const search = (searchValue: string, data: Trace | Span): boolean =>
   filterField(getData(FILTER_FIELDS.NAME, data), "contains", searchValue) ||
   filterField(getData(FILTER_FIELDS.INPUT, data), "contains", searchValue) ||
   filterField(getData(FILTER_FIELDS.OUTPUT, data), "contains", searchValue) ||
-  filterField(getData(FILTER_FIELDS.METADATA, data), "contains", searchValue);
+  filterField(getData(FILTER_FIELDS.METADATA, data), "contains", searchValue) ||
+  filterField(
+    getData(FILTER_FIELDS.TOKEN_USAGE, data),
+    "contains",
+    searchValue,
+  ) ||
+  filterField(getData(FILTER_FIELDS.ERROR_INFO, data), "contains", searchValue);
 
 const getFieldValue = (
   fieldId: string,

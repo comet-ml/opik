@@ -708,6 +708,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dataset resource
@@ -5242,6 +5246,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5303,6 +5312,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5828,6 +5842,10 @@ components:
         total:
           type: integer
           format: int64
+        sortableBy:
+          type: array
+          items:
+            type: string
     Dataset_Public:
       required:
       - name
@@ -5844,6 +5862,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -6099,6 +6122,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     Experiment:
       required:
       - dataset_name
@@ -8152,6 +8180,9 @@ components:
           - DURATION
           - COST
           - GUARDRAILS_FAILED_COUNT
+          - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -8183,6 +8214,9 @@ components:
           - DURATION
           - COST
           - GUARDRAILS_FAILED_COUNT
+          - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -8716,6 +8750,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Prompt_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Prompt_Public:
       required:
       - name

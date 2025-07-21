@@ -40,7 +40,6 @@ import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -58,7 +57,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.comet.opik.api.Project.Configuration;
 import static com.comet.opik.api.Project.ProjectPage;
 import static com.comet.opik.api.Project.View;
 import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
@@ -302,25 +300,4 @@ public class ProjectsResource {
         return Response.ok().entity(projectStatisticsSummary).build();
     }
 
-    @PUT
-    @Path("/{id}/configurations")
-    @Operation(operationId = "upsertProjectConfigurations", summary = "Upsert project configurations", description = "Upsert project configurations", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-    })
-    public Response upsertProjectConfigurations(
-            @PathParam("id") UUID projectId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Configuration.class))) @Valid Configuration configuration) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Setting project configuration for project '{}' on workspaceId '{}'", projectId, workspaceId);
-
-        projectService.updateConfiguration(projectId, configuration);
-
-        log.info("Set project configuration for project '{}' on workspaceId '{}'", projectId, workspaceId);
-
-        return Response.ok().build();
-    }
 }

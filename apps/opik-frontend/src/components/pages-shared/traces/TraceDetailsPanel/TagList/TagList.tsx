@@ -2,7 +2,7 @@ import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import useAppStore from "@/store/AppStore";
 import { Span, Trace } from "@/types/traces";
-import TagListRenderer from "./TagListRenderer";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 
 type TagListProps = {
   tags: string[];

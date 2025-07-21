@@ -6,8 +6,10 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -23,12 +25,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.reducing;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 
 @EagerSingleton
 @Slf4j
@@ -72,14 +76,16 @@ public class TraceThreadOnlineScoringSamplerListener {
     public void onTraceThreadOnlineScoringSampled(@NonNull TraceThreadsCreated event) {
 
         UUID projectId = event.projectId();
-        List<UUID> traceThreadModelIds = event.traceThreadModelIds();
+        Map<UUID, TraceThreadModel> traceThreadModelMap = event.traceThreadModels().stream()
+                .collect(toMap(TraceThreadModel::id, Function.identity()));
+
         String workspaceId = event.workspaceId();
 
         log.info(
-                "Received TraceThreadOnlineScoringSampled event for workspace_id: '{}', projectId: '{}', traceThreadModelIds: '{}'. Processing online scoring sampling",
-                workspaceId, projectId, traceThreadModelIds);
+                "Received TraceThreadOnlineScoringSampled event for workspaceId: '{}', projectId: '{}', traceThreadModelIds: '{}'. Processing online scoring sampling",
+                workspaceId, projectId, traceThreadModelMap.keySet());
 
-        if (traceThreadModelIds.isEmpty()) {
+        if (traceThreadModelMap.isEmpty()) {
             log.info(
                     "No trace thread model IDs provided for projectId: '{}', workspaceId: '{}'. Skipping online scoring sampling.",
                     projectId, workspaceId);
@@ -98,14 +104,15 @@ public class TraceThreadOnlineScoringSamplerListener {
             return;
         }
 
-        List<TraceThreadSampling> samplingPerRule = sampleTraceThreads(traceThreadModelIds, rules, workspaceId);
+        List<TraceThreadSampling> samplingPerRule = sampleTraceThreads(traceThreadModelMap, rules, workspaceId);
 
         traceThreadService.updateThreadSampledValue(projectId, samplingPerRule)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, event.userName()))
+                .thenReturn(traceThreadModelMap.size())
                 .subscribe(
                         unused -> log.info(
-                                "Successfully updated trace thread: '[{}]'  sampling values for projectId: '{}', workspaceId: '{}'",
+                                "Successfully updated trace threadModelIds: '{}'  sampling values for projectId: '{}', workspaceId: '{}'",
                                 samplingPerRule.stream().map(TraceThreadSampling::threadModelId).toList(), projectId,
                                 workspaceId),
                         error -> {
@@ -117,35 +124,45 @@ public class TraceThreadOnlineScoringSamplerListener {
 
     }
 
-    private List<TraceThreadSampling> sampleTraceThreads(List<UUID> traceThreadModelIds,
+    private List<TraceThreadSampling> sampleTraceThreads(Map<UUID, TraceThreadModel> traceThreadModelMap,
             List<AutomationRuleEvaluator<?>> rules, String workspaceId) {
-        return traceThreadModelIds
+        return traceThreadModelMap.keySet()
                 .parallelStream()
                 .flatMap(traceThreadModelId -> {
-                    log.info("Processing trace thread model ID: '{}' for online scoring sampling", traceThreadModelId);
+                    log.info("Processing trace threadModelId: '{}' for online scoring sampling", traceThreadModelId);
 
                     return rules.stream()
                             .map(evaluator -> {
-                                boolean shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
+                                boolean shouldBeSampled = false;
 
-                                try (var logContext = wrapWithMdc(Map.of(
-                                        UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                                        UserLog.WORKSPACE_ID, workspaceId,
-                                        UserLog.RULE_ID, evaluator.getId().toString(),
-                                        UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()))) {
+                                // Check if rule is enabled first
+                                if (!evaluator.isEnabled()) {
+                                    try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                            traceThreadModelId)) {
+                                        userFacingLogger.info(
+                                                "The threadModelId '{}' was skipped for rule: '{}' as the rule is disabled",
+                                                traceThreadModelId, evaluator.getName());
+                                    }
+                                } else {
+                                    shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
 
-                                    if (!shouldBeSampled) {
-                                        userFacingLogger.info(
-                                                "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
-                                                traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
-                                    } else {
-                                        userFacingLogger.info(
-                                                "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
-                                                traceThreadModelId, evaluator.getName(), evaluator.getSamplingRate());
+                                    try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                            traceThreadModelId)) {
+                                        if (!shouldBeSampled) {
+                                            userFacingLogger.info(
+                                                    "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
+                                                    traceThreadModelId, evaluator.getName(),
+                                                    evaluator.getSamplingRate());
+                                        } else {
+                                            userFacingLogger.info(
+                                                    "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
+                                                    traceThreadModelId, evaluator.getName(),
+                                                    evaluator.getSamplingRate());
+                                        }
                                     }
                                 }
 
-                                return new TraceThreadSampling(traceThreadModelId,
+                                return new TraceThreadSampling(traceThreadModelMap.get(traceThreadModelId),
                                         Map.of(evaluator.getId(), shouldBeSampled));
                             });
                 })
@@ -155,12 +172,22 @@ public class TraceThreadOnlineScoringSamplerListener {
                                 reducing(new HashMap<>(), this::groupRuleSampling))))
                 .entrySet()
                 .stream()
-                .map(sampling -> new TraceThreadSampling(sampling.getKey(), sampling.getValue()))
+                .map(sampling -> new TraceThreadSampling(traceThreadModelMap.get(sampling.getKey()),
+                        sampling.getValue()))
                 .toList();
     }
 
     private Map<UUID, Boolean> groupRuleSampling(Map<UUID, Boolean> acc, Map<UUID, Boolean> current) {
         acc.putAll(current);
         return acc;
+    }
+
+    private LogContextAware.Closable createThreadLoggingContext(String workspaceId,
+            AutomationRuleEvaluator<?> evaluator, UUID traceThreadModelId) {
+        return wrapWithMdc(Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, workspaceId,
+                UserLog.RULE_ID, evaluator.getId().toString(),
+                UserLog.THREAD_MODEL_ID, traceThreadModelId.toString()));
     }
 }

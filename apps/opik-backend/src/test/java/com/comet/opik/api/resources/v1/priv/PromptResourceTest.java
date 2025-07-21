@@ -67,9 +67,11 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -82,6 +84,14 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
+import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
+import static com.comet.opik.api.sorting.SortableFields.ID;
+import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
+import static com.comet.opik.api.sorting.SortableFields.NAME;
+import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -975,6 +985,10 @@ class PromptResourceTest {
 
             var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
+            updatedPrompt = updatedPrompt.toBuilder()
+                    .tags(updatedPrompt.tags() == null ? prompt.tags() : updatedPrompt.tags())
+                    .build();
+
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
@@ -1028,8 +1042,12 @@ class PromptResourceTest {
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().name(UUID.randomUUID().toString())
                             .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
-                            .description(UUID.randomUUID().toString()).build()),
+                            .description(UUID.randomUUID().toString())
+                            .tags(null)
+                            .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .tags(Set.of()).build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
                             .tags(PodamFactoryUtils.manufacturePojoSet(factory, String.class)).build()));
         }
@@ -1394,16 +1412,27 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var random = new Random();
+
             var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
-                            .versionCount(0L)
+                            .versionCount(random.nextLong(5))
                             .template(null)
                             .build())
                     .toList();
 
-            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
 
             List<Prompt> expectedPrompts = prompts.stream().sorted(comparator).toList();
 
@@ -1412,8 +1441,95 @@ class PromptResourceTest {
         }
 
         private Stream<Arguments> getPrompts__whenSortingByValidFields__thenReturnTracePromptsSorted() {
+            // Comparators for all sortable fields
+            Comparator<Prompt> idComparator = Comparator.comparing(Prompt::id);
+            Comparator<Prompt> nameComparator = Comparator.comparing(Prompt::name, String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> descriptionComparator = Comparator.comparing(
+                    prompt -> prompt.description() != null ? prompt.description().toLowerCase() : "",
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> createdAtComparator = Comparator.comparing(Prompt::createdAt);
+            Comparator<Prompt> lastUpdatedAtComparator = Comparator.comparing(Prompt::lastUpdatedAt);
+            Comparator<Prompt> createdByComparator = Comparator.comparing(Prompt::createdBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> lastUpdatedByComparator = Comparator.comparing(Prompt::lastUpdatedBy,
+                    String.CASE_INSENSITIVE_ORDER);
             Comparator<Prompt> tagsComparator = Comparator.comparing(prompt -> prompt.tags().toString().toLowerCase());
+            Comparator<Prompt> versionCountComparator = Comparator.comparing(Prompt::versionCount);
+
+            Comparator<Prompt> idComparatorReversed = Comparator.comparing(Prompt::id).reversed();
+
             return Stream.of(
+                    // ID field sorting
+                    Arguments.of(
+                            idComparator,
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            idComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // NAME field sorting
+                    Arguments.of(
+                            nameComparator,
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            nameComparator.reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+
+                    // DESCRIPTION field sorting
+                    Arguments.of(
+                            descriptionComparator,
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            descriptionComparator.reversed(),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            createdAtComparator,
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(
+                            lastUpdatedAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            createdByComparator.thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdByComparator.reversed().thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(
+                            lastUpdatedByComparator.thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedByComparator.reversed().thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                                    .build()),
+
+                    // VERSION_COUNT field sorting
+                    Arguments.of(
+                            versionCountComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            versionCountComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.DESC)
+                                    .build()),
+
+                    // TAGS field sorting
                     Arguments.of(
                             tagsComparator,
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
@@ -1434,16 +1550,27 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var random = new Random();
+
             var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
-                            .versionCount(0L)
+                            .versionCount(random.nextLong(5))
                             .template(null)
                             .build())
                     .toList();
 
-            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
 
             List<Prompt> expectedPrompts = getExpectedPrompts.apply(prompts);
             PromptFilter filter = getFilter.apply(prompts);
@@ -1453,6 +1580,7 @@ class PromptResourceTest {
         }
 
         private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
             return Stream.of(
                     Arguments.of(
                             (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
@@ -1467,7 +1595,137 @@ class PromptResourceTest {
                                     .operator(Operator.NOT_CONTAINS)
                                     .value(prompts.getFirst().tags().iterator().next())
                                     .build(),
-                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())));
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(prompts.getFirst().name().substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.ENDS_WITH)
+                                    .value(prompts.getFirst().name().substring(3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() >= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() <= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().createdAt().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()));
         }
     }
 
@@ -2359,6 +2617,8 @@ class PromptResourceTest {
             assertThat(promptPage.page()).isEqualTo(page);
             assertThat(promptPage.size()).isEqualTo(expectedPrompts.size());
 
+            assertSortableFields(promptPage);
+
             assertThat(promptPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
@@ -2367,6 +2627,18 @@ class PromptResourceTest {
                                     .build())
                     .isEqualTo(expectedPrompts);
         }
+    }
+
+    private static void assertSortableFields(Prompt.PromptPage promptPage) {
+        assertThat(promptPage.sortableBy()).contains(
+                ID,
+                NAME,
+                DESCRIPTION,
+                CREATED_AT,
+                LAST_UPDATED_AT,
+                CREATED_BY,
+                LAST_UPDATED_BY,
+                TAGS);
     }
 
     private int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {

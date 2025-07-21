@@ -5,7 +5,7 @@ from ...e2e import verifiers
 from ...testlib import ANY_DICT, ANY_STRING
 
 
-MODEL_NAME = "gpt-3.5-turbo"
+from . import constants
 
 
 def test_litellm_opik_logging__happyflow(
@@ -18,7 +18,7 @@ def test_litellm_opik_logging__happyflow(
     def streaming_function(input):
         messages = [{"role": "user", "content": input}]
         response = litellm.completion(
-            model=MODEL_NAME,
+            model=constants.MODEL_NAME,
             messages=messages,
             metadata={
                 "opik": {
@@ -49,7 +49,7 @@ def test_litellm_opik_logging__happyflow(
         opik_client=opik_client,
         trace_id=traces[0].id,
         name="chat.completion",
-        metadata=ANY_DICT,
+        metadata=ANY_DICT.containing({"created_from": "litellm"}),
         input=[
             {
                 "content": "Why is tracking and evaluation of LLMs important?",
@@ -67,8 +67,8 @@ def test_litellm_opik_logging__happyflow(
         trace_id=traces[0].id,
         span_id=spans[0].id,
         parent_span_id=None,
-        name=ANY_STRING.starting_with(MODEL_NAME),
-        metadata=ANY_DICT,
+        name=ANY_STRING.starting_with(constants.MODEL_NAME),
+        metadata=ANY_DICT.containing({"created_from": "litellm"}),
         input=[
             {
                 "content": "Why is tracking and evaluation of LLMs important?",

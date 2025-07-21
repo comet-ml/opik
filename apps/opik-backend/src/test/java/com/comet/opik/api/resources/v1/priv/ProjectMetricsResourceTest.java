@@ -89,6 +89,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -547,11 +548,104 @@ class ProjectMetricsResourceTest {
                             e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
                                     .toList())));
         }
+    }
 
-        private static BigDecimal calcAverage(List<BigDecimal> scores) {
-            BigDecimal sum = scores.stream()
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
+    @Nested
+    @DisplayName("Thread feedback scores")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadFeedbackScoresTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var scoresMinus3 = createThreadFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
+                    names);
+            var scoresMinus1 = createThreadFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval),
+                    names);
+            var scores = createThreadFeedbackScores(projectName, marker, names);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, BigDecimal.class, scoresMinus3, scoresMinus1, scores);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
+        }
+
+        private Map<String, BigDecimal> createThreadFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
+            return IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        // create a thread with a unique thread_id
+                        String threadId = UUID.randomUUID().toString();
+
+                        // open the thread first
+                        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
+                                WORKSPACE_NAME);
+
+                        // create a trace in the thread to ensure the thread exists
+                        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .threadId(threadId)
+                                .startTime(marker.plus(i, ChronoUnit.SECONDS))
+                                .build();
+
+                        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+                        // close the thread
+                        traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
+                                WORKSPACE_NAME);
+
+                        // create several feedback scores for that thread
+                        List<FeedbackScoreBatchItemThread> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
+                                        .toBuilder()
+                                        .name(name)
+                                        .projectName(projectName)
+                                        .threadId(threadId)
+                                        .build())
+                                .collect(Collectors.toList());
+
+                        traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+                        return scores;
+                    }).flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
+                                    .toList())));
         }
     }
 
@@ -769,17 +863,17 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
 
             var durationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus3.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus1.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_DURATION_P50, durationsCurrent.get(0),
-                    ProjectMetricsDAO.NAME_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(
                     projectId,
@@ -790,8 +884,8 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
-                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -810,9 +904,9 @@ class ProjectMetricsResourceTest {
 
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_DURATION_P50, null);
-                    put(ProjectMetricsDAO.NAME_DURATION_P90, null);
-                    put(ProjectMetricsDAO.NAME_DURATION_P99, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P90, null);
+                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P99, null);
                 }
             };
 
@@ -825,8 +919,8 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
-                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     empty,
                     empty,
@@ -993,9 +1087,8 @@ class ProjectMetricsResourceTest {
                     .toList();
 
             // Open threads first
-            threadIds.forEach(threadId -> {
-                traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
-            });
+            threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
+                    WORKSPACE_NAME));
 
             // Create multiple traces per thread to test that threads are counted, not traces
             threadIds.forEach(threadId -> {
@@ -1010,9 +1103,8 @@ class ProjectMetricsResourceTest {
             });
 
             // Close threads to ensure they are written to the trace_threads table
-            threadIds.forEach(threadId -> {
-                traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, WORKSPACE_NAME);
-            });
+            threadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
+                    WORKSPACE_NAME));
 
             return (long) threadIds.size();
         }
@@ -1026,6 +1118,142 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
+        }
+    }
+
+    @Nested
+    @DisplayName("Thread duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadDurationTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            // Create thread durations at different times
+            List<BigDecimal> durationsMinus3 = createTracesWithThreadDuration(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval));
+            List<BigDecimal> durationsMinus1 = createTracesWithThreadDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            List<BigDecimal> durationsCurrent = createTracesWithThreadDuration(projectName, marker);
+
+            // SUT
+            var durationMinus3 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
+            var durationMinus1 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
+            var durationCurrent = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker,
+                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    BigDecimal.class, durationMinus3, durationMinus1, durationCurrent);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
+
+            Instant marker = getIntervalStart(interval);
+
+            // SUT
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private List<BigDecimal> createTracesWithThreadDuration(String projectName, Instant marker) {
+            // Create different threads with different durations
+            List<String> threadIds = IntStream.range(0, 3)
+                    .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
+                    .toList();
+
+            List<Double> threadDurations = new java.util.ArrayList<>();
+
+            // Open threads first
+            threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
+                    WORKSPACE_NAME));
+
+            // Create traces with specific durations for each thread
+            for (int i = 0; i < threadIds.size(); i++) {
+                String threadId = threadIds.get(i);
+
+                // Different thread duration patterns: increasing durations
+                int baseDurationMs = (i + 1) * 300 + RANDOM.nextInt(200);
+                int numTraces = 2 + i; // Variable number of traces per thread
+
+                Instant threadStartTime = marker.plusMillis(i * 100L); // Space threads apart
+                Instant threadEndTime = threadStartTime.plusMillis(baseDurationMs);
+
+                // Create multiple traces within the thread
+                List<Trace> traces = IntStream.range(0, numTraces)
+                        .mapToObj(j -> {
+                            // First trace starts at thread start time
+                            Instant traceStart = j == 0 ? threadStartTime : threadStartTime.plusMillis(j * 50L);
+                            // Last trace ends at thread end time, others have shorter durations
+                            Instant traceEnd = j == (numTraces - 1) ? threadEndTime : traceStart.plusMillis(100);
+
+                            return factory.manufacturePojo(Trace.class).toBuilder()
+                                    .projectName(projectName)
+                                    .threadId(threadId)
+                                    .startTime(traceStart)
+                                    .endTime(traceEnd)
+                                    .build();
+                        })
+                        .toList();
+
+                traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+                // Calculate actual thread duration: (last trace end time) - (first trace start time)
+                threadDurations.add(threadStartTime.until(threadEndTime, ChronoUnit.MICROS) / 1000.0);
+            }
+
+            // Close threads to ensure they are written to the trace_threads table
+            threadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
+                    WORKSPACE_NAME));
+
+            return StatsUtils.calculateQuantiles(threadDurations,
+                    List.of(0.50, 0.90, 0.99));
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, BigDecimal> empty = new HashMap<>();
+            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, null);
+            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P90, null);
+            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P99, null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker,
+                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    BigDecimal.class, empty, empty, empty);
         }
     }
 
@@ -1087,6 +1315,12 @@ class ProjectMetricsResourceTest {
                                     .toList())
                             .build();
                 }).toList();
+    }
+
+    private static BigDecimal calcAverage(List<BigDecimal> scores) {
+        BigDecimal sum = scores.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
     }
 
     private static Instant subtract(Instant instant, int count, TimeInterval interval) {
