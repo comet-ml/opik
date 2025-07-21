@@ -10,7 +10,7 @@ jobs:
     name: Assign PR Creator or Pusher
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       pull-requests: write
 
