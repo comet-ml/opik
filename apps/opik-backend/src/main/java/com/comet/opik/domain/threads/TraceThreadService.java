@@ -45,11 +45,11 @@ public interface TraceThreadService {
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
     Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant now,
-            Duration timeoutToMarkThreadAsInactive,
+            Duration defaultTimeoutToMarkThreadAsInactive,
             int limit);
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
-            Duration timeoutToMarkThreadAsInactive);
+            Duration defaultTimeoutToMarkThreadAsInactive);
 
     Mono<Boolean> addToPendingQueue(UUID projectId);
 
@@ -271,26 +271,27 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive, int limit) {
-        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, timeoutToMarkThreadAsInactive, limit);
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
+        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive, limit);
     }
 
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
-            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, now, timeoutToMarkThreadAsInactive, contextView)),
+                        contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
+                                contextView)),
                 LOCK_DURATION).then();
     }
 
-    private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive,
+    private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration defaultTimeoutToMarkThreadAsInactive,
             ContextView ctx) {
 
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return traceThreadDAO.streamPendingClosureThreads(projectId, now, timeoutToMarkThreadAsInactive)
+        return traceThreadDAO.streamPendingClosureThreads(projectId, now, defaultTimeoutToMarkThreadAsInactive)
                 .flatMap(threads -> {
 
                     if (threads.isEmpty()) {
