@@ -27,9 +27,6 @@ def test_tool_span_created(fake_backend):
     try:
         track_atomic_agents(project_name="tool-span")
 
-        BaseTool = sys.modules["atomic_agents.tools.base_tool"].BaseTool
-        print(f"BaseTool patched: {getattr(BaseTool, '__opik_patched__', False)}")
-
         BaseAgent = sys.modules["atomic_agents.agents.base_agent"].BaseAgent
         agent = BaseAgent()
         agent.run("test")
@@ -38,10 +35,6 @@ def test_tool_span_created(fake_backend):
 
         assert len(fake_backend.trace_trees) == 1
         trace_tree = fake_backend.trace_trees[0]
-
-        print(f"Total spans: {len(trace_tree.spans)}")
-        for span in trace_tree.spans:
-            print(f"Span: {span.name}, Type: {span.type}")
 
         tool_spans = [span for span in trace_tree.spans if span.type == "tool"]
         assert (
