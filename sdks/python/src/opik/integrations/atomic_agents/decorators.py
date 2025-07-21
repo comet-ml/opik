@@ -5,8 +5,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from opik.api_objects import opik_client
-from opik.decorator import error_info_collector
 from opik.integrations.atomic_agents.opik_tracer import OpikAtomicAgentsTracer
+from opik.decorator import (
+    arguments_helpers,
+    span_creation_handler,
+    error_info_collector,
+)
+
+from opik import context_storage
 
 __IS_TRACKING_ENABLED = False
 
@@ -80,13 +86,6 @@ def _patch_atomic_tools() -> None:
 
     original_run = BaseTool.run  # type: ignore[attr-defined]
 
-    from opik.decorator import (  # local import to avoid cycles
-        arguments_helpers,
-        span_creation_handler,
-    )
-
-    from opik import context_storage
-
     def _tool_run(self: Any, *args: Any, **kwargs: Any) -> Any:  # type: ignore[no-self-use]
         payload: Any = args[0] if args else kwargs or None
         input_dict = payload if isinstance(payload, dict) else {"input": str(payload)}
@@ -106,8 +105,6 @@ def _patch_atomic_tools() -> None:
         )
 
         span_data.parent_span_id = None
-
-        # span_data is never None here, since it is created above. Keeping variable for clarity.
 
         client = opik_client.get_client_cached()
         if client.config.log_start_trace_span:
@@ -153,7 +150,6 @@ def _patch_atomic_llms() -> None:
     def _llm_get_response(self: Any, *args: Any, **kwargs: Any) -> Any:
         messages = kwargs.get("messages") or args[0] if args else []
 
-        # Try to get model name from various possible locations
         model_name = "unknown_model"
         if hasattr(self, "config") and hasattr(self.config, "model"):
             model_name = self.config.model
