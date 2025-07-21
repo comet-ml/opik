@@ -168,6 +168,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     """
     If set to True, then `@track` decorator and `track_LIBRARY(...)` integrations do not log any data.
     Any other API will continue working.
+
+    This setting can be overridden at runtime using:
+    - opik.set_tracing_active(False)  # Disable tracing
+    - opik.set_tracing_active(True)   # Enable tracing
+    - opik.is_tracing_active()        # Check current state
+    - opik.reset_tracing_to_config_default()  # Reset to this config value
+
+    Runtime overrides take precedence over this static configuration.
+
     We do not recommend disable tracking unless you only use tracking functionalities in your project because
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
