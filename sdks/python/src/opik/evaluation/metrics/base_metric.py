@@ -25,7 +25,7 @@ class BaseMetric(abc.ABC):
         >>>         super().__init__(name=name, track=track)
         >>>
         >>>     def score(self, input: str, output: str, **ignored_kwargs: Any):
-        >>>         # Add you logic here
+        >>>         # Add your logic here
         >>>
         >>>         return score_result.ScoreResult(
         >>>             value=0,
@@ -35,7 +35,10 @@ class BaseMetric(abc.ABC):
     """
 
     def __init__(
-        self, name: Optional[str] = None, track: bool = True, project_name: Optional[str] = None
+        self,
+        name: Optional[str] = None,
+        track: bool = True,
+        project_name: Optional[str] = None,
     ) -> None:
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
