@@ -53,7 +53,15 @@ class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return workspaceConfigurationDAO.deleteConfiguration(workspaceId);
+            return workspaceConfigurationDAO.deleteConfiguration(workspaceId)
+                    .doOnSuccess(deletedCount -> {
+                        if (deletedCount > 0) {
+                            log.info("Deleted workspace configuration for workspace '{}'", workspaceId);
+                        } else {
+                            log.warn("No workspace configuration found to delete for workspace '{}'", workspaceId);
+                        }
+                    })
+                    .then();
         });
     }
 }

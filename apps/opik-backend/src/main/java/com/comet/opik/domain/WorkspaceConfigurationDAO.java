@@ -4,6 +4,7 @@ import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.r2dbc.spi.Result;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,7 @@ public interface WorkspaceConfigurationDAO {
 
     Mono<WorkspaceConfiguration> getConfiguration(String workspaceId);
 
-    Mono<Void> deleteConfiguration(String workspaceId);
+    Mono<Long> deleteConfiguration(String workspaceId);
 }
 
 @Singleton
@@ -114,7 +115,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
     }
 
     @Override
-    public Mono<Void> deleteConfiguration(@NonNull String workspaceId) {
+    public Mono<Long> deleteConfiguration(@NonNull String workspaceId) {
         log.info("Deleting workspace configuration for workspace '{}'", workspaceId);
 
         return asyncTemplate.nonTransaction(connection -> {
@@ -122,8 +123,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                     .bind("workspace_id", workspaceId);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .doOnSuccess(__ -> log.info("Deleted workspace configuration for workspace '{}'", workspaceId))
-                    .then();
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
 }
