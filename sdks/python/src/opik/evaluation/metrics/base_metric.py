@@ -35,7 +35,7 @@ class BaseMetric(abc.ABC):
     """
 
     def __init__(
-        self, name: str = None, track: bool = True, project_name: Optional[str] = None
+        self, name: Optional[str] = None, track: bool = True, project_name: Optional[str] = None
     ) -> None:
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
