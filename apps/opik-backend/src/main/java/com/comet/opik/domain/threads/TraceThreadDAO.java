@@ -251,9 +251,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND status = :status
-            <if(last_updated_at)>
-            AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)
-            <endif>
+            AND last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
             ;
             """;
 
@@ -534,8 +532,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId,
             @NonNull Instant lastUpdatedAt) {
         return asyncTemplate.stream(connection -> {
+
             var statement = connection.createStatement(GET_RECENT_CLOSED_THREADS_PER_PROJECT)
-                    .bind("workspace_id", "workspace_id")
                     .bind("project_id", projectId)
                     .bind("last_updated_at", lastUpdatedAt.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());

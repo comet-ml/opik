@@ -296,12 +296,24 @@ class TraceThreadsClosingJobTest {
 
             Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
 
+            var expectedActiveTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.ACTIVE, traces);
+
+            // Wait for the job to process the created thread
+            Mono.delay(Duration.ofSeconds(1)).block();
+
+            // Then: Verify that threads are created as ACTIVE first
+            Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                verifyOpenThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(expectedActiveTraceThreadModel));
+            });
+
+            // Wait for custom timeout duration + some buffer (2-second total)
+            // This should be enough to trigger closure with custom timeout
+            Mono.delay(Duration.ofSeconds(2)).block();
+
             var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
                     expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
-
-            // Wait for custom timeout duration + some buffer (3 seconds total)
-            // This should be enough to trigger closure with custom timeout
-            Mono.delay(Duration.ofSeconds(3)).block();
 
             var expectedLastUpdateAt = Instant.now();
             TraceThread expectedUpdatedTraceThreadModel = expectedTraceThreadModel.toBuilder()

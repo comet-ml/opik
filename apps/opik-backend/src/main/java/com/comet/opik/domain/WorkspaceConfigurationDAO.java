@@ -4,7 +4,6 @@ import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
-import io.r2dbc.spi.Result;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

@@ -41,11 +41,12 @@ class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService
 
     @Override
     public Mono<WorkspaceConfiguration> getConfiguration() {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Getting workspace configuration for workspace '{}'", workspaceId);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return workspaceConfigurationDAO.getConfiguration(workspaceId)
-                .doOnSuccess(config -> log.info("Found workspace configuration for workspace '{}'", workspaceId));
+            return workspaceConfigurationDAO.getConfiguration(workspaceId)
+                    .doOnSuccess(config -> log.info("Found workspace configuration for workspace '{}'", workspaceId));
+        });
     }
 
     @Override
