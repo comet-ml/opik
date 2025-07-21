@@ -275,29 +275,27 @@ class OpikTracer:
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
-        if adk_helpers.has_empty_text_part_content(llm_response):
-            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
-            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
-            LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - empty content) | Trace ID: {trace_id} | Span ID: {span_id}")
-            return
-
         model = None
         provider = None
         usage = None
         output = None
 
-        try:
-            output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-            usage_data = llm_response_wrapper.pop_llm_usage_data(output)
-            if usage_data is not None:
-                model = usage_data.model
-                provider = usage_data.provider
-                usage = usage_data.opik_usage
-        except Exception as e:
-            LOGGER.debug(
-                f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
-                exc_info=True,
-            )
+        if not adk_helpers.has_empty_text_part_content(llm_response):
+            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
+            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+
+            try:
+                output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                usage_data = llm_response_wrapper.pop_llm_usage_data(output)
+                if usage_data is not None:
+                    model = usage_data.model
+                    provider = usage_data.provider
+                    usage = usage_data.opik_usage
+            except Exception as e:
+                LOGGER.debug(
+                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+                    exc_info=True,
+                )
 
         self._last_model_output = output
 
