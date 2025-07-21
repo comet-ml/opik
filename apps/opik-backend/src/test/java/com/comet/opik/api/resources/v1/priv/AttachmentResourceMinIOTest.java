@@ -12,6 +12,7 @@ import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -44,6 +45,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -54,6 +56,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -93,6 +96,8 @@ class AttachmentResourceMinIOTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
         MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
@@ -216,16 +221,20 @@ class AttachmentResourceMinIOTest {
         deleteTrace.accept(traceId);
 
         // Verify trace attachments were actually deleted via list endpoint and download link
-        tracePage = attachmentResourceClient.attachmentList(project.id(), EntityType.TRACE,
-                traceId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
-        assertThat(tracePage).isEqualTo(Attachment.AttachmentPage.empty(1));
-        attachmentResourceClient.downloadFile(traceDownloadLink, API_KEY, 404);
+        Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var tracePageUpdated = attachmentResourceClient.attachmentList(project.id(), EntityType.TRACE,
+                    traceId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
+            assertThat(tracePageUpdated).isEqualTo(Attachment.AttachmentPage.empty(1));
+            attachmentResourceClient.downloadFile(traceDownloadLink, API_KEY, 404);
+        });
 
         // Verify span attachments were actually deleted via list endpoint and download link
-        spanPage = attachmentResourceClient.attachmentList(project.id(), EntityType.SPAN,
-                spanId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
-        assertThat(spanPage).isEqualTo(Attachment.AttachmentPage.empty(1));
-        attachmentResourceClient.downloadFile(spanDownloadLink, API_KEY, 404);
+        Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var spanPageUpdated = attachmentResourceClient.attachmentList(project.id(), EntityType.SPAN,
+                    spanId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
+            assertThat(spanPageUpdated).isEqualTo(Attachment.AttachmentPage.empty(1));
+            attachmentResourceClient.downloadFile(spanDownloadLink, API_KEY, 404);
+        });
     }
 
     Stream<Arguments> deleteTraceDeletesTraceAndSpanAttachments() {

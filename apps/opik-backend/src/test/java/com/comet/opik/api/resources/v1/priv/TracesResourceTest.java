@@ -7433,7 +7433,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -7478,7 +7480,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -7515,7 +7519,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -7617,7 +7623,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -7667,7 +7675,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -7711,7 +7721,9 @@ class TracesResourceTest {
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
-            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
@@ -8258,13 +8270,18 @@ class TracesResourceTest {
             traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY);
 
             // Verify trace comments were actually deleted via get endpoint
-            expectedTraceComments.forEach(
-                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                expectedTraceComments.forEach(
+                        comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE,
+                                404));
+            });
 
             // Verify span comments were actually deleted via get endpoint
-            spanWithComments.getRight().forEach(
-                    comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
-                            TEST_WORKSPACE, 404));
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                spanWithComments.getRight().forEach(
+                        comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
+                                TEST_WORKSPACE, 404));
+            });
         }
 
         @Test
@@ -8303,14 +8320,18 @@ class TracesResourceTest {
             traceResourceClient.deleteTraces(request, TEST_WORKSPACE, API_KEY);
 
             // Verify comments were actually deleted via get endpoint
-            expectedTraceComments
-                    .forEach(comment -> traceResourceClient.getCommentById(comment.id(), traces.getFirst().id(),
-                            API_KEY, TEST_WORKSPACE, 404));
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                expectedTraceComments
+                        .forEach(comment -> traceResourceClient.getCommentById(comment.id(), traces.getFirst().id(),
+                                API_KEY, TEST_WORKSPACE, 404));
+            });
 
             // Verify span comments were actually deleted via get endpoint
-            spanWithComments.getRight().forEach(
-                    comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
-                            TEST_WORKSPACE, 404));
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                spanWithComments.getRight().forEach(
+                        comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
+                                TEST_WORKSPACE, 404));
+            });
         }
 
         private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId) {
