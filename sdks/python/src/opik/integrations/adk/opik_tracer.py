@@ -107,6 +107,12 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
+            # Debug logging for callback invocation
+            current_trace = self._context_storage.get_trace_data()
+            current_span = self._context_storage.top_span_data()
+            trace_id = current_trace.id if current_trace else "None"
+            span_id = current_span.id if current_span else "None"
+            LOGGER.debug(f"🟢 BEFORE_AGENT_CALLBACK called | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
             )
@@ -155,6 +161,9 @@ class OpikTracer:
                 )
 
                 self._start_span(span_data=opik_span_data)
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id}")
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -162,6 +171,12 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
+            # Debug logging for callback invocation
+            current_trace = self._context_storage.get_trace_data()
+            current_span = self._context_storage.top_span_data()
+            trace_id = current_trace.id if current_trace else "None"
+            span_id = current_span.id if current_span else "None"
+            LOGGER.debug(f"🔴 AFTER_AGENT_CALLBACK called | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
             output = self._last_model_output
 
             if (span_data := self._context_storage.top_span_data()) is not None:
@@ -178,6 +193,9 @@ class OpikTracer:
                     self._end_current_trace()
                     self._current_trace_created_by_opik_tracer.set(None)
                     self._last_model_output = None
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
@@ -189,6 +207,12 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
+            # Debug logging for callback invocation
+            current_trace = self._context_storage.get_trace_data()
+            current_span = self._context_storage.top_span_data()
+            trace_id = current_trace.id if current_trace else "None"
+            span_id = current_span.id if current_span else "None"
+            LOGGER.debug(f"🔵 BEFORE_MODEL_CALLBACK called | Model: {llm_request.model} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
             input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
 
             provider, model = litellm_wrappers.parse_provider_and_model(
@@ -210,6 +234,9 @@ class OpikTracer:
             )
 
             self._start_span(span_data=span_data)
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ BEFORE_MODEL_CALLBACK finished | Model: {llm_request.model} | Trace ID: {trace_id} | Span ID: {span_id}")
 
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
@@ -221,16 +248,27 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        # Debug logging for callback invocation (declare variables outside try block)
+        current_trace = self._context_storage.get_trace_data()
+        current_span = self._context_storage.top_span_data()
+        trace_id = current_trace.id if current_trace else "None"
+        span_id = current_span.id if current_span else "None"
+        
         try:
             # Ignore partial chunks, ADK will call this method with the full response at the end
             if llm_response.partial is True:
+                LOGGER.debug(f"🟣 AFTER_MODEL_CALLBACK called (PARTIAL) | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
+                LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - partial) | Trace ID: {trace_id} | Span ID: {span_id}")
                 return
+            
+            LOGGER.debug(f"🟣 AFTER_MODEL_CALLBACK called (FULL) | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
         if adk_helpers.has_empty_text_part_content(llm_response):
             # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
             # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+            LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - empty content) | Trace ID: {trace_id} | Span ID: {span_id}")
             return
 
         model = None
@@ -266,6 +304,9 @@ class OpikTracer:
                 )
                 self._end_current_span()
                 self._opik_created_spans.discard(span_data.id)
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | Trace ID: {trace_id} | Span ID: {span_id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
@@ -278,6 +319,12 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
+            # Debug logging for callback invocation
+            current_trace = self._context_storage.get_trace_data()
+            current_span = self._context_storage.top_span_data()
+            trace_id = current_trace.id if current_trace else "None"
+            span_id = current_span.id if current_span else "None"
+            LOGGER.debug(f"🟡 BEFORE_TOOL_CALLBACK called | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id} | Function Call ID: {tool_context.function_call_id}")
             metadata = {
                 "function_call_id": tool_context.function_call_id,
                 **self.metadata,
@@ -296,6 +343,9 @@ class OpikTracer:
             )
 
             self._start_span(span_data=span_data)
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ BEFORE_TOOL_CALLBACK finished | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id}")
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
@@ -310,6 +360,12 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
+            # Debug logging for callback invocation
+            current_trace = self._context_storage.get_trace_data()
+            current_span = self._context_storage.top_span_data()
+            trace_id = current_trace.id if current_trace else "None"
+            span_id = current_span.id if current_span else "None"
+            LOGGER.debug(f"🟠 AFTER_TOOL_CALLBACK called | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id} | Function Call ID: {tool_context.function_call_id}")
             current_span_data = self._context_storage.top_span_data()
             assert current_span_data is not None
 
@@ -322,6 +378,9 @@ class OpikTracer:
                 current_span_data.update(output=output)
                 self._end_current_span()
                 self._opik_created_spans.discard(current_span_data.id)
+            
+            # Debug log for callback completion
+            LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id}")
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
