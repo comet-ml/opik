@@ -24,7 +24,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     >
       <div
         className={cn(
-          "flex max-h-full flex-row gap-2",
+          "flex max-h-full flex-row gap-1.5",
           isSmall ? "overflow-x-auto" : "flex-wrap overflow-auto",
         )}
       >
