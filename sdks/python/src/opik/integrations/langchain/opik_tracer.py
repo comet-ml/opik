@@ -22,6 +22,7 @@ from . import (
 )
 from ...api_objects import helpers, opik_client
 from opik import context_storage
+from ...runtime_config import is_tracing_active
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -436,8 +437,7 @@ class OpikTracer(BaseTracer):
         return self._created_traces
 
     def _skip_tracking(self) -> bool:
-        config = self._opik_client.config
-        if config.track_disable:
+        if not is_tracing_active():
             return True
 
         return False

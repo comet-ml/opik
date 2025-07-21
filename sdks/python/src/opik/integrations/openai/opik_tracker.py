@@ -1,6 +1,7 @@
 from typing import Optional, TypeVar
 
 import openai
+from opik.runtime_config import is_tracing_active
 
 from . import (
     chat_completion_chunks_aggregator,
@@ -17,6 +18,8 @@ def track_openai(
 ) -> OpenAIClient:
     """Adds Opik tracking to an OpenAI client.
 
+    If global tracing is disabled at runtime, the function returns the client unchanged.
+
     Tracks calls to:
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
     * `openai_client.beta.chat.completions.parse()`
@@ -32,6 +35,10 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
+    # Fast path when tracing disabled
+    if not is_tracing_active():
+        return openai_client
+
     if hasattr(openai_client, "opik_tracked"):
         return openai_client
 

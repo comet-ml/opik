@@ -1,6 +1,7 @@
 from typing import Optional
 
 import crewai
+from opik.runtime_config import is_tracing_active
 
 from . import crewai_decorator
 
@@ -22,6 +23,9 @@ def track_crewai(
     Parameters:
         project_name: The name of the project to associate with the tracking.
     """
+    if not is_tracing_active():
+        return
+
     global __IS_TRACKING_ENABLED
     if __IS_TRACKING_ENABLED:
         return

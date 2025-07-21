@@ -1,6 +1,7 @@
 from typing import Optional
 
 from google import genai
+from opik.runtime_config import is_tracing_active
 
 from . import (
     generate_content_decorator,
@@ -31,6 +32,9 @@ def track_genai(
     Returns:
         The modified genai.Client with Opik tracking enabled.
     """
+    if not is_tracing_active():
+        return client
+
     if hasattr(client, "opik_tracked"):
         return client
     encoder_extension.register()
