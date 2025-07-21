@@ -34,11 +34,9 @@ class OpikContextProvider(SystemPromptContextProviderBase):  # type: ignore[misc
         self._metadata = metadata or {}
         self._trace_id: Optional[str] = trace_id
 
-    # Consumers may call this once they have the trace id.
     def set_trace_id(self, trace_id: str) -> None:  # noqa: D401
         self._trace_id = trace_id
 
-    # ------------------------------------------------------------------
     def get_info(self) -> str:  # type: ignore[override]
         if self._trace_id is None:
             return ""

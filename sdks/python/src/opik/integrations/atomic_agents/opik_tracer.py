@@ -38,7 +38,6 @@ class OpikAtomicAgentsTracer:
         self._context_storage = context_storage.get_current_context_instance()
         self._trace_data: Optional[trace.TraceData] = None
 
-    # Public API ---------------------------------------------------------
     def start(
         self,
         *,
@@ -85,7 +84,6 @@ class OpikAtomicAgentsTracer:
 
         self._trace_data = None
 
-    # Context manager ----------------------------------------------------
     def __enter__(self) -> "OpikAtomicAgentsTracer":
         self.start(name="atomic_agents_run")
         return self

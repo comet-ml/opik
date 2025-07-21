@@ -23,7 +23,6 @@ def test_llm_span_creation(fake_backend) -> None:
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
 
-    # Should have LLM spans
     llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
     assert len(llm_spans) > 0, "No LLM span was created"
 
