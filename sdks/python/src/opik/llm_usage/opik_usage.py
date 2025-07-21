@@ -181,7 +181,7 @@ class OpikUsage(pydantic.BaseModel):
                 + provider_usage.output_token_details.reasoning
             )
         else:
-            completion_tokens = provider_usage.output_token
+            completion_tokens = provider_usage.output_tokens
 
         return cls(
             completion_tokens=completion_tokens,

@@ -1,11 +1,10 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple
 
 from opik import llm_usage, logging_messages
+from opik.integrations.langchain import langchain_run_helpers
 from opik.types import LLMProvider
 
-if TYPE_CHECKING:
-    from langchain_core.tracers.schemas import Run
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,13 +23,15 @@ def get_llm_usage_info(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        # TODO: This is empty in Streaming mode with gemini models
+        usage = langchain_run_helpers.try_get_chat_model_usage(run_dict)
+        if usage is not None:
+            return usage
+
+        # try raw VertexAI usage from generation_info
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
             "usage_metadata"
         ]
-
-        opik_usage = llm_usage.OpikUsage.from_google_dict(usage_metadata)
-        return opik_usage
+        return llm_usage.OpikUsage.from_google_dict(usage_metadata)
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
@@ -39,16 +40,13 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         return None
 
 
-def is_vertexai_run(run: "Run") -> bool:
+def is_vertexai_run(run_dict: Dict[str, Any]) -> bool:
     try:
-        if run.serialized is None:
+        if run_dict.get("serialized") is None:
             return False
 
-        invocation_params = run.extra.get("invocation_params", {})
-        provider = invocation_params.get("_type", "").lower()
-        is_vertexai = "vertexai" in provider
-
-        return is_vertexai
+        provider, _ = _get_provider_and_model(run_dict)
+        return provider is not None and provider == LLMProvider.GOOGLE_VERTEXAI
 
     except Exception:
         LOGGER.debug(
@@ -60,20 +58,27 @@ def is_vertexai_run(run: "Run") -> bool:
 
 def _get_provider_and_model(
     run_dict: Dict[str, Any],
-) -> Tuple[Optional[Union[Literal[LLMProvider.GOOGLE_VERTEXAI], str]], Optional[str]]:
+) -> Tuple[Optional[LLMProvider], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
     """
     provider = None
     model = None
 
-    if invocation_params := run_dict["extra"].get("invocation_params"):
-        provider = invocation_params.get("_type")
-        if provider == "vertexai":
+    # try metadata first
+    if (ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)) is not None:
+        if "google_vertexai" == ls_metadata.provider:
+            provider = LLMProvider.GOOGLE_VERTEXAI
+
+        model = ls_metadata.model
+
+    elif (invocation_params := run_dict["extra"].get("invocation_params")) is not None:
+        if "vertexai" == invocation_params.get("_type"):
             provider = LLMProvider.GOOGLE_VERTEXAI
         model = invocation_params.get("model_name")
-        if model is not None:
-            # Gemini **may** add "models/" prefix to some model versions
-            model = model.split("/")[-1]
+
+    if model is not None:
+        # Gemini **may** add "models/" prefix to some model versions
+        model = model.split("/")[-1]
 
     return provider, model
