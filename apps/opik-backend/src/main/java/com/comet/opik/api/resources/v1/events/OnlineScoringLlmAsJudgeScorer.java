@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -21,8 +21,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.LLM_AS_JUDGE;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -42,8 +45,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
+            @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
+        super(config, redisson, feedbackScoreService, traceService, LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
@@ -91,8 +95,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
                 userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), chatResponse);
             } catch (Exception exception) {
+                String errorMessage = Optional.ofNullable(exception.getCause())
+                        .map(Throwable::getMessage)
+                        .orElse(exception.getMessage());
+
                 userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
-                        trace.id(), message.ruleName(), exception.getCause().getMessage());
+                        trace.id(), message.ruleName(), errorMessage);
                 throw exception;
             }
 

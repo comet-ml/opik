@@ -23,7 +23,7 @@ spec:
   endpoints:
     - port: {{ $value.metrics.portName | default "http" }}
       {{- if $value.metrics.interval }}
-      interval: {{ $value.metrics.interval }}
+      interval: {{ $value.metrics.interval | default "60s" | quote}}
       {{- end }}
       {{- if $value.metrics.scrapeTimeout }}
       scrapeTimeout: {{ $value.metrics.scrapeTimeout }}

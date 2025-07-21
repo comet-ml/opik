@@ -123,7 +123,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython userDefinedMetricPython -> {
-                    if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
+                    if (!opikConfiguration.getServiceToggles().isTraceThreadPythonEvaluatorEnabled()) {
                         throw new ServerErrorException("Python evaluator is disabled", 501);
                     }
                     var definition = userDefinedMetricPython.toBuilder()
@@ -170,7 +170,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             try {
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate());
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled());
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->

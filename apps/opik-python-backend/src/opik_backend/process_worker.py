@@ -9,6 +9,7 @@ from typing import Type, Union, List
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
+from .payload_types import PayloadType
 
 # Set up logging for the worker
 logger = logging.getLogger("process_worker")
@@ -37,9 +38,10 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
-def run_user_code(code: str, data: dict) -> dict:
+def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
+    For trace_thread type, pass data as first positional argument.
     """
     module = ModuleType(str(uuid.uuid4()))
 
@@ -56,7 +58,13 @@ def run_user_code(code: str, data: dict) -> dict:
     score_result: Union[ScoreResult, List[ScoreResult]] = []
     try:
         metric = metric_class()
-        score_result = metric.score(**data)
+        
+        # Handle trace_thread type differently - pass data as first positional argument
+        if payload_type == PayloadType.TRACE_THREAD.value:
+            score_result = metric.score(data)
+        else:
+            # Regular scoring - unpack data as keyword arguments
+            score_result = metric.score(**data)
     except Exception as e:
         stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
         return {"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
@@ -82,12 +90,13 @@ def worker_process_main(connection):
                 if command_data is None or command_data.get("command") == "EXIT":
                     break
                     
-                # Parse the command (code and data)
+                # Parse the command (code, data, and payload_type)
                 code = command_data.get('code', '')
                 input_data = command_data.get('data', {})
+                payload_type = command_data.get('payload_type')
                 
                 # Execute the code
-                result = run_user_code(code, input_data)
+                result = run_user_code(code, input_data, payload_type)
                 
                 # Return the result via the pipe
                 connection.send(result)

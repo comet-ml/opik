@@ -7,7 +7,7 @@ import org.jdbi.v3.json.Json;
 import java.time.Instant;
 import java.util.UUID;
 
-import static com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.*;
+import static com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode;
 
 @Builder(toBuilder = true)
 public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
@@ -16,6 +16,7 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         String projectName,
         String name,
         Float samplingRate,
+        boolean enabled,
         @Json TraceThreadUserDefinedMetricPythonCode code,
         Instant createdAt,
         String createdBy,

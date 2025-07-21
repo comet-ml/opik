@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
@@ -50,9 +49,7 @@ public record Project(
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount,
         @JsonView({
-                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount,
-        @JsonView({Project.View.Public.class, Project.View.Detailed.class,
-                View.Write.class}) @Nullable @Valid Configuration configuration){
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount){
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

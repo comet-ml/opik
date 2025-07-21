@@ -16,6 +16,7 @@ class Base(UniversalBaseModel):
     project_id: str
     name: str
     sampling_rate: typing.Optional[float] = None
+    enabled: typing.Optional[bool] = None
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:

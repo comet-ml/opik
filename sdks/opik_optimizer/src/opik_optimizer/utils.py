@@ -257,7 +257,14 @@ def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
 
-def get_optimization_run_url_by_id(dataset_id: str, optimization_id: str) -> str:
+def get_optimization_run_url_by_id(
+    dataset_id: Optional[str], optimization_id: Optional[str]
+) -> str:
+    if dataset_id is None or optimization_id is None:
+        raise ValueError(
+            "Cannot create a new run link without a dataset_id and optimization_id."
+        )
+
     opik_config = opik.config.get_from_user_inputs()
     url_override = opik_config.url_override
     encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")

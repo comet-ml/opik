@@ -142,7 +142,7 @@ spec:
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with $value.nodeSelector }}
+      {{- with (default $.Values.nodeSelector $value.nodeSelector) }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -150,7 +150,7 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with $value.tolerations }}
+      {{- with (default $.Values.tolerations $value.tolerations) }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

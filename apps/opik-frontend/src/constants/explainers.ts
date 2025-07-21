@@ -5,7 +5,7 @@ export enum EXPLAINER_ID {
   what_are_feedback_scores = "what_are_feedback_scores",
   i_created_a_project_now_what = "i_created_a_project_now_what",
   what_are_traces = "what_are_traces",
-  what_are_llm_calls = "what_are_llm_calls",
+  what_are_spans = "what_are_spans",
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
@@ -14,6 +14,7 @@ export enum EXPLAINER_ID {
   hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
   whats_that_prompt_select = "whats_that_prompt_select",
   i_added_edited_a_new_online_evaluation_rule_now_what = "i_added_edited_a_new_online_evaluation_rule_now_what",
+  i_added_edited_a_new_online_evaluation_thread_level_rule_now_what = "i_added_edited_a_new_online_evaluation_thread_level_rule_now_what",
   what_are_these_elements_in_the_tree = "what_are_these_elements_in_the_tree",
   what_is_human_review = "what_is_human_review",
   whats_an_experiment = "whats_an_experiment",
@@ -45,6 +46,7 @@ export enum EXPLAINER_ID {
   whats_the_best_score = "whats_the_best_score",
   what_happens_if_i_edit_an_ai_provider = "what_happens_if_i_edit_an_ai_provider",
   what_happens_if_i_edit_a_rule = "what_happens_if_i_edit_a_rule",
+  what_happens_if_i_edit_a_thread_rule = "what_happens_if_i_edit_a_thread_rule",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
@@ -92,10 +94,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "A trace is a step-by-step record of how your LLM application processes a single input, including LLM calls and other operations.",
     docLink: "/tracing/log_traces",
   },
-  [EXPLAINER_ID.what_are_llm_calls]: {
-    id: EXPLAINER_ID.what_are_llm_calls,
+  [EXPLAINER_ID.what_are_spans]: {
+    id: EXPLAINER_ID.what_are_spans,
     description:
-      "An LLM call is a single interaction with a language model - usually a prompt and its response. Use LLM calls to debug, monitor, and evaluate model behavior.",
+      "A span represents a single step in the execution of a trace. Use spans to debug, monitor, and evaluate model behavior.",
   },
   [EXPLAINER_ID.what_are_threads]: {
     id: EXPLAINER_ID.what_are_threads,
@@ -151,6 +153,13 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "All new traces will now be automatically scored using this rule. You can view the results in the Traces table, the Metrics tab, and in each trace's detail view.",
   },
+  [EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what]:
+    {
+      id: EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
+      title: "Evaluation rule set",
+      description:
+        "All new threads will now be automatically scored using this rule. You can view the results in the Threads table, the Metrics tab, and in each thread's detail view.",
+    },
   [EXPLAINER_ID.what_are_these_elements_in_the_tree]: {
     id: EXPLAINER_ID.what_are_these_elements_in_the_tree,
     description:
@@ -333,6 +342,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Editing an existing rule",
     description:
       "Changes will only apply to new traces. Existing traces won't be affected.",
+  },
+  [EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule]: {
+    id: EXPLAINER_ID.what_happens_if_i_edit_a_thread_rule,
+    title: "Editing a thread-level rule",
+    description:
+      "Changes will only apply to new threads. Existing threads won't be affected.",
   },
   [EXPLAINER_ID.why_would_i_want_to_create_a_new_project]: {
     id: EXPLAINER_ID.why_would_i_want_to_create_a_new_project,

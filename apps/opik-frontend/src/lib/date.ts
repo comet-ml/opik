@@ -43,9 +43,9 @@ export const makeEndOfMinute = (value: string) => {
   return dayjs(value).endOf("minute").toISOString();
 };
 
-const millisecondsToSeconds = (milliseconds: number) => {
-  // rounds with precision, one character after the point
-  return round(milliseconds / 1000, 1);
+export const millisecondsToSeconds = (milliseconds: number) => {
+  const precision = milliseconds > 100 ? 1 : milliseconds > 10 ? 2 : 3;
+  return round(milliseconds / 1000, precision);
 };
 
 export const secondsToMilliseconds = (seconds: number) => {

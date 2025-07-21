@@ -1,0 +1,18 @@
+---
+description: Test naming conventions and performance guidelines
+globs:
+alwaysApply: true
+---
+
+## Test Naming and Structure
+- Use convention: `test_WHAT__CASE_DESCRIPTION__EXPECTED_RESULT` or `test_WHAT__happyflow`
+- Make tests easy to read and understand
+- Before adding a new test, study existing similar tests nearby and make the new one consistent
+- Always test public API only, never violate privacy
+
+## Test Performance and Tools
+- Make tests run as fast as possible
+- `unittest.mock` or stub/fake objects can be used if needed
+- `pytest` is used for testing
+- End-to-end (e2e) tests should not test client-side logic branching, unless it leads to different endpoints used
+- If a test is hard to make without reading protected attributes, create a read-only property

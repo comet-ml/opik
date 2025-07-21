@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -34,6 +35,7 @@ import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
@@ -67,6 +69,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -75,6 +78,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -124,6 +128,52 @@ class OnlineScoringEngineTest {
             }
             """
             .formatted(MESSAGE_TO_TEST).trim();
+
+    private final String TRACE_THREAD_PROMPT = """
+            Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST `assistant` message is relevant to context in messages.
+
+            ** Guidelines: **
+            - Make sure to only return in JSON format.
+            - The JSON must have only 2 fields: 'verdict' and 'reason'.
+            - The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last `assistant` message is relevant according to the context in messages.
+            - Provide a 'reason' ONLY if the answer is 'no'.
+            - You DON'T have to provide a reason if the answer is 'yes'.
+            - You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on relevancy.
+            - You MUST ONLY provide a verdict for the LAST message on the list but MUST USE context from the previous messages.
+            - ONLY provide a 'no' answer if the LLM response is COMPLETELY irrelevant to the user's input message.
+            - Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevancies!
+            - You should mention LLM response instead of `assistant`, and User instead of `user`.
+
+            {{context}}
+            """;
+
+    private final String unquoted;
+
+    {
+        try {
+            String jsonEncodedPrompt = JsonUtils.MAPPER.writeValueAsString(TRACE_THREAD_PROMPT);
+            unquoted = jsonEncodedPrompt.substring(1, jsonEncodedPrompt.length() - 1);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private final String TEST_TRACE_THREAD_EVALUATOR = """
+            {
+              "model": { "name": "gpt-4o", "temperature": 0.3 },
+              "messages": [
+                { "role": "USER", "content": "%s" },
+                { "role": "SYSTEM", "content": "You're a helpful AI, be cordial." }
+              ],
+              "schema": [
+                { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
+                { "name": "Conciseness",         "type": "DOUBLE",    "description": "Conciseness of the summary" },
+                { "name": "Technical Accuracy",  "type": "BOOLEAN",   "description": "Technical accuracy of the summary" }
+              ]
+            }
+            """
+            .formatted(unquoted).trim();
+
     private final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
     private final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
     private final String INPUT = """
@@ -345,6 +395,7 @@ class OnlineScoringEngineTest {
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
                 .samplingRate(1.0f)
+                .enabled(true)
                 .build();
     }
 
@@ -408,6 +459,46 @@ class OnlineScoringEngineTest {
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @Test
+    @DisplayName("render message templates with a trace thread")
+    void testRenderTemplateWithTraceThread() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+
+        var renderedMessages = OnlineScoringEngine.renderThreadMessages(
+                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace));
+
+        assertThat(renderedMessages).hasSize(2);
+
+        var userMessage = renderedMessages.getFirst();
+        assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains(SUMMARY_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains(OUTPUT_STR);
+
+        var systemMessage = renderedMessages.get(1);
+        assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @Test
+    @DisplayName("prepare trace thread LLM request with tool-calling strategy")
+    void testPrepareTraceThreadLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var trace = createTrace(generator.generate(), generator.generate()).toBuilder()
+                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
+                .build();
+
+        var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
+                new ToolCallingStrategy());
+
+        assertThat(request.responseFormat()).isNotNull();
+        var expectedSchema = createTestSchema();
+        assertThat(request.responseFormat().jsonSchema().rootElement()).isEqualTo(expectedSchema);
     }
 
     @Test
@@ -550,5 +641,35 @@ class OnlineScoringEngineTest {
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("renderMessages should support keys with dots in their names")
+    void testExtractFromJsonWithDotKey(String key, String jsonBody) throws Exception {
+        // variable mapping: variable 'testVar' maps to 'input.' + key
+        var variables = Map.of("testVar", "input." + key);
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .createdBy(USER_NAME)
+                .input(JsonUtils.MAPPER.readTree(jsonBody))
+                .build();
+
+        // Render a message using the variable
+        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Test value: {{testVar}}"));
+        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
+        assertThat(rendered).hasSize(1);
+        var userMessage = rendered.getFirst();
+        assertThat(userMessage).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains("Test value: expected-value");
+    }
+
+    private static Stream<Arguments> testExtractFromJsonWithDotKey() {
+        return Stream.of(
+                arguments("key.with.dot", "{\"key.with.dot\":\"expected-value\"}"),
+                arguments("regularKey", "{\"regularKey\":\"expected-value\"}"),
+                arguments("subObject.nestedKey", "{\"subObject\":{\"nestedKey\":\"expected-value\"}}"));
     }
 }

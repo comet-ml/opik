@@ -284,7 +284,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
-
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

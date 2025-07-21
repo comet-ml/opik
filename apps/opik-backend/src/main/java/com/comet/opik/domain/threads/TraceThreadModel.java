@@ -26,6 +26,10 @@ public record TraceThreadModel(
         Instant createdAt,
         Instant lastUpdatedAt,
         Set<String> tags,
-        Map<UUID, Boolean> sampling) {
+        Map<UUID, Boolean> sampling,
+        Instant scoredAt) {
 
+    public boolean isInactive() {
+        return status == TraceThreadStatus.INACTIVE;
+    }
 }

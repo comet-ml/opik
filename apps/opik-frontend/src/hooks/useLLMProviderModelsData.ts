@@ -43,6 +43,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 4o 2024-05-13",
     },
 
+    // GPT-4.1 Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_4_1,
+      label: "GPT 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+      label: "GPT 4.1 Mini",
+    },
+
     // GPT-4 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_4_TURBO,
@@ -89,6 +99,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.ANTHROPIC]: [
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_4_SONNET,
+      label: "Claude 4 Sonnet",
+    },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
       label: "Claude 3.5 Sonnet 2024-10-22",
@@ -1070,6 +1084,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_VISION_PREVIEW,
       label: "openai/gpt-4-vision-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
+      label: "openai/gpt-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_MINI,
+      label: "openai/gpt-4.1-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1,

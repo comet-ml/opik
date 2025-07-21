@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,11 +49,9 @@ public interface TraceThreadDAO {
             Duration timeoutToMarkThreadAsInactive,
             int limit);
 
-    Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive);
-
     Mono<Long> openThread(UUID projectId, String threadId);
 
-    Mono<Long> closeThread(UUID projectId, String threadId);
+    Mono<Long> closeThread(UUID projectId, List<String> threadId);
 
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 
@@ -61,6 +60,11 @@ public interface TraceThreadDAO {
     Mono<Long> updateThreadSampledValues(UUID projectId, List<TraceThreadSampling> threadSamplingPerRules);
 
     Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
+
+    Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
+
+    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant now,
+            Duration timeoutToMarkThreadAsInactive);
 }
 
 @Singleton
@@ -69,7 +73,7 @@ public interface TraceThreadDAO {
 class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String INSERT_THREADS_SQL = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
             VALUES
                 <items:{item |
                     (
@@ -83,7 +87,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                          parseDateTime64BestEffort(:created_at<item.index> , 9),
                          parseDateTime64BestEffort(:last_updated_at<item.index> , 6),
                          :tags<item.index>,
-                         mapFromArrays(:rule_ids<item.index>, :sampling<item.index>)
+                         mapFromArrays(:rule_ids<item.index>, :sampling<item.index>),
+                         :scored_at<item.index>
                      )
                      <if(item.hasNext)>
                         ,
@@ -94,7 +99,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
-            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at
             ) SELECT
                 workspace_id,
                 project_id,
@@ -105,7 +110,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 created_by,
                 :user_name as last_updated_by,
                 created_at,
-                sampling_per_rule
+                sampling_per_rule,
+                scored_at
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -120,7 +126,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             <if(project_ids)>AND project_id IN :project_ids<endif>
             <if(status)> AND status = :status <endif>
             <if(ids)> AND id IN :ids <endif>
-            <if(threadIds)> AND thread_id IN :thread_ids <endif>
+            <if(thread_ids)> AND thread_id IN :thread_ids <endif>
+            <if(scored_at_empty)> AND scored_at IS NULL <endif>
             ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -131,34 +138,22 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.workspace_id,
                 tt.project_id
             FROM trace_threads tt final
-            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
             WHERE tt.status = 'active'
-            AND (
-                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at < timestamp_sub(parseDateTime64BestEffort(:now, 6), toIntervalSecond(pc.timeout_mark_thread_as_inactive)))
-            OR
-                (tt.last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6))
-            )
+            AND tt.last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
             ORDER BY tt.last_updated_at
             LIMIT :limit
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
-            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule)
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
             SELECT
-                workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule
+                workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL
             FROM trace_threads tt final
-            LEFT JOIN project_configurations pc ON tt.workspace_id = pc.workspace_id AND tt.project_id = pc.project_id
             WHERE tt.workspace_id = :workspace_id
             AND tt.project_id = :project_id
             AND tt.status != :status
-            <if(last_updated_at)>
-            AND (
-                (pc.timeout_mark_thread_as_inactive > 0 AND tt.last_updated_at \\< timestamp_sub(parseDateTime64BestEffort(:now, 6), pc.timeout_mark_thread_as_inactive))
-            OR
-                (tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6))
-            )
-            <endif>
-            <if(thread_id)>AND tt.thread_id = :thread_id<endif>
+            <if(thread_ids)>AND tt.thread_id IN :thread_ids<endif>
+            ;
             """;
 
     private static final String SELECT_PROJECT_ID_FROM_THREAD = """
@@ -169,37 +164,98 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND workspace_id = :workspace_id
             ;
             """;
+
     private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
-                INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule)
-                SELECT
-                    tt.workspace_id,
-                    tt.project_id,
-                    tt.thread_id,
-                    tt.id,
-                    tt.status,
-                    tt.created_by,
-                    :user_name,
-                    tt.created_at,
-                    now64(6),
-                    tt.tags,
-                    sd.sampling_per_rule
-                FROM trace_threads tt final
-                JOIN (
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
+            SELECT
+                new_tt.workspace_id,
+                new_tt.project_id,
+                new_tt.thread_id,
+                new_tt.id,
+                if(empty(tt.thread_id), new_tt.status, tt.status) AS status,
+                if(empty(tt.thread_id), new_tt.created_by, tt.created_by) AS created_by,
+                :user_name AS last_updated_by,
+                if(empty(tt.thread_id), new_tt.created_at, tt.created_at) AS created_at,
+                now64(6) AS last_updated_at,
+                if(empty(tt.thread_id), new_tt.tags, tt.tags) AS tags,
+                new_tt.sampling_per_rule AS sampling_per_rule,
+                if(empty(tt.thread_id), new_tt.scored_at, tt.scored_at) AS scored_at
+            FROM (
+                <items:{item |
                     SELECT
-                        thread_model_id,
-                        sampling_per_rule
-                    FROM (
-                        <items:{item |
-                            SELECT
-                                :thread_model_id<item.index> AS thread_model_id,
-                                mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
-                            <if(item.hasNext)>UNION ALL<endif>
-                        }>
-                    )
-                ) AS sd ON tt.id = sd.thread_model_id
+                        :workspace_id AS workspace_id,
+                        :project_id<item.index> AS project_id,
+                        :thread_id<item.index> AS thread_id,
+                        :thread_model_id<item.index> AS id,
+                        :status<item.index> AS status,
+                        :created_by<item.index> AS created_by,
+                        :user_name AS last_updated_by,
+                        parseDateTime64BestEffort(:created_at<item.index>, 9) AS created_at,
+                        now64(6) AS last_updated_at,
+                        :tags<item.index> AS tags,
+                        mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule,
+                        :scored_at<item.index> AS scored_at
+                    <if(item.hasNext)>UNION ALL<endif>
+                }>
+            ) as new_tt
+            LEFT JOIN (
+                SELECT
+                    tt.workspace_id AS workspace_id,
+                    tt.project_id AS project_id,
+                    tt.thread_id AS thread_id,
+                    tt.id AS id,
+                    tt.status AS status,
+                    tt.created_by AS created_by,
+                    :user_name AS last_updated_by,
+                    tt.created_at AS created_at,
+                    now64(6) AS last_updated_at,
+                    tt.tags AS tags,
+                    tt.sampling_per_rule AS sampling_per_rule,
+                    tt.scored_at AS scored_at
+                FROM trace_threads tt final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN :ids
+            ) AS tt
+            ON new_tt.id = tt.id
+            AND new_tt.workspace_id = tt.workspace_id
+            AND new_tt.project_id = tt.project_id
+            AND new_tt.thread_id = tt.thread_id
+            ;
+            """;
+
+    private static final String UPDATE_THREAD_SCORED_AT = """
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
+            SELECT
+                workspace_id,
+                project_id,
+                thread_id,
+                id,
+                status,
+                created_by,
+                :user_name,
+                created_at,
+                now64(6),
+                tags,
+                sampling_per_rule,
+                parseDateTime64BestEffort(:scored_at, 9)
+            FROM trace_threads final
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND thread_id IN :thread_ids
+            """;
+
+    public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
+            SELECT
+                workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at
+            FROM trace_threads tt final
+            WHERE tt.workspace_id = :workspace_id
+            AND tt.project_id = :project_id
+            AND tt.status = :status
+            <if(last_updated_at)>
+            AND tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)
+            <endif>
+            ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -242,11 +298,19 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 }
 
                 if (item.sampling() != null) {
-                    statement.bind("rule_ids" + i, item.sampling().keySet().toArray(UUID[]::new));
-                    statement.bind("sampling" + i, item.sampling().values().toArray(Boolean[]::new));
+                    UUID[] ruleIds = item.sampling().keySet().toArray(UUID[]::new);
+                    statement.bind("rule_ids" + i, ruleIds);
+                    statement.bind("sampling" + i,
+                            Arrays.stream(ruleIds).map(ruleId -> item.sampling().get(ruleId)).toArray(Boolean[]::new));
                 } else {
                     statement.bind("rule_ids" + i, new UUID[]{});
                     statement.bind("sampling" + i, new Boolean[]{});
+                }
+
+                if (item.scoredAt() != null) {
+                    statement.bind("scored_at" + i, item.scoredAt().toString());
+                } else {
+                    statement.bindNull("scored_at" + i, Instant.class);
                 }
 
                 i++;
@@ -294,7 +358,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
                     .bind("last_updated_at",
                             lastUpdatedUntil.toString())
-                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("limit", limit);
 
             return Flux.from(statement.execute())
@@ -304,32 +367,16 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant now,
-            @NonNull Duration timeoutToMarkThreadAsInactive) {
-        return asyncTemplate.nonTransaction(connection -> {
-            ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-            closureThreadsSql.add("last_updated_at", true);
-            var statement = connection.createStatement(closureThreadsSql.render())
-                    .bind("project_id", projectId)
-                    .bind("last_updated_at",
-                            now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
-                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
-
-            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        });
-    }
-
-    @Override
     public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
         return asyncTemplate.nonTransaction(connection -> {
             ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-            openThreadsSql.add("thread_id", threadId);
+            List<String> threadIds = List.of(threadId);
+
+            openThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(openThreadsSql.render())
                     .bind("project_id", projectId)
-                    .bind("thread_id", threadId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new))
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -338,14 +385,18 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
+    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.just(0L);
+        }
+
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
-            closureThreadsSql.add("thread_id", threadId);
+            closureThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
-                    .bind("thread_id", threadId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new))
                     .bind("status", TraceThreadStatus.INACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -388,7 +439,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-
     public Mono<Long> updateThreadSampledValues(@NonNull UUID projectId,
             @NonNull List<TraceThreadSampling> threadSamplingPerRules) {
         return asyncTemplate.nonTransaction(connection -> {
@@ -409,13 +459,33 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             int i = 0;
             for (TraceThreadSampling sampling : threadSamplingPerRules) {
                 UUID threadModelId = sampling.threadModelId();
-                UUID[] ruleIds = sampling.samplingPerRule().keySet().toArray(UUID[]::new);
-                Boolean[] samplingValues = sampling.samplingPerRule().keySet().stream()
-                        .map(ruleId -> sampling.samplingPerRule().get(ruleId)).toArray(Boolean[]::new);
+                TraceThreadModel traceThreadModel = sampling.traceThread();
+
+                UUID[] ruleIds = sampling.samplingPerRule().keySet()
+                        .toArray(UUID[]::new);
+
+                Boolean[] samplingValues = Arrays.stream(ruleIds)
+                        .map(ruleId -> sampling.samplingPerRule().get(ruleId))
+                        .toArray(Boolean[]::new);
 
                 statement.bind("thread_model_id" + i, threadModelId);
                 statement.bind("rule_ids" + i, ruleIds);
                 statement.bind("sampling" + i, samplingValues);
+                statement.bind("project_id" + i, traceThreadModel.projectId());
+                statement.bind("thread_id" + i, traceThreadModel.threadId());
+                statement.bind("status" + i, traceThreadModel.status().getValue());
+                statement.bind("created_by" + i, traceThreadModel.createdBy());
+                statement.bind("created_at" + i, traceThreadModel.createdAt().toString());
+                statement.bind("tags" + i, traceThreadModel.tags() != null
+                        ? traceThreadModel.tags().toArray(String[]::new)
+                        : new String[]{});
+
+                if (traceThreadModel.scoredAt() != null) {
+                    statement.bind("scored_at" + i, traceThreadModel.scoredAt().toString());
+                } else {
+                    statement.bindNull("scored_at" + i, Instant.class);
+                }
+
                 i++;
             }
 
@@ -445,6 +515,41 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    @Override
+    public Mono<Long> setScoredAt(@NonNull UUID projectId, @NonNull List<String> threadIds, @NonNull Instant scoredAt) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
+                    .bind("project_id", projectId)
+                    .bind("thread_ids", threadIds)
+                    .bind("scored_at", scoredAt.toString());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId, @NonNull Instant now,
+            @NonNull Duration timeoutToMarkThreadAsInactive) {
+        return asyncTemplate.stream(connection -> {
+            ST closureThreadsSql = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
+            closureThreadsSql.add("last_updated_at", true);
+
+            var statement = connection.createStatement(closureThreadsSql.render())
+                    .bind("project_id", projectId)
+                    .bind("last_updated_at",
+                            now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("status", TraceThreadStatus.ACTIVE.getValue());
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
+        }).buffer(1000);
+    }
+
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
             template.add("ids", criteria.ids());
@@ -461,6 +566,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         if (criteria.status() != null) {
             template.add("status", criteria.status().getValue());
         }
+
+        template.add("scored_at_empty", criteria.scoredAtEmpty());
     }
 
     private void bindStatementParam(TraceThreadCriteria criteria, Statement statement) {

@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import io.r2dbc.spi.Row;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.time.Instant;
@@ -18,6 +19,7 @@ interface TraceThreadMapper {
 
     TraceThreadMapper INSTANCE = Mappers.getMapper(TraceThreadMapper.class);
 
+    @Mapping(target = "lastUpdatedBy", source = "userName")
     TraceThreadModel mapFromThreadIdModel(TraceThreadIdModel traceThread, String userName, TraceThreadStatus status,
             Instant lastUpdatedAt);
 
@@ -41,6 +43,7 @@ interface TraceThreadMapper {
                                 .map(entry -> Map.entry(UUID.fromString(entry.getKey()), entry.getValue()))
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
                         .orElse(Map.of()))
+                .scoredAt(row.get("scored_at", Instant.class))
                 .build();
     }
 
