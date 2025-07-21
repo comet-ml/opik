@@ -5,7 +5,6 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .configuration_detailed import ConfigurationDetailed
 from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .percentage_values_detailed import PercentageValuesDetailed
@@ -30,7 +29,6 @@ class ProjectDetailed(UniversalBaseModel):
     trace_count: typing.Optional[int] = None
     guardrails_failed_count: typing.Optional[int] = None
     error_count: typing.Optional[ErrorCountWithDeviationDetailed] = None
-    configuration: typing.Optional[ConfigurationDetailed] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

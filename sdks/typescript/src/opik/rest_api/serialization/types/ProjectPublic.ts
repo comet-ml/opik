@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { ProjectPublicVisibility } from "./ProjectPublicVisibility";
-import { ConfigurationPublic } from "./ConfigurationPublic";
 
 export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectPublic.Raw, OpikApi.ProjectPublic> =
     core.serialization.object({
@@ -19,7 +18,6 @@ export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectP
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         lastUpdatedTraceAt: core.serialization.property("last_updated_trace_at", core.serialization.date().optional()),
-        configuration: ConfigurationPublic.optional(),
     });
 
 export declare namespace ProjectPublic {
@@ -33,6 +31,5 @@ export declare namespace ProjectPublic {
         last_updated_at?: string | null;
         last_updated_by?: string | null;
         last_updated_trace_at?: string | null;
-        configuration?: ConfigurationPublic.Raw | null;
     }
 }

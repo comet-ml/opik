@@ -35,6 +35,7 @@ export namespace AutomationRuleEvaluatorWrite {
         projectId: string;
         name: string;
         samplingRate?: number;
+        enabled?: boolean;
         action: "evaluator";
     }
 }

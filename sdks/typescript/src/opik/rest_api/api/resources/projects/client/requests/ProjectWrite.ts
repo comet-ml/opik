@@ -14,5 +14,4 @@ export interface ProjectWrite {
     name: string;
     visibility?: OpikApi.ProjectWriteVisibility;
     description?: string;
-    configuration?: OpikApi.ConfigurationWrite;
 }
