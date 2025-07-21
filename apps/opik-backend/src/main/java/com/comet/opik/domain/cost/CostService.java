@@ -126,16 +126,26 @@ public class CostService {
                 if (hasMultimodalPricing) {
                     if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
                             || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                        calculator = PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                                SpanCostCalculator::multimodalCostWithCache);
+                        // Only use cache-aware multimodal calculator for known providers
+                        if (PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR.containsKey(provider)) {
+                            calculator = PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR.get(provider);
+                        } else {
+                            // Fallback to regular multimodal cost (without cache) for unknown providers
+                            calculator = SpanCostCalculator::multimodalCost;
+                        }
                     } else {
                         calculator = SpanCostCalculator::multimodalCost;
                     }
                 } else
                     if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
                             || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                                        SpanCostCalculator::textGenerationCost);
+                                // Only use cache-aware calculator for known providers
+                                if (PROVIDERS_CACHE_COST_CALCULATOR.containsKey(provider)) {
+                                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.get(provider);
+                                } else {
+                                    // Fallback to regular text generation cost (without cache) for unknown providers
+                                    calculator = SpanCostCalculator::textGenerationCost;
+                                }
                             } else
                         if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
                             calculator = SpanCostCalculator::textGenerationCost;
