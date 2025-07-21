@@ -1,0 +1,15 @@
+---
+description: Core library architecture and design patterns
+globs:
+alwaysApply: true
+---
+
+## Core Architecture Patterns
+- Follow layered architecture: API Objects → Message Processing (for non-blocking operations) → REST API → Backend
+- Create spans, traces and feedback scores as non-blocking operations performed in the background
+- Use `opik.opik_context` module, `opik.context_storage` module, and `@opik.track` decorator to handle spans and traces lifecycle
+
+## Integration Patterns
+- Extend base decorator classes for new tracking integrations (example: `opik.integrations.anthropic`)
+- If the library to integrate with supports callbacks, consider implementing a callback first (example: `opik.integrations.langchain`)
+- Implement evaluation functionalities (new metrics and evaluate-like functions) consistent with existing logic and API

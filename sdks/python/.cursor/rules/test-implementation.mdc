@@ -1,0 +1,18 @@
+---
+description: Test fixtures, utilities, and implementation patterns
+globs:
+alwaysApply: true
+---
+
+## Test Fixtures and Utilities
+- Use `fake_backend` fixture to emulate real backend when testing creation of spans, traces and feedback scores in unit tests and library integration tests
+- Use TraceModel, SpanModel, FeedbackScoreModel and assertion helper functions
+- Extensive examples in `opik/sdks/python/tests/unit/decorator/test_tracker_outputs.py` and `opik/sdks/python/tests/library_integration/openai/test_openai_responses.py`
+- Use and create verify_* functions from `opik/sdks/python/tests/e2e/verifiers.py` for repeated assertion logic
+
+## Test Coverage and Scenarios
+- Use parameterized tests for testing multiple scenarios efficiently
+- Test both sync and async code paths where applicable
+- Use appropriate test fixtures for isolation
+- Test error conditions and edge cases thoroughly
+- Use domain-specific assertion helpers
