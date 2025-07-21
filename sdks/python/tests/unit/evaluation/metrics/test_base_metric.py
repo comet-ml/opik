@@ -21,7 +21,7 @@ class MyCustomMetric(base_metric.BaseMetric):
         super().__init__(name=name, track=track)
 
     def score(self, input: str, output: str, **ignored_kwargs: Any):
-        # Add you logic here
+        # Add your logic here
         return score_result.ScoreResult(
             value=0, name=self.name, reason="Optional reason for the score"
         )
