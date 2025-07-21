@@ -18,6 +18,11 @@ providers:
         enabled: true
         test_playground: true
         test_online_scoring: true
+      - name: "GPT 4.1 Mini"
+        ui_selector: "GPT 4.1 Mini"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
 
   anthropic:
     display_name: "Anthropic"
