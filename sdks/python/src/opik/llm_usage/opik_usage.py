@@ -8,6 +8,7 @@ from . import (
     unknown_usage,
     bedrock_usage,
     openai_responses_usage,
+    langchain_usage,
 )
 from opik import dict_utils
 
@@ -17,6 +18,7 @@ ProviderUsage = Union[
     anthropic_usage.AnthropicUsage,
     bedrock_usage.BedrockUsage,
     openai_responses_usage.OpenAIResponsesUsage,
+    langchain_usage.LangChainUsage,
     unknown_usage.UnknownUsage,
 ]
 
@@ -164,6 +166,25 @@ class OpikUsage(pydantic.BaseModel):
 
         return cls(
             completion_tokens=provider_usage.output_tokens,
+            prompt_tokens=provider_usage.input_tokens,
+            total_tokens=provider_usage.total_tokens,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_langchain_response_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = langchain_usage.LangChainUsage.from_original_usage_dict(usage)
+
+        if provider_usage.output_token_details is not None:
+            completion_tokens = (
+                provider_usage.output_token
+                + provider_usage.output_token_details.reasoning
+            )
+        else:
+            completion_tokens = provider_usage.output_token
+
+        return cls(
+            completion_tokens=completion_tokens,
             prompt_tokens=provider_usage.input_tokens,
             total_tokens=provider_usage.total_tokens,
             provider_usage=provider_usage,
