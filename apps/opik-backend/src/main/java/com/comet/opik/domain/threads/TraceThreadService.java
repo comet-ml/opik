@@ -4,11 +4,13 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.EventBus;
@@ -81,6 +83,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
     private final @NonNull TraceThreadOnlineScorerPublisher onlineScorePublisher;
+    private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
 
     public Mono<Void> processTraceThreads(@NonNull Map<String, Instant> threadIdAndLastUpdateAts,
             @NonNull UUID projectId) {
@@ -291,7 +294,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return traceThreadDAO.streamPendingClosureThreads(projectId, now, defaultTimeoutToMarkThreadAsInactive)
+        return getWorkspaceTimeout(now, defaultTimeoutToMarkThreadAsInactive)
+                .flatMapMany(lastUpdatedAt -> traceThreadDAO.streamPendingClosureThreads(projectId, lastUpdatedAt))
                 .flatMap(threads -> {
 
                     if (threads.isEmpty()) {
@@ -320,6 +324,13 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);
                 });
+    }
+
+    private Mono<Instant> getWorkspaceTimeout(Instant now, Duration defaultTimeoutToMarkThreadAsInactive) {
+        return workspaceConfigurationService.getConfiguration()
+                .map(WorkspaceConfiguration::timeoutToMarkThreadAsInactive)
+                .switchIfEmpty(Mono.just(defaultTimeoutToMarkThreadAsInactive))
+                .map(now::minus);
     }
 
     private Mono<Void> checkAndTriggerOnlineScoring(UUID projectId, List<TraceThreadModel> closedThreads) {

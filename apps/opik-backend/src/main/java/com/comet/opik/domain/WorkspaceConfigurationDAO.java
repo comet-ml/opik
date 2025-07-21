@@ -1,63 +1,30 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.WorkspaceConfiguration;
-import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.WorkspaceConfigurationRowMapper;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
-import org.jdbi.v3.sqlobject.customizer.Bind;
-import org.jdbi.v3.sqlobject.statement.SqlQuery;
-import org.jdbi.v3.sqlobject.statement.SqlUpdate;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(WorkspaceConfigurationDAOImpl.class)
 public interface WorkspaceConfigurationDAO {
 
-    WorkspaceConfiguration upsertConfiguration(String workspaceId, WorkspaceConfiguration configuration);
+    Mono<Long> upsertConfiguration(String workspaceId, WorkspaceConfiguration configuration);
 
-    Optional<WorkspaceConfiguration> getConfiguration(String workspaceId);
+    Mono<WorkspaceConfiguration> getConfiguration(String workspaceId);
 
-    void deleteConfiguration(String workspaceId);
-
-    @RegisterRowMapper(WorkspaceConfigurationRowMapper.class)
-    interface WorkspaceConfigurationSqlDAO {
-
-        @SqlUpdate("""
-                INSERT INTO workspace_configurations (workspace_id, timeout_mark_thread_as_inactive, created_at, last_updated_at, created_by, last_updated_by)
-                VALUES (:workspace_id, :timeout_seconds, NOW(6), NOW(6), :user_name, :user_name)
-                ON DUPLICATE KEY UPDATE
-                    timeout_mark_thread_as_inactive = VALUES(timeout_mark_thread_as_inactive),
-                    last_updated_at = NOW(6),
-                    last_updated_by = VALUES(last_updated_by)
-                """)
-        int upsertConfiguration(@Bind("workspace_id") String workspaceId,
-                @Bind("timeout_seconds") Long timeoutSeconds,
-                @Bind("user_name") String userName);
-
-        @SqlQuery("""
-                SELECT timeout_mark_thread_as_inactive as timeoutToMarkThreadAsInactive
-                FROM workspace_configurations
-                WHERE workspace_id = :workspace_id
-                """)
-        Optional<WorkspaceConfiguration> getConfiguration(@Bind("workspace_id") String workspaceId);
-
-        @SqlUpdate("""
-                DELETE FROM workspace_configurations
-                WHERE workspace_id = :workspace_id
-                """)
-        int deleteConfiguration(@Bind("workspace_id") String workspaceId);
-    }
+    Mono<Void> deleteConfiguration(String workspaceId);
 }
 
 @Singleton
@@ -65,59 +32,98 @@ public interface WorkspaceConfigurationDAO {
 @Slf4j
 class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull Provider<RequestContext> requestContext;
+    private static final String UPSERT_CONFIGURATION_SQL = """
+            INSERT INTO workspace_configurations (
+                workspace_id,
+                timeout_mark_thread_as_inactive,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by
+            )
+            SELECT
+                new_config.workspace_id,
+                new_config.timeout_mark_thread_as_inactive,
+                if(empty(wc.workspace_id), new_config.created_at, wc.created_at),
+                new_config.last_updated_at,
+                if(empty(wc.workspace_id), new_config.created_by, wc.created_by),
+                new_config.last_updated_by
+            FROm (
+                SELECT
+                    :workspace_id AS workspace_id,
+                    :timeout_seconds AS timeout_mark_thread_as_inactive,
+                    now64(9) AS created_at,
+                    now64(6) AS last_updated_at,
+                    :user_name AS created_by,
+                    :user_name AS last_updated_by
+            ) AS new_config
+            LEFT JOIN workspace_configurations wc final ON wc.workspace_id = new_config.workspace_id
+            """;
+
+    private static final String GET_CONFIGURATION_SQL = """
+            SELECT timeout_mark_thread_as_inactive
+            FROM workspace_configurations final
+            WHERE workspace_id = :workspace_id
+            """;
+
+    private static final String DELETE_CONFIGURATION_SQL = """
+            DELETE FROM workspace_configurations
+            WHERE workspace_id = :workspace_id
+            """;
+
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
-    public WorkspaceConfiguration upsertConfiguration(@NonNull String workspaceId,
+    public Mono<Long> upsertConfiguration(@NonNull String workspaceId,
             @NonNull WorkspaceConfiguration configuration) {
-        log.info("Upserting workspace configuration for workspace '{}'", workspaceId);
 
-        String userName = requestContext.get().getUserName();
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(UPSERT_CONFIGURATION_SQL)
+                    .bind("workspace_id", workspaceId);
 
-        return template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspaceConfigurationSqlDAO.class);
-
-            Long timeoutSeconds = configuration.timeoutToMarkThreadAsInactive() != null
-                    ? configuration.timeoutToMarkThreadAsInactive().toSeconds()
-                    : null;
-
-            dao.upsertConfiguration(workspaceId, timeoutSeconds, userName);
-
-            log.info("Upserted workspace configuration for workspace '{}'", workspaceId);
-            return configuration;
-        });
-    }
-
-    @Override
-    public Optional<WorkspaceConfiguration> getConfiguration(@NonNull String workspaceId) {
-        log.info("Getting workspace configuration for workspace '{}'", workspaceId);
-
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(WorkspaceConfigurationSqlDAO.class);
-
-            Optional<WorkspaceConfiguration> configuration = dao.getConfiguration(workspaceId);
-
-            if (configuration.isPresent()) {
-                log.info("Found workspace configuration for workspace '{}'", workspaceId);
-                return configuration;
+            if (configuration.timeoutToMarkThreadAsInactive() != null) {
+                statement.bind("timeout_seconds", configuration.timeoutToMarkThreadAsInactive().toSeconds());
+            } else {
+                statement.bindNull("timeout_seconds", Long.class);
             }
 
-            log.info("No workspace configuration found for workspace '{}'", workspaceId);
-            return Optional.empty();
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
 
     @Override
-    public void deleteConfiguration(@NonNull String workspaceId) {
+    public Mono<WorkspaceConfiguration> getConfiguration(@NonNull String workspaceId) {
+        log.info("Getting workspace configuration for workspace '{}'", workspaceId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(GET_CONFIGURATION_SQL)
+                    .bind("workspace_id", workspaceId);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> {
+                        Duration timeout = Optional.ofNullable(row.get("timeout_mark_thread_as_inactive", Long.class))
+                                .map(Duration::ofSeconds)
+                                .orElse(null);
+
+                        return WorkspaceConfiguration.builder()
+                                .timeoutToMarkThreadAsInactive(timeout)
+                                .build();
+                    })));
+        });
+    }
+
+    @Override
+    public Mono<Void> deleteConfiguration(@NonNull String workspaceId) {
         log.info("Deleting workspace configuration for workspace '{}'", workspaceId);
 
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspaceConfigurationSqlDAO.class);
-            dao.deleteConfiguration(workspaceId);
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_CONFIGURATION_SQL)
+                    .bind("workspace_id", workspaceId);
 
-            log.info("Deleted workspace configuration for workspace '{}'", workspaceId);
-            return null;
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doOnSuccess(__ -> log.info("Deleted workspace configuration for workspace '{}'", workspaceId))
+                    .then();
         });
     }
 }

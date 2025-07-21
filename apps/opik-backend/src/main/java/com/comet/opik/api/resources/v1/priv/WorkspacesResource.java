@@ -23,6 +23,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -32,6 +33,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -152,17 +154,17 @@ public class WorkspacesResource {
 
         log.info("Getting workspace configuration for workspace_id '{}'", workspaceId);
 
-        var configuration = workspaceConfigurationService.getConfiguration();
+        var configuration = workspaceConfigurationService.getConfiguration()
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("No workspace configuration found for workspace '{}'", workspaceId);
+                    return Mono.error(new NotFoundException("No workspace configuration found for workspace"));
+                }))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
-        if (configuration.isPresent()) {
-            log.info("Found workspace configuration for workspace_id '{}'", workspaceId);
-            return Response.ok().entity(configuration.get()).build();
-        } else {
-            log.info("No workspace configuration found for workspace_id '{}'", workspaceId);
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(new io.dropwizard.jersey.errors.ErrorMessage(404, "Workspace configuration not found"))
-                    .build();
-        }
+        log.info("Found workspace configuration for workspace_id '{}'", workspaceId);
+
+        return Response.ok().entity(configuration).build();
     }
 
     @PUT
@@ -179,11 +181,13 @@ public class WorkspacesResource {
 
         log.info("Upserting workspace configuration for workspace_id '{}'", workspaceId);
 
-        WorkspaceConfiguration savedConfiguration = workspaceConfigurationService.upsertConfiguration(configuration);
+        workspaceConfigurationService.upsertConfiguration(configuration)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
         log.info("Upserted workspace configuration for workspace_id '{}'", workspaceId);
 
-        return Response.ok().entity(savedConfiguration).build();
+        return Response.noContent().build();
     }
 
     @DELETE
@@ -197,7 +201,9 @@ public class WorkspacesResource {
 
         log.info("Deleting workspace configuration for workspace_id '{}'", workspaceId);
 
-        workspaceConfigurationService.deleteConfiguration();
+        workspaceConfigurationService.deleteConfiguration()
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
         log.info("Deleted workspace configuration for workspace_id '{}'", workspaceId);
 

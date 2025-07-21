@@ -3,24 +3,22 @@ package com.comet.opik.domain;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
+import com.google.inject.Singleton;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
-import jakarta.inject.Singleton;
-import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Optional;
+import reactor.core.publisher.Mono;
 
 @ImplementedBy(WorkspaceConfigurationServiceImpl.class)
 public interface WorkspaceConfigurationService {
 
-    WorkspaceConfiguration upsertConfiguration(WorkspaceConfiguration configuration);
+    Mono<Void> upsertConfiguration(WorkspaceConfiguration configuration);
 
-    Optional<WorkspaceConfiguration> getConfiguration();
+    Mono<WorkspaceConfiguration> getConfiguration();
 
-    void deleteConfiguration();
+    Mono<Void> deleteConfiguration();
 }
 
 @Singleton
@@ -32,32 +30,30 @@ class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
-    public WorkspaceConfiguration upsertConfiguration(@NonNull WorkspaceConfiguration configuration) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Upserting workspace configuration for workspace '{}'", workspaceId);
+    public Mono<Void> upsertConfiguration(@NonNull WorkspaceConfiguration configuration) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return workspaceConfigurationDAO.upsertConfiguration(workspaceId, configuration);
+            return workspaceConfigurationDAO.upsertConfiguration(workspaceId, configuration)
+                    .then();
+        });
     }
 
     @Override
-    public Optional<WorkspaceConfiguration> getConfiguration() {
+    public Mono<WorkspaceConfiguration> getConfiguration() {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Getting workspace configuration for workspace '{}'", workspaceId);
 
-        return workspaceConfigurationDAO.getConfiguration(workspaceId);
+        return workspaceConfigurationDAO.getConfiguration(workspaceId)
+                .doOnSuccess(config -> log.info("Found workspace configuration for workspace '{}'", workspaceId));
     }
 
     @Override
-    public void deleteConfiguration() {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting workspace configuration for workspace '{}'", workspaceId);
+    public Mono<Void> deleteConfiguration() {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        // Verify configuration exists
-        getConfiguration().orElseThrow(() -> {
-            log.warn("Workspace configuration not found for workspace '{}'", workspaceId);
-            return new NotFoundException("Workspace configuration not found");
+            return workspaceConfigurationDAO.deleteConfiguration(workspaceId);
         });
-
-        workspaceConfigurationDAO.deleteConfiguration(workspaceId);
     }
 }

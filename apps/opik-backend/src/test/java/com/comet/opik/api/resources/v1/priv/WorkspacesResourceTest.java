@@ -623,10 +623,10 @@ class WorkspacesResourceTest {
                     .build();
 
             // When
-            WorkspaceConfiguration result = workspaceResourceClient.upsertWorkspaceConfiguration(
-                    configuration, API_KEY, WORKSPACE_NAME);
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
 
-            // Then
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
             assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
         }
 
@@ -639,10 +639,10 @@ class WorkspacesResourceTest {
                     .build();
 
             // When
-            WorkspaceConfiguration result = workspaceResourceClient.upsertWorkspaceConfiguration(
-                    configuration, API_KEY, WORKSPACE_NAME);
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
 
-            // Then
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
             assertThat(result.timeoutToMarkThreadAsInactive()).isNull();
         }
 
@@ -656,10 +656,10 @@ class WorkspacesResourceTest {
                     .build();
 
             // When
-            WorkspaceConfiguration result = workspaceResourceClient.upsertWorkspaceConfiguration(
-                    configuration, API_KEY, WORKSPACE_NAME);
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
 
-            // Then
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
             assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
         }
 
@@ -739,8 +739,8 @@ class WorkspacesResourceTest {
         }
 
         @Test
-        @DisplayName("when deleting non-existing workspace configuration, then return not found")
-        void deleteWorkspaceConfiguration__whenConfigurationDoesNotExist__thenReturnNotFound() {
+        @DisplayName("when deleting non-existing workspace configuration, then return no content")
+        void deleteWorkspaceConfiguration__whenConfigurationDoesNotExist__thenReturnNoContent() {
             // Given
             String uniqueWorkspace = "unique-workspace-" + UUID.randomUUID();
             String uniqueApiKey = UUID.randomUUID().toString();
@@ -751,7 +751,7 @@ class WorkspacesResourceTest {
                     uniqueWorkspace)) {
 
                 // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
         }
 
@@ -804,20 +804,30 @@ class WorkspacesResourceTest {
                     .timeoutToMarkThreadAsInactive(timeout)
                     .build();
 
-            // When - Make raw HTTP call to check actual JSON response
-            try (Response response = client.target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+            // When - Make raw HTTP call to upsert
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
                     .put(Entity.json(configuration))) {
 
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
-                // Check the raw JSON response contains ISO-8601 format
-                String jsonResponse = response.readEntity(String.class);
-                assertThat(jsonResponse).contains("\"PT30M\"");
-                assertThat(jsonResponse).doesNotContain("1800.000000000"); // Should not contain decimal seconds
+                // Get the configuration to check ISO-8601 format
+                try (Response getResponse = client
+                        .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                        .get()) {
+
+                    assertThat(getResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    String jsonResponse = getResponse.readEntity(String.class);
+                    assertThat(jsonResponse).contains("\"PT30M\"");
+                    assertThat(jsonResponse).doesNotContain("1800.000000000"); // Should not contain decimal seconds
+                }
             }
         }
 
@@ -848,15 +858,19 @@ class WorkspacesResourceTest {
             Map<String, String> configMap = Map.of("timeout_to_mark_thread_as_inactive", iso8601Duration);
 
             // When
-            try (Response response = client.target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
                     .put(Entity.json(configMap))) {
 
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                WorkspaceConfiguration result = response.readEntity(WorkspaceConfiguration.class);
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+
+                // Verify by getting the configuration
+                WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY,
+                        WORKSPACE_NAME);
                 assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(expectedDuration);
             }
         }
@@ -920,15 +934,19 @@ class WorkspacesResourceTest {
             );
 
             // When
-            try (Response response = client.target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
                     .put(Entity.json(payload))) {
 
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                WorkspaceConfiguration result = response.readEntity(WorkspaceConfiguration.class);
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+
+                // Verify by getting the configuration
+                WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY,
+                        WORKSPACE_NAME);
                 assertThat(result.timeoutToMarkThreadAsInactive()).isNull(); // Should be null (use default)
             }
         }

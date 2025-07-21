@@ -85,7 +85,7 @@ public class WorkspaceResourceClient {
         }
     }
 
-    public WorkspaceConfiguration upsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,
+    public void upsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("/configuration")
@@ -94,9 +94,7 @@ public class WorkspaceResourceClient {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .put(Entity.json(configuration))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-            return response.readEntity(WorkspaceConfiguration.class);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
