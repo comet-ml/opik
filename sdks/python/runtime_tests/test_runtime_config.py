@@ -21,7 +21,7 @@ def test_set_and_get(first: bool, second: bool) -> none_schema:
     assert opik.is_tracing_active() is second
 
 
-def test_reset_to_config_default(monkeypatch: Any) -> None:
+def test_reset_to_config_default(monkeypatch: Any) -> none_schema:
     """Reset should fall back to OpikConfig.track_disable value."""
     # Stub OpikConfig to force tracing disabled via static config
     from opik import config as _config_module
