@@ -1,0 +1,17 @@
+---
+description: SOLID principles and architectural design guidelines
+globs:
+alwaysApply: true
+---
+
+## SOLID and Architecture
+- Follow SOLID principles
+- Organize modules by functionality, avoid generic utility modules
+- Use meaningful module and class names that reflect their purpose, no shortcuts
+- Use builder functions for creating complex objects, tend to follow dependency injection principles
+- Keep modules, classes and functions focused on single responsibilities
+
+## API Consistency
+- Always look for similar APIs that already exist and make new ones consistent
+- Maintain backward compatibility for public interfaces
+- Don't add default parameter values if not required - defaults should exist in high-level APIs only

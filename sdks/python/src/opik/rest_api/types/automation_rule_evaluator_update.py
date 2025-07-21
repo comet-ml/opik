@@ -15,6 +15,7 @@ from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
+    enabled: typing.Optional[bool] = None
     project_id: str
     action: typing.Literal["evaluator"] = "evaluator"
 

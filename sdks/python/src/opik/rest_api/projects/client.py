@@ -5,8 +5,6 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.configuration_timeout_to_mark_thread_as_inactive import ConfigurationTimeoutToMarkThreadAsInactive
-from ..types.configuration_write import ConfigurationWrite
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
@@ -85,7 +83,6 @@ class ProjectsClient:
         name: str,
         visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
-        configuration: typing.Optional[ConfigurationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -98,8 +95,6 @@ class ProjectsClient:
         visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
-
-        configuration : typing.Optional[ConfigurationWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -115,11 +110,7 @@ class ProjectsClient:
         client.projects.create_project(name='name', )
         """
         _response = self._raw_client.create_project(
-            name=name,
-            visibility=visibility,
-            description=description,
-            configuration=configuration,
-            request_options=request_options,
+            name=name, visibility=visibility, description=description, request_options=request_options
         )
         return _response.data
 
@@ -384,41 +375,6 @@ class ProjectsClient:
         _response = self._raw_client.retrieve_project(name=name, request_options=request_options)
         return _response.data
 
-    def upsert_project_configurations(
-        self,
-        id: str,
-        *,
-        timeout_to_mark_thread_as_inactive: typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Upsert project configurations
-
-        Parameters
-        ----------
-        id : str
-
-        timeout_to_mark_thread_as_inactive : typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive]
-            minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.projects.upsert_project_configurations(id='id', )
-        """
-        _response = self._raw_client.upsert_project_configurations(
-            id, timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
-        )
-        return _response.data
-
 
 class AsyncProjectsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -485,7 +441,6 @@ class AsyncProjectsClient:
         name: str,
         visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
-        configuration: typing.Optional[ConfigurationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -498,8 +453,6 @@ class AsyncProjectsClient:
         visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
-
-        configuration : typing.Optional[ConfigurationWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -518,11 +471,7 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_project(
-            name=name,
-            visibility=visibility,
-            description=description,
-            configuration=configuration,
-            request_options=request_options,
+            name=name, visibility=visibility, description=description, request_options=request_options
         )
         return _response.data
 
@@ -811,42 +760,4 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.retrieve_project(name=name, request_options=request_options)
-        return _response.data
-
-    async def upsert_project_configurations(
-        self,
-        id: str,
-        *,
-        timeout_to_mark_thread_as_inactive: typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Upsert project configurations
-
-        Parameters
-        ----------
-        id : str
-
-        timeout_to_mark_thread_as_inactive : typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive]
-            minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.projects.upsert_project_configurations(id='id', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.upsert_project_configurations(
-            id, timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
-        )
         return _response.data

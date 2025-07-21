@@ -37,6 +37,7 @@ export namespace AutomationRuleEvaluatorObjectPublic {
         projectName?: string;
         name: string;
         samplingRate?: number;
+        enabled?: boolean;
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;

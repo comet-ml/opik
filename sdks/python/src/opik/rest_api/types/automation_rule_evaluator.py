@@ -19,6 +19,7 @@ class Base(UniversalBaseModel):
     project_name: typing.Optional[str] = None
     name: str
     sampling_rate: typing.Optional[float] = None
+    enabled: typing.Optional[bool] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

@@ -1,0 +1,17 @@
+---
+description: Import organization and access control guidelines
+globs:
+alwaysApply: true
+---
+
+## Import Organization
+- Always import modules, not names (except from `typing` or similar commonly used modules)
+- Keep the namespace clean
+- Group imports: standard library, third-party, local imports
+
+## Access Control
+- Never violate access modifiers
+- If method/attribute is used only inside its class - it should be protected
+- If function/object is used only inside its module - it should be protected
+- Classes may omit underscores in names if they are used only in their modules
+- If unsure how something is used, search for examples in `opik/sdks/python/src` and `opik/sdks/python/tests`
