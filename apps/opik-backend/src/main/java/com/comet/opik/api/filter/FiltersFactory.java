@@ -114,11 +114,11 @@ public class FiltersFactory {
 
     private Filter toValidAndDecoded(Filter filter) {
         if (filter.field().getType() != FieldType.STRING) {
-            // don't decode value for string fields as it is already decoded
+            // don't decode value for string fields as it is already decoded during JSON deserialization
             try {
                 filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {
-                log.warn("invalid filter '{}'", filter.value(), exception);
+                log.warn("failed to URL decode filter value '{}'", filter.value(), exception);
                 throw new BadRequestException("Invalid filter '%s'".formatted(filter.value()), exception);
             }
         }
