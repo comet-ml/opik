@@ -44,17 +44,17 @@ public class TraceThreadsClosingJob extends Job {
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
-        var timeoutToMarkThreadAsInactive = traceThreadConfig
-                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
+        var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
+                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
         int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
-        lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
+        lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
                         error -> log.error("Error processing closing of trace threads", error));
     }
 
-    private Mono<Void> lockAndProcessJob(Lock lock, Duration timeoutToMarkThreadAsInactive, int limit) {
+    private Mono<Void> lockAndProcessJob(Lock lock, Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
         return lockService.bestEffortLock(
                 lock,
                 Mono.defer(() -> {
@@ -63,7 +63,7 @@ public class TraceThreadsClosingJob extends Job {
                             traceThreadService
                                     .getProjectsWithPendingClosureThreads(
                                             now,
-                                            timeoutToMarkThreadAsInactive,
+                                            defaultTimeoutToMarkThreadAsInactive,
                                             limit));
                 }),
                 Mono.fromCallable(() -> {
