@@ -1,5 +1,6 @@
 services:
   frontend:
+    user: root
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       # Authorization header validation
@@ -9,7 +10,7 @@ services:
       - ./startup-auth-gate.sh:/startup-auth-gate.sh
     command: ["/bin/bash", "/startup-auth-gate.sh"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f -H \"Authorization: $OPIK_AUTH_GATE_VALUE\" http://localhost:5173"]
+      test: ["CMD", "sh", "-c", 'curl -f -H "Authorization: $OPIK_AUTH_GATE_VALUE" http://localhost:5173']
       interval: 1s
       timeout: 30s
       retries: 10
