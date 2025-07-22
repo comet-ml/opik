@@ -23,7 +23,11 @@ def get_llm_usage_info(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        return langchain_run_helpers.try_get_token_usage(run_dict)
+        usage_metadata = langchain_run_helpers.try_get_token_usage(
+            run_dict
+        ).map_to_google_gemini_usage()
+
+        return llm_usage.OpikUsage.from_google_dict(usage_metadata)
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,

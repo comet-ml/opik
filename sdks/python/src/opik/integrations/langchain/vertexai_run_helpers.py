@@ -23,15 +23,24 @@ def get_llm_usage_info(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        usage = langchain_run_helpers.try_get_chat_model_usage(run_dict)
-        if usage is not None:
-            return usage
-
         # try raw VertexAI usage from generation_info
-        usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
-            "usage_metadata"
-        ]
-        return llm_usage.OpikUsage.from_google_dict(usage_metadata)
+        if (
+            usage_metadata := run_dict["outputs"]["generations"][-1][-1][
+                "generation_info"
+            ].get("usage_metadata")
+        ) is not None:
+            # inside LangGraph studio we have an empty usage_metadata dictionary here and
+            # should fallback to streaming token usage
+            if len(usage_metadata) >= 3:
+                return llm_usage.OpikUsage.from_google_dict(usage_metadata)
+
+        usage = langchain_run_helpers.try_get_streaming_token_usage(run_dict)
+        if usage is not None:
+            return llm_usage.OpikUsage.from_google_dict(
+                usage.map_to_google_gemini_usage()
+            )
+
+        raise Exception("No token usage found in the run dictionary.")
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,

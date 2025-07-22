@@ -2,8 +2,8 @@ import langchain_google_vertexai
 import pytest
 from langchain.prompts import PromptTemplate
 
-from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
+from . import google_helpers
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -11,57 +11,27 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     assert_equal,
-    assert_dict_has_keys,
 )
 
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
 
-def _assert_usage_validity(usage: Dict[str, Any]):
-    REQUIRED_USAGE_KEYS = [
-        "completion_tokens",
-        "prompt_tokens",
-        "total_tokens",
-        "original_usage.total_token_count",
-        "original_usage.candidates_token_count",
-        "original_usage.prompt_token_count",
-    ]
-
-    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
-
-
-def _assert_chat_usage_validity(usage: Dict[str, Any]):
-    REQUIRED_USAGE_KEYS = [
-        "completion_tokens",
-        "prompt_tokens",
-        "total_tokens",
-        "original_usage.input_tokens",
-        "original_usage.output_tokens",
-        "original_usage.total_tokens",
-        "original_usage.input_token_details.cache_read",
-    ]
-
-    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
-
-
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, assert_helper",
+    "llm_model, expected_input_prompt",
     [
         (
             langchain_google_vertexai.VertexAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            _assert_usage_validity,
         ),
         (
             langchain_google_vertexai.ChatVertexAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            _assert_chat_usage_validity,
         ),
     ],
 )
 def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend, llm_model, expected_input_prompt, assert_helper
+    fake_backend, llm_model, expected_input_prompt
 ):
     llm = llm_model(
         max_tokens=10,
@@ -170,5 +140,5 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
     assert len(callback.created_traces()) == 1
     llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
 
-    assert_helper(llm_call_span.usage)
+    google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

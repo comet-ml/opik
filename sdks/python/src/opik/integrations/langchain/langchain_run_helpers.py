@@ -1,7 +1,7 @@
 import typing
 from typing import Dict, Any, Optional
 
-from opik import llm_usage
+from . import langchain_usage
 
 
 class LSMetadata(typing.NamedTuple):
@@ -10,24 +10,26 @@ class LSMetadata(typing.NamedTuple):
     model_type: str
 
 
-def try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
-    if (usage := try_get_chat_model_usage(run_dict)) is not None:
+def try_get_token_usage(run_dict: Dict[str, Any]) -> langchain_usage.LangChainUsage:
+    if (usage := try_get_streaming_token_usage(run_dict)) is not None:
         return usage
 
     # try generation_info
     usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
         "usage_metadata"
     ]
-    return llm_usage.OpikUsage.from_langchain_response_dict(usage_metadata)
+    return langchain_usage.LangChainUsage.from_original_usage_dict(usage_metadata)
 
 
-def try_get_chat_model_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
+def try_get_streaming_token_usage(
+    run_dict: Dict[str, Any],
+) -> Optional[langchain_usage.LangChainUsage]:
     if "message" in run_dict["outputs"]["generations"][-1][-1]:
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
         ]["usage_metadata"]
 
-        return llm_usage.OpikUsage.from_langchain_response_dict(usage_metadata)
+        return langchain_usage.LangChainUsage.from_original_usage_dict(usage_metadata)
 
     return None
 
