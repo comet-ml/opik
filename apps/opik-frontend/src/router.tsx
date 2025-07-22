@@ -37,6 +37,7 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -139,6 +140,16 @@ const chatRoute = createRoute({
   component: ChatPage,
   staticData: {
     title: "Chat",
+  },
+});
+
+// ----------- dashboards
+const dashboardRoute = createRoute({
+  path: "/$workspaceName/dashboards",
+  getParentRoute: () => workspaceGuardRoute,
+  component: DashboardPage,
+  staticData: {
+    title: "Dashboards",
   },
 });
 
@@ -379,6 +390,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     homeRouteNew,
     chatRoute,
+    dashboardRoute,
     workspaceRoute.addChildren([
       projectsRoute.addChildren([
         projectsListRoute,
