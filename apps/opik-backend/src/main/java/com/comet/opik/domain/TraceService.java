@@ -26,6 +26,7 @@ import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -43,6 +44,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,6 +56,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
+import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -325,14 +329,23 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
-        return Mono.deferContextual(ctx -> dao.delete(ids, projectId, connection)
-                .doOnSuccess(__ -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    eventBus.post(new TracesDeleted(ids, workspaceId, userName));
-                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'", ids.size(),
-                            workspaceId);
-                }));
+
+        return Mono.deferContextual(ctx -> {
+            // Process each batch in parallel
+            List<Mono<Void>> monos = Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE).parallelStream()
+                    .map(batch -> dao.delete(new HashSet<>(batch), projectId, connection)
+                            .doOnSuccess(__ -> {
+                                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                                String userName = ctx.get(RequestContext.USER_NAME);
+                                eventBus.post(new TracesDeleted(new HashSet<>(batch), workspaceId, userName));
+                                log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
+                                        batch.size(), workspaceId);
+                            }))
+                    .toList();
+
+            // Combine all Monos into one
+            return Mono.when(monos);
+        });
     }
 
     @Override
