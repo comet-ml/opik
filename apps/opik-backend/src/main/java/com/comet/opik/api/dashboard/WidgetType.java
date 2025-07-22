@@ -1,0 +1,32 @@
+package com.comet.opik.api.dashboard;
+
+import com.fasterxml.jackson.annotation.JsonValue;
+
+public enum WidgetType {
+    LINE_CHART("line_chart"),
+    BAR_CHART("bar_chart"),
+    PIE_CHART("pie_chart"),
+    TABLE("table"),
+    KPI_CARD("kpi_card"),
+    HEATMAP("heatmap");
+
+    private final String value;
+
+    WidgetType(String value) {
+        this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+        return value;
+    }
+
+    public static WidgetType fromValue(String value) {
+        for (WidgetType type : values()) {
+            if (type.value.equals(value)) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Unknown widget type: " + value);
+    }
+}
