@@ -120,7 +120,7 @@ experimentItemService.create(newRequest)
         .contextWrite(ctx -> setRequestContext(ctx, requestContext)) // ensure propagation of request context
         .block();
 log.info("Created experiment items, count '{}'", newRequest.size());
-````
+```
 
 * **Context Propagation**:
 
