@@ -4,11 +4,13 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.EventBus;
@@ -45,11 +47,11 @@ public interface TraceThreadService {
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
     Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant now,
-            Duration timeoutToMarkThreadAsInactive,
+            Duration defaultTimeoutToMarkThreadAsInactive,
             int limit);
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
-            Duration timeoutToMarkThreadAsInactive);
+            Duration defaultTimeoutToMarkThreadAsInactive);
 
     Mono<Boolean> addToPendingQueue(UUID projectId);
 
@@ -81,6 +83,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
     private final @NonNull TraceThreadOnlineScorerPublisher onlineScorePublisher;
+    private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
 
     public Mono<Void> processTraceThreads(@NonNull Map<String, Instant> threadIdAndLastUpdateAts,
             @NonNull UUID projectId) {
@@ -271,26 +274,28 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive, int limit) {
-        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, timeoutToMarkThreadAsInactive, limit);
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
+        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive, limit);
     }
 
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
-            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, now, timeoutToMarkThreadAsInactive, contextView)),
+                        contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
+                                contextView)),
                 LOCK_DURATION).then();
     }
 
-    private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive,
+    private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration defaultTimeoutToMarkThreadAsInactive,
             ContextView ctx) {
 
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return traceThreadDAO.streamPendingClosureThreads(projectId, now, timeoutToMarkThreadAsInactive)
+        return getWorkspaceTimeout(now, defaultTimeoutToMarkThreadAsInactive)
+                .flatMapMany(lastUpdatedAt -> traceThreadDAO.streamPendingClosureThreads(projectId, lastUpdatedAt))
                 .flatMap(threads -> {
 
                     if (threads.isEmpty()) {
@@ -319,6 +324,13 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);
                 });
+    }
+
+    private Mono<Instant> getWorkspaceTimeout(Instant now, Duration defaultTimeoutToMarkThreadAsInactive) {
+        return workspaceConfigurationService.getConfiguration()
+                .map(WorkspaceConfiguration::timeoutToMarkThreadAsInactive)
+                .switchIfEmpty(Mono.just(defaultTimeoutToMarkThreadAsInactive))
+                .map(now::minus);
     }
 
     private Mono<Void> checkAndTriggerOnlineScoring(UUID projectId, List<TraceThreadModel> closedThreads) {
