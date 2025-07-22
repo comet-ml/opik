@@ -81,6 +81,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
@@ -310,7 +311,7 @@ public class TracesResource {
 
         log.info("Deleting trace with id '{}'", id);
 
-        service.delete(id)
+        service.delete(Set.of(id), null)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -326,7 +327,7 @@ public class TracesResource {
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request) {
         log.info("Deleting traces, count '{}'", request.ids().size());
-        service.delete(request.ids())
+        service.delete(request.ids(), null)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted traces, count '{}'", request.ids().size());

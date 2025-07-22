@@ -552,7 +552,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
-                .bind("ids", ids);
+                .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

@@ -224,7 +224,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
 
             var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_ENTITY_IDS);
 
-            statement.bind("entity_ids", entityIds)
+            statement.bind("entity_ids", entityIds.toArray(UUID[]::new))
                     .bind("entity_type", entityType.getValue());
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))

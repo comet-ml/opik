@@ -1,14 +1,16 @@
 package com.comet.opik.api.events;
 
 import com.comet.opik.infrastructure.events.BaseEvent;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 
 import java.util.Set;
 import java.util.UUID;
 
-@Getter
+@SuperBuilder(toBuilder = true)
+@Data
 @Accessors(fluent = true)
 public class TracesDeleted extends BaseEvent {
     private final @NonNull Set<UUID> traceIds;

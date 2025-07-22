@@ -9085,6 +9085,43 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when trace thread is deleted, then related spans are deleted as well")
+        void deleteTraceThread__whenTraceThreadIdIsPresent__thenDeleteRelatedSpans() {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace = createTrace().toBuilder()
+                    .threadId(UUID.randomUUID().toString())
+                    .projectName(projectName)
+                    .build();
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(null)
+                            .build())
+                    .toList();
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            var id = create(trace, apiKey, workspaceName);
+
+            traceResourceClient.deleteTraceThreads(List.of(trace.threadId()), trace.projectName(), null, apiKey,
+                    workspaceName);
+
+            getAndAssertTraceNotFound(id, apiKey, workspaceName);
+
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
+        }
+
+        @Test
         @DisplayName("when trace thread does not exist, then return no content")
         void deleteTraceThread__whenTraceDoesNotExist__thenReturnNotFound() {
             var trace = createTrace();

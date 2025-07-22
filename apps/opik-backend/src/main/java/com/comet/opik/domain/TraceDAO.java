@@ -81,9 +81,7 @@ interface TraceDAO {
 
     Mono<Void> update(TraceUpdate traceUpdate, UUID id, Connection connection);
 
-    Mono<Void> delete(UUID id, Connection connection);
-
-    Mono<Void> delete(Set<UUID> ids, Connection connection);
+    Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection);
 
     Mono<Trace> findById(UUID id, Connection connection);
 
@@ -114,6 +112,8 @@ interface TraceDAO {
     Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
 
     Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
+
+    Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
@@ -748,6 +748,7 @@ class TraceDAOImpl implements TraceDAO {
             DELETE FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
             ;
             """;
 
@@ -1430,6 +1431,14 @@ class TraceDAOImpl implements TraceDAO {
             AND thread_id IN :thread_ids
             """;
 
+    private static final String SELECT_TRACE_IDS_BY_THREAD_IDS = """
+            SELECT DISTINCT id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND thread_id IN :thread_ids
+            """;
+
     /***
      * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
      * <p>
@@ -1762,17 +1771,22 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
-        return delete(Set.of(id), connection);
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, @NonNull Connection connection) {
+    public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull Connection connection) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
-        log.info("Deleting traces, count '{}'", ids.size());
-        var statement = connection.createStatement(DELETE_BY_ID)
+        log.info("Deleting traces, count '{}'{}", ids.size(),
+                projectId != null ? " for project id '" + projectId + "'" : "");
+
+        var template = new ST(DELETE_BY_ID);
+        Optional.ofNullable(projectId)
+                .ifPresent(id -> template.add("project_id", id));
+
+        var statement = connection.createStatement(template.render())
                 .bind("ids", ids.toArray(UUID[]::new));
+
+        if (projectId != null) {
+            statement.bind("project_id", projectId);
+        }
+
         var segment = startSegment("traces", "Clickhouse", "delete");
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment))
@@ -2491,6 +2505,25 @@ class TraceDAOImpl implements TraceDAO {
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getTraceIdsByThreadIds(@NonNull UUID projectId, @NonNull List<String> threadIds,
+            @NonNull Connection connection) {
+        Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
+        log.info("Getting trace IDs by thread IDs, count '{}'", threadIds.size());
+
+        var statement = connection.createStatement(SELECT_TRACE_IDS_BY_THREAD_IDS)
+                .bind("project_id", projectId)
+                .bind("thread_ids", threadIds.toArray(String[]::new));
+
+        Segment segment = startSegment("traces", "Clickhouse", "getTraceIdsByThreadIds");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                .collect(Collectors.toSet());
     }
 
     @Override
