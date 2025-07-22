@@ -329,23 +329,17 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
-
-        return Mono.deferContextual(ctx -> {
-            // Process each batch in parallel
-            List<Mono<Void>> monos = Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE).parallelStream()
-                    .map(batch -> dao.delete(new HashSet<>(batch), projectId, connection)
-                            .doOnSuccess(__ -> {
-                                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                                String userName = ctx.get(RequestContext.USER_NAME);
-                                eventBus.post(new TracesDeleted(new HashSet<>(batch), workspaceId, userName));
-                                log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
-                                        batch.size(), workspaceId);
-                            }))
-                    .toList();
-
-            // Combine all Monos into one
-            return Mono.when(monos);
-        });
+        return Mono.deferContextual(
+                ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
+                        .flatMap(batch -> dao.delete(new HashSet<>(batch), projectId, connection)
+                                .doOnSuccess(__ -> {
+                                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                                    String userName = ctx.get(RequestContext.USER_NAME);
+                                    eventBus.post(new TracesDeleted(new HashSet<>(batch), workspaceId, userName));
+                                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
+                                            batch.size(), workspaceId);
+                                }))
+                        .then());
     }
 
     @Override
