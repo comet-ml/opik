@@ -242,7 +242,8 @@ class AttachmentResourceMinIOTest {
                 Arguments.of(
                         (Consumer<UUID>) traceId -> traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY)),
                 Arguments.of((Consumer<UUID>) traceId -> traceResourceClient
-                        .deleteTraces(BatchDelete.builder().ids(Set.of(traceId)).build(), TEST_WORKSPACE, API_KEY)));
+                        .deleteTraces(BatchDelete.builder().ids(Set.of(traceId)).build(), null, TEST_WORKSPACE,
+                                API_KEY)));
     }
 
     Pair<StartMultipartUploadRequest, byte[]> uploadFile(String projectName, EntityType type, UUID entityId)

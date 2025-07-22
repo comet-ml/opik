@@ -325,9 +325,10 @@ public class TracesResource {
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request,
+            @QueryParam("project_id") UUID projectId) {
         log.info("Deleting traces, count '{}'", request.ids().size());
-        service.delete(request.ids(), null)
+        service.delete(request.ids(), projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted traces, count '{}'", request.ids().size());

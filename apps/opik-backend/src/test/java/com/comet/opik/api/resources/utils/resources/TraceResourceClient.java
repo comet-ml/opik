@@ -191,9 +191,10 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteTraces(BatchDelete request, String workspaceName, String apiKey) {
+    public void deleteTraces(BatchDelete request, UUID projectId, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
+                .queryParam("project_id", projectId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

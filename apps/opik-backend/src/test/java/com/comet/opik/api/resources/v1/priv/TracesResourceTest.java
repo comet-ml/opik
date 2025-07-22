@@ -7430,7 +7430,10 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
+            var project = projectResourceClient.getByName(projectName, apiKey, workspaceName);
+
+            traceResourceClient.deleteTraces(BatchDelete.builder().ids(Set.of(traces.getFirst().id())).build(),
+                    project.id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -7620,7 +7623,7 @@ class TracesResourceTest {
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
-            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, null, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -7672,7 +7675,7 @@ class TracesResourceTest {
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
-            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, null, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -7718,7 +7721,7 @@ class TracesResourceTest {
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
-            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, null, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -7752,7 +7755,7 @@ class TracesResourceTest {
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
-            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, null, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, List.of(), List.of(), apiKey);
         }
@@ -7765,7 +7768,7 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var request = factory.manufacturePojo(BatchDelete.class);
-            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, null, workspaceName, apiKey);
         }
     }
 
@@ -8317,7 +8320,7 @@ class TracesResourceTest {
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
-            traceResourceClient.deleteTraces(request, TEST_WORKSPACE, API_KEY);
+            traceResourceClient.deleteTraces(request, null, TEST_WORKSPACE, API_KEY);
 
             // Verify comments were actually deleted via get endpoint
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
