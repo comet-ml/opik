@@ -1,4 +1,4 @@
-﻿# opik.ps1
+# opik.ps1
 
 [CmdletBinding()]
 param (
@@ -27,9 +27,7 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
-# Local development uses specific services defined in LOCAL_DEVELOPMENT_SERVICES (excludes backend/frontend containers)
-# Note: demo-data-generator is excluded because it depends on frontend/python-backend containers
-$LOCAL_DEVELOPMENT_SERVICES = @("mysql", "redis", "clickhouse", "zookeeper", "minio", "mc")
+# Local development functionality removed - now handled by Docker profiles
 
 # Colored output functions for local development
 function Write-StatusInfo {
@@ -366,64 +364,34 @@ function Test-LocalRequirements {
     Write-StatusSuccess "All local development requirements are met"
 }
 
-function Set-NginxConfigLocal {
-    Write-StatusInfo "Configuring nginx for local development..."
+# Nginx configuration function removed - nginx now configured for local development by default
 
-    $nginxConfig = Join-Path $scriptDir "deployment\docker-compose\nginx_default_local.conf"
-
-    if (Test-Path $nginxConfig) {
-        $content = Get-Content $nginxConfig -Raw
-        if ($content -match "proxy_pass http://backend:8080;") {
-            $content = $content -replace "proxy_pass http://backend:8080;", "proxy_pass http://host.docker.internal:8080;"
-            Set-Content -Path $nginxConfig -Value $content
-            Write-StatusSuccess "Nginx configuration updated for local development"
-        } elseif ($content -match "proxy_pass http://host.docker.internal:8080;") {
-            Write-StatusInfo "Nginx configuration already set for local development"
-        } else {
-            Write-StatusWarning "Could not find expected proxy_pass configuration in nginx file"
-        }
-    } else {
-        Write-StatusWarning "Nginx configuration file not found: $nginxConfig"
-    }
-}
-
-function Set-FrontendConfigLocal {
-    Write-StatusInfo "Configuring frontend for local development..."
-
-    $frontendDir = Join-Path $scriptDir "apps\opik-frontend"
-    $envFile = Join-Path $frontendDir ".env.development"
-
-    if (-not (Test-Path $envFile)) {
-        Write-StatusWarning ".env.development file not found, creating it..."
-    }
-
-    $envContent = @"
-VITE_BASE_URL=/
-VITE_BASE_API_URL=http://localhost:8080
-"@
-
-    Set-Content -Path $envFile -Value $envContent
-    Write-StatusSuccess "Frontend environment configured for local development"
-}
+# Frontend configuration function removed - frontend now has local environment file
 
 function Start-LocalContainers {
-    Write-StatusInfo "Starting required containers for local development (supporting services only, excluding backend/frontend/python-backend containers)..."
+    Write-StatusInfo "Starting containers for local development using Docker profiles..."
 
     # Change to script directory
     Set-Location $scriptDir
 
-    # Configure nginx and frontend for local development
-    Set-NginxConfigLocal
-    Set-FrontendConfigLocal
-
-    # Start containers using docker compose with port mapping override
-    # Force port mapping to true for local development
+    # Use Docker profiles to start only the infrastructure services
     $dockerArgs = @(
         "compose",
         "-f", "deployment\docker-compose\docker-compose.yaml",
-        "-f", "deployment\docker-compose\docker-compose.override.yaml",
+        "--profile", "local-dev",
         "up", "-d"
-    ) + $LOCAL_DEVELOPMENT_SERVICES
+    )
+
+    # Add port mapping override if enabled
+    if ($PORT_MAPPING) {
+        $dockerArgs = @(
+            "compose",
+            "-f", "deployment\docker-compose\docker-compose.yaml",
+            "-f", "deployment\docker-compose\docker-compose.override.yaml",
+            "--profile", "local-dev",
+            "up", "-d"
+        )
+    }
 
     docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
 
@@ -460,6 +428,22 @@ function Start-LocalContainers {
     Write-StatusSuccess "All required containers for local development are running"
 }
 
+function Start-LocalMigrations {
+    Write-StatusInfo "Running database migrations using Docker profile..."
+
+    Set-Location $scriptDir
+
+    # Use the local-dev-migrate profile to run migrations
+    docker compose -f deployment\docker-compose\docker-compose.yaml --profile local-dev-migrate run --rm local-migration
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-StatusSuccess "Database migrations completed successfully"
+    } else {
+        Write-StatusError "Database migrations failed"
+        exit 1
+    }
+}
+
 function Build-BackendLocal {
     Write-StatusInfo "Building backend with Maven (skipping tests)..."
 
@@ -483,55 +467,37 @@ function Start-BackendLocal {
     $backendDir = Join-Path $scriptDir "apps\opik-backend"
     Set-Location $backendDir
 
-    # Set environment variables for local development
-    $env:CORS = "true"
-    $env:STATE_DB_PROTOCOL = "jdbc:mysql://"
-    $env:STATE_DB_URL = "localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
-    $env:STATE_DB_DATABASE_NAME = "opik"
-    $env:STATE_DB_USER = "opik"
-    $env:STATE_DB_PASS = "opik"
-    $env:ANALYTICS_DB_MIGRATIONS_URL = "jdbc:clickhouse://localhost:8123"
-    $env:ANALYTICS_DB_MIGRATIONS_USER = "opik"
-    $env:ANALYTICS_DB_MIGRATIONS_PASS = "opik"
-    $env:ANALYTICS_DB_PROTOCOL = "HTTP"
-    $env:ANALYTICS_DB_HOST = "localhost"
-    $env:ANALYTICS_DB_PORT = "8123"
-    $env:ANALYTICS_DB_DATABASE_NAME = "opik"
-    $env:ANALYTICS_DB_USERNAME = "opik"
-    $env:ANALYTICS_DB_PASS = "opik"
-    $env:JAVA_OPTS = "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
-    $env:REDIS_URL = "redis://:opik@localhost:6379/"
-
-    # Run database migrations if --migrate flag is specified
-    if ($RUN_MIGRATIONS) {
-        Write-StatusInfo "Running database migrations..."
-        # Set OPIK_VERSION for the migration script and create symlink
-        $jarFile = Get-ChildItem "target\opik-backend-*.jar" | Where-Object { $_.Name -notlike "*sources*" -and $_.Name -notlike "original-*" } | Select-Object -First 1
-        $migrationJar = $null
-        if ($jarFile) {
-            # Extract version from JAR filename (e.g., opik-backend-1.0-SNAPSHOT.jar -> 1.0-SNAPSHOT)
-            $env:OPIK_VERSION = $jarFile.BaseName -replace '^opik-backend-', ''
-            
-            # Create symlink for migration script (it expects JAR in current directory)
-            $migrationJar = "opik-backend-$($env:OPIK_VERSION).jar"
-            if (-not (Test-Path $migrationJar)) {
-                New-Item -ItemType SymbolicLink -Path $migrationJar -Target $jarFile.FullName -Force | Out-Null
+    # Load environment variables from centralized local config
+    $envFile = Join-Path $scriptDir "deployment\docker-compose\.env.local"
+    if (Test-Path $envFile) {
+        Write-StatusInfo "Loading environment variables from .env.local"
+        Get-Content $envFile | ForEach-Object {
+            if ($_ -match "^([^#][^=]+)=(.*)$") {
+                $name = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                Set-Item -Path "env:$name" -Value $value
             }
         }
-        if (Test-Path "run_db_migrations.ps1") {
-            & .\run_db_migrations.ps1
-        } elseif (Test-Path "run_db_migrations.sh") {
-            & bash .\run_db_migrations.sh
-        } else {
-            Write-StatusWarning "Database migration script not found, skipping..."
-        }
-        
-        # Clean up symlink after migrations
-        if ($migrationJar -and (Test-Path $migrationJar) -and ((Get-Item $migrationJar).LinkType -eq "SymbolicLink")) {
-            Remove-Item $migrationJar -Force
-        }
     } else {
-        Write-StatusInfo "Skipping database migrations (use --migrate flag to run them)"
+        Write-StatusWarning "Local environment file not found, using default values"
+        # Fallback to hardcoded values if needed
+        $env:CORS = "true"
+        $env:STATE_DB_PROTOCOL = "jdbc:mysql://"
+        $env:STATE_DB_URL = "localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+        $env:STATE_DB_DATABASE_NAME = "opik"
+        $env:STATE_DB_USER = "opik"
+        $env:STATE_DB_PASS = "opik"
+        $env:ANALYTICS_DB_MIGRATIONS_URL = "jdbc:clickhouse://localhost:8123"
+        $env:ANALYTICS_DB_MIGRATIONS_USER = "opik"
+        $env:ANALYTICS_DB_MIGRATIONS_PASS = "opik"
+        $env:ANALYTICS_DB_PROTOCOL = "HTTP"
+        $env:ANALYTICS_DB_HOST = "localhost"
+        $env:ANALYTICS_DB_PORT = "8123"
+        $env:ANALYTICS_DB_DATABASE_NAME = "opik"
+        $env:ANALYTICS_DB_USERNAME = "opik"
+        $env:ANALYTICS_DB_PASS = "opik"
+        $env:JAVA_OPTS = "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
+        $env:REDIS_URL = "redis://:opik@localhost:6379/"
     }
 
     # Start the backend
@@ -580,7 +546,12 @@ function Start-FrontendLocal {
         & npm install
     }
 
-    # Frontend environment is already configured in Start-LocalContainers
+    # Check for local environment configuration
+    if (Test-Path ".env.local") {
+        Write-StatusInfo "Using local environment configuration"
+    } else {
+        Write-StatusWarning "Local environment file not found in frontend directory"
+    }
 
     # Start the frontend development server
     Write-StatusInfo "Starting frontend development server..."
@@ -637,8 +608,13 @@ function Start-LocalDevelopment {
     Test-LocalRequirements
     Test-DockerStatus
 
-    # Start containers for local development
+    # Start containers for local development using Docker profiles
     Start-LocalContainers
+
+    # Run migrations if requested
+    if ($RUN_MIGRATIONS) {
+        Start-LocalMigrations
+    }
 
     # Build and run backend and frontend
     Build-BackendLocal

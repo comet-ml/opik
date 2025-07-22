@@ -5,6 +5,10 @@ services:
     image: mysql:8.4.2
     pull_policy: always
     hostname: mysql
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     environment:
       MYSQL_ROOT_PASSWORD: opik
       MYSQL_DATABASE: opik
@@ -22,6 +26,10 @@ services:
     image: redis:7.2.4-alpine3.19
     pull_policy: always
     hostname: redis
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     command: redis-server --requirepass opik
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "6379" ]
@@ -32,6 +40,10 @@ services:
 
   clickhouse-init:
     image: alpine:latest
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     volumes:
       - ./clickhouse_config:/clickhouse_config_files
       - clickhouse-config:/config
@@ -44,6 +56,10 @@ services:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
     pull_policy: always
     hostname: clickhouse
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     environment:
       CLICKHOUSE_DB: opik
       CLICKHOUSE_USER: opik
@@ -73,6 +89,10 @@ services:
   zookeeper:
     image: docker.io/bitnami/zookeeper:3.9.3-debian-12-r16
     hostname: zookeeper
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     environment:
       ZOO_MY_ID: 1
       ZOO_SERVERS: zookeeper=zookeeper:2888:3888
@@ -87,6 +107,10 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -100,6 +124,10 @@ services:
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    profiles:
+      - full
+      - local-dev
+      - infrastructure
     depends_on:
       - minio
     entrypoint: >
@@ -113,6 +141,9 @@ services:
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - full
+      - backend-only
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -173,6 +204,9 @@ services:
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - full
+      - backend-only
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -198,6 +232,7 @@ services:
     pull_policy: always
     profiles:
       - guardrails
+      - full-with-guardrails
     build:
       context: ../../apps/opik-guardrails-backend
       dockerfile: Dockerfile
@@ -214,6 +249,10 @@ services:
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - full
+      - full-with-guardrails
+      - demo
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -231,6 +270,10 @@ services:
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - full
+      - full-with-guardrails
+      - frontend-only
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
@@ -250,6 +293,35 @@ services:
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+
+  # Migration service specifically for local development
+  local-migration:
+    image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
+    profiles:
+      - local-dev-migrate
+    build:
+      context: ../../apps/opik-backend
+      dockerfile: Dockerfile
+      args:
+        OPIK_VERSION: ${OPIK_VERSION:-latest}
+    hostname: local-migration
+    environment:
+      STATE_DB_PROTOCOL: "jdbc:mysql://"
+      STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+      STATE_DB_DATABASE_NAME: opik
+      STATE_DB_USER: opik
+      STATE_DB_PASS: opik
+      ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse:8123"
+      ANALYTICS_DB_MIGRATIONS_USER: opik
+      ANALYTICS_DB_MIGRATIONS_PASS: opik
+      JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
+    command: [ "bash", "-c", "./run_db_migrations.sh" ]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
 
 networks:
   default:

@@ -4,10 +4,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1" "opik-zookeeper-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 
-# Local development uses specific services defined in LOCAL_DEVELOPMENT_SERVICES (excludes backend/frontend containers)
-# Note: demo-data-generator is excluded because it depends on frontend/python-backend containers
-LOCAL_DEVELOPMENT_SERVICES="mysql redis clickhouse zookeeper minio mc"
-
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=("${REQUIRED_CONTAINERS[@]}")
 
@@ -43,52 +39,77 @@ command_exists() {
 get_verify_cmd() {
   local cmd="./opik.sh"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="$cmd --guardrails"
-  fi
-  echo "$cmd --verify"
-}
-
-get_start_cmd() {
-  local cmd="./opik.sh"
-  if [[ "$BUILD_MODE" == "true" ]]; then
-    cmd="$cmd --build"
+    cmd+=" --guardrails"
   fi
   if [[ "$DEBUG_MODE" == "true" ]]; then
-    cmd="$cmd --debug"
+    cmd+=" --debug"
   fi
   if [[ "$PORT_MAPPING" == "true" ]]; then
-    cmd="$cmd --port-mapping"
+    cmd+=" --port-mapping"
   fi
-  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="$cmd --guardrails"
-  fi
+  cmd+=" --verify"
   echo "$cmd"
 }
 
-generate_uuid() {
-  if command -v uuidgen >/dev/null 2>&1; then
-    uuidgen
+get_version() {
+  if [[ -f VERSION ]]; then
+    cat VERSION
   else
-    cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N
+    echo "latest"
   fi
 }
 
-get_docker_compose_cmd() {
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
-  if [[ "$PORT_MAPPING" == "true" ]]; then
-    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
+print_header() {
+  echo ""
+  echo "======================================"
+  echo "         Welcome to OPIK 🚀         "
+  echo "======================================"
+  echo ""
+}
+
+print_status_info() {
+  echo ""
+  echo "----------------------------------------"
+  echo "           System Status 📊           "
+  echo "----------------------------------------"
+  echo ""
+}
+
+print_container_status() {
+  echo ""
+  echo "Container Status:"
+  docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" --filter name=opik
+  echo ""
+}
+
+print_url_info() {
+  echo ""
+  echo "🌐 Application URLs:"
+  echo "   Main Interface: http://localhost:5173"
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    echo "   Guardrails: http://localhost:5173"
   fi
-  echo "$cmd"
+  echo ""
+  echo "📊 Health Checks:"
+  echo "   Backend Health: http://localhost:8080/health-check"
+  echo "   Frontend: http://localhost:5173"
+  echo ""
 }
 
 print_usage() {
-  echo "Usage: opik.sh [OPTIONS]"
+  echo "Usage: $0 [OPTIONS] [COMMAND]"
+  echo ""
+  echo "Commands:"
+  echo "  start           Start all containers (default if no command specified)"
+  echo "  stop            Stop all containers"
+  echo "  restart         Restart all containers"
+  echo "  status          Show current system status"
+  echo "  logs            Show logs for all containers"
+  echo "  clean           Stop and remove all containers and volumes (destructive)"
+  echo "  build           Build all container images"
+  echo "  --verify        Check if all containers are running correctly"
   echo ""
   echo "Options:"
-  echo "  --verify        Check if all containers are healthy"
-  echo "  --info          Display welcome system status, only if all containers are running"
-  echo "  --stop          Stop all containers and clean up"
-  echo "  --build         Build containers before starting (can be combined with other flags)"
   echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
@@ -123,64 +144,21 @@ check_local_requirements() {
     print_success "All local development requirements are met"
 }
 
-# Function to configure nginx for local development
-configure_nginx_local() {
-    print_status "Configuring nginx for local development..."
-
-    nginx_config="$script_dir/deployment/docker-compose/nginx_default_local.conf"
-
-    # Update nginx configuration to use host.docker.internal for backend
-    if grep -q "proxy_pass http://backend:8080;" "$nginx_config"; then
-        # Handle both macOS and Linux sed syntax
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' 's|proxy_pass http://backend:8080;|proxy_pass http://host.docker.internal:8080;|' "$nginx_config"
-        else
-            sed -i 's|proxy_pass http://backend:8080;|proxy_pass http://host.docker.internal:8080;|' "$nginx_config"
-        fi
-        print_success "Nginx configuration updated for local development"
-    elif grep -q "proxy_pass http://host.docker.internal:8080;" "$nginx_config"; then
-        print_status "Nginx configuration already set for local development"
-    else
-        print_warning "Could not find expected proxy_pass configuration in nginx file"
-    fi
-}
-
-# Function to configure frontend for local development
-configure_frontend_local() {
-    print_status "Configuring frontend for local development..."
-
-    frontend_dir="$script_dir/apps/opik-frontend"
-
-    # Ensure .env.development has the correct configuration for local development
-    if [ ! -f "$frontend_dir/.env.development" ]; then
-        print_warning ".env.development file not found, creating it..."
-    fi
-
-    # Update .env.development with correct local development settings
-    cat > "$frontend_dir/.env.development" << EOF
-VITE_BASE_URL=/
-VITE_BASE_API_URL=http://localhost:8080
-EOF
-
-    print_success "Frontend environment configured for local development"
-}
-
-# Function to start containers for local development
+# Function to start containers for local development using Docker profiles
 start_local_containers() {
-    print_status "Starting required containers for local development (supporting services only, excluding backend/frontend/python-backend containers)..."
+    print_status "Starting containers for local development using Docker profiles..."
 
     # Change to project root
     cd "$script_dir"
 
-    # Configure nginx for local development
-    configure_nginx_local
+    # Use Docker profiles to start only the infrastructure services
+    local profile_args="--profile local-dev"
+    if [[ "$PORT_MAPPING" == "true" ]]; then
+        profile_args+=" -f deployment/docker-compose/docker-compose.override.yaml"
+    fi
 
-    # Configure frontend environment for local development
-    configure_frontend_local
-
-    # Start containers using docker compose with port mapping override 
-    # Force port mapping to true for local development
-    docker compose -f deployment/docker-compose/docker-compose.yaml -f deployment/docker-compose/docker-compose.override.yaml up -d "$LOCAL_DEVELOPMENT_SERVICES"
+    # Start containers using docker compose with the local-dev profile
+    docker compose -f deployment/docker-compose/docker-compose.yaml $profile_args up -d
 
     print_status "Waiting for containers to be healthy..."
 
@@ -199,18 +177,31 @@ start_local_containers() {
                 break
             fi
             if [ $i -eq $max_retries ]; then
-                if [ "$container" = "opik-python-backend-1" ]; then
-                    print_warning "$container may not be fully healthy, but continuing..."
-                else
-                    print_error "$container failed to become healthy after ${max_retries}s"
-                    exit 1
-                fi
+                print_error "$container failed to become healthy after ${max_retries}s"
+                exit 1
             fi
             sleep $interval
         done
     done
 
     print_success "All required containers for local development are running"
+}
+
+# Function to run database migrations using Docker profile
+run_local_migrations() {
+    print_status "Running database migrations using Docker profile..."
+
+    cd "$script_dir"
+
+    # Use the local-dev-migrate profile to run migrations
+    docker compose -f deployment/docker-compose/docker-compose.yaml --profile local-dev-migrate run --rm local-migration
+
+    if [ $? -eq 0 ]; then
+        print_success "Database migrations completed successfully"
+    else
+        print_error "Database migrations failed"
+        exit 1
+    fi
 }
 
 # Function to build backend with Maven
@@ -240,49 +231,32 @@ run_backend_local() {
 
     cd "$backend_dir"
 
-    # Set environment variables for local development
-    export CORS="true"
-    export STATE_DB_PROTOCOL="jdbc:mysql://"
-    export STATE_DB_URL="localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
-    export STATE_DB_DATABASE_NAME="opik"
-    export STATE_DB_USER="opik"
-    export STATE_DB_PASS="opik"
-    export ANALYTICS_DB_MIGRATIONS_URL="jdbc:clickhouse://localhost:8123"
-    export ANALYTICS_DB_MIGRATIONS_USER="opik"
-    export ANALYTICS_DB_MIGRATIONS_PASS="opik"
-    export ANALYTICS_DB_PROTOCOL="HTTP"
-    export ANALYTICS_DB_HOST="localhost"
-    export ANALYTICS_DB_PORT="8123"
-    export ANALYTICS_DB_DATABASE_NAME="opik"
-    export ANALYTICS_DB_USERNAME="opik"
-    export ANALYTICS_DB_PASS="opik"
-    export JAVA_OPTS="-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
-    export REDIS_URL="redis://:opik@localhost:6379/"
-
-    # Run database migrations if --migrate flag is specified
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        print_status "Running database migrations..."
-        # Set OPIK_VERSION for the migration script and create symlink
-        JAR_FILE=$(find target -name "opik-backend-*.jar" ! -name "*sources*" ! -name "original-*" | head -n 1)
-        if [ -n "$JAR_FILE" ]; then
-            # Extract version from JAR filename (e.g., opik-backend-1.0-SNAPSHOT.jar -> 1.0-SNAPSHOT)
-            OPIK_VERSION=$(basename "$JAR_FILE" | sed 's/opik-backend-\(.*\)\.jar/\1/')
-            export OPIK_VERSION
-            
-            # Create symlink for migration script (it expects JAR in current directory)
-            MIGRATION_JAR="opik-backend-$OPIK_VERSION.jar"
-            if [ ! -f "$MIGRATION_JAR" ]; then
-                ln -sf "$JAR_FILE" "$MIGRATION_JAR"
-            fi
-        fi
-        ./run_db_migrations.sh
-        
-        # Clean up symlink after migrations
-        if [ -n "$MIGRATION_JAR" ] && [ -L "$MIGRATION_JAR" ]; then
-            rm "$MIGRATION_JAR"
-        fi
+    # Load environment variables from centralized local config
+    if [ -f "$script_dir/deployment/docker-compose/.env.local" ]; then
+        set -a
+        source "$script_dir/deployment/docker-compose/.env.local"
+        set +a
+        print_status "Loaded environment variables from .env.local"
     else
-        print_status "Skipping database migrations (use --migrate flag to run them)"
+        print_warning "Local environment file not found, using default values"
+        # Fallback to hardcoded values if needed
+        export CORS="true"
+        export STATE_DB_PROTOCOL="jdbc:mysql://"
+        export STATE_DB_URL="localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+        export STATE_DB_DATABASE_NAME="opik"
+        export STATE_DB_USER="opik"
+        export STATE_DB_PASS="opik"
+        export ANALYTICS_DB_MIGRATIONS_URL="jdbc:clickhouse://localhost:8123"
+        export ANALYTICS_DB_MIGRATIONS_USER="opik"
+        export ANALYTICS_DB_MIGRATIONS_PASS="opik"
+        export ANALYTICS_DB_PROTOCOL="HTTP"
+        export ANALYTICS_DB_HOST="localhost"
+        export ANALYTICS_DB_PORT="8123"
+        export ANALYTICS_DB_DATABASE_NAME="opik"
+        export ANALYTICS_DB_USERNAME="opik"
+        export ANALYTICS_DB_PASS="opik"
+        export JAVA_OPTS="-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
+        export REDIS_URL="redis://:opik@localhost:6379/"
     fi
 
     # Start the backend
@@ -327,7 +301,12 @@ run_frontend_local() {
         npm install
     fi
 
-    # Frontend environment is already configured in start_local_containers
+    # Copy local environment file for development
+    if [ -f ".env.local" ]; then
+        print_status "Using local environment configuration"
+    else
+        print_warning "Local environment file not found in frontend directory"
+    fi
 
     # Start the frontend development server
     print_status "Starting frontend development server..."
@@ -379,8 +358,13 @@ run_local_development() {
     check_local_requirements
     check_docker_status
 
-    # Start containers for local development
+    # Start containers for local development using Docker profiles
     start_local_containers
+
+    # Run migrations if requested
+    if [ "$RUN_MIGRATIONS" = true ]; then
+        run_local_migrations
+    fi
 
     # Full setup: build and run both backend and frontend
     build_backend_local
@@ -403,6 +387,39 @@ check_docker_status() {
   if ! docker info >/dev/null 2>&1; then
     echo "❌ Docker is not running or not accessible. Please start Docker first."
     exit 1
+  fi
+}
+
+get_docker_compose_cmd() {
+  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  if [[ "$PORT_MAPPING" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
+  fi
+  echo "$cmd"
+}
+
+get_start_cmd() {
+  local cmd="./opik.sh"
+  if [[ "$BUILD_MODE" == "true" ]]; then
+    cmd="$cmd --build"
+  fi
+  if [[ "$DEBUG_MODE" == "true" ]]; then
+    cmd="$cmd --debug"
+  fi
+  if [[ "$PORT_MAPPING" == "true" ]]; then
+    cmd="$cmd --port-mapping"
+  fi
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    cmd="$cmd --guardrails"
+  fi
+  echo "$cmd"
+}
+
+generate_uuid() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen
+  else
+    cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N
   fi
 }
 
