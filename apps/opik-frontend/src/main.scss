@@ -5,6 +5,60 @@
 @tailwind components;
 @tailwind utilities;
 
+/* React Grid Layout styles */
+.react-grid-layout {
+  position: relative;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNiIgaGVpZ2h0PSI2IiB2aWV3Qm94PSIwIDAgNiA2IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZG90cyBmaWxsPSIjOTk5IiBvcGFjaXR5PSIwLjQ1Ij4KICA8Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIvPgogIDxjaXJjbGUgY3g9IjUiIGN5PSIxIiByPSIxIi8+CiAgPGNpcmNsZSBjeD0iMSIgY3k9IjUiIHI9IjEiLz4KICA8Y2lyY2xlIGN4PSI1IiBjeT0iNSIgcj0iMSIvPgo8L2RvdHM+Cjwvc3ZnPgo=') no-repeat 50% 50%;
+  background-size: 6px 6px;
+  cursor: se-resize;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: hsl(var(--primary)) !important;
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+}
+
+.react-grid-item.resizing {
+  opacity: 0.6;
+  z-index: 3;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

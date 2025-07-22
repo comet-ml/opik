@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  BarChart3,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -87,6 +88,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LayoutGrid,
         label: "Projects",
         count: "projects",
+      },
+      {
+        id: "dashboards",
+        path: "/$workspaceName/dashboards",
+        type: MENU_ITEM_TYPE.router,
+        icon: BarChart3,
+        label: "Dashboards",
       },
     ],
   },

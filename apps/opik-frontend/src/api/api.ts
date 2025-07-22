@@ -24,6 +24,7 @@ export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
 export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
 export const WORKSPACES_REST_ENDPOINT = "/v1/private/workspaces/";
+export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
