@@ -10,7 +10,6 @@ from opik.api_objects import opik_client
 
 adk_operations_skip_list = [
     "invocation",
-    "call_llm", # opik tracer will handle these spans
 ]
 
 class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
@@ -52,6 +51,9 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
         if name.startswith("execute_tool"):
             pass
 
+        if name == "call_llm":
+            pass
+
         current_trace_data = opik.context_storage.get_trace_data()
         current_span_data = opik.context_storage.top_span_data()
 
@@ -59,6 +61,12 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
         if name in adk_operations_skip_list:
             yield opentelemetry.trace.INVALID_SPAN
             return
+        
+        if current_span_data is not None and current_span_data.type == "llm" and current_span_data.name != "STARTED_LLM_CALL":
+            opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
+            current_span_data.init_end_time()
+            self._opik_client.span(**current_span_data.as_parameters)
+            current_span_data = opik.context_storage.top_span_data()
 
         try:
             if current_trace_data is None:
@@ -68,12 +76,11 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
                 opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
                 
             else:
-                if current_span_data is not None and current_span_data.type == "llm":
+                if current_span_data is not None and current_span_data.name == "STARTED_LLM_CALL":
                     span_to_close_in_finally_block = current_span_data
-                    # LLM span was created externally in ADK tracer, we don't need to create a new one.
                     yield opentelemetry.trace.INVALID_SPAN
                     return
-
+                    
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=name,
                     type="general",

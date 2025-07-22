@@ -151,10 +151,10 @@ class OpikTracer:
 
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
-                    name=llm_request.model,
+                    name="STARTED_LLM_CALL",
                     project_name=self.project_name,
                     metadata=self.metadata,
-                    type="llm",
+                    type="llm", # for now
                     model=model,
                     provider=provider,
                     input=input,
