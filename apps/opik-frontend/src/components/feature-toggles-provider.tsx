@@ -17,6 +17,7 @@ type FeatureTogglesState = {
 const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
+  [FeatureToggleKeys.AI_TRACE_INSPECTOR_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -36,7 +37,14 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    // if (data) setFeatures(data);
+    // TODO lala remove this after testing
+    if (data) {
+      setFeatures({
+        ...data,
+        [FeatureToggleKeys.AI_TRACE_INSPECTOR_ENABLED]: true,
+      });
+    }
   }, [data]);
 
   const value = useMemo(() => {
