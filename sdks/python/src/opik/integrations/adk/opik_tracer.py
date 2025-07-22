@@ -1,6 +1,7 @@
 import contextvars
 import functools
 import logging
+import opentelemetry.trace
 from typing import Any, Dict, List, Optional, Set, Union
 
 import google.adk.agents
@@ -8,11 +9,13 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
+from google.adk import telemetry as adk_telemetry
 
 from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
+from sqlalchemy.sql.operators import op
 
 from . import (
     helpers as adk_helpers,
@@ -44,6 +47,9 @@ class OpikTracer:
         self.distributed_headers = distributed_headers
 
         self._init_internal_attributes()
+
+        self._adk_span_id_to_opik_span_data: Dict[str, span.SpanData] = {}
+        self._adk_trace_id_to_opik_trace_data: Dict[str, trace.TraceData] = {}
 
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
@@ -107,6 +113,8 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
+            adk_span = opentelemetry.trace.get_current_span()
+
             # Debug logging for callback invocation
             current_trace = self._context_storage.get_trace_data()
             current_span = self._context_storage.top_span_data()
@@ -281,9 +289,7 @@ class OpikTracer:
         output = None
 
         if not adk_helpers.has_empty_text_part_content(llm_response):
-            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
-            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
-
+            
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(output)
@@ -296,6 +302,12 @@ class OpikTracer:
                     f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
                     exc_info=True,
                 )
+        else:
+            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
+            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+
+            LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - empty content) | Trace ID: {trace_id} | Span ID: {span_id}")
+            return
 
         self._last_model_output = output
 
