@@ -1413,6 +1413,7 @@ class TracesResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         TraceFilter.builder()
                                                 .field(filter.getKey())
@@ -4669,6 +4670,7 @@ class TracesResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         TraceThreadFilter.builder()
                                                 .field(filter.getKey())
