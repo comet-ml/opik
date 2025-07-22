@@ -327,11 +327,11 @@ public class TracesResource {
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request,
             @QueryParam("project_id") UUID projectId) {
-        log.info("Deleting traces, count '{}'", request.ids().size());
+        log.info("Deleting traces, project id '{}' and count '{}'", projectId, request.ids().size());
         service.delete(request.ids(), projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted traces, count '{}'", request.ids().size());
+        log.info("Deleted traces, project id '{}' and count '{}'", projectId, request.ids().size());
         return Response.noContent().build();
     }
 

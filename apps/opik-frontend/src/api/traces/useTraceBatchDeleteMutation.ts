@@ -18,8 +18,8 @@ const useTracesBatchDeleteMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ids }: UseTraceBatchDeleteMutationParams) => {
-      const { data } = await api.post(`${TRACES_REST_ENDPOINT}delete`, {
+    mutationFn: async ({ ids, projectId }: UseTraceBatchDeleteMutationParams) => {
+      const { data } = await api.post(`${TRACES_REST_ENDPOINT}delete?project_id=${projectId}`, {
         ids: ids,
       });
       return data;
