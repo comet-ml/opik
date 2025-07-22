@@ -1247,6 +1247,7 @@ class SpansResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         SpanFilter.builder()
                                                 .field(filter.getKey())
