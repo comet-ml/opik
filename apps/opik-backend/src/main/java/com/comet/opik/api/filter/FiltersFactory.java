@@ -119,6 +119,7 @@ public class FiltersFactory {
                 filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {
                 log.warn("invalid filter '{}'", filter.value(), exception);
+                throw new BadRequestException("Invalid filter '%s'".formatted(filter.value()), exception);
             }
         }
 
