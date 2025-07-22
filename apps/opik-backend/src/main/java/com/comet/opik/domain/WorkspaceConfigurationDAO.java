@@ -103,6 +103,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> {
                         Duration timeout = Optional.ofNullable(row.get("timeout_mark_thread_as_inactive", Long.class))
+                                .filter(timeoutSeconds -> timeoutSeconds > 0)
                                 .map(Duration::ofSeconds)
                                 .orElse(null);
 
