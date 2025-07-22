@@ -1,10 +1,10 @@
-import contextvars
 import functools
 import logging
 import opentelemetry.trace
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Union
 
 import google.adk.agents
+from google.adk.agents import base_agent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
 from google.adk.tools.base_tool import BaseTool
@@ -12,10 +12,9 @@ from google.adk.tools.tool_context import ToolContext
 from google.adk import telemetry as adk_telemetry
 
 from opik import context_storage
-from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
-from sqlalchemy.sql.operators import op
+from opik.decorator import span_creation_handler, arguments_helpers
 
 from . import (
     helpers as adk_helpers,
@@ -23,6 +22,7 @@ from . import (
     llm_response_wrapper,
     callback_context_info_extractors,
 )
+from . import adk_tracer_wrapper
 from .graph import mermaid_graph_builder
 
 LOGGER = logging.getLogger(__name__)
@@ -48,88 +48,31 @@ class OpikTracer:
 
         self._init_internal_attributes()
 
-        self._adk_span_id_to_opik_span_data: Dict[str, span.SpanData] = {}
-        self._adk_trace_id_to_opik_trace_data: Dict[str, trace.TraceData] = {}
-
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
-
-        # Use OpikContextStorage instance instead of global context storage module
-        # in case we need to use different context storage for ADK in the future
-        self._context_storage = context_storage.get_current_context_instance()
-
-        self._opik_created_spans: Set[str] = (
-            set()
-        )  # TODO: use contextvar set for a more reliable clean-up?
-
-        self._current_trace_created_by_opik_tracer: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("current_trace_created_by_opik_tracer", default=None)
-
         self._opik_client = opik_client.get_client_cached()
 
-        _patch_adk()
+        _patch_adk(self._opik_client)
 
     def flush(self) -> None:
         self._opik_client.flush()
-
-    def _end_current_trace(self) -> None:
-        trace_data = self._context_storage.pop_trace_data()
-        assert trace_data is not None
-        trace_data.init_end_time()
-        self._opik_client.trace(**trace_data.as_parameters)
-
-    def _end_current_span(
-        self,
-    ) -> None:
-        span_data = self._context_storage.pop_span_data()
-        assert span_data is not None
-        span_data.init_end_time()
-        self._opik_client.span(**span_data.as_parameters)
-
-    def _start_span(self, span_data: span.SpanData) -> None:
-        self._context_storage.add_span_data(span_data)
-        self._opik_created_spans.add(span_data.id)
-
-        if self._opik_client.config.log_start_trace_span:
-            self._opik_client.span(**span_data.as_start_parameters)
-
-    def _start_trace(self, trace_data: trace.TraceData) -> None:
-        self._context_storage.set_trace_data(trace_data)
-        self._current_trace_created_by_opik_tracer.set(trace_data.id)
-
-        if self._opik_client.config.log_start_trace_span:
-            self._opik_client.trace(**trace_data.as_start_parameters)
-
-    def _set_current_context_data(self, value: SpanOrTraceData) -> None:
-        if isinstance(value, span.SpanData):
-            self._context_storage.add_span_data(value)
-        elif isinstance(value, trace.TraceData):
-            self._context_storage.set_trace_data(value)
-        else:
-            raise ValueError(f"Invalid context type: {type(value)}")
 
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
-            adk_span = opentelemetry.trace.get_current_span()
-
-            # Debug logging for callback invocation
-            current_trace = self._context_storage.get_trace_data()
-            current_span = self._context_storage.top_span_data()
-            trace_id = current_trace.id if current_trace else "None"
-            span_id = current_span.id if current_span else "None"
-            LOGGER.debug(f"🟢 BEFORE_AGENT_CALLBACK called | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
+            current_trace = context_storage.get_trace_data()
+            current_span = context_storage.top_span_data()
+            
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
             )
 
-            trace_metadata = self.metadata.copy()
-            trace_metadata["adk_invocation_id"] = callback_context.invocation_id
-            trace_metadata.update(session_metadata)
+            agent_metadata = self.metadata.copy()
+            agent_metadata["adk_invocation_id"] = callback_context.invocation_id
+            agent_metadata.update(session_metadata)
 
-            _try_add_agent_graph_to_metadata(trace_metadata, callback_context)
+            _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
 
             if callback_context.user_content is not None:
                 user_input = adk_helpers.convert_adk_base_model_to_dict(
@@ -137,42 +80,34 @@ class OpikTracer:
                 )
             else:
                 user_input = None
+
             name = self.name or callback_context.agent_name
 
-            current_trace_data = self._context_storage.get_trace_data()
-            if current_trace_data is None:  # todo: support distributed headers
-                current_trace = trace.TraceData(
+            # Update existing context data instead of creating new
+            if current_span is not None:
+                # Update current span with agent information
+                current_span.update(
                     name=name,
+                    metadata={**agent_metadata},
+                    input=user_input,
+                    tags=self.tags,
                     project_name=self.project_name,
-                    metadata=trace_metadata,
+                )
+                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED SPAN: {current_span.id}")
+            elif current_trace is not None:
+                # Update current trace with agent information
+                current_trace.update(
+                    name=name,
+                    metadata={**agent_metadata},
+                    input=user_input,
+                    tags=self.tags,
                     thread_id=thread_id,
-                    input=user_input,
-                    tags=self.tags,
-                )
-
-                self._start_trace(trace_data=current_trace)
-                # Debug log for newly created trace
-                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🆕 CREATED TRACE: {current_trace.id}")
-            else:
-                start_span_arguments = arguments_helpers.StartSpanParameters(
-                    name=name,
                     project_name=self.project_name,
-                    metadata=trace_metadata,
-                    tags=self.tags,
-                    input=user_input,
-                    type="general",
                 )
-                _, opik_span_data = (
-                    span_creation_handler.create_span_respecting_context(
-                        start_span_arguments=start_span_arguments,
-                        distributed_trace_headers=None,
-                        opik_context_storage=self._context_storage,
-                    )
-                )
+                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED TRACE: {current_trace.id}")
+            else:
+                LOGGER.warning(f"No current span or trace found in context for agent: {callback_context.agent_name}")
 
-                self._start_span(span_data=opik_span_data)
-                # Debug log for newly created span
-                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🆕 CREATED SPAN: {opik_span_data.id} | Parent Trace: {current_trace_data.id}")
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -180,40 +115,23 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
-            # Debug logging for callback invocation
-            current_trace = self._context_storage.get_trace_data()
-            current_span = self._context_storage.top_span_data()
-            trace_id = current_trace.id if current_trace else "None"
-            span_id = current_span.id if current_span else "None"
-            LOGGER.debug(f"🔴 AFTER_AGENT_CALLBACK called | Agent: {callback_context.agent_name} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
             output = self._last_model_output
-
-            if (span_data := self._context_storage.top_span_data()) is not None:
-                if span_data.id in self._opik_created_spans:
-                    span_data.update(output=output)
-                    finalized_span_id = span_data.id
-                    self._end_current_span()
-                    self._opik_created_spans.discard(span_data.id)
-                    # Debug log for finalized span
-                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
-                else:
-                    # Debug log for no action taken
-                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | ⏸️ NO ACTION (span not created by opik) | Span: {span_data.id} | Trace: {trace_id}")
+            # Debug logging for callback invocation
+            current_span = context_storage.top_span_data()
+            current_trace = context_storage.get_trace_data()
+            if current_span is not None:
+                current_span.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
+            elif current_trace is not None:
+                current_trace.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
+                self._last_model_output = None
             else:
-                trace_data = self._context_storage.get_trace_data()
-                assert trace_data is not None
-
-                if trace_data.id == self._current_trace_created_by_opik_tracer.get():
-                    finalized_trace_id = trace_data.id
-                    trace_data.update(output=output)
-                    self._end_current_trace()
-                    self._current_trace_created_by_opik_tracer.set(None)
-                    self._last_model_output = None
-                    # Debug log for finalized trace
-                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🏁 FINALIZED TRACE: {finalized_trace_id}")
-                else:
-                    # Debug log for no action taken
-                    LOGGER.debug(f"✅ AFTER_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | ⏸️ NO ACTION (trace not created by opik) | Trace: {trace_data.id}")
+                LOGGER.warning(f"No current span or trace found in context for agent output update")
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
@@ -225,12 +143,6 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Debug logging for callback invocation
-            current_trace = self._context_storage.get_trace_data()
-            current_span = self._context_storage.top_span_data()
-            trace_id = current_trace.id if current_trace else "None"
-            span_id = current_span.id if current_span else "None"
-            LOGGER.debug(f"🔵 BEFORE_MODEL_CALLBACK called | Model: {llm_request.model} | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
             input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
 
             provider, model = litellm_wrappers.parse_provider_and_model(
@@ -248,14 +160,9 @@ class OpikTracer:
                     input=input,
                 ),
                 distributed_trace_headers=None,
-                opik_context_storage=self._context_storage,
             )
 
-            self._start_span(span_data=span_data)
-            
-            # Debug log for newly created span
-            LOGGER.debug(f"✅ BEFORE_MODEL_CALLBACK finished | Model: {llm_request.model} | 🆕 CREATED SPAN: {span_data.id} | Parent Trace: {trace_id}")
-
+            context_storage.add_span_data(span_data)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
@@ -266,70 +173,48 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        # Debug logging for callback invocation (declare variables outside try block)
-        current_trace = self._context_storage.get_trace_data()
-        current_span = self._context_storage.top_span_data()
-        trace_id = current_trace.id if current_trace else "None"
-        span_id = current_span.id if current_span else "None"
-        
         try:
             # Ignore partial chunks, ADK will call this method with the full response at the end
             if llm_response.partial is True:
-                LOGGER.debug(f"🟣 AFTER_MODEL_CALLBACK called (PARTIAL) | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
-                LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - partial) | Trace ID: {trace_id} | Span ID: {span_id}")
                 return
             
-            LOGGER.debug(f"🟣 AFTER_MODEL_CALLBACK called (FULL) | Trace ID: {trace_id} | Span ID: {span_id} | Invocation ID: {callback_context.invocation_id}")
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
-        model = None
-        provider = None
-        usage = None
-        output = None
-
-        if not adk_helpers.has_empty_text_part_content(llm_response):
-            
-            try:
-                output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-                usage_data = llm_response_wrapper.pop_llm_usage_data(output)
-                if usage_data is not None:
-                    model = usage_data.model
-                    provider = usage_data.provider
-                    usage = usage_data.opik_usage
-            except Exception as e:
-                LOGGER.debug(
-                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
-                    exc_info=True,
-                )
-        else:
-            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
-            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
-
-            LOGGER.debug(f"⏭️ AFTER_MODEL_CALLBACK finished (early return - empty content) | Trace ID: {trace_id} | Span ID: {span_id}")
-            return
-
-        self._last_model_output = output
-
         try:
-            span_data = self._context_storage.top_span_data()
-            assert span_data is not None
+            model = None
+            provider = None
+            usage = None
+            output = None
 
-            if span_data.id in self._opik_created_spans:
-                finalized_span_id = span_data.id
-                span_data.update(
+            if not adk_helpers.has_empty_text_part_content(llm_response):
+                try:
+                    output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                    usage_data = llm_response_wrapper.pop_llm_usage_data(output)
+                    if usage_data is not None:
+                        model = usage_data.model
+                        provider = usage_data.provider
+                        usage = usage_data.opik_usage
+                except Exception as e:
+                    LOGGER.debug(
+                        f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+                        exc_info=True,
+                    )
+
+            current_span = context_storage.top_span_data()
+            if current_span is not None:
+                current_span.update(
                     output=output,
-                    usage=usage,
+                    name=model,
+                    type="llm",
                     model=model,
                     provider=provider,
+                    usage=usage,
+                    project_name=self.project_name,
                 )
-                self._end_current_span()
-                self._opik_created_spans.discard(span_data.id)
-                # Debug log for finalized span
-                LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
+                self._last_model_output = output
             else:
-                # Debug log for no action taken
-                LOGGER.debug(f"✅ AFTER_MODEL_CALLBACK finished | ⏸️ NO ACTION (span not created by opik) | Span: {span_data.id} | Trace: {trace_id}")
+                LOGGER.warning(f"No current span found in context for model output update")
         except Exception as e:
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
@@ -342,33 +227,24 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Debug logging for callback invocation
-            current_trace = self._context_storage.get_trace_data()
-            current_span = self._context_storage.top_span_data()
-            trace_id = current_trace.id if current_trace else "None"
-            span_id = current_span.id if current_span else "None"
-            LOGGER.debug(f"🟡 BEFORE_TOOL_CALLBACK called | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id} | Function Call ID: {tool_context.function_call_id}")
-            metadata = {
+            current_span = context_storage.top_span_data()
+            
+            tool_metadata = {
                 "function_call_id": tool_context.function_call_id,
                 **self.metadata,
             }
 
-            _, span_data = span_creation_handler.create_span_respecting_context(
-                start_span_arguments=arguments_helpers.StartSpanParameters(
+            # Update existing span with tool information
+            if current_span is not None:
+                current_span.update(
                     name=tool.name,
-                    project_name=self.project_name,
-                    metadata=metadata,
                     type="tool",
                     input=args,
-                ),
-                distributed_trace_headers=None,
-                opik_context_storage=self._context_storage,
-            )
-
-            self._start_span(span_data=span_data)
-            
-            # Debug log for newly created span
-            LOGGER.debug(f"✅ BEFORE_TOOL_CALLBACK finished | Tool: {tool.name} | 🆕 CREATED SPAN: {span_data.id} | Parent Trace: {trace_id}")
+                    metadata={**tool_metadata},
+                    project_name=self.project_name,
+                )
+            else:
+                LOGGER.warning(f"No current span found in context for tool: {tool.name}")
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
@@ -384,41 +260,28 @@ class OpikTracer:
     ) -> None:
         try:
             # Debug logging for callback invocation
-            current_trace = self._context_storage.get_trace_data()
-            current_span = self._context_storage.top_span_data()
-            trace_id = current_trace.id if current_trace else "None"
-            span_id = current_span.id if current_span else "None"
-            LOGGER.debug(f"🟠 AFTER_TOOL_CALLBACK called | Tool: {tool.name} | Trace ID: {trace_id} | Span ID: {span_id} | Function Call ID: {tool_context.function_call_id}")
-            current_span_data = self._context_storage.top_span_data()
-            assert current_span_data is not None
-
+            current_span = context_storage.top_span_data()
+            
             output = (
                 tool_response
                 if isinstance(tool_response, dict)
                 else {"output": tool_response}
             )
-            if current_span_data.id in self._opik_created_spans:
-                finalized_span_id = current_span_data.id
-                current_span_data.update(output=output)
-                self._end_current_span()
-                self._opik_created_spans.discard(current_span_data.id)
-                # Debug log for finalized span
-                LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | 🏁 FINALIZED SPAN: {finalized_span_id} | Trace: {trace_id}")
+            
+            # Update existing span with tool output
+            if current_span is not None:
+                current_span.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
             else:
-                # Debug log for no action taken
-                LOGGER.debug(f"✅ AFTER_TOOL_CALLBACK finished | Tool: {tool.name} | ⏸️ NO ACTION (span not created by opik) | Span: {current_span_data.id} | Trace: {trace_id}")
+                LOGGER.warning(f"No current span found in context for tool output update: {tool.name}")
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
-
-        state.pop("_last_model_output", None)
         state.pop("_opik_client", None)
-        state.pop("_context_storage", None)
-        state.pop("_current_trace_created_by_opik_tracer", None)
-        state.pop("_opik_created_spans", None)
-
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -450,7 +313,7 @@ def _try_add_agent_graph_to_metadata(
 
 
 @functools.lru_cache()
-def _patch_adk() -> None:
+def _patch_adk(opik_client: opik_client.Opik) -> None:
     # monkey patch LLMResponse to store usage_metadata
     old_function = LlmResponse.create
     create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
@@ -470,3 +333,11 @@ def _patch_adk() -> None:
                 lite_llm._model_response_to_generate_content_response
             )
         )
+    
+    no_op_opik_tracer = adk_tracer_wrapper.ADKOpenTelemetryTracerPatched(opik_client)
+    
+    adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
+    adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
+
+    base_agent.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
+    base_agent.tracer.start_span = no_op_opik_tracer.start_span
