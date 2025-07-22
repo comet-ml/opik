@@ -187,19 +187,21 @@ class OpikTracer:
             usage = None
             output = None
 
-            if not adk_helpers.has_empty_text_part_content(llm_response):
-                try:
-                    output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-                    usage_data = llm_response_wrapper.pop_llm_usage_data(output)
-                    if usage_data is not None:
-                        model = usage_data.model
-                        provider = usage_data.provider
-                        usage = usage_data.opik_usage
-                except Exception as e:
-                    LOGGER.debug(
-                        f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
-                        exc_info=True,
-                    )
+            if adk_helpers.has_empty_text_part_content(llm_response):
+                return
+
+            try:
+                output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                usage_data = llm_response_wrapper.pop_llm_usage_data(output)
+                if usage_data is not None:
+                    model = usage_data.model
+                    provider = usage_data.provider
+                    usage = usage_data.opik_usage
+            except Exception as e:
+                LOGGER.debug(
+                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+                    exc_info=True,
+                )
 
             current_span = context_storage.top_span_data()
             if current_span is not None:
@@ -212,6 +214,9 @@ class OpikTracer:
                     usage=usage,
                     project_name=self.project_name,
                 )
+                context_storage.pop_span_data(ensure_id=current_span.id)
+                current_span.init_end_time()
+                self._opik_client.span(**current_span.as_parameters)
                 self._last_model_output = output
             else:
                 LOGGER.warning(f"No current span found in context for model output update")

@@ -48,15 +48,9 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
     ) -> Iterator["opentelemetry.trace.Span"]:        
         trace_to_close_in_finally_block = None
         span_to_close_in_finally_block = None
-        if name.startswith("execute_tool"):
-            pass
-
-        if name == "call_llm":
-            pass
 
         current_trace_data = opik.context_storage.get_trace_data()
         current_span_data = opik.context_storage.top_span_data()
-
 
         if name in adk_operations_skip_list:
             yield opentelemetry.trace.INVALID_SPAN
@@ -101,7 +95,7 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
             else:
                 assert span_to_close_in_finally_block is not None
                 opik.context_storage.trim_span_data_stack_to_certain_span(span_to_close_in_finally_block.id)
-                opik.context_storage.pop_span_data(ensure_id=span_to_close_in_finally_block.id)
-                span_to_close_in_finally_block.init_end_time()
-                self._opik_client.span(**span_to_close_in_finally_block.as_parameters)
+                if opik.context_storage.pop_span_data(ensure_id=span_to_close_in_finally_block.id) is not None:
+                    span_to_close_in_finally_block.init_end_time()
+                    self._opik_client.span(**span_to_close_in_finally_block.as_parameters)
 
