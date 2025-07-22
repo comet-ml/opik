@@ -29,6 +29,7 @@ import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPa
 import TraceDetailsActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel";
 import get from "lodash/get";
 import { METADATA_AGENT_GRAPH_KEY } from "@/constants/traces";
+import TraceAIViewer from "./TraceAIAssistantPanel/TraceAIViewer";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 
@@ -233,6 +234,15 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                   />
                 )}
+                {activeSection === DetailsActionSection.AIAssistants && (
+                  <TraceAIViewer
+                    traceId={traceId}
+                    spanId={spanId}
+                    projectId={projectId}
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
+                  />
+                )}
               </ResizablePanel>
             </>
           )}
@@ -263,6 +273,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           graph={graph}
           setGraph={setGraph}
           hasAgentGraph={hasAgentGraph}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
         />
       }
       onClose={onClose}
