@@ -79,17 +79,14 @@ Copilot should verify that REST endpoint methods adhere to our validation, docum
   * Example:
 
     ```java
+    @Operation(summary = "Create Widget", operationId = "createWidget")
+    public Response createWidget(...) {
+        // your implementation here
+        return Response.status(Response.Status.CREATED)
+            .entity(widget)
+            .build();
+    }
     ```
-
-@Operation(summary = "Create Widget", operationId = "createWidget")
-public Response createWidget(...) {
-// your implementation here
-return Response.status(Response.Status.CREATED)
-.entity(widget)
-.build();
-}
-
-````
 
 - **Request Body Schema**:
   - Endpoints that accept a JSON payload must include:
@@ -249,7 +246,7 @@ Use these guidelines to shape Copilot’s feedback on database migration scripts
 
 Use these guidelines to shape Copilot’s feedback on transaction usage and DAO patterns.
 
-## 8. Error Handling Guidelines
+## 9. Error Handling Guidelines
 
 When reviewing exception handling and error logic, ensure the following:
 
@@ -261,7 +258,7 @@ When reviewing exception handling and error logic, ensure the following:
 * Use custom exception classes where appropriate to convey domain-specific errors.
 * Ensure HTTP status codes match error semantics (e.g., 400 for client errors, 500 for server errors).
 
-## 9. General Project Guidelines
+## 10. General Project Guidelines
 
 * Follow the layered architecture: **Resources → Services → DAOs → Models**.
 * When creating a new component (Resource, Service, DAO, or Model), place it in the appropriate package and layer.
@@ -269,7 +266,7 @@ When reviewing exception handling and error logic, ensure the following:
 * All source files must end with a blank line.
 * This project contains many tests; when verifying compilation, tests may be skipped (focus on production code compilation).
 
-## 10. Logging Guidelines
+## 11. Logging Guidelines
 
 * Use structured, consistent logging throughout the codebase.
 * Loggers must use SLF4J and be defined via Lombok's `@Slf4j` annotation on classes:
@@ -290,7 +287,7 @@ When reviewing exception handling and error logic, ensure the following:
 
 Use these guidelines to shape Copilot’s feedback on logging practices.
 
-## 11. Dependency Management Guidelines
+## 12. Dependency Management Guidelines
 
 * Do not add Java dependencies lightly; always prefer existing libraries in the project.
 * Language: Java 21
@@ -316,7 +313,7 @@ Use these guidelines to shape Copilot’s feedback on logging practices.
 
 Use these guidelines to shape Copilot’s feedback on dependency usage and library choices.
 
-## 12. Testing Guidelines
+## 13. Testing Guidelines
 
 * **Unit tests** are recommended for specific and important business logic, but not mandatory.
 * **Blackbox tests** are required to cover at least the happy path scenarios and enforce contract constraints.
@@ -329,7 +326,7 @@ Use these guidelines to shape Copilot’s feedback on dependency usage and libra
 
 Use these guidelines to shape Copilot’s feedback on test coverage and quality.
 
-## 13. Static Analysis & Best Practices
+## 14. Static Analysis & Best Practices
 
 * Ensure the code passes static analysis tools such as Checkstyle, PMD, and SpotBugs without violations.
 * Favor immutability: declare fields `final` when possible and avoid mutable static fields.
@@ -345,9 +342,6 @@ Use these guidelines to shape Copilot’s feedback on test coverage and quality.
 * Keep cyclomatic complexity low; methods exceeding 10 branches should be refactored.
 * Ensure no unused imports, variables, or private methods remain in the codebase.
 
-<<<<<<< HEAD
 **General Rule:** all project source files must end with a single blank line.
 
-=======
->>>>>>> 231ffcc36 (NA: Add copilot instructions for Code Review (#2802))
 Use these guidelines to shape Copilot’s feedback on static code analysis and best practices.
