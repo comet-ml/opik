@@ -345,4 +345,6 @@ Use these guidelines to shape Copilot’s feedback on test coverage and quality.
 * Keep cyclomatic complexity low; methods exceeding 10 branches should be refactored.
 * Ensure no unused imports, variables, or private methods remain in the codebase.
 
+**General Rule:** all project source files must end with a single blank line.
+
 Use these guidelines to shape Copilot’s feedback on static code analysis and best practices.
