@@ -88,7 +88,7 @@ public class WorkspaceResourceClient {
     public void upsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -101,7 +101,7 @@ public class WorkspaceResourceClient {
     public Response callUpsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -110,7 +110,7 @@ public class WorkspaceResourceClient {
 
     public WorkspaceConfiguration getWorkspaceConfiguration(String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -124,7 +124,7 @@ public class WorkspaceResourceClient {
 
     public Response callGetWorkspaceConfiguration(String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -133,7 +133,7 @@ public class WorkspaceResourceClient {
 
     public void deleteWorkspaceConfiguration(String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -145,7 +145,7 @@ public class WorkspaceResourceClient {
 
     public Response callDeleteWorkspaceConfiguration(String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/configuration")
+                .path("/configurations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

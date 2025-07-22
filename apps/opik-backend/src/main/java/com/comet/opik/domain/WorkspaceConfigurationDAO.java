@@ -48,7 +48,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 new_config.last_updated_at,
                 if(empty(wc.workspace_id), new_config.created_by, wc.created_by),
                 new_config.last_updated_by
-            FROm (
+            FROM (
                 SELECT
                     :workspace_id AS workspace_id,
                     :timeout_seconds AS timeout_mark_thread_as_inactive,

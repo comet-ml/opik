@@ -144,7 +144,7 @@ public class WorkspacesResource {
     }
 
     @GET
-    @Path("/configuration")
+    @Path("/configurations")
     @Operation(operationId = "getWorkspaceConfiguration", summary = "Get workspace configuration", description = "Get workspace configuration", responses = {
             @ApiResponse(responseCode = "200", description = "Workspace Configuration", content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))),
             @ApiResponse(responseCode = "404", description = "Configuration Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
@@ -156,7 +156,7 @@ public class WorkspacesResource {
 
         var configuration = workspaceConfigurationService.getConfiguration()
                 .switchIfEmpty(Mono.defer(() -> {
-                    log.warn("No workspace configuration found for workspace '{}'", workspaceId);
+                    log.info("No workspace configuration found for workspace '{}'", workspaceId);
                     return Mono.error(new NotFoundException("No workspace configuration found for workspace"));
                 }))
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
@@ -168,14 +168,14 @@ public class WorkspacesResource {
     }
 
     @PUT
-    @Path("/configuration")
+    @Path("/configurations")
     @Operation(operationId = "upsertWorkspaceConfiguration", summary = "Upsert workspace configuration", description = "Upsert workspace configuration", responses = {
             @ApiResponse(responseCode = "200", description = "Configuration Updated", content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response upsertWorkspaceConfiguration(
-            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))) @Valid WorkspaceConfiguration configuration) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))) @Valid @NotNull WorkspaceConfiguration configuration) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -191,7 +191,7 @@ public class WorkspacesResource {
     }
 
     @DELETE
-    @Path("/configuration")
+    @Path("/configurations")
     @Operation(operationId = "deleteWorkspaceConfiguration", summary = "Delete workspace configuration", description = "Delete workspace configuration", responses = {
             @ApiResponse(responseCode = "204", description = "Configuration Deleted"),
             @ApiResponse(responseCode = "404", description = "Configuration Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))

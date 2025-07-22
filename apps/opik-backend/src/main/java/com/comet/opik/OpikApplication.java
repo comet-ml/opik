@@ -32,7 +32,6 @@ import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -111,13 +110,12 @@ public class OpikApplication extends Application<OpikConfiguration> {
         environment.getObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
         environment.getObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         environment.getObjectMapper().configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
-        environment.getObjectMapper().configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, false);
         environment.getObjectMapper().enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
         environment.getObjectMapper()
                 .registerModule(new SimpleModule()
                         .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
-                        .addDeserializer(Duration.class, new StrictDurationDeserializer()));
+                        .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

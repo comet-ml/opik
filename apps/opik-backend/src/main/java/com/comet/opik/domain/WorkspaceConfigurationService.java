@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +26,6 @@ public interface WorkspaceConfigurationService {
 class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService {
 
     private final @NonNull WorkspaceConfigurationDAO workspaceConfigurationDAO;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     public Mono<Void> upsertConfiguration(@NonNull WorkspaceConfiguration configuration) {
@@ -59,7 +57,7 @@ class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService
                         if (deletedCount > 0) {
                             log.info("Deleted workspace configuration for workspace '{}'", workspaceId);
                         } else {
-                            log.warn("No workspace configuration found to delete for workspace '{}'", workspaceId);
+                            log.info("No workspace configuration found to delete for workspace '{}'", workspaceId);
                         }
                     })
                     .then();

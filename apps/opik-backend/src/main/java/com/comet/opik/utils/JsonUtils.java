@@ -40,7 +40,7 @@ public class JsonUtils {
             .registerModule(new JavaTimeModule()
                     .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                     .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
-                    .addDeserializer(Duration.class, new StrictDurationDeserializer()));
+                    .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
         try {

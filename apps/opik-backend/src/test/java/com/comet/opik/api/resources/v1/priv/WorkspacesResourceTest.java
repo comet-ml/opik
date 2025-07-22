@@ -806,7 +806,7 @@ class WorkspacesResourceTest {
 
             // When - Make raw HTTP call to upsert
             try (Response upsertResponse = client
-                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
@@ -817,7 +817,7 @@ class WorkspacesResourceTest {
 
                 // Get the configuration to check ISO-8601 format
                 try (Response getResponse = client
-                        .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+                        .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
                         .request()
                         .header(HttpHeaders.AUTHORIZATION, API_KEY)
                         .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
@@ -859,7 +859,7 @@ class WorkspacesResourceTest {
 
             // When
             try (Response upsertResponse = client
-                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
@@ -884,7 +884,7 @@ class WorkspacesResourceTest {
             Map<String, String> configMap = Map.of("timeout_to_mark_thread_as_inactive", iso8601Duration);
 
             // When
-            try (Response response = client.target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+            try (Response response = client.target(String.format("%s/v1/private/workspaces/configurations", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
@@ -893,11 +893,12 @@ class WorkspacesResourceTest {
                 // Then
                 assertThat(response.getStatus()).isIn(HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_UNPROCESSABLE_CONTENT);
 
-                // Optionally verify error message if available
                 if (response.getStatus() == HttpStatus.SC_UNPROCESSABLE_CONTENT) {
-                    String responseBody = response.readEntity(String.class);
-                    // The response should contain validation error information
-                    assertThat(responseBody).isNotEmpty();
+                    var error = response.readEntity(ErrorMessage.class);
+                    assertThat(error.errors()).contains(expectedError);
+                } else {
+                    var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(errorMessage.getMessage()).isEqualTo(expectedError);
                 }
             }
         }
@@ -916,13 +917,23 @@ class WorkspacesResourceTest {
 
         static java.util.stream.Stream<Arguments> invalidIso8601TimeoutStrings() {
             return java.util.stream.Stream.of(
-                    Arguments.of("PT0.5S", "Sub-second precision not supported"), // Sub-second precision
-                    Arguments.of("PT500MS", "Milliseconds not supported"), // Milliseconds format
-                    Arguments.of("P8D", "Exceeds maximum duration"), // 8 days (exceeds maximum)
-                    Arguments.of("P30D", "Exceeds maximum duration"), // 30 days (exceeds maximum)
-                    Arguments.of("INVALID", "Invalid ISO-8601 format"), // Invalid format
-                    Arguments.of("30M", "Missing PT prefix"), // Missing PT prefix
-                    Arguments.of("", "Empty string should be invalid")); // Empty string should be invalid
+                    Arguments.of("PT0.5S",
+                            "timeoutToMarkThreadAsInactive minimum precision supported is seconds, please use a duration with seconds precision or higher"),
+                    Arguments.of("PT500MS",
+                            "Unable to process JSON. Cannot parse Duration from string 'PT500MS': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"),
+                    Arguments.of("P8D", "timeoutToMarkThreadAsInactive duration exceeds the maximum allowed of PT168H"),
+                    Arguments.of("P30D",
+                            "timeoutToMarkThreadAsInactive duration exceeds the maximum allowed of PT168H"),
+                    Arguments.of("INVALID",
+                            "Unable to process JSON. Cannot parse Duration from string 'INVALID': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"),
+                    Arguments.of("30M",
+                            "Unable to process JSON. Cannot parse Duration from string '30M': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"));
         }
 
         @Test
@@ -935,7 +946,7 @@ class WorkspacesResourceTest {
 
             // When
             try (Response upsertResponse = client
-                    .target(String.format("%s/v1/private/workspaces/configuration", baseURI))
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
