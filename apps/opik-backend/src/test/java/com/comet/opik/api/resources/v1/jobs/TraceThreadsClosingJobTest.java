@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.jobs;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -17,6 +18,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -100,6 +102,7 @@ class TraceThreadsClosingJobTest {
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private WorkspaceResourceClient workspaceResourceClient;
 
     @BeforeAll
 
@@ -114,6 +117,7 @@ class TraceThreadsClosingJobTest {
 
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, podamFactory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -258,6 +262,68 @@ class TraceThreadsClosingJobTest {
             // Finally: Check if the threads are closed again after the job runs
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 verifyClosedThreads(projectId, projectName, apiKey, workspaceName, expectedClosedTraceThreadModels2);
+            });
+        }
+
+        @Test
+        @DisplayName("Should close trace threads for project with custom workspace timeout")
+        void shouldCloseTraceThreadsForProjectWithCustomTimeout() {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var threadId = UUID.randomUUID().toString();
+
+            // Set a custom workspace timeout of 2 seconds (shorter than the job polling, but longer than default 1s in config-test.yml)
+            Duration customTimeout = Duration.ofSeconds(2);
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(customTimeout)
+                    .build();
+
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, apiKey, workspaceName);
+
+            // Create multiple traces within same thread
+            List<Trace> traces = createListOfTraces(projectName, threadId);
+            var expectedCreatedAt = Instant.now();
+
+            // When: Creating trace threads
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
+
+            var expectedActiveTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.ACTIVE, traces);
+
+            // Wait for the job to process the created thread
+            Mono.delay(Duration.ofSeconds(1)).block();
+
+            // Then: Verify that threads are created as ACTIVE first
+            Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                verifyOpenThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(expectedActiveTraceThreadModel));
+            });
+
+            // Wait for custom timeout duration + some buffer (2-second total)
+            // This should be enough to trigger closure with custom timeout
+            Mono.delay(Duration.ofSeconds(2)).block();
+
+            var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
+
+            var expectedLastUpdateAt = Instant.now();
+            TraceThread expectedUpdatedTraceThreadModel = expectedTraceThreadModel.toBuilder()
+                    .lastUpdatedAt(expectedLastUpdateAt)
+                    .build();
+
+            // Then: Verify threads are closed according to workspace custom timeout
+            Awaitility.await().pollInterval(200, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(expectedUpdatedTraceThreadModel));
             });
         }
 

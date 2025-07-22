@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.domain.WorkspaceMetricsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,7 +21,11 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
@@ -27,6 +33,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -40,6 +47,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class WorkspacesResource {
 
     private final @NonNull WorkspaceMetricsService workspaceMetricsService;
+    private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
@@ -133,5 +141,72 @@ public class WorkspacesResource {
                 workspaceId);
 
         return Response.ok().entity(response).build();
+    }
+
+    @GET
+    @Path("/configurations")
+    @Operation(operationId = "getWorkspaceConfiguration", summary = "Get workspace configuration", description = "Get workspace configuration", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace Configuration", content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))),
+            @ApiResponse(responseCode = "404", description = "Configuration Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getWorkspaceConfiguration() {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting workspace configuration for workspace_id '{}'", workspaceId);
+
+        var configuration = workspaceConfigurationService.getConfiguration()
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("No workspace configuration found for workspace '{}'", workspaceId);
+                    return Mono.error(new NotFoundException("No workspace configuration found for workspace"));
+                }))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found workspace configuration for workspace_id '{}'", workspaceId);
+
+        return Response.ok().entity(configuration).build();
+    }
+
+    @PUT
+    @Path("/configurations")
+    @Operation(operationId = "upsertWorkspaceConfiguration", summary = "Upsert workspace configuration", description = "Upsert workspace configuration", responses = {
+            @ApiResponse(responseCode = "200", description = "Configuration Updated", content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response upsertWorkspaceConfiguration(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))) @Valid @NotNull WorkspaceConfiguration configuration) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Upserting workspace configuration for workspace_id '{}'", workspaceId);
+
+        workspaceConfigurationService.upsertConfiguration(configuration)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Upserted workspace configuration for workspace_id '{}'", workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @DELETE
+    @Path("/configurations")
+    @Operation(operationId = "deleteWorkspaceConfiguration", summary = "Delete workspace configuration", description = "Delete workspace configuration", responses = {
+            @ApiResponse(responseCode = "204", description = "Configuration Deleted"),
+            @ApiResponse(responseCode = "404", description = "Configuration Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response deleteWorkspaceConfiguration() {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting workspace configuration for workspace_id '{}'", workspaceId);
+
+        workspaceConfigurationService.deleteConfiguration()
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted workspace configuration for workspace_id '{}'", workspaceId);
+
+        return Response.noContent().build();
     }
 }

@@ -46,8 +46,7 @@ public interface TraceThreadDAO {
     Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
     Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(Instant now,
-            Duration timeoutToMarkThreadAsInactive,
-            int limit);
+            Duration defaultTimeoutToMarkThreadAsInactive, int limit);
 
     Mono<Long> openThread(UUID projectId, String threadId);
 
@@ -63,8 +62,7 @@ public interface TraceThreadDAO {
 
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 
-    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant now,
-            Duration timeoutToMarkThreadAsInactive);
+    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant lastUpdatedAt);
 }
 
 @Singleton
@@ -138,8 +136,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.workspace_id,
                 tt.project_id
             FROM trace_threads tt final
+            LEFT JOIN workspace_configurations wc final ON tt.workspace_id = wc.workspace_id
             WHERE tt.status = 'active'
-            AND tt.last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
+            AND tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             ORDER BY tt.last_updated_at
             LIMIT :limit
             """;
@@ -248,13 +247,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
             SELECT
                 workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at
-            FROM trace_threads tt final
-            WHERE tt.workspace_id = :workspace_id
-            AND tt.project_id = :project_id
-            AND tt.status = :status
-            <if(last_updated_at)>
-            AND tt.last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)
-            <endif>
+            FROM trace_threads final
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND status = :status
+            AND last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
             ;
             """;
 
@@ -352,12 +349,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive, int limit) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
         return asyncTemplate.stream(connection -> {
-            Instant lastUpdatedUntil = now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS);
             var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
-                    .bind("last_updated_at",
-                            lastUpdatedUntil.toString())
+                    .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
                     .bind("limit", limit);
 
             return Flux.from(statement.execute())
@@ -533,16 +529,13 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId, @NonNull Instant now,
-            @NonNull Duration timeoutToMarkThreadAsInactive) {
+    public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId,
+            @NonNull Instant lastUpdatedAt) {
         return asyncTemplate.stream(connection -> {
-            ST closureThreadsSql = new ST(GET_RECENT_CLOSED_THREADS_PER_PROJECT);
-            closureThreadsSql.add("last_updated_at", true);
 
-            var statement = connection.createStatement(closureThreadsSql.render())
+            var statement = connection.createStatement(GET_RECENT_CLOSED_THREADS_PER_PROJECT)
                     .bind("project_id", projectId)
-                    .bind("last_updated_at",
-                            now.minus(timeoutToMarkThreadAsInactive).truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("last_updated_at", lastUpdatedAt.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
