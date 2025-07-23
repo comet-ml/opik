@@ -24,6 +24,7 @@ on:
           - crewai
           - genai
           - adk
+          - adk_legacy_1_3_0
           - metrics
   schedule:
     - cron: "0 0 */1 * *"
@@ -118,6 +119,11 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-adk-tests.yml
+    secrets: inherit
+  adk_legacy_1_3_0_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["adk_legacy_1_3_0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-adk-legacy-1-3-0-tests.yml
     secrets: inherit
 
   evaluation_metrics_tests:
