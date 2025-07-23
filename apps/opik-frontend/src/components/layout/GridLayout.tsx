@@ -1,5 +1,7 @@
 import React from "react";
 
-export default function GridLayout() {
+const GridLayout: React.FunctionComponent = () => {
   return <div>Grid Layout</div>;
-}
+};
+
+export default GridLayout;
