@@ -1,9 +1,8 @@
-from contextlib import contextmanager
-from typing import Iterator, Optional, Set
+from typing import Iterator, Optional
 
 import opentelemetry.trace
 import opik.context_storage
-from opik.api_objects import span, trace
+from opik.api_objects import trace
 from opik.decorator import span_creation_handler, arguments_helpers
 from opik.api_objects import opik_client
 
@@ -12,11 +11,13 @@ adk_operations_skip_list = [
     "invocation",
 ]
 
+
 class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
     """The default Tracer, used when no Tracer implementation is available.
 
     All operations are no-op.
     """
+
     def __init__(self, opik_client: opik_client.Opik):
         self._opik_client = opik_client
 
@@ -45,7 +46,7 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
         record_exception: bool = True,
         set_status_on_exception: bool = True,
         end_on_exit: bool = True,
-    ) -> Iterator["opentelemetry.trace.Span"]:        
+    ) -> Iterator["opentelemetry.trace.Span"]:
         trace_to_close_in_finally_block = None
         span_to_close_in_finally_block = None
 
@@ -55,8 +56,12 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
         if name in adk_operations_skip_list:
             yield opentelemetry.trace.INVALID_SPAN
             return
-        
-        if current_span_data is not None and current_span_data.type == "llm" and current_span_data.name != "STARTED_LLM_CALL":
+
+        if (
+            current_span_data is not None
+            and current_span_data.type == "llm"
+            and current_span_data.name != "STARTED_LLM_CALL"
+        ):
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
             current_span_data.init_end_time()
             self._opik_client.span(**current_span_data.as_parameters)
@@ -64,38 +69,51 @@ class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
 
         try:
             if current_trace_data is None:
-                trace_to_close_in_finally_block = trace.TraceData(
-                    name=name
-                )
+                trace_to_close_in_finally_block = trace.TraceData(name=name)
                 opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
-                
+
             else:
-                if current_span_data is not None and current_span_data.name == "STARTED_LLM_CALL":
+                if (
+                    current_span_data is not None
+                    and current_span_data.name == "STARTED_LLM_CALL"
+                ):
                     span_to_close_in_finally_block = current_span_data
                     yield opentelemetry.trace.INVALID_SPAN
                     return
-                    
+
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=name,
                     type="general",
                 )
 
-                _, span_to_close_in_finally_block = span_creation_handler.create_span_respecting_context(
-                    start_span_arguments=start_span_arguments,
-                    distributed_trace_headers=None,
+                _, span_to_close_in_finally_block = (
+                    span_creation_handler.create_span_respecting_context(
+                        start_span_arguments=start_span_arguments,
+                        distributed_trace_headers=None,
+                    )
                 )
                 opik.context_storage.add_span_data(span_to_close_in_finally_block)
 
             yield opentelemetry.trace.INVALID_SPAN
         finally:
             if trace_to_close_in_finally_block is not None:
-                opik.context_storage.pop_trace_data(ensure_id=trace_to_close_in_finally_block.id)
+                opik.context_storage.pop_trace_data(
+                    ensure_id=trace_to_close_in_finally_block.id
+                )
                 trace_to_close_in_finally_block.init_end_time()
                 self._opik_client.trace(**trace_to_close_in_finally_block.as_parameters)
             else:
                 assert span_to_close_in_finally_block is not None
-                opik.context_storage.trim_span_data_stack_to_certain_span(span_to_close_in_finally_block.id)
-                if opik.context_storage.pop_span_data(ensure_id=span_to_close_in_finally_block.id) is not None:
+                opik.context_storage.trim_span_data_stack_to_certain_span(
+                    span_to_close_in_finally_block.id
+                )
+                if (
+                    opik.context_storage.pop_span_data(
+                        ensure_id=span_to_close_in_finally_block.id
+                    )
+                    is not None
+                ):
                     span_to_close_in_finally_block.init_end_time()
-                    self._opik_client.span(**span_to_close_in_finally_block.as_parameters)
-
+                    self._opik_client.span(
+                        **span_to_close_in_finally_block.as_parameters
+                    )

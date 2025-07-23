@@ -1,6 +1,5 @@
 import functools
 import logging
-import opentelemetry.trace
 from typing import Any, Dict, List, Optional, Union
 
 import google.adk.agents
@@ -63,7 +62,7 @@ class OpikTracer:
         try:
             current_trace = context_storage.get_trace_data()
             current_span = context_storage.top_span_data()
-            
+
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
             )
@@ -93,7 +92,9 @@ class OpikTracer:
                     tags=self.tags,
                     project_name=self.project_name,
                 )
-                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED SPAN: {current_span.id}")
+                LOGGER.debug(
+                    f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED SPAN: {current_span.id}"
+                )
             elif current_trace is not None:
                 # Update current trace with agent information
                 current_trace.update(
@@ -104,9 +105,13 @@ class OpikTracer:
                     thread_id=thread_id,
                     project_name=self.project_name,
                 )
-                LOGGER.debug(f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED TRACE: {current_trace.id}")
+                LOGGER.debug(
+                    f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED TRACE: {current_trace.id}"
+                )
             else:
-                LOGGER.warning(f"No current span or trace found in context for agent: {callback_context.agent_name}")
+                LOGGER.warning(
+                    f"No current span or trace found in context for agent: {callback_context.agent_name}"
+                )
 
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
@@ -131,7 +136,9 @@ class OpikTracer:
                 )
                 self._last_model_output = None
             else:
-                LOGGER.warning(f"No current span or trace found in context for agent output update")
+                LOGGER.warning(
+                    "No current span or trace found in context for agent output update"
+                )
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
@@ -154,7 +161,7 @@ class OpikTracer:
                     name="STARTED_LLM_CALL",
                     project_name=self.project_name,
                     metadata=self.metadata,
-                    type="llm", # for now
+                    type="llm",  # for now
                     model=model,
                     provider=provider,
                     input=input,
@@ -177,7 +184,7 @@ class OpikTracer:
             # Ignore partial chunks, ADK will call this method with the full response at the end
             if llm_response.partial is True:
                 return
-            
+
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
@@ -219,7 +226,9 @@ class OpikTracer:
                 self._opik_client.span(**current_span.as_parameters)
                 self._last_model_output = output
             else:
-                LOGGER.warning(f"No current span found in context for model output update")
+                LOGGER.warning(
+                    "No current span found in context for model output update"
+                )
         except Exception as e:
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
@@ -249,7 +258,9 @@ class OpikTracer:
                     project_name=self.project_name,
                 )
             else:
-                LOGGER.warning(f"No current span found in context for tool: {tool.name}")
+                LOGGER.warning(
+                    f"No current span found in context for tool: {tool.name}"
+                )
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
@@ -266,13 +277,13 @@ class OpikTracer:
         try:
             # Debug logging for callback invocation
             current_span = context_storage.top_span_data()
-            
+
             output = (
                 tool_response
                 if isinstance(tool_response, dict)
                 else {"output": tool_response}
             )
-            
+
             # Update existing span with tool output
             if current_span is not None:
                 current_span.update(
@@ -280,7 +291,9 @@ class OpikTracer:
                     project_name=self.project_name,
                 )
             else:
-                LOGGER.warning(f"No current span found in context for tool output update: {tool.name}")
+                LOGGER.warning(
+                    f"No current span found in context for tool output update: {tool.name}"
+                )
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
@@ -338,9 +351,9 @@ def _patch_adk(opik_client: opik_client.Opik) -> None:
                 lite_llm._model_response_to_generate_content_response
             )
         )
-    
+
     no_op_opik_tracer = adk_tracer_wrapper.ADKOpenTelemetryTracerPatched(opik_client)
-    
+
     adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
     adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
 

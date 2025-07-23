@@ -121,10 +121,13 @@ def test_opik_tracer_with_sample_agent(
     assert result.status_code == 200
 
     synchronization.wait_for_done(
-        check_function=lambda: len(opik_client_unique_project_name.search_traces(
-            filter_string='input contains "Hey, whats the weather in New York today?"',
-        )) > 0,
-        timeout=30
+        check_function=lambda: len(
+            opik_client_unique_project_name.search_traces(
+                filter_string='input contains "Hey, whats the weather in New York today?"',
+            )
+        )
+        > 0,
+        timeout=30,
     )
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"',
@@ -173,10 +176,13 @@ def test_opik_tracer_with_sample_agent_sse(
     assert result.status_code == 200
 
     synchronization.wait_for_done(
-        check_function=lambda: len(opik_client_unique_project_name.search_traces(
-            filter_string='input contains "Hey, whats the weather in New York today?"',
-        )) > 0,
-        timeout=30
+        check_function=lambda: len(
+            opik_client_unique_project_name.search_traces(
+                filter_string='input contains "Hey, whats the weather in New York today?"',
+            )
+        )
+        > 0,
+        timeout=30,
     )
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"',
@@ -226,10 +232,13 @@ def test_opik_tracer_with_sample_agent__openai(
     assert result.status_code == 200
 
     synchronization.wait_for_done(
-        check_function=lambda: len(opik_client_unique_project_name.search_traces(
-            filter_string='input contains "Hey, whats the weather in New York today?"',
-        )) > 0,
-        timeout=30
+        check_function=lambda: len(
+            opik_client_unique_project_name.search_traces(
+                filter_string='input contains "Hey, whats the weather in New York today?"',
+            )
+        )
+        > 0,
+        timeout=30,
     )
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"',
@@ -281,10 +290,13 @@ def test_opik_tracer_with_sample_agent__anthropic(
     assert result.status_code == 200
 
     synchronization.wait_for_done(
-        check_function=lambda: len(opik_client_unique_project_name.search_traces(
-            filter_string='input contains "Hey, whats the weather in New York today?"',
-        )) > 0,
-        timeout=30
+        check_function=lambda: len(
+            opik_client_unique_project_name.search_traces(
+                filter_string='input contains "Hey, whats the weather in New York today?"',
+            )
+        )
+        > 0,
+        timeout=30,
     )
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"',
