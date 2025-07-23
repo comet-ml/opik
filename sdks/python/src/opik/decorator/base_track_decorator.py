@@ -13,7 +13,7 @@ from typing import (
     Union,
 )
 
-from .. import config, context_storage, logging_messages
+from .. import context_storage, logging_messages
 from ..api_objects import opik_client, span, trace
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
@@ -48,11 +48,6 @@ class BaseTrackDecorator(abc.ABC):
     def __init__(self) -> None:
         self.provider: Optional[str] = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
-
-    @functools.cached_property
-    def disabled(self) -> bool:
-        config_ = config.OpikConfig()
-        return config_.track_disable
 
     def track(
         self,
@@ -401,7 +396,7 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
-        if self.disabled or not is_tracing_active():
+        if not is_tracing_active():
             return
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
 
@@ -488,7 +483,7 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        if self.disabled or not is_tracing_active():
+        if not is_tracing_active():
             return
 
         if generators_span_to_end is None:
