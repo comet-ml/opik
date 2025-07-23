@@ -120,6 +120,7 @@ jobs:
     if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-adk-tests.yml
     secrets: inherit
+
   adk_legacy_1_3_0_tests:
     needs: [init_environment]
     if: contains(fromJSON('["adk_legacy_1_3_0", "all"]'), needs.init_environment.outputs.LIBS)
