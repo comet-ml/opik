@@ -217,6 +217,8 @@ class OpikTracer:
                 )
                 context_storage.pop_span_data(ensure_id=current_span.id)
                 current_span.init_end_time()
+                # We close this span manually because otherwise ADK will close it too late, 
+                # and it will also add tool spans inside of it, which we want to avoid.
                 self._opik_client.span(**current_span.as_parameters)
                 self._last_model_output = output
             else:
