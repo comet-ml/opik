@@ -42,9 +42,11 @@ class RecursiveCallbackInjector:
                 setattr(agent, callback_field_name, callback_func)
             elif isinstance(
                 current_callback_value, list
-            ) and not _contains_opik_tracer_callback(callbacks=current_callback_value):
+            ) and not self._contains_opik_tracer_callback(
+                callbacks=current_callback_value
+            ):
                 current_callback_value.append(callback_func)
-            elif not _is_opik_callback_function(current_callback_value):
+            elif not self._is_opik_callback_function(current_callback_value):
                 setattr(
                     agent, callback_field_name, [current_callback_value, callback_func]
                 )
@@ -90,19 +92,17 @@ class RecursiveCallbackInjector:
             except Exception as e:
                 LOGGER.warning(f"Failed to track agent tool: {e}")
 
+    def _is_opik_callback_function(self, obj: Any) -> bool:
+        if not callable(obj):
+            return False
 
-def _is_opik_callback_function(obj: Any) -> bool:
-    if not callable(obj):
+        if isinstance(obj, types.MethodType):
+            return isinstance(obj.__self__, type(self._opik_tracer))
+
         return False
 
-    if isinstance(obj, types.MethodType):
-        return isinstance(obj.__self__, opik_tracer.OpikTracer)
-
-    return False
-
-
-def _contains_opik_tracer_callback(callbacks: List) -> bool:
-    return any(_is_opik_callback_function(callback) for callback in callbacks)
+    def _contains_opik_tracer_callback(self, callbacks: List) -> bool:
+        return any(self._is_opik_callback_function(callback) for callback in callbacks)
 
 
 def track_adk_agent_recursive(
