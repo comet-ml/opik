@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import isEmpty from "lodash/isEmpty";
 
-import { Dataset } from "@/types/datasets";
 import NoData from "@/components/shared/NoData/NoData";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
@@ -21,13 +20,13 @@ type FeedbackScoresChartContainerProps = {
   className: string;
   chartData?: ChartData;
   chartId: string;
-  dataset: Dataset;
-  isAverageScores: boolean;
+  chartName?: string;
+  subtitle?: string;
 };
 
 const FeedbackScoresChartContainer: React.FC<
   FeedbackScoresChartContainerProps
-> = ({ chartData, chartId, dataset, className, isAverageScores }) => {
+> = ({ className, chartData, chartId, chartName, subtitle }) => {
   const isPending = !chartData;
   const noData = useMemo(() => {
     if (isPending) return false;
@@ -70,10 +69,10 @@ const FeedbackScoresChartContainer: React.FC<
   return (
     <Card className={cn("min-w-[400px]", className)} ref={ref}>
       <CardHeader className="space-y-0.5 px-4 pt-3">
-        <CardTitle className="comet-body-s-accented">{dataset.name}</CardTitle>
-        {isAverageScores && (
+        <CardTitle className="comet-body-s-accented">{chartName}</CardTitle>
+        {subtitle && (
           <CardDescription className="comet-body-xs text-xs">
-            Average scores
+            {subtitle}
           </CardDescription>
         )}
       </CardHeader>

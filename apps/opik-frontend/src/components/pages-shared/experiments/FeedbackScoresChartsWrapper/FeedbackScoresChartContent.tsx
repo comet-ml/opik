@@ -14,7 +14,6 @@ import { CartesianGrid, YAxis, Line } from "recharts";
 import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
-import { Dataset } from "@/types/datasets";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -27,7 +26,8 @@ export type DataRecord = {
 };
 
 export type ChartData = {
-  dataset: Dataset;
+  id: string;
+  name: string;
   data: DataRecord[];
   lines: string[];
   index: number;
