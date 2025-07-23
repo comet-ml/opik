@@ -18,11 +18,8 @@ class _RuntimeConfig:
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._tracing_active: Optional[bool] = None  # None ⇒ fallback to config
+        self._tracing_active: Optional[bool] = None
 
-    # ---------------------------------------------------------------------
-    # Public helpers
-    # ---------------------------------------------------------------------
     def set_tracing_active(self, active: bool) -> None:
         """Override global tracing state.
 
@@ -49,15 +46,12 @@ class _RuntimeConfig:
             if self._tracing_active is not None:
                 return self._tracing_active
 
-        # Fallback lookup happens outside the lock to avoid import deadlocks
         try:
-            from . import config as _config_module  # local import to avoid cycles
+            from . import config as _config_module
 
             cfg = _config_module.OpikConfig()
             return not cfg.track_disable
         except Exception:  # noqa: BLE001
-            # In the unlikely event that config fails to load, keep tracing on to
-            # avoid silently dropping data.
             return True
 
 
