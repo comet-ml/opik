@@ -252,7 +252,7 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
             onEscapeKeyDown={(e) => e.stopPropagation()}
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
-            <DialogHeader>
+            <DialogHeader className="p-4 pb-0">
               <DialogTitle>{dialogTitle}</DialogTitle>
               <div className="size-full max-h-[80vh] p-4">
                 <ZoomPanContainer expandButton={false}>

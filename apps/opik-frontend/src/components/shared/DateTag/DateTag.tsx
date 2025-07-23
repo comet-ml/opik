@@ -9,7 +9,7 @@ interface DateTagProps {
 
 const DateTag = ({ date }: DateTagProps) => {
   return (
-    <Tag size="md" variant="gray" className="flex shrink-0 items-center gap-2">
+    <Tag size="lg" variant="gray" className="flex shrink-0 items-center gap-2">
       <Clock className="size-4 shrink-0" />
       <div className="truncate">{formatDate(date)}</div>
     </Tag>

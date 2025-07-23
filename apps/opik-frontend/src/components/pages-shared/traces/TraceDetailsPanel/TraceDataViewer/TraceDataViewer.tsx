@@ -2,14 +2,7 @@ import React, { useCallback } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
-import {
-  Brain,
-  Clock,
-  Coins,
-  Hash,
-  MessageSquareMore,
-  PenLine,
-} from "lucide-react";
+import { Clock, Coins, Hash, PenLine } from "lucide-react";
 
 import { AgentGraphData, Span, Trace } from "@/types/traces";
 import {
@@ -18,7 +11,6 @@ import {
 } from "@/constants/traces";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import FeedbackScoreHoverCard from "@/components/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TagList from "../TagList/TagList";
 import InputOutputTab from "./InputOutputTab";
@@ -29,7 +21,6 @@ import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
-import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
@@ -96,11 +87,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
 
-  const duration = formatDuration(data.duration);
-  const estimatedCost = data.total_estimated_cost;
-  const model = get(data, "model", null);
-  const provider = get(data, "provider", null);
-
   return (
     <div className="size-full max-w-full overflow-auto">
       {graphData && (
@@ -132,73 +118,45 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
           />
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
-            <TooltipWrapper content={`Duration in seconds: ${duration}`}>
+            <TooltipWrapper content="Duration in seconds">
               <div
-                className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                 data-testid="data-viewer-duration"
+                className="flex items-center gap-2 px-1"
               >
-                <Clock className="size-3 shrink-0" /> {duration}
+                <Clock className="size-4 shrink-0" />
+                {formatDuration(data.duration)}
               </div>
             </TooltipWrapper>
             {isNumber(tokens) && (
-              <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>
+              <TooltipWrapper content="Total amount of tokens">
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-tokens"
+                  className="flex items-center gap-2 px-1"
                 >
-                  <Hash className="size-3 shrink-0" /> {tokens}
-                </div>
-              </TooltipWrapper>
-            )}
-            {!isUndefined(estimatedCost) && (
-              <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost)}`}
-              >
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-cost"
-                >
-                  <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost, { modifier: "short" })}
+                  <Hash className="size-4 shrink-0" />
+                  {tokens} tokens
                 </div>
               </TooltipWrapper>
             )}
             {Boolean(data.feedback_scores?.length) && (
-              <FeedbackScoreHoverCard scores={data.feedback_scores!}>
+              <TooltipWrapper content="Number of feedback scores">
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-scores"
+                  className="flex items-center gap-2 px-1"
                 >
-                  <PenLine className="size-3 shrink-0" />{" "}
-                  {data.feedback_scores!.length}
+                  <PenLine className="size-4 shrink-0" />
+                  {data.feedback_scores?.length} feedback scores
                 </div>
-              </FeedbackScoreHoverCard>
+              </TooltipWrapper>
             )}
-            {Boolean(data.comments?.length) && (
-              <UserCommentHoverList commentsList={data.comments}>
+            {!isUndefined(data.total_estimated_cost) && (
+              <TooltipWrapper content="Estimated cost">
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-comments"
+                  data-testid="data-viewer-scores"
+                  className="flex items-center gap-2 break-all px-1"
                 >
-                  <MessageSquareMore className="size-3 shrink-0" />{" "}
-                  {data.comments.length}
-                </div>
-              </UserCommentHoverList>
-            )}
-            {(model || provider) && (
-              <TooltipWrapper
-                content={`Model: ${model || "NA"}, Provider: ${
-                  provider || "NA"
-                }`}
-              >
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-provider-model"
-                >
-                  <Brain className="size-3 shrink-0" />{" "}
-                  <div className="truncate">
-                    {provider} {model}
-                  </div>
+                  <Coins className="size-4 shrink-0" />
+                  {formatCost(data.total_estimated_cost)}
                 </div>
               </TooltipWrapper>
             )}

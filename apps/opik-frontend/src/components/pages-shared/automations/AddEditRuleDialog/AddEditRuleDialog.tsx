@@ -26,7 +26,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
@@ -163,7 +162,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       uiType: formUIRuleType,
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
-      enabled: defaultRule?.enabled ?? true,
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
@@ -272,7 +270,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       name: formData.ruleName,
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
-      enabled: formData.enabled,
       type: ruleType,
     };
 
@@ -460,33 +457,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       label="Sampling rate"
                       tooltip="Percentage of traces to evaluate"
                     />
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="enabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between space-y-0">
-                      <div className="flex flex-col">
-                        <Label
-                          htmlFor="enabled"
-                          className="text-sm font-medium"
-                        >
-                          Enable rule
-                        </Label>
-                        <Description>
-                          Enable or disable this evaluation rule
-                        </Description>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          id="enabled"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
                   )}
                 />
 

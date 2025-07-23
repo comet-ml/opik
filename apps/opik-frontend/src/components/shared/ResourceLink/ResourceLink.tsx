@@ -104,7 +104,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       {asTag ? (
         <TooltipWrapper content={text} stopClickPropagation>
           <Tag
-            size="md"
+            size="lg"
             variant="gray"
             className={cn(
               "flex items-center gap-2",

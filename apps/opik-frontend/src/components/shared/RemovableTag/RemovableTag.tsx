@@ -39,7 +39,7 @@ const RemovableTag: React.FunctionComponent<RemovableTagProps> = ({
         <span className="mr-1 truncate">{label}</span>
         {isRemovable && (
           <Button
-            size="icon-2xs"
+            size="icon-xs"
             variant="ghost"
             className="hidden group-hover:flex"
             onClick={() => onDelete(label)}

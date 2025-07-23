@@ -1,7 +1,6 @@
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
-import { cn } from "@/lib/utils";
+import React from "react";
 import { BASE_TRACE_DATA_TYPE, SPAN_TYPE } from "@/types/traces";
+import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import {
   Construction,
   Hammer,
@@ -9,7 +8,8 @@ import {
   Link,
   MessageCircle,
 } from "lucide-react";
-import React from "react";
+import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const ICONS_MAP = {
   [TRACE_TYPE_FOR_TREE]: {

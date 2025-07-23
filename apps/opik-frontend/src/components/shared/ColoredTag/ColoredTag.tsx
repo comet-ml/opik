@@ -1,19 +1,19 @@
 import React, { useMemo } from "react";
 
-import { Tag, TagProps } from "@/components/ui/tag";
+import { Tag } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export interface ColoredTagProps {
   label: string;
-  size?: TagProps["size"];
+  size?: "default" | "sm" | "lg";
   testId?: string;
   className?: string;
 }
 
 const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   label,
-  size = "md",
+  size = "lg",
   testId,
   className,
 }) => {

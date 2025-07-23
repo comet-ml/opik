@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { DownloadIcon, Expand, ExternalLink } from "lucide-react";
+import { DownloadIcon, ExternalLink } from "lucide-react";
 
 import { cn, isSameDomainUrl } from "@/lib/utils";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
@@ -36,13 +36,9 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     (type === ATTACHMENT_TYPE.TEXT && allowedDomain) ||
     (type === ATTACHMENT_TYPE.PDF && allowedDomain);
 
-  const expandClickHandler = useCallback(
-    (event: React.MouseEvent<unknown>) => {
-      event.stopPropagation();
-      isExpandable && onExpand(previewData);
-    },
-    [onExpand, previewData, isExpandable],
-  );
+  const expandClickHandler = useCallback(() => {
+    isExpandable && onExpand(previewData);
+  }, [onExpand, previewData, isExpandable]);
 
   return (
     <div
@@ -57,35 +53,22 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
         <TooltipWrapper content={name}>
           <span className="truncate">{name}</span>
         </TooltipWrapper>
-        <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
-          {isExpandable && (
-            <TooltipWrapper content="Open in fullscreen">
-              <Button
-                variant="ghost"
-                size="icon-2xs"
-                onClick={expandClickHandler}
-                aria-label="Open in fullscreen"
-              >
-                <Expand />
-              </Button>
-            </TooltipWrapper>
-          )}
-          <TooltipWrapper
-            content={showDownload ? "Download" : "Open in new tab"}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="hidden shrink-0 group-hover:inline-flex"
+          asChild
+        >
+          <a
+            href={url}
+            download={name}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Button variant="ghost" size="icon-2xs" asChild>
-              <a
-                href={url}
-                download={name}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {showDownload ? <DownloadIcon /> : <ExternalLink />}
-              </a>
-            </Button>
-          </TooltipWrapper>
-        </div>
+            {showDownload ? <DownloadIcon /> : <ExternalLink />}
+          </a>
+        </Button>
       </div>
       {type === ATTACHMENT_TYPE.IMAGE ? (
         <img

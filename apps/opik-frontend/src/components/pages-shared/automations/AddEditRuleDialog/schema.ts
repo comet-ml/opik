@@ -158,7 +158,6 @@ export const BaseEvaluationRuleFormSchema = z.object({
   samplingRate: SamplingRateSchema,
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
-  enabled: z.boolean().default(true),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =

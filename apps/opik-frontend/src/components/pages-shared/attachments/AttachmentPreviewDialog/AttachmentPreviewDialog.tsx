@@ -64,7 +64,7 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
 
   const renderImageContent = () => {
     return (
-      <div className="size-full h-[80vh] p-4">
+      <div className="flex h-[80vh] w-full">
         <ZoomPanContainer expandButton={false} className="pt-8">
           <img
             src={url}

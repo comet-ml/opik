@@ -45,14 +45,14 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden">
+    <div className="flex min-h-7 w-full flex-wrap items-center gap-1 overflow-x-hidden">
       <Tag className="mx-1 size-4 text-muted-slate" />
       {[...tags].sort().map((tag) => {
         return (
           <RemovableTag
             label={tag}
             key={tag}
-            size="md"
+            size="lg"
             onDelete={() => onDeleteTag(tag)}
           />
         );
@@ -62,7 +62,8 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
           <Button
             data-testid="add-tag-button"
             variant="outline"
-            size="icon-2xs"
+            size="icon-sm"
+            className="size-7"
           >
             <Plus />
           </Button>

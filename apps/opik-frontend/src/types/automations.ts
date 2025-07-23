@@ -62,7 +62,6 @@ export type EvaluatorsRule = {
   project_id: string;
   project_name?: string;
   sampling_rate: number;
-  enabled?: boolean;
   created_at: string;
   created_by: string;
   last_updated_at: string;

@@ -62,9 +62,9 @@ const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
 
 const renderDurationTooltipValue = ({
   value,
-}: ChartTooltipRenderValueArguments) => formatDuration(value as number, false);
+}: ChartTooltipRenderValueArguments) => formatDuration(value as number);
 
-const durationYTickFormatter = (value: number) => formatDuration(value, false);
+const durationYTickFormatter = (value: number) => formatDuration(value);
 
 interface MetricsTabProps {
   projectId: string;
@@ -146,7 +146,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <MetricContainerChart
               chartId="threads_feedback_scores_chart"
               key="threads_feedback_scores_chart"
-              name="Threads feedback scores"
+              name="Feedback scores of the threads"
               description="Daily averages"
               metricName={METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES}
               interval={interval}
@@ -192,7 +192,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <MetricContainerChart
               chartId="feedback_scores_chart"
               key="feedback_scores_chart"
-              name="Trace feedback scores"
+              name="Feedback scores"
               description="Daily averages"
               metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
               interval={interval}
