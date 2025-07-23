@@ -1,6 +1,5 @@
 from typing import Optional
 import logging
-from opik.runtime_config import is_tracing_active
 
 import anthropic
 from . import messages_create_decorator
@@ -48,10 +47,6 @@ def track_anthropic(
     Returns:
         Anthropic client with integrated Opik tracking logic.
     """
-    # Fast path when tracing disabled
-    if not is_tracing_active():
-        return anthropic_client
-
     if hasattr(anthropic_client, "opik_tracked"):
         return anthropic_client
 

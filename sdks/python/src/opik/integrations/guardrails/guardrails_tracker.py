@@ -1,7 +1,6 @@
 from typing import Optional
 
 import guardrails
-from opik.runtime_config import is_tracing_active
 
 from . import guardrails_decorator
 
@@ -21,9 +20,6 @@ def track_guardrails(
     Returns:
         The modified Guard instance with Opik tracking enabled for its validators.
     """
-    if not is_tracing_active():
-        return guard
-
     validators = guard._validators
     decorator_factory = guardrails_decorator.GuardrailsValidatorValidateDecorator()
 

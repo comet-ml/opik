@@ -1,7 +1,6 @@
 from typing import Optional
 
 import aisuite
-from opik.runtime_config import is_tracing_active
 
 from . import aisuite_decorator
 
@@ -24,8 +23,6 @@ def track_aisuite(
     Returns:
         The modified AISuite client with Opik tracking enabled.
     """
-    if not is_tracing_active():
-        return aisuite_client
 
     if hasattr(aisuite_client, "opik_tracked"):
         return aisuite_client
