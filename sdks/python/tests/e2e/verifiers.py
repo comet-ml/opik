@@ -524,7 +524,7 @@ def _assert_feedback_scores(
             category_name=score.category_name,
             id=item_id,
             name=score.name,
-            reason=score.reason,
+            reason=score.reason.strip(),
             value=score.value,
         )
         for score in feedback_scores
