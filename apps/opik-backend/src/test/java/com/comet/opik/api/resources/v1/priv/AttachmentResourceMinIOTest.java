@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -242,7 +242,7 @@ class AttachmentResourceMinIOTest {
                 Arguments.of(
                         (Consumer<UUID>) traceId -> traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY)),
                 Arguments.of((Consumer<UUID>) traceId -> traceResourceClient
-                        .deleteTraces(BatchDelete.builder().ids(Set.of(traceId)).build(), null, TEST_WORKSPACE,
+                        .deleteTraces(BatchDeleteByProject.builder().ids(Set.of(traceId)).build(), TEST_WORKSPACE,
                                 API_KEY)));
     }
 

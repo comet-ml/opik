@@ -22,12 +22,10 @@ const useTracesBatchDeleteMutation = () => {
       ids,
       projectId,
     }: UseTraceBatchDeleteMutationParams) => {
-      const { data } = await api.post(
-        `${TRACES_REST_ENDPOINT}delete?project_id=${projectId}`,
-        {
-          ids: ids,
-        },
-      );
+      const { data } = await api.post(`${TRACES_REST_ENDPOINT}delete`, {
+        ids: ids,
+        project_id: projectId,
+      });
       return data;
     },
     onError: (error) => {
