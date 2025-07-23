@@ -57,7 +57,7 @@ class GEval(base_metric.BaseMetric):
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
             )
-            self._chain_of_thought_response=self._model.generate_string(input=prompt)
+            self._chain_of_thought_response = self._model.generate_string(input=prompt)
 
         return self._chain_of_thought_response
 
@@ -68,7 +68,9 @@ class GEval(base_metric.BaseMetric):
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
             )
-            self._chain_of_thought_response = await self._model.agenerate_string(input=prompt)
+            self._chain_of_thought_response = await self._model.agenerate_string(
+                input=prompt
+            )
 
         return self._chain_of_thought_response
 
