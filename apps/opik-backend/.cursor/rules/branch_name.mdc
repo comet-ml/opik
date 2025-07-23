@@ -6,7 +6,7 @@ globs:
 - Ensure git branch naming convention: `{USERNAME}/{JIRA-TICKET}_{JIRA-SUMMARY}`
 - `USERNAME` must be your Git username
 - `JIRA-TICKET`: GitHub issue number (e.g. `#123`) or `OPIK-1763`; use `NA` if none—ask the contributor if missing
-- `CHANGE_SUMMARY`: short, concise, hyphen-separated description of the branch changes
+- `JIRA_SUMMARY`: short, concise, hyphen-separated description of the branch changes
 - PR description must include these sections:
   - **Details**: what the change does, why it was made, and any design decisions
   - **Resolves**: URL of the GitHub issue this PR fixes (e.g. `https://github.com/org/repo/issues/123`), or `NA`
