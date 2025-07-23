@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
@@ -325,12 +326,12 @@ public class TracesResource {
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request) {
-        log.info("Deleting traces, count '{}'", request.ids().size());
-        service.delete(request.ids(), null)
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDeleteByProject request) {
+        log.info("Deleting traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
+        service.delete(request.ids(), request.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted traces, count '{}'", request.ids().size());
+        log.info("Deleted traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
         return Response.noContent().build();
     }
 
