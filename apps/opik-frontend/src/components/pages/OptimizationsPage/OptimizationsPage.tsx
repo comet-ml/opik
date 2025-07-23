@@ -64,10 +64,16 @@ import {
 } from "@/components/pages-shared/experiments/table";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+import {
+  DEFAULT_GROUPS_PER_PAGE,
+  DELETED_DATASET_ID,
+  GROUPING_COLUMN,
+} from "@/constants/grouping";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
+import uniq from "lodash/uniq";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -325,6 +331,45 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [setGroupLimit],
   );
 
+  const chartsData = useMemo(() => {
+    const groupsMap: Record<string, ChartData> = {};
+    let index = 0;
+
+    optimizations.forEach((optimization) => {
+      if (optimization.virtual_dataset_id !== DELETED_DATASET_ID) {
+        if (!groupsMap[optimization.virtual_dataset_id]) {
+          groupsMap[optimization.virtual_dataset_id] = {
+            id: optimization.virtual_dataset_id,
+            name: optimization.dataset.name,
+            data: [],
+            lines: [],
+            index,
+          };
+          index += 1;
+        }
+
+        groupsMap[optimization.virtual_dataset_id].data.unshift({
+          entityId: optimization.id,
+          entityName: optimization.name,
+          createdDate: formatDate(optimization.created_at),
+          scores: (optimization.feedback_scores || []).reduce<
+            Record<string, number>
+          >((acc, score) => {
+            acc[score.name] = score.value;
+            return acc;
+          }, {}),
+        });
+
+        groupsMap[optimization.virtual_dataset_id].lines = uniq([
+          ...groupsMap[optimization.virtual_dataset_id].lines,
+          ...(optimization.feedback_scores || []).map((s) => s.name),
+        ]);
+      }
+    });
+
+    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
+  }, [optimizations]);
+
   if (isPending) {
     return <Loader />;
   }
@@ -387,7 +432,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </div>
       </div>
       {Boolean(optimizations.length) && (
-        <FeedbackScoresChartsWrapper entities={optimizations} />
+        <FeedbackScoresChartsWrapper chartsData={chartsData} />
       )}
       <DataTable
         columns={columns}

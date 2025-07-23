@@ -69,7 +69,11 @@ import {
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages-shared/experiments/table";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+import {
+  DEFAULT_GROUPS_PER_PAGE,
+  DELETED_DATASET_ID,
+  GROUPING_COLUMN,
+} from "@/constants/grouping";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -80,6 +84,12 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
+import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
+import uniq from "lodash/uniq";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -502,20 +512,70 @@ const ExperimentsPage: React.FunctionComponent = () => {
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
+  const chartsData = useMemo(() => {
+    const groupsMap: Record<string, ChartData> = {};
+    let index = 0;
+
+    experiments.forEach((experiment) => {
+      if (experiment.virtual_dataset_id !== DELETED_DATASET_ID) {
+        if (!groupsMap[experiment.virtual_dataset_id]) {
+          groupsMap[experiment.virtual_dataset_id] = {
+            id: experiment.virtual_dataset_id,
+            name: experiment.dataset.name,
+            data: [],
+            lines: [],
+            index,
+          };
+          index += 1;
+        }
+
+        groupsMap[experiment.virtual_dataset_id].data.unshift({
+          entityId: experiment.id,
+          entityName: experiment.name,
+          createdDate: formatDate(experiment.created_at),
+          scores: (experiment.feedback_scores || []).reduce<
+            Record<string, number>
+          >((acc, score) => {
+            acc[score.name] = score.value;
+            return acc;
+          }, {}),
+        });
+
+        groupsMap[experiment.virtual_dataset_id].lines = uniq([
+          ...groupsMap[experiment.virtual_dataset_id].lines,
+          ...(experiment.feedback_scores || []).map((s) => s.name),
+        ]);
+      }
+    });
+
+    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
+  }, [experiments]);
+
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Experiments</h1>
-      </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
-      />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="pb-1 pt-6"
+        direction="horizontal"
+        limitWidth
+      >
+        <div className="flex items-center">
+          <h1 className="comet-title-l truncate break-words">Experiments</h1>
+        </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerDescription
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search!}
@@ -561,9 +621,18 @@ const ExperimentsPage: React.FunctionComponent = () => {
             Create new experiment
           </Button>
         </div>
-      </div>
+      </PageBodyStickyContainer>
       {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
+        <PageBodyStickyContainer
+          direction="horizontal"
+          className="z-[5]"
+          limitWidth
+        >
+          <FeedbackScoresChartsWrapper
+            chartsData={chartsData}
+            isAverageScores
+          />
+        </PageBodyStickyContainer>
       )}
       <DataTable
         columns={columns}
@@ -590,6 +659,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        TableWrapper={PageBodyStickyTableWrapper}
+        TableBody={DataTableVirtualBody}
+        stickyHeader
       />
       <div className="py-4">
         <DataTablePagination
@@ -605,7 +677,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         setOpen={setOpenDialog}
         datasetName={query?.datasetName}
       />
-    </div>
+    </PageBodyScrollContainer>
   );
 };
 
