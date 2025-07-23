@@ -16,19 +16,19 @@ AttachmentEntityType = Literal["trace", "span"]
 
 
 class LLMProvider(str, enum.Enum):
-    GOOGLE_VERTEXAI: str = "google_vertexai"
+    GOOGLE_VERTEXAI = "google_vertexai"
     """Used for gemini models hosted in VertexAI. https://cloud.google.com/vertex-ai"""
 
-    GOOGLE_AI: str = "google_ai"
+    GOOGLE_AI = "google_ai"
     """Used for gemini models hosted in GoogleAI. https://ai.google.dev/aistudio"""
 
-    OPENAI: str = "openai"
+    OPENAI = "openai"
     """Used for models hosted by OpenAI. https://platform.openai.com"""
 
-    ANTHROPIC: str = "anthropic"
+    ANTHROPIC = "anthropic"
     """Used for models hosted by Anthropic. https://www.anthropic.com"""
 
-    ANTHROPIC_VERTEXAI: str = "anthropic_vertexai"
+    ANTHROPIC_VERTEXAI = "anthropic_vertexai"
     """Used for Anthropic models hosted by VertexAI. https://cloud.google.com/vertex-ai"""
 
     GROQ = "groq"

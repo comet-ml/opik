@@ -1,7 +1,6 @@
 import pydantic
 from typing import Optional, Dict, Any
 from . import base_original_provider_usage
-from opik import dict_utils
 
 
 class OpenAIResponsesUsage(base_original_provider_usage.BaseOriginalProviderUsage):
@@ -31,18 +30,9 @@ class OpenAIResponsesUsage(base_original_provider_usage.BaseOriginalProviderUsag
         if self.input_tokens_details is not None:
             result["input_tokens_details"] = self.input_tokens_details.model_dump()
 
-        result = dict_utils.flatten_dict(
-            d=result, delim=".", parent_key=parent_key_prefix
+        return self.flatten_result_and_add_model_extra(
+            result=result, parent_key_prefix=parent_key_prefix
         )
-
-        if self.model_extra is not None:
-            model_extra = dict_utils.flatten_dict(
-                d=self.model_extra, delim=".", parent_key=parent_key_prefix
-            )
-            result.update(model_extra)
-
-        result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
-        return result
 
     @classmethod
     def from_original_usage_dict(

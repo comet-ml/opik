@@ -244,3 +244,10 @@ def ensure_vertexai_configured(ensure_google_project_and_location_configured):
     finally:
         if os.path.exists(GOOGLE_APPLICATION_CREDENTIALS_PATH):
             os.remove(GOOGLE_APPLICATION_CREDENTIALS_PATH)
+
+
+@pytest.fixture()
+def ensure_google_api_configured():
+    GOOGLE_API_KEY = "GOOGLE_API_KEY"
+    if GOOGLE_API_KEY not in os.environ:
+        raise Exception(f"{GOOGLE_API_KEY} env var must be set")

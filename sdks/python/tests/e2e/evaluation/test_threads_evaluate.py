@@ -128,7 +128,7 @@ def test_evaluate_threads__happy_path(opik_client, active_thread):
             id=active_thread,
             name=score.name,
             value=score.value,
-            reason=score.reason,
+            reason=score.reason.strip(),
             category_name=None,
         )
         for score in thread_result.scores
