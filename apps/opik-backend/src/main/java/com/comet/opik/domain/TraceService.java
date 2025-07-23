@@ -26,9 +26,11 @@ import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
+import io.r2dbc.spi.Connection;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -42,6 +44,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +56,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
+import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -69,9 +74,7 @@ public interface TraceService {
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
-    Mono<Void> delete(UUID id);
-
-    Mono<Void> delete(Set<UUID> ids);
+    Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -319,30 +322,24 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(@NonNull UUID id) {
-        log.info("Deleting trace by id '{}'", id);
-        return Mono.deferContextual(ctx -> template.nonTransaction(connection -> dao.delete(id, connection))
-                .doOnSuccess(__ -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    eventBus.post(new TracesDeleted(Set.of(id), workspaceId, userName));
-                    log.info("Published TracesDeleted event for trace id '{}' on workspace '{}'", id, workspaceId);
-                }));
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Void> delete(Set<UUID> ids) {
+    public Mono<Void> delete(Set<UUID> ids, UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
-        return Mono.deferContextual(ctx -> template.nonTransaction(connection -> dao.delete(ids, connection))
-                .doOnSuccess(__ -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    eventBus.post(new TracesDeleted(ids, workspaceId, userName));
-                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'", ids.size(),
-                            workspaceId);
-                }));
+        return template.nonTransaction(connection -> delete(ids, projectId, connection));
+    }
+
+    private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
+        return Mono.deferContextual(
+                ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
+                        .flatMap(batch -> dao.delete(new HashSet<>(batch), projectId, connection)
+                                .doOnSuccess(__ -> {
+                                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                                    String userName = ctx.get(RequestContext.USER_NAME);
+                                    eventBus.post(new TracesDeleted(new HashSet<>(batch), workspaceId, userName));
+                                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
+                                            batch.size(), workspaceId);
+                                }))
+                        .then());
     }
 
     @Override
@@ -434,13 +431,28 @@ class TraceServiceImpl implements TraceService {
         }
 
         if (traceThreads.projectId() != null) {
-            return dao.deleteThreads(traceThreads.projectId(), traceThreads.threadIds())
-                    .then();
+            return deleteTraceThreadsByProjectId(traceThreads.projectId(), traceThreads.threadIds());
         }
 
         return getProjectByName(traceThreads.projectName())
-                .flatMap(project -> dao.deleteThreads(project.id(), traceThreads.threadIds()))
-                .then();
+                .flatMap(project -> deleteTraceThreadsByProjectId(project.id(), traceThreads.threadIds()));
+    }
+
+    private Mono<Void> deleteTraceThreadsByProjectId(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        log.info("Deleting trace threads by project id '{}' and thread ids count '{}'", projectId, threadIds.size());
+
+        return Mono.deferContextual(ctx -> template.nonTransaction(connection ->
+        // First get all trace IDs for the thread IDs
+        dao.getTraceIdsByThreadIds(projectId, threadIds, connection)
+                .flatMap(traceIds -> {
+                    if (traceIds.isEmpty()) {
+                        log.info("No traces found for thread IDs, skipping deletion");
+                        return Mono.empty();
+                    }
+                    log.info("Found '{}' traces for thread IDs, proceeding with deletion", traceIds.size());
+
+                    return delete(traceIds, projectId, connection);
+                })));
     }
 
     @Override

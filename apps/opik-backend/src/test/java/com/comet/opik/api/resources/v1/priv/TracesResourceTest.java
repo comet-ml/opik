@@ -1413,6 +1413,7 @@ class TracesResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         TraceFilter.builder()
                                                 .field(filter.getKey())
@@ -4669,6 +4670,7 @@ class TracesResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         TraceThreadFilter.builder()
                                                 .field(filter.getKey())
@@ -6161,6 +6163,42 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey,
                     List.of(), exclude);
 
+        }
+
+        @Test
+        @DisplayName("should handle filter with percent characters in value correctly")
+        void shouldHandleTracesWithPercentCharactersInName() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traceName = "test%";
+
+            // Create a trace with % characters in the name
+            var traces = List.of(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name(traceName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .threadId(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create a filter to search for the trace by name
+            var filter = TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value(traceName)
+                    .build();
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(filter), traces, traces, List.of(),
+                    apiKey, null, Set.of());
         }
     }
 
@@ -9082,6 +9120,43 @@ class TracesResourceTest {
             getAndAssertTraceNotFound(trace.id(), apiKey, workspaceName);
             getAndAssert(traceFromOtherProject, otherProjectId, apiKey, workspaceName);
             getAndAssert(traceFromOtherWorkspace, otherWorkspaceProjectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when trace thread is deleted, then related spans are deleted as well")
+        void deleteTraceThread__whenTraceThreadIdIsPresent__thenDeleteRelatedSpans() {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace = createTrace().toBuilder()
+                    .threadId(UUID.randomUUID().toString())
+                    .projectName(projectName)
+                    .build();
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(null)
+                            .build())
+                    .toList();
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            var id = create(trace, apiKey, workspaceName);
+
+            traceResourceClient.deleteTraceThreads(List.of(trace.threadId()), trace.projectName(), null, apiKey,
+                    workspaceName);
+
+            getAndAssertTraceNotFound(id, apiKey, workspaceName);
+
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
+            });
         }
 
         @Test
