@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import relativeTime from "dayjs/plugin/relativeTime";
+import duration from "dayjs/plugin/duration";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
@@ -8,6 +9,7 @@ import isNull from "lodash/isNull";
 
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
+dayjs.extend(duration);
 
 const FORMATTED_DATE_STRING_REGEXP =
   /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
@@ -99,5 +101,63 @@ export const formatDuration = (value?: number | null, onlySeconds = true) => {
     }${days ? days + "d " : ""}${hours ? hours + "h " : ""}${
       minutes ? minutes + "m " : ""
     }${seconds}s`.trim();
+  }
+};
+
+/**
+ * Validates an ISO-8601 duration string and checks if it's within the maximum allowed duration
+ * @param durationString - ISO-8601 duration string (e.g., "PT30M", "P1D", "PT2H30M")
+ * @param maxDays - Maximum allowed duration in days (default: 7)
+ * @returns boolean indicating if the duration is valid and within limits
+ */
+export const isValidIso8601Duration = (
+  durationString: string,
+  maxDays: number = 7,
+): boolean => {
+  try {
+    const dur = dayjs.duration(durationString);
+    const totalMs = dur.asMilliseconds();
+
+    if (isNaN(totalMs) || totalMs <= 0) {
+      return false;
+    }
+
+    const maxDuration = dayjs.duration(maxDays, "days");
+    return totalMs <= maxDuration.asMilliseconds();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Converts an ISO-8601 duration string to a human-readable format
+ * @param durationString - ISO-8601 duration string
+ * @returns Human-readable duration string or null if invalid
+ */
+export const formatIso8601Duration = (
+  durationString: string,
+): string | null => {
+  try {
+    const dur = dayjs.duration(durationString);
+    const totalMs = dur.asMilliseconds();
+
+    if (isNaN(totalMs) || totalMs <= 0) {
+      return null;
+    }
+
+    const days = dur.days();
+    const hours = dur.hours();
+    const minutes = dur.minutes();
+    const seconds = dur.seconds();
+
+    const parts: string[] = [];
+    if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+    if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+    if (minutes > 0) parts.push(`${minutes} min`);
+    if (seconds > 0) parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
+
+    return parts.length > 0 ? parts.join(", ") : "0 seconds";
+  } catch {
+    return null;
   }
 };
