@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.10", "3.12"]  # 3.9 is broken in OpenAI SDK in 1.97.1
+        python_version: ["3.9", "3.12"]
 
     steps:
       - name: Check out code
