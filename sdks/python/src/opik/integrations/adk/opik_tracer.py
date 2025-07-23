@@ -233,7 +233,7 @@ class OpikTracer:
     ) -> None:
         try:
             current_span = context_storage.top_span_data()
-            
+
             tool_metadata = {
                 "function_call_id": tool_context.function_call_id,
                 **self.metadata,

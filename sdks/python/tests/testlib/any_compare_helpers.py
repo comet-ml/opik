@@ -68,8 +68,9 @@ class AnyList:
 class AnyString:
     """A helper object that provides partial equality check to strings."""
 
-    def __init__(self, startswith: Optional[str] = None):
+    def __init__(self, startswith: Optional[str] = None, containing: Optional[str] = None):
         self._startswith = startswith
+        self._containing = containing
 
     def __eq__(self, other):
         if not isinstance(other, str):
@@ -90,6 +91,9 @@ class AnyString:
 
     def starting_with(self, startswith: str):
         return AnyString(startswith=startswith)
+    
+    def containing(self, containing: str):
+        return AnyString(containing=containing)
 
 
 ANY = mock.ANY
