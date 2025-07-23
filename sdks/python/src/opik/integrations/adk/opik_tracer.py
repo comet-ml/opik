@@ -82,9 +82,7 @@ class OpikTracer:
 
             name = self.name or callback_context.agent_name
 
-            # Update existing context data instead of creating new
             if current_span is not None:
-                # Update current span with agent information
                 current_span.update(
                     name=name,
                     metadata={**agent_metadata},
@@ -92,11 +90,7 @@ class OpikTracer:
                     tags=self.tags,
                     project_name=self.project_name,
                 )
-                LOGGER.debug(
-                    f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED SPAN: {current_span.id}"
-                )
             elif current_trace is not None:
-                # Update current trace with agent information
                 current_trace.update(
                     name=name,
                     metadata={**agent_metadata},
@@ -104,9 +98,6 @@ class OpikTracer:
                     tags=self.tags,
                     thread_id=thread_id,
                     project_name=self.project_name,
-                )
-                LOGGER.debug(
-                    f"✅ BEFORE_AGENT_CALLBACK finished | Agent: {callback_context.agent_name} | 🔄 UPDATED TRACE: {current_trace.id}"
                 )
             else:
                 LOGGER.warning(
@@ -156,9 +147,12 @@ class OpikTracer:
                 llm_request.model
             )
 
+            # ADK runs `before_model_callback` before running `start_as_current_span` function for the LLM call,
+            # which makes it impossible to update the Opik span from this method.
+            # So we create a span manually here. This flow is handled inside ADKTracerWrapper.
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
-                    name="STARTED_LLM_CALL",
+                    name=adk_tracer_wrapper.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
                     project_name=self.project_name,
                     metadata=self.metadata,
                     type="llm",  # for now
