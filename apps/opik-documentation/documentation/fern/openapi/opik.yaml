@@ -3625,6 +3625,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/configurations:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace configuration
+      description: Get workspace configuration
+      operationId: getWorkspaceConfiguration
+      responses:
+        "200":
+          description: Workspace Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Workspaces
+      summary: Upsert workspace configuration
+      description: Upsert workspace configuration
+      operationId: upsertWorkspaceConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceConfiguration"
+      responses:
+        "200":
+          description: Configuration Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Workspaces
+      summary: Delete workspace configuration
+      description: Delete workspace configuration
+      operationId: deleteWorkspaceConfiguration
+      responses:
+        "204":
+          description: Configuration Deleted
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/costs:
     post:
       tags:
@@ -9699,6 +9764,15 @@ components:
           format: date-time
         start_before_end:
           type: boolean
+    WorkspaceConfiguration:
+      type: object
+      properties:
+        timeout_to_mark_thread_as_inactive:
+          type: string
+          description: "Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H\
+            \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
+            \ please use a duration with seconds precision or higher. Also, the max\
+            \ duration allowed is 7 days."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

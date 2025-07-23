@@ -290,4 +290,5 @@ export * from "./WorkspaceMetricsSummaryRequest";
 export * from "./DataPointDouble";
 export * from "./WorkspaceMetricResponse";
 export * from "./WorkspaceMetricRequest";
+export * from "./WorkspaceConfiguration";
 export * from "./WorkspaceMetricsSummaryResponse";
