@@ -347,6 +347,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -675,6 +676,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",
