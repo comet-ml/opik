@@ -36,7 +36,9 @@ class LegacyOpikTracer:
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
     ):
-        LOGGER.warning("Opik detected ADK version < 1.3.0, using legacy OpikTracer. We recommend upgrading to the recent version to get the best experience from Opik integration.")
+        LOGGER.warning(
+            "Legacy OpikTracer for google-adk < 1.3.0 is being used. We recommend upgrading to the recent version to automatically get the best experience from Opik integration."
+        )
         self.name = name
         self.tags = tags
         self.metadata = metadata or {}
