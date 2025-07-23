@@ -401,6 +401,8 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
+        if self.disabled or not is_tracing_active():
+            return
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
 
         try:
