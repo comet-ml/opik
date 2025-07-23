@@ -22,7 +22,7 @@ from . import (
 )
 from ...api_objects import helpers, opik_client
 from opik import context_storage
-from ...runtime_config import is_tracing_active
+from ...decorator.tracing_runtime_config import is_tracing_active
 
 if TYPE_CHECKING:
     from uuid import UUID

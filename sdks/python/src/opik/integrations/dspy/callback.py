@@ -6,7 +6,7 @@ from dspy.utils import callback as dspy_callback
 
 from opik import types, opik_context, context_storage
 from opik.api_objects import helpers, span, trace, opik_client
-from opik.runtime_config import is_tracing_active
+from opik.decorator.tracing_runtime_config import is_tracing_active
 from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module

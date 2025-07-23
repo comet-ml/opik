@@ -23,7 +23,7 @@ from . import (
     inspect_helpers,
     span_creation_handler,
 )
-from ..runtime_config import is_tracing_active
+from .tracing_runtime_config import is_tracing_active
 
 LOGGER = logging.getLogger(__name__)
 

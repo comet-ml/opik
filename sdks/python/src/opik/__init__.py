@@ -17,7 +17,7 @@ from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
 from . import opik_context
-from .runtime_config import (
+from .decorator.tracing_runtime_config import (
     set_tracing_active,
     is_tracing_active,
     reset_tracing_to_config_default,

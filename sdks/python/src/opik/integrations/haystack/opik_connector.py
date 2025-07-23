@@ -5,7 +5,7 @@ from haystack import logging, tracing
 
 from . import opik_tracer
 import opik
-from opik.runtime_config import is_tracing_active
+from opik.decorator.tracing_runtime_config import is_tracing_active
 
 LOGGER = logging.getLogger(__name__)
 
