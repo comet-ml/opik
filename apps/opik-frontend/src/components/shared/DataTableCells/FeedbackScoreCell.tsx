@@ -1,10 +1,13 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-
-import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { TraceFeedbackScore } from "@/types/traces";
 import { MessageSquareMore } from "lucide-react";
+import isNumber from "lodash/isNumber";
+import isFunction from "lodash/isFunction";
+
+import { toString } from "@/lib/utils";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
+import { TraceFeedbackScore } from "@/types/traces";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
@@ -33,5 +36,41 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     </CellWrapper>
   );
 };
+
+type CustomMeta = {
+  accessorFn?: string;
+};
+
+const FeedbackScoreAggregationCell = <TData,>(
+  context: CellContext<TData, string>,
+) => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { accessorFn } = (custom ?? {}) as CustomMeta;
+
+  const rowId = context.row.id;
+  const { aggregationMap } = context.table.options.meta ?? {};
+
+  const data = aggregationMap?.[rowId] ?? {};
+  const rawValue = isFunction(accessorFn) ? accessorFn(data) : undefined;
+  let value = "-";
+
+  console.log(data, rawValue, value);
+
+  if (isNumber(rawValue)) {
+    value = toString(rawValue);
+  }
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="text-light-slate"
+    >
+      {value}
+    </CellWrapper>
+  );
+};
+
+FeedbackScoreCell.Aggregation = FeedbackScoreAggregationCell;
 
 export default FeedbackScoreCell;
