@@ -113,40 +113,6 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
-from .configuration import Configuration
-from .configuration_detailed import ConfigurationDetailed
-from .configuration_detailed_timeout_to_mark_thread_as_inactive import (
-    ConfigurationDetailedTimeoutToMarkThreadAsInactive,
-)
-from .configuration_detailed_timeout_to_mark_thread_as_inactive_units_item import (
-    ConfigurationDetailedTimeoutToMarkThreadAsInactiveUnitsItem,
-)
-from .configuration_detailed_timeout_to_mark_thread_as_inactive_units_item_duration import (
-    ConfigurationDetailedTimeoutToMarkThreadAsInactiveUnitsItemDuration,
-)
-from .configuration_public import ConfigurationPublic
-from .configuration_public_timeout_to_mark_thread_as_inactive import ConfigurationPublicTimeoutToMarkThreadAsInactive
-from .configuration_public_timeout_to_mark_thread_as_inactive_units_item import (
-    ConfigurationPublicTimeoutToMarkThreadAsInactiveUnitsItem,
-)
-from .configuration_public_timeout_to_mark_thread_as_inactive_units_item_duration import (
-    ConfigurationPublicTimeoutToMarkThreadAsInactiveUnitsItemDuration,
-)
-from .configuration_timeout_to_mark_thread_as_inactive import ConfigurationTimeoutToMarkThreadAsInactive
-from .configuration_timeout_to_mark_thread_as_inactive_units_item import (
-    ConfigurationTimeoutToMarkThreadAsInactiveUnitsItem,
-)
-from .configuration_timeout_to_mark_thread_as_inactive_units_item_duration import (
-    ConfigurationTimeoutToMarkThreadAsInactiveUnitsItemDuration,
-)
-from .configuration_write import ConfigurationWrite
-from .configuration_write_timeout_to_mark_thread_as_inactive import ConfigurationWriteTimeoutToMarkThreadAsInactive
-from .configuration_write_timeout_to_mark_thread_as_inactive_units_item import (
-    ConfigurationWriteTimeoutToMarkThreadAsInactiveUnitsItem,
-)
-from .configuration_write_timeout_to_mark_thread_as_inactive_units_item_duration import (
-    ConfigurationWriteTimeoutToMarkThreadAsInactiveUnitsItemDuration,
-)
 from .count_value_stat_public import CountValueStatPublic
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
@@ -381,6 +347,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -473,22 +440,6 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
-    "Configuration",
-    "ConfigurationDetailed",
-    "ConfigurationDetailedTimeoutToMarkThreadAsInactive",
-    "ConfigurationDetailedTimeoutToMarkThreadAsInactiveUnitsItem",
-    "ConfigurationDetailedTimeoutToMarkThreadAsInactiveUnitsItemDuration",
-    "ConfigurationPublic",
-    "ConfigurationPublicTimeoutToMarkThreadAsInactive",
-    "ConfigurationPublicTimeoutToMarkThreadAsInactiveUnitsItem",
-    "ConfigurationPublicTimeoutToMarkThreadAsInactiveUnitsItemDuration",
-    "ConfigurationTimeoutToMarkThreadAsInactive",
-    "ConfigurationTimeoutToMarkThreadAsInactiveUnitsItem",
-    "ConfigurationTimeoutToMarkThreadAsInactiveUnitsItemDuration",
-    "ConfigurationWrite",
-    "ConfigurationWriteTimeoutToMarkThreadAsInactive",
-    "ConfigurationWriteTimeoutToMarkThreadAsInactiveUnitsItem",
-    "ConfigurationWriteTimeoutToMarkThreadAsInactiveUnitsItemDuration",
     "CountValueStatPublic",
     "DataPointDouble",
     "DataPointNumberPublic",
@@ -725,6 +676,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",

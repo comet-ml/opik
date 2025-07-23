@@ -310,7 +310,7 @@ traceThreadConfig:
   closeTraceThreadJobInterval: 1500ms
   # Default: 4s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
-  closeTraceThreadJobLockTime: 4s
+  closeTraceThreadJobLockTime: 3s
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms

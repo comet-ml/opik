@@ -4,6 +4,8 @@ import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.WorkspaceConfiguration;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
@@ -26,16 +28,24 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -103,6 +113,7 @@ class WorkspacesResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
+    private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
@@ -113,6 +124,7 @@ class WorkspacesResourceTest {
     void setUpAll(ClientSupport client, IdGenerator idGenerator) throws SQLException {
 
         this.baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -594,5 +606,361 @@ class WorkspacesResourceTest {
                 .map(Span::totalEstimatedCost)
                 .map(BigDecimal::doubleValue)
                 .collect(Collectors.toList());
+    }
+
+    @Nested
+    @DisplayName("Workspace Configuration Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class WorkspaceConfigurationTests {
+
+        @Test
+        @DisplayName("when upserting workspace configuration with valid data, then return success")
+        void upsertWorkspaceConfiguration__whenValidData__thenReturnSuccess() {
+            // Given
+            Duration timeout = Duration.ofMinutes(30);
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // When
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration with null timeout, then return success")
+        void upsertWorkspaceConfiguration__whenNullTimeout__thenReturnSuccess() {
+            // Given
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(null)
+                    .build();
+
+            // When
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.timeoutToMarkThreadAsInactive()).isNull();
+        }
+
+        @ParameterizedTest
+        @MethodSource("validTimeoutDurations")
+        @DisplayName("when upserting workspace configuration with various valid timeouts, then return success")
+        void upsertWorkspaceConfiguration__whenVariousValidTimeouts__thenReturnSuccess(Duration timeout) {
+            // Given
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // When
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            // Then - Verify by getting the configuration
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidTimeoutDurations")
+        @DisplayName("when upserting workspace configuration with invalid timeouts, then return error")
+        void upsertWorkspaceConfiguration__whenInvalidTimeouts__thenReturnError(Duration timeout) {
+            // Given
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // When
+            try (Response response = workspaceResourceClient.callUpsertWorkspaceConfiguration(
+                    configuration, API_KEY, WORKSPACE_NAME)) {
+
+                // Then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("when getting existing workspace configuration, then return configuration")
+        void getWorkspaceConfiguration__whenConfigurationExists__thenReturnConfiguration() {
+            // Given
+            Duration timeout = Duration.ofHours(2);
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // Create configuration first
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            // When
+            WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+
+            // Then
+            assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
+        }
+
+        @Test
+        @DisplayName("when getting non-existing workspace configuration, then return not found")
+        void getWorkspaceConfiguration__whenConfigurationDoesNotExist__thenReturnNotFound() {
+            // Given
+            String uniqueWorkspace = "unique-workspace-" + UUID.randomUUID();
+            String uniqueApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(uniqueApiKey, uniqueWorkspace, UUID.randomUUID().toString());
+
+            // When
+            try (Response response = workspaceResourceClient.callGetWorkspaceConfiguration(uniqueApiKey,
+                    uniqueWorkspace)) {
+
+                // Then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when deleting existing workspace configuration, then return success")
+        void deleteWorkspaceConfiguration__whenConfigurationExists__thenReturnSuccess() {
+            // Given
+            Duration timeout = Duration.ofDays(1);
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // Create configuration first
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            // When
+            workspaceResourceClient.deleteWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+
+            // Then
+            try (Response response = workspaceResourceClient.callGetWorkspaceConfiguration(API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when deleting non-existing workspace configuration, then return no content")
+        void deleteWorkspaceConfiguration__whenConfigurationDoesNotExist__thenReturnNoContent() {
+            // Given
+            String uniqueWorkspace = "unique-workspace-" + UUID.randomUUID();
+            String uniqueApiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(uniqueApiKey, uniqueWorkspace, UUID.randomUUID().toString());
+
+            // When
+            try (Response response = workspaceResourceClient.callDeleteWorkspaceConfiguration(uniqueApiKey,
+                    uniqueWorkspace)) {
+
+                // Then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("when upserting configuration with duration exceeding maximum, then return validation error")
+        void upsertWorkspaceConfiguration__whenDurationExceedsMaximum__thenReturnValidationError() {
+            // Given
+            Duration exceedsMaxDuration = Duration.ofDays(8); // Max is 7 days
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(exceedsMaxDuration)
+                    .build();
+
+            // When
+            try (Response response = workspaceResourceClient.callUpsertWorkspaceConfiguration(
+                    configuration, API_KEY, WORKSPACE_NAME)) {
+
+                // Then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                assertThat(response.hasEntity()).isTrue();
+                ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
+                assertThat(errorMessage.errors())
+                        .anyMatch(error -> error.contains("duration exceeds the maximum allowed"));
+            }
+        }
+
+        @Test
+        @DisplayName("when upserting configuration with sub-second precision, then return validation error")
+        void upsertWorkspaceConfiguration__whenSubSecondPrecision__thenReturnValidationError() {
+            // Given
+            Duration subSecondDuration = Duration.ofMillis(500);
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(subSecondDuration)
+                    .build();
+
+            // When
+            try (Response response = workspaceResourceClient.callUpsertWorkspaceConfiguration(
+                    configuration, API_KEY, WORKSPACE_NAME)) {
+
+                // Then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration, then API uses ISO-8601 format for Duration")
+        void upsertWorkspaceConfiguration__whenValidDuration__thenReturnsIso8601Format() {
+            // Given
+            Duration timeout = Duration.ofMinutes(30); // Should be "PT30M" in ISO-8601 format
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .build();
+
+            // When - Make raw HTTP call to upsert
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .put(Entity.json(configuration))) {
+
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+
+                // Get the configuration to check ISO-8601 format
+                try (Response getResponse = client
+                        .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                        .get()) {
+
+                    assertThat(getResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    String jsonResponse = getResponse.readEntity(String.class);
+                    assertThat(jsonResponse).contains("\"PT30M\"");
+                    assertThat(jsonResponse).doesNotContain("1800.000000000"); // Should not contain decimal seconds
+                }
+            }
+        }
+
+        static java.util.stream.Stream<Arguments> validTimeoutDurations() {
+            return java.util.stream.Stream.of(
+                    Arguments.of(Duration.ofSeconds(1)),
+                    Arguments.of(Duration.ofMinutes(1)),
+                    Arguments.of(Duration.ofMinutes(30)),
+                    Arguments.of(Duration.ofHours(1)),
+                    Arguments.of(Duration.ofHours(24)),
+                    Arguments.of(Duration.ofDays(7)));
+        }
+
+        static java.util.stream.Stream<Arguments> invalidTimeoutDurations() {
+            return java.util.stream.Stream.of(
+                    Arguments.of(Duration.ofMillis(500)),
+                    Arguments.of(Duration.ofMillis(999)),
+                    Arguments.of(Duration.ofDays(8)),
+                    Arguments.of(Duration.ofDays(30)));
+        }
+
+        @ParameterizedTest
+        @MethodSource("validIso8601TimeoutStrings")
+        @DisplayName("when upserting workspace configuration with valid ISO-8601 strings, then return success")
+        void upsertWorkspaceConfiguration__whenValidIso8601Strings__thenReturnSuccess(String iso8601Duration,
+                Duration expectedDuration) {
+            // Given - Create a Map to properly structure JSON with ISO-8601 string
+            Map<String, String> configMap = Map.of("timeout_to_mark_thread_as_inactive", iso8601Duration);
+
+            // When
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .put(Entity.json(configMap))) {
+
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+
+                // Verify by getting the configuration
+                WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY,
+                        WORKSPACE_NAME);
+                assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(expectedDuration);
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidIso8601TimeoutStrings")
+        @DisplayName("when upserting workspace configuration with invalid ISO-8601 strings, then return validation error")
+        void upsertWorkspaceConfiguration__whenInvalidIso8601Strings__thenReturnValidationError(
+                String iso8601Duration, String expectedError) {
+            // Given - Create a Map to properly structure JSON with invalid ISO-8601 string
+            Map<String, String> configMap = Map.of("timeout_to_mark_thread_as_inactive", iso8601Duration);
+
+            // When
+            try (Response response = client.target(String.format("%s/v1/private/workspaces/configurations", baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .put(Entity.json(configMap))) {
+
+                // Then
+                assertThat(response.getStatus()).isIn(HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_UNPROCESSABLE_CONTENT);
+
+                if (response.getStatus() == HttpStatus.SC_UNPROCESSABLE_CONTENT) {
+                    var error = response.readEntity(ErrorMessage.class);
+                    assertThat(error.errors()).contains(expectedError);
+                } else {
+                    var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(errorMessage.getMessage()).isEqualTo(expectedError);
+                }
+            }
+        }
+
+        static java.util.stream.Stream<Arguments> validIso8601TimeoutStrings() {
+            return java.util.stream.Stream.of(
+                    Arguments.of("PT1S", Duration.ofSeconds(1)), // 1 second
+                    Arguments.of("PT30S", Duration.ofSeconds(30)), // 30 seconds
+                    Arguments.of("PT1M", Duration.ofMinutes(1)), // 1 minute
+                    Arguments.of("PT30M", Duration.ofMinutes(30)), // 30 minutes
+                    Arguments.of("PT1H", Duration.ofHours(1)), // 1 hour
+                    Arguments.of("PT2H", Duration.ofHours(2)), // 2 hours
+                    Arguments.of("P1D", Duration.ofDays(1)), // 1 day
+                    Arguments.of("P7D", Duration.ofDays(7))); // 7 days (maximum)
+        }
+
+        static java.util.stream.Stream<Arguments> invalidIso8601TimeoutStrings() {
+            return java.util.stream.Stream.of(
+                    Arguments.of("PT0.5S",
+                            "timeoutToMarkThreadAsInactive minimum precision supported is seconds, please use a duration with seconds precision or higher"),
+                    Arguments.of("PT500MS",
+                            "Unable to process JSON. Cannot parse Duration from string 'PT500MS': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"),
+                    Arguments.of("P8D", "timeoutToMarkThreadAsInactive duration exceeds the maximum allowed of PT168H"),
+                    Arguments.of("P30D",
+                            "timeoutToMarkThreadAsInactive duration exceeds the maximum allowed of PT168H"),
+                    Arguments.of("INVALID",
+                            "Unable to process JSON. Cannot parse Duration from string 'INVALID': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"),
+                    Arguments.of("30M",
+                            "Unable to process JSON. Cannot parse Duration from string '30M': Text cannot be parsed to a Duration\n"
+                                    +
+                                    " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"));
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration with null timeout, then return success with null")
+        void upsertWorkspaceConfiguration__whenNullTimeout__thenReturnSuccessWithNull() {
+            // Given - null timeout (use default)
+            Map<String, Object> payload = Map.of(
+            // Intentionally not including timeout_to_mark_thread_as_inactive to send null
+            );
+
+            // When
+            try (Response upsertResponse = client
+                    .target(String.format("%s/v1/private/workspaces/configurations", baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .put(Entity.json(payload))) {
+
+                // Then - Upsert should return 204
+                assertThat(upsertResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+
+                // Verify by getting the configuration
+                WorkspaceConfiguration result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY,
+                        WORKSPACE_NAME);
+                assertThat(result.timeoutToMarkThreadAsInactive()).isNull(); // Should be null (use default)
+            }
+        }
+
     }
 }

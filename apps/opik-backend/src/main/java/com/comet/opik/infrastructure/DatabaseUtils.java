@@ -10,6 +10,9 @@ import java.util.stream.Collectors;
 @UtilityClass
 @Slf4j
 public class DatabaseUtils {
+
+    public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
+
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         var filteredProperties = dataSourceFactory.getProperties()
                 .entrySet()

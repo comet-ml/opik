@@ -92,6 +92,12 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     accessorFn: (row) => formatDate(row.most_recent_optimization_at),
   },
   {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.last_updated_at),
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
@@ -106,6 +112,11 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
 
 export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
   {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "id",
     label: "ID",
     type: COLUMN_TYPE.string,
@@ -119,6 +130,11 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
   },
   {
     id: "created_at",

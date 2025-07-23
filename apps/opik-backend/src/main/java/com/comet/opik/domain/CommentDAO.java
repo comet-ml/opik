@@ -185,7 +185,7 @@ class CommentDAOImpl implements CommentDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(DELETE_COMMENT_BY_ID)
-                    .bind("ids", commentIds);
+                    .bind("ids", commentIds.toArray(UUID[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
