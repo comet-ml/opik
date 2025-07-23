@@ -45,7 +45,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -322,7 +321,7 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID projectId) {
+    public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
         return template.nonTransaction(connection -> delete(ids, projectId, connection));
@@ -331,11 +330,16 @@ class TraceServiceImpl implements TraceService {
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
         return Mono.deferContextual(
                 ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
-                        .flatMap(batch -> dao.delete(new HashSet<>(batch), projectId, connection)
+                        .flatMap(batch -> dao.delete(Set.copyOf(batch), projectId, connection)
                                 .doOnSuccess(__ -> {
                                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                                     String userName = ctx.get(RequestContext.USER_NAME);
-                                    eventBus.post(new TracesDeleted(new HashSet<>(batch), workspaceId, userName));
+                                    eventBus.post(TracesDeleted.builder()
+                                            .traceIds(Set.copyOf(batch))
+                                            .projectId(projectId)
+                                            .workspaceId(workspaceId)
+                                            .userName(userName)
+                                            .build());
                                     log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
                                             batch.size(), workspaceId);
                                 }))

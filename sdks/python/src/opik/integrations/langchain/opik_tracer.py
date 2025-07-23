@@ -359,9 +359,9 @@ class OpikTracer(BaseTracer):
                 usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
                 usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif vertexai_run_helpers.is_vertexai_run(run):
+            elif vertexai_run_helpers.is_vertexai_run(run_dict):
                 usage_info = vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif google_generative_ai_helpers.is_google_generative_ai_run(run):
+            elif google_generative_ai_helpers.is_google_generative_ai_run(run_dict):
                 usage_info = google_generative_ai_helpers.get_llm_usage_info(run_dict)
             elif anthropic_run_helpers.is_anthropic_run(run):
                 usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)

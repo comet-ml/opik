@@ -779,7 +779,11 @@ class SpanDAO {
             """;
 
     private static final String DELETE_BY_TRACE_IDS = """
-            DELETE FROM spans WHERE trace_id IN :trace_ids AND workspace_id = :workspace_id;
+            DELETE FROM spans
+            WHERE trace_id IN :trace_ids
+            AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
+            ;
             """;
 
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
@@ -1296,7 +1300,7 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
+    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
         log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
@@ -1304,8 +1308,16 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
+                    var template = new ST(DELETE_BY_TRACE_IDS);
+                    Optional.ofNullable(projectId)
+                            .ifPresent(id -> template.add("project_id", id));
+
+                    var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId);
+                    }
 
                     return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                 })

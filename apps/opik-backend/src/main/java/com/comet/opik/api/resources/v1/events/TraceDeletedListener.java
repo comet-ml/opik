@@ -41,12 +41,13 @@ public class TraceDeletedListener {
         Set<UUID> traceIds = event.traceIds();
         String workspaceId = event.workspaceId();
         String userName = event.userName();
+        UUID projectId = event.projectId();
 
         log.info(
                 "Received TracesDeleted event for workspace: '{}', trace count: '{}'. Processing related entity deletion",
                 workspaceId, traceIds.size());
 
-        processTraceDeletion(traceIds)
+        processTraceDeletion(traceIds, projectId)
                 .doOnError(error -> {
                     log.error(
                             "Failed to process TracesDeleted event for workspace: '{}', trace count: '{}', error: '{}'",
@@ -68,12 +69,12 @@ public class TraceDeletedListener {
      * @param traceIds the set of trace IDs whose related entities should be deleted
      * @return a Mono that completes when all related entities have been deleted
      */
-    private Mono<Void> processTraceDeletion(Set<UUID> traceIds) {
+    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, UUID projectId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
-        return feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, traceIds)
+        return feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, traceIds, projectId)
                 .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds)))
                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds)))
-                .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds)));
+                .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }
 }
