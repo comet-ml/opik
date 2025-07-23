@@ -30,6 +30,36 @@ Feature requests are welcome! To help us understand the feature you'd like to se
 
 If you are in a position to submit a PR for the feature, feel free to open a PR !
 
+## General Contribution Guidelines
+
+### Code Formatting and Style
+
+When contributing to Opik, please follow these formatting and code style guidelines:
+
+#### Avoid Excessive Formatting Changes
+
+**Do not apply formatting changes that drastically alter files without clear benefit.** When submitting PRs:
+
+- **Focus on meaningful changes**: Only format code that you're actively modifying or fixing
+- **Avoid mass reformatting**: Don't run formatters across entire files or codebases unless specifically requested
+- **Be intentional**: If you need to apply formatting changes, ensure they serve a clear purpose (e.g., fixing consistency issues, improving readability)
+
+#### When Formatting is Appropriate
+
+- Fixing inconsistent indentation in code you're modifying
+- Correcting style violations in files you're actively working on
+- Following project-specific linting rules (see component-specific sections below)
+- Addressing formatting issues flagged by CI/CD pipelines
+
+#### When to Avoid Formatting
+
+- Applying auto-formatters to entire files when only changing a few lines
+- Changing whitespace, line endings, or indentation across large portions of unchanged code
+- Reformatting files just because your editor suggests it
+- Making stylistic changes that don't align with the existing codebase patterns
+
+> **Remember**: Code reviews should focus on logic, functionality, and meaningful improvements. Excessive formatting changes can obscure the actual purpose of your contribution and make reviews more difficult.
+
 ## Project set up and Architecture
 
 The Opik project is made up of five main sub-projects:
