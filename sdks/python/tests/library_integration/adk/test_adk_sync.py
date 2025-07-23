@@ -1,6 +1,7 @@
 import opik
 import pickle
 import pydantic
+import pytest
 from typing import Optional, Iterator, Dict
 from . import agent_tools
 import google.adk
@@ -68,11 +69,22 @@ def _extract_final_response_text(events: Iterator[adk_events.Event]) -> Optional
     return last_event.content.parts[0].text
 
 
-def test_adk__public_name_OpikTracer_corresponds_to_thr_right_implementation_for_current_adk_version():
-    if semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0":
-        assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
-    else:
-        assert OpikTracer is opik_tracer.OpikTracer
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0",
+    reason="Test only applies to ADK versions < 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_legacy_implementation_for_old_adk_versions():
+    """Test that OpikTracer maps to LegacyOpikTracer for ADK versions < 1.3.0"""
+    assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions >= 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions():
+    """Test that OpikTracer maps to OpikTracer for ADK versions >= 1.3.0"""
+    assert OpikTracer is opik_tracer.OpikTracer
 
 
 def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
