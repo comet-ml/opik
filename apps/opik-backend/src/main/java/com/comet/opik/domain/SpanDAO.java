@@ -1305,7 +1305,7 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
-                            .bind("trace_ids", traceIds);
+                            .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
                     return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                 })

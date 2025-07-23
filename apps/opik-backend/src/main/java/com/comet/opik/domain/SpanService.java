@@ -270,6 +270,7 @@ public class SpanService {
                 .flatMapMany(it -> spanDAO.search(limit, it));
     }
 
+    @WithSpan
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
