@@ -156,20 +156,40 @@ type CustomDatesOptionProps = {
 const CustomDatesOption: React.FC<CustomDatesOptionProps> = ({ className }) => {
   const { minDate, maxDate, applyRange, selectValue, value } =
     useDateRangeSelectContext();
+  const [date, setDate] = React.useState<DateRange | undefined>(value);
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
 
-  const handleDateSelect = (dateRange: DateRange | undefined) => {
-    if (!dateRange || !dateRange.from) return;
+  const handleDayClick = (day: Date) => {
+    setDate((prev) => {
+      let newRange: DateRange | undefined;
 
-    // If end date is not selected, set it to the same as start date
-    const endDate = dateRange.to || dateRange.from;
+      if (prev?.to) {
+        // If 'to' is already set, reset the range
+        newRange = { from: day, to: undefined };
+      } else if (prev?.from) {
+        // If 'from' is set and 'to' is not
+        if (day < prev.from) {
+          // If the new day is before the 'from' date, reset the range
+          newRange = { from: day, to: undefined };
+        } else {
+          // Otherwise, set the 'to' date
+          newRange = { from: prev.from, to: day };
+        }
+      } else {
+        // If neither 'from' nor 'to' is set, set 'from'
+        newRange = { from: day, to: undefined };
+      }
 
-    const newRange = {
-      from: dateRange.from,
-      to: endDate,
-    };
+      // If we have a complete range (both from and to), apply it and close the calendar
+      if (newRange?.from && newRange?.to) {
+        applyRange({
+          from: newRange.from,
+          to: newRange.to,
+        });
+      }
 
-    applyRange(newRange);
+      return newRange;
+    });
   };
 
   // Create disabled function using context values
@@ -226,8 +246,8 @@ const CustomDatesOption: React.FC<CustomDatesOptionProps> = ({ className }) => {
         >
           <Calendar
             mode="range"
-            selected={value}
-            onSelect={handleDateSelect}
+            selected={date}
+            onDayClick={handleDayClick}
             numberOfMonths={1}
             className="rounded-md"
             aria-label="Select date range"
@@ -261,7 +281,7 @@ const Trigger: React.FC<TriggerProps> = ({
       return PRESET_LABEL_MAP[appliedPreset];
     }
 
-    return placeholder;
+    return getRangeDatesText(value) || placeholder;
   }, [value, customMode, placeholder]);
 
   return (
@@ -327,6 +347,7 @@ const DateRangeSelectRoot: React.FC<DateRangeSelectProps> = ({
   const applyRange = (newRange: DateRangeValue) => {
     onChangeValue?.(newRange);
     setCustomMode(true);
+    setIsOpen(false);
   };
 
   const onOpenChange = (open: boolean) => {
