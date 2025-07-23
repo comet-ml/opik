@@ -1329,7 +1329,11 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
+                    .traceIds(Set.of(trace6.id()))
+                    .workspaceId(workspaceId)
+                    .userName(USER)
+                    .build());
 
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
@@ -2853,7 +2857,11 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
+                    .traceIds(Set.of(trace6.id()))
+                    .workspaceId(workspaceId)
+                    .userName(USER)
+                    .build());
 
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 

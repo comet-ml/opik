@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
@@ -191,7 +191,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteTraces(BatchDelete request, String workspaceName, String apiKey) {
+    public void deleteTraces(BatchDeleteByProject request, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
                 .request()
