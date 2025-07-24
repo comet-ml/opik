@@ -90,6 +90,10 @@ class BaseTrackDecorator(abc.ABC):
             This decorator can be used to track both synchronous and asynchronous functions,
             and also synchronous and asynchronous generators.
             It automatically detects the function type and applies the appropriate tracking logic.
+
+            Tracing is checked only once at the start of the call; a call that
+            began while tracing was enabled will still be logged even if
+            tracing is disabled before it returns.
         """
         track_options = arguments_helpers.TrackOptions(
             name=None,

@@ -78,6 +78,7 @@ This is useful for:
 - Conditional tracing based on user type or request parameters
 - Debugging and troubleshooting without redeployment
 - Implementing sampling strategies
+- Calls already in progress when you disable tracing still finish logging.
 
 See `examples/dynamic_tracing_cookbook.py` for comprehensive usage patterns.
 
