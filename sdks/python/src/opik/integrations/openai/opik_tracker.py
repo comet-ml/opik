@@ -15,9 +15,12 @@ def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
 ) -> OpenAIClient:
-    """Adds Opik tracking to an OpenAI client.
+    """Adds Opik tracking wrappers to an OpenAI client.
 
-    If global tracing is disabled at runtime, the function returns the client unchanged.
+    The client is always patched; however every wrapped call checks
+    `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
+    any telemetry. If tracing is disabled at call time, the wrapped function
+    executes normally but no span/trace is sent.
 
     Tracks calls to:
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
