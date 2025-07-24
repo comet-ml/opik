@@ -1,8 +1,6 @@
 # Opik × Atomic Agents Integration
 
-> **Status:** Beta – This integration is functional but incomplete. It currently traces agent runs and tool calls, but not LLM invocations.
-
-`opik` now ships first-class support for [Atomic Agents](https://github.com/BrainBlend-AI/atomic-agents), a lightweight modular framework for building agentic pipelines.
+`opik` now supports [Atomic Agents](https://github.com/BrainBlend-AI/atomic-agents), a lightweight modular framework for building agentic pipelines.
 
 ---
 

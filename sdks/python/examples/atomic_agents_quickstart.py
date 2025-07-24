@@ -13,17 +13,33 @@ from pydantic import Field
 
 # %% [markdown]
 """
-# Atomic Agents × Opik – Quick-Start
-Minimal, self-contained example showing how to trace Atomic Agents workflows
-with Opik.  You can run this file as a Jupyter **Python Interactive** script
-or execute it as plain Python – in both cases the trace will appear in the Opik
-UI (assuming you configured the SDK environment variables).
+# Atomic Agents × Opik – Quick-Start 🚀
+
+Welcome!  This notebook-style script shows **step-by-step** how to instrument an
+Atomic Agents pipeline with Opik for full tracing and observability.
+
+👀 **What you’ll learn**
+1. Install the required packages
+2. Enable automatic tracing in **one line**
+3. Build a tiny `EchoAgent`
+4. Inspect the trace in the Opik UI
+
+> Run it interactively (VS Code / Jupyter) or as a plain `python` script – the
+> trace is created either way.
 """
 
 # %% [markdown]
-"""## Installation (commented for CI)
+"""## 1. Installation
 ```bash
-pip install "opik[atomic_agents]" atomic-agents
+pip install "opik[atomic_agents]" atomic-agents instructor
+```
+
+### Set environment variables
+
+```bash
+export OPIK_API_KEY="<your-api-key>"
+# Optional: point to self-hosted instance
+# export OPIK_BASE_URL="http://localhost:3000"
 ```
 """
 
