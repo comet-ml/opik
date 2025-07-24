@@ -38,6 +38,7 @@ import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPa
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
+import CustomApisPage from "@/pages/CustomApisPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -150,6 +151,16 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
   staticData: {
     title: "Dashboards",
+  },
+});
+
+// ----------- custom apis
+const customApisRoute = createRoute({
+  path: "/$workspaceName/custom-apis",
+  getParentRoute: () => workspaceGuardRoute,
+  component: CustomApisPage,
+  staticData: {
+    title: "Custom APIs",
   },
 });
 
@@ -391,6 +402,7 @@ const routeTree = rootRoute.addChildren([
     homeRouteNew,
     chatRoute,
     dashboardRoute,
+    customApisRoute,
     workspaceRoute.addChildren([
       projectsRoute.addChildren([
         projectsListRoute,

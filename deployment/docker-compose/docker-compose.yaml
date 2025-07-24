@@ -170,6 +170,49 @@ services:
       redis:
         condition: service_healthy
 
+  python-panel-engine:
+    image: code-panels-python-panel-engine:latest
+    #pull_policy: always
+    # build:
+    #   context: .
+    #   dockerfile: python-panel-engine/Dockerfile
+    #   args:
+    #     VERSION: "dev"
+    ports:
+      - "9080:9080"  # Main web interface (nginx proxy)
+      - "8501:8501"  # Streamlit port (direct access)
+      - "5000:5000"  # Flask API port (direct access)
+    environment:
+      - EXTERNAL_URL=http://localhost:9080  # Full URL for standalone mode
+      - STREAMLIT_PORT=8501
+      - FLASK_PORT=5000
+      - NGINX_PORT=9080
+      - SHOULD_AUTHENTICATE=0  # Disable auth for local development
+      - CORS=true
+      - XSRF=false
+      - COMPUTE_ENGINE_DEBUG=TRUE
+      - ALLOWED_DOMAINS=http://localhost:80,http://localhost:8080,http://localhost:9080
+      # Enhanced logging settings
+      - STREAMLIT_LOG_LEVEL=info  # More verbose Streamlit logs
+      - FLASK_DEBUG=true           # Enable Flask debug mode
+      - PYTHONUNBUFFERED=1         # Real-time Python output
+    # volumes:
+    #   - ./python-panel-engine:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Resource limits and reservations
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'        # Maximum 2 CPU cores
+          memory: 4G         # Maximum 4GB RAM
+        reservations:
+          cpus: '0.5'        # Reserve at least 0.5 CPU cores
+          memory: 1G         # Reserve at least 1GB RAM
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always

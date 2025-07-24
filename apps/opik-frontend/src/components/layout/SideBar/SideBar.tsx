@@ -19,6 +19,7 @@ import {
   ChevronRight,
   SparklesIcon,
   BarChart3,
+  Code,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -173,6 +174,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Bolt,
         label: "Configuration",
+      },
+      {
+        id: "custom-apis",
+        path: "/$workspaceName/custom-apis",
+        type: MENU_ITEM_TYPE.router,
+        icon: Code,
+        label: "Custom APIs",
       },
     ],
   },
