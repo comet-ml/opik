@@ -40,7 +40,8 @@ def create_app(test_config=None, should_init_executor=True):
         app.config.from_mapping(test_config)
 
     # Setup OpenTelemetry before registering blueprints
-    setup_telemetry(app)
+    if os.environ.get("OPIK_OTEL_SDK_ENABLED") == "true":
+        setup_telemetry(app)
 
     from opik_backend.evaluator import evaluator, init_executor
     from opik_backend.post_user_signup import post_user_signup
@@ -70,7 +71,7 @@ def setup_telemetry(app):
     otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
     
     # Create MeterProvider with OTLP reader only
-    resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "opik-python-backend")})
+    resource = Resource.create()
     provider = MeterProvider(resource=resource, metric_readers=[otlp_reader])
 
     # Set the global MeterProvider
