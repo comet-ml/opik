@@ -1,20 +1,18 @@
 import React from "react";
-import DateRangeSelect, {
+import {
+  DateRangeSelect,
   DateRangeValue,
-  DEFAULT_DATE_RANGE,
-} from "@/components/shared/DateRangeSelect/DateRangeNewSelect";
+} from "@/components/shared/DateRangeSelect";
 
-type NewDateRangePickerProps = {
-  value?: DateRangeValue;
-  onChangeValue?: (range: DateRangeValue) => void;
+type MetricDateRangeSelectProps = {
+  value: DateRangeValue;
+  onChangeValue: (range: DateRangeValue) => void;
   minDate?: Date;
   maxDate?: Date;
-  placeholder?: string;
-  className?: string;
 };
 
-const NewDateRangePicker: React.FC<NewDateRangePickerProps> = ({
-  value = DEFAULT_DATE_RANGE,
+const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
+  value,
   onChangeValue,
   minDate,
   maxDate,
@@ -38,4 +36,4 @@ const NewDateRangePicker: React.FC<NewDateRangePickerProps> = ({
   );
 };
 
-export default NewDateRangePicker;
+export default MetricDateRangeSelect;

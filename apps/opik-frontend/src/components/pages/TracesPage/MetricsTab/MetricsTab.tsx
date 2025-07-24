@@ -1,11 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
-import React, { useMemo, useRef, useState } from "react";
-import {
-  INTERVAL_TYPE,
-  METRIC_NAME_TYPE,
-} from "@/api/projects/useProjectMetric";
-import { StringParam, useQueryParam, withDefault } from "use-query-params";
+import React, { useRef, useState } from "react";
+import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
@@ -16,19 +12,10 @@ import { formatDuration } from "@/lib/date";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect/DateRangeNewSelect";
-import NewDateRangePicker from "@/components/shared/DateRangeSelect/NewDateRangePicker";
 import {
-  calculateIntervalStartAndEnd,
-  calculateIntervalType,
-  parseDateRangeFromURL,
-  serializeDateRange,
-} from "./utils";
-import {
-  DEFAULT_METRICS_DATE_RANGE,
-  MAX_METRICS_DATE,
-  MIN_METRICS_DATE,
-} from "./constants";
+  useMetricDateRangeState,
+  MetricDateRangeSelect,
+} from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
 const DURATION_LABELS_MAP = {
   "duration.p50": "Percentile 50",
@@ -50,20 +37,20 @@ interface MetricsTabProps {
 }
 
 const MetricsTab = ({ projectId }: MetricsTabProps) => {
-  const [dateRangeParam, setDateRangeParam] = useQueryParam(
-    "range",
-    withDefault(StringParam, serializeDateRange(DEFAULT_METRICS_DATE_RANGE)),
-  );
-
   const [requestChartOpen, setRequestChartOpen] = useState(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
 
-  const dateRange = useMemo(
-    () => parseDateRangeFromURL(dateRangeParam, DEFAULT_METRICS_DATE_RANGE),
-    [dateRangeParam],
-  );
+  const {
+    dateRange,
+    handleDateRangeChange,
+    interval,
+    intervalStart,
+    intervalEnd,
+    minDate,
+    maxDate,
+  } = useMetricDateRangeState();
 
   const { data: traces } = useTracesList(
     {
@@ -92,20 +79,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   const resetKeyRef = useRef(0);
   const hasTraces = Boolean(traces?.total);
   const hasThreads = Boolean(threads?.total);
-
-  const interval: INTERVAL_TYPE = useMemo(
-    () => calculateIntervalType(dateRange),
-    [dateRange],
-  );
-
-  const { intervalStart, intervalEnd } = useMemo(
-    () => calculateIntervalStartAndEnd(dateRange),
-    [dateRange],
-  );
-
-  const handleDateRangeChange = (newRange: DateRangeValue) => {
-    setDateRangeParam(serializeDateRange(newRange));
-  };
 
   const handleRequestChartOpen = (val: boolean) => {
     setRequestChartOpen(val);
@@ -280,11 +253,11 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <ChartLineIcon className="mr-2 size-3.5" />
           Request a chart
         </Button>
-        <NewDateRangePicker
+        <MetricDateRangeSelect
           value={dateRange}
           onChangeValue={handleDateRangeChange}
-          minDate={MIN_METRICS_DATE}
-          maxDate={MAX_METRICS_DATE}
+          minDate={minDate}
+          maxDate={maxDate}
         />
       </div>
       <div

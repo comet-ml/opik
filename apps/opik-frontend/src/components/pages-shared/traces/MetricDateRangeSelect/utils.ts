@@ -1,5 +1,5 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect/DateRangeSelect";
+import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
 
 export const serializeDateForURL = (date: Date): string => {
@@ -17,6 +17,8 @@ export const serializeDateRange = (range: DateRangeValue): string => {
 export const parseDateRangeFromURL = (
   value: string,
   defaultRange: DateRangeValue,
+  minDate: Date,
+  maxDate: Date,
 ): DateRangeValue => {
   if (!value || !value.includes(",")) {
     return defaultRange;
@@ -27,7 +29,12 @@ export const parseDateRangeFromURL = (
     const from = parseDateFromURL(fromStr);
     const to = parseDateFromURL(toStr);
 
-    if (!dayjs(from).isValid() || !dayjs(to).isValid()) {
+    if (
+      !dayjs(from).isValid() ||
+      !dayjs(to).isValid() ||
+      dayjs(from).isBefore(minDate) ||
+      dayjs(to).isAfter(maxDate)
+    ) {
       return defaultRange;
     }
 
