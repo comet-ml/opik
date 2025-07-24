@@ -40,7 +40,7 @@ def create_app(test_config=None, should_init_executor=True):
         app.config.from_mapping(test_config)
 
     # Setup OpenTelemetry before registering blueprints
-    if os.environ.get("OPIK_OTEL_SDK_ENABLED") == "true":
+    if os.environ.get("OPIK_OTEL_SDK_ENABLED", "").lower() == "true":
         setup_telemetry(app)
 
     from opik_backend.evaluator import evaluator, init_executor
