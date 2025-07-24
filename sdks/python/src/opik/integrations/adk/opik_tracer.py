@@ -12,6 +12,7 @@ from google.adk.tools.tool_context import ToolContext
 from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
+from opik.decorator.tracing_runtime_config import is_tracing_active
 from opik.types import DistributedTraceHeadersDict
 
 from . import (
@@ -71,7 +72,8 @@ class OpikTracer:
         trace_data = self._context_storage.pop_trace_data()
         assert trace_data is not None
         trace_data.init_end_time()
-        self._opik_client.trace(**trace_data.as_parameters)
+        if is_tracing_active():
+            self._opik_client.trace(**trace_data.as_parameters)
 
     def _end_current_span(
         self,
@@ -79,20 +81,21 @@ class OpikTracer:
         span_data = self._context_storage.pop_span_data()
         assert span_data is not None
         span_data.init_end_time()
-        self._opik_client.span(**span_data.as_parameters)
+        if is_tracing_active():
+            self._opik_client.span(**span_data.as_parameters)
 
     def _start_span(self, span_data: span.SpanData) -> None:
         self._context_storage.add_span_data(span_data)
         self._opik_created_spans.add(span_data.id)
 
-        if self._opik_client.config.log_start_trace_span:
+        if self._opik_client.config.log_start_trace_span and is_tracing_active():
             self._opik_client.span(**span_data.as_start_parameters)
 
     def _start_trace(self, trace_data: trace.TraceData) -> None:
         self._context_storage.set_trace_data(trace_data)
         self._current_trace_created_by_opik_tracer.set(trace_data.id)
 
-        if self._opik_client.config.log_start_trace_span:
+        if self._opik_client.config.log_start_trace_span and is_tracing_active():
             self._opik_client.trace(**trace_data.as_start_parameters)
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:

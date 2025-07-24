@@ -22,7 +22,7 @@ from . import (
 )
 from ...api_objects import helpers, opik_client
 from opik import context_storage
-from ...decorator.tracing_runtime_config import is_tracing_active
+from opik.decorator.tracing_runtime_config import is_tracing_active
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -313,11 +313,14 @@ class OpikTracer(BaseTracer):
             new_trace_data, new_span_data = self._track_root_run(run_dict)
             if new_trace_data is not None:
                 self._opik_context_storage.set_trace_data(new_trace_data)
-                if self._opik_client.config.log_start_trace_span:
+                if (
+                    self._opik_client.config.log_start_trace_span
+                    and is_tracing_active()
+                ):
                     self._opik_client.trace(**new_trace_data.as_start_parameters)
 
             self._opik_context_storage.add_span_data(new_span_data)
-            if self._opik_client.config.log_start_trace_span:
+            if self._opik_client.config.log_start_trace_span and is_tracing_active():
                 self._opik_client.span(**new_span_data.as_start_parameters)
             return
 
@@ -347,7 +350,7 @@ class OpikTracer(BaseTracer):
             ]
 
         self._opik_context_storage.add_span_data(new_span_data)
-        if self._opik_client.config.log_start_trace_span:
+        if self._opik_client.config.log_start_trace_span and is_tracing_active():
             self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:
@@ -382,7 +385,8 @@ class OpikTracer(BaseTracer):
                 model=usage_info.model,
             )
 
-            self._opik_client.span(**span_data.as_parameters)
+            if is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
@@ -404,7 +408,8 @@ class OpikTracer(BaseTracer):
                 output=None,
                 error_info=error_info,
             )
-            self._opik_client.span(**span_data.as_parameters)
+            if is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
