@@ -6,7 +6,7 @@ from . import aisuite_decorator
 
 
 def track_aisuite(
-    aisuite_client: aisuite.Client,
+    aisuite_client: aisuite.AISuite,
     project_name: Optional[str] = None,
 ) -> aisuite.Client:
     """Adds Opik tracking to an AISuite client.
