@@ -22,8 +22,8 @@ from . import (
     generator_wrappers,
     inspect_helpers,
     span_creation_handler,
+    tracing_runtime_config,
 )
-from .tracing_runtime_config import is_tracing_active
 
 LOGGER = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
-            if not is_tracing_active():
+            if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
@@ -223,7 +223,7 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
-            if not is_tracing_active():
+            if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
@@ -273,7 +273,7 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
-            if not is_tracing_active():
+            if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
             self._before_call(
                 func=func,
@@ -328,7 +328,7 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
-            if not is_tracing_active():
+            if not tracing_runtime_config.is_tracing_active():
                 return await func(*args, **kwargs)
             self._before_call(
                 func=func,
@@ -404,8 +404,6 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
-        if not is_tracing_active():
-            return
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
 
         try:
@@ -444,14 +442,20 @@ class BaseTrackDecorator(abc.ABC):
         )
         client = opik_client.get_client_cached()
 
-        if client.config.log_start_trace_span and is_tracing_active():
+        if (
+            client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        ):
             client.span(**created_span_data.as_start_parameters)
 
         if created_trace_data is not None:
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
 
-            if client.config.log_start_trace_span and is_tracing_active():
+            if (
+                client.config.log_start_trace_span
+                and tracing_runtime_config.is_tracing_active()
+            ):
                 client.trace(**created_trace_data.as_start_parameters)
 
         context_storage.add_span_data(created_span_data)
@@ -491,9 +495,6 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        if not is_tracing_active():
-            return
-
         if generators_span_to_end is None:
             span_data_to_end, trace_data_to_end = pop_end_candidates()
         else:
