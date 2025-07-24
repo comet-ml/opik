@@ -6,7 +6,7 @@ export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
 };
 
-export const parseDateFromURL = (dateString: string): Date => {
+export const parseDateFromState = (dateString: string): Date => {
   return dayjs(dateString, "YYYY-MM-DD").toDate();
 };
 
@@ -14,7 +14,7 @@ export const serializeDateRange = (range: DateRangeValue): string => {
   return `${serializeDateForURL(range.from)},${serializeDateForURL(range.to)}`;
 };
 
-export const parseDateRangeFromURL = (
+export const parseDateRangeFromState = (
   value: string,
   defaultRange: DateRangeValue,
   minDate: Date,
@@ -26,8 +26,8 @@ export const parseDateRangeFromURL = (
 
   const [fromStr, toStr] = value.split(",");
   try {
-    const from = parseDateFromURL(fromStr);
-    const to = parseDateFromURL(toStr);
+    const from = parseDateFromState(fromStr);
+    const to = parseDateFromState(toStr);
 
     if (
       !dayjs(from).isValid() ||

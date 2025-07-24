@@ -13,7 +13,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import {
-  useMetricDateRangeState,
+  useMetricDateRangeWithQuery,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -22,6 +22,8 @@ const DURATION_LABELS_MAP = {
   "duration.p90": "Percentile 90",
   "duration.p99": "Percentile 99",
 };
+
+const METRICS_DATE_RANGE_KEY = "range";
 
 const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   formatCost(value as number);
@@ -50,7 +52,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeState();
+  } = useMetricDateRangeWithQuery({
+    key: METRICS_DATE_RANGE_KEY,
+  });
 
   const { data: traces } = useTracesList(
     {
