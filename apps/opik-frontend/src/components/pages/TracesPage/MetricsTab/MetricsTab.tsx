@@ -107,7 +107,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -120,7 +119,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -133,7 +131,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -153,7 +150,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -166,7 +162,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -179,7 +174,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -195,7 +189,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="line"
             />,
             <MetricContainerChart
@@ -208,7 +201,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               renderValue={renderCostTooltipValue}
               chartType="line"
             />,
@@ -226,7 +218,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={false}
               chartType="bar"
             />,
           ]
