@@ -173,6 +173,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not is_tracing_active():
+                return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
@@ -221,6 +223,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not is_tracing_active():
+                return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
@@ -269,6 +273,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not is_tracing_active():
+                return func(*args, **kwargs)
             self._before_call(
                 func=func,
                 track_options=track_options,
@@ -322,6 +328,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not is_tracing_active():
+                return await func(*args, **kwargs)
             self._before_call(
                 func=func,
                 track_options=track_options,
