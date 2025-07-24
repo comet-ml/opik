@@ -1,8 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Info, RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
+  GroupingState,
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -52,23 +59,22 @@ import { Separator } from "@/components/ui/separator";
 import useGroupedOptimizationsList, {
   GroupedOptimization,
 } from "@/hooks/useGroupedOptimizationsList";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
-  checkIsMoreRowId,
-  generateGroupedNameColumDef,
+  generateActionsColumDef,
   generateGroupedCellDef,
-  getIsCustomRow,
+  generateGroupedNameColumDef,
+  getIsGroupRow,
   getRowId,
   getSharedShiftCheckboxClickHandler,
-  GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages-shared/experiments/table";
-import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+} from "@/components/shared/DataTable/utils";
+import { checkIsGroupRowType } from "@/lib/groups";
 import {
   DEFAULT_GROUPS_PER_PAGE,
   DELETED_DATASET_ID,
   GROUPING_COLUMN,
-} from "@/constants/grouping";
+} from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
@@ -78,6 +84,11 @@ import uniq from "lodash/uniq";
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
 const COLUMNS_ORDER_KEY = "optimizations-columns-order";
+
+export const GROUPING_CONFIG = {
+  groupedColumnMode: false as const,
+  grouping: [GROUPING_COLUMN] as GroupingState,
+};
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   {
@@ -251,7 +262,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const selectedRows: Array<GroupedOptimization> = useMemo(() => {
     return optimizations.filter(
-      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
     );
   }, [rowSelection, optimizations]);
 
@@ -315,9 +326,29 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
-  const expandingConfig = useExpandingConfig({
-    groupIds,
-  });
+  const expandingConfig = useExpandingConfig({});
+
+  const openGroupsRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    const updateForExpandedState: Record<string, boolean> = {};
+    groupIds.forEach((groupId) => {
+      const id = `${GROUPING_COLUMN}:${groupId}`;
+      if (!openGroupsRef.current[id]) {
+        openGroupsRef.current[id] = true;
+        updateForExpandedState[id] = true;
+      }
+    });
+
+    if (Object.keys(updateForExpandedState).length) {
+      expandingConfig.setExpanded((state) => {
+        if (state === true) return state;
+        return {
+          ...state,
+          ...updateForExpandedState,
+        };
+      });
+    }
+  }, [expandingConfig, groupIds]);
 
   const handleNewOptimizationClick = useCallback(() => {
     setOpenDialog(true);
@@ -330,16 +361,18 @@ const OptimizationsPage: React.FunctionComponent = () => {
     },
     [setGroupLimit],
   );
-
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
+    const indexMap: Record<string, number> = {};
     let index = 0;
 
     optimizations.forEach((optimization) => {
-      if (optimization.virtual_dataset_id !== DELETED_DATASET_ID) {
-        if (!groupsMap[optimization.virtual_dataset_id]) {
-          groupsMap[optimization.virtual_dataset_id] = {
-            id: optimization.virtual_dataset_id,
+      const key = optimization[GROUPING_COLUMN];
+      if (key !== DELETED_DATASET_ID) {
+        if (!groupsMap[key]) {
+          indexMap[key] = index;
+          groupsMap[key] = {
+            id: key,
             name: optimization.dataset.name,
             data: [],
             lines: [],
@@ -348,7 +381,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           index += 1;
         }
 
-        groupsMap[optimization.virtual_dataset_id].data.unshift({
+        groupsMap[key].data.unshift({
           entityId: optimization.id,
           entityName: optimization.name,
           createdDate: formatDate(optimization.created_at),
@@ -360,14 +393,16 @@ const OptimizationsPage: React.FunctionComponent = () => {
           }, {}),
         });
 
-        groupsMap[optimization.virtual_dataset_id].lines = uniq([
-          ...groupsMap[optimization.virtual_dataset_id].lines,
+        groupsMap[key].lines = uniq([
+          ...groupsMap[key].lines,
           ...(optimization.feedback_scores || []).map((s) => s.name),
         ]);
       }
     });
 
-    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
+    return Object.values(groupsMap).sort(
+      (g1, g2) => indexMap[g1.id] - indexMap[g2.id],
+    );
   }, [optimizations]);
 
   if (isPending) {
@@ -439,7 +474,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         data={optimizations}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
+        getIsCustomRow={getIsGroupRow}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

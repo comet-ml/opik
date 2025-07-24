@@ -102,3 +102,8 @@ export interface ExperimentItem {
 export interface ExperimentsCompare extends DatasetItem {
   experiment_items: ExperimentItem[];
 }
+
+export interface ExperimentsGroupNode {
+  label?: string;
+  groups?: Record<string, ExperimentsGroupNode>;
+}

@@ -7,11 +7,13 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 type FeedbackScoresChartsWrapperProps = {
   chartsData: ChartData[];
   isAverageScores?: boolean;
+  noDataComponent?: React.ReactNode;
 };
 
 const FeedbackScoresChartsWrapper = ({
   chartsData,
   isAverageScores = false,
+  noDataComponent,
 }: FeedbackScoresChartsWrapperProps) => {
   const chartClassName =
     chartsData.length === 1
@@ -21,22 +23,19 @@ const FeedbackScoresChartsWrapper = ({
         : "basis-[520px]";
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-4 overflow-y-auto",
-        chartsData.length > 0 && "mb-4",
-      )}
-    >
-      {chartsData.map((data, index) => (
-        <FeedbackScoresChartContainer
-          key={data.id}
-          className={chartClassName}
-          chartData={chartsData[index]}
-          chartId={data.id}
-          chartName={data.name}
-          subtitle={isAverageScores ? "Average scores" : undefined}
-        />
-      ))}
+    <div className={cn("flex items-center gap-4 overflow-y-auto mb-4")}>
+      {chartsData.length === 0 && noDataComponent
+        ? noDataComponent
+        : chartsData.map((data, index) => (
+            <FeedbackScoresChartContainer
+              key={data.id}
+              className={chartClassName}
+              chartData={chartsData[index]}
+              chartId={data.id}
+              chartName={data.name}
+              subtitle={isAverageScores ? "Average scores" : undefined}
+            />
+          ))}
     </div>
   );
 };

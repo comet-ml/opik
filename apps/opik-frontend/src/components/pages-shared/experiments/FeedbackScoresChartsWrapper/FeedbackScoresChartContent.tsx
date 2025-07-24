@@ -27,10 +27,9 @@ export type DataRecord = {
 
 export type ChartData = {
   id: string;
-  name: string;
+  name: string | string[];
   data: DataRecord[];
   lines: string[];
-  index: number;
 };
 
 type FeedbackScoresChartContentProps = {
