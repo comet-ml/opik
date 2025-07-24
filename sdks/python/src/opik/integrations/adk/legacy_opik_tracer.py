@@ -1,13 +1,12 @@
 import contextvars
-import functools
 import logging
 from typing import Any, Dict, List, Optional, Set, Union
 
 import google.adk.agents
-from google.adk.agents.callback_context import CallbackContext
-from google.adk.models import LlmRequest, LlmResponse, lite_llm
-from google.adk.tools.base_tool import BaseTool
-from google.adk.tools.tool_context import ToolContext
+from google.adk.agents import callback_context
+from google.adk import models
+from google.adk.tools import base_tool
+from google.adk.tools import tool_context
 
 from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
@@ -16,9 +15,13 @@ from opik.types import DistributedTraceHeadersDict
 
 from . import (
     helpers as adk_helpers,
+    callback_context_info_extractors,
+    patchers,
+)
+
+from .patchers import (
     litellm_wrappers,
     llm_response_wrapper,
-    callback_context_info_extractors,
 )
 from .graph import mermaid_graph_builder
 
@@ -65,7 +68,7 @@ class LegacyOpikTracer:
 
         self._opik_client = opik_client.get_client_cached()
 
-        _patch_adk()
+        patchers.patch_adk(self._opik_client)
 
     def flush(self) -> None:
         self._opik_client.flush()
@@ -107,7 +110,10 @@ class LegacyOpikTracer:
             raise ValueError(f"Invalid context type: {type(value)}")
 
     def before_agent_callback(
-        self, callback_context: CallbackContext, *args: Any, **kwargs: Any
+        self,
+        callback_context: callback_context.CallbackContext,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         try:
             thread_id, session_metadata = (
@@ -162,7 +168,10 @@ class LegacyOpikTracer:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
     def after_agent_callback(
-        self, callback_context: CallbackContext, *args: Any, **kwargs: Any
+        self,
+        callback_context: callback_context.CallbackContext,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         try:
             output = self._last_model_output
@@ -186,8 +195,8 @@ class LegacyOpikTracer:
 
     def before_model_callback(
         self,
-        callback_context: CallbackContext,
-        llm_request: LlmRequest,
+        callback_context: callback_context.CallbackContext,
+        llm_request: models.LlmRequest,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -219,8 +228,8 @@ class LegacyOpikTracer:
 
     def after_model_callback(
         self,
-        callback_context: CallbackContext,
-        llm_response: LlmResponse,
+        callback_context: callback_context.CallbackContext,
+        llm_response: models.LlmResponse,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -274,9 +283,9 @@ class LegacyOpikTracer:
 
     def before_tool_callback(
         self,
-        tool: BaseTool,
+        tool: base_tool.BaseTool,
         args: Dict[str, Any],
-        tool_context: ToolContext,
+        tool_context: tool_context.ToolContext,
         *other_args: Any,
         **kwargs: Any,
     ) -> None:
@@ -305,9 +314,9 @@ class LegacyOpikTracer:
 
     def after_tool_callback(
         self,
-        tool: BaseTool,
+        tool: base_tool.BaseTool,
         args: Dict[str, Any],
-        tool_context: ToolContext,
+        tool_context: tool_context.ToolContext,
         tool_response: Any,
         *other_args: Any,
         **kwargs: Any,
@@ -345,7 +354,7 @@ class LegacyOpikTracer:
 
 
 def _try_add_agent_graph_to_metadata(
-    metadata: Dict[str, Any], callback_context: CallbackContext
+    metadata: Dict[str, Any], callback_context: callback_context.CallbackContext
 ) -> None:
     current_agent: Optional[google.adk.agents.BaseAgent] = (
         callback_context_info_extractors.try_get_current_agent_instance(
@@ -365,26 +374,3 @@ def _try_add_agent_graph_to_metadata(
         }
     except Exception:
         LOGGER.error("Failed to build mermaid graph for agent.", exc_info=True)
-
-
-@functools.lru_cache()
-def _patch_adk() -> None:
-    # monkey patch LLMResponse to store usage_metadata
-    old_function = LlmResponse.create
-    create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
-    LlmResponse.create = create_wrapper
-
-    if hasattr(lite_llm, "LiteLLMClient") and hasattr(
-        lite_llm.LiteLLMClient, "acompletion"
-    ):
-        lite_llm.LiteLLMClient.acompletion = (
-            litellm_wrappers.litellm_client_acompletion_decorator(
-                lite_llm.LiteLLMClient.acompletion
-            )
-        )
-    if hasattr(lite_llm, "_model_response_to_generate_content_response"):
-        lite_llm._model_response_to_generate_content_response = (
-            litellm_wrappers.generate_content_response_decorator(
-                lite_llm._model_response_to_generate_content_response
-            )
-        )
