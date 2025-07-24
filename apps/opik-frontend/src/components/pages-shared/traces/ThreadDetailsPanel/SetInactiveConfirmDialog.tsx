@@ -10,6 +10,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import useThreadCloseStatusMutation from "@/api/traces/useThreadCloseStatusMutation";
+import { Link } from "@tanstack/react-router";
+import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import { ExternalLink } from "lucide-react";
+import useAppStore from "@/store/AppStore";
+import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
 
 type SetInactiveConfirmDialogProps = {
   open: boolean;
@@ -23,6 +28,7 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
 > = ({ open, setOpen, threadId, projectId }) => {
   const { mutate: setThreadInactive, isPending } =
     useThreadCloseStatusMutation();
+  const { activeWorkspaceName: workspaceName } = useAppStore();
 
   const onConfirm = () => {
     setThreadInactive(
@@ -44,8 +50,7 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Set as inactive</DialogTitle>
           <DialogDescription>
-            {/* TODO: Uncomment once Online eval is ready */}
-            {/* Setting this thread as inactive will let you add scores, tags, and
+            Setting this thread as inactive will let you add scores, tags, and
             comments. Online evaluation rules will also run. <br /> <br />
             If you send a new message, the thread will become active again, and
             all feedback will be cleared. You can also
@@ -60,7 +65,8 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
                 params={{ workspaceName }}
                 search={{
                   tab: "workspace-preferences",
-                  editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+                  [WORKSPACE_PREFERENCES_QUERY_PARAMS.EDIT_PREFERENCE]:
+                    WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
                 }}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -69,11 +75,7 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
                 <ExternalLink className="size-3" />
               </Link>
             </Button>
-            to automatically expire the session later. */}
-            Marking this thread as inactive will allow you to add feedback
-            scores. <br />
-            If a new message is sent, the thread will automatically become
-            active again, and any feedback will be cleared.
+            to automatically expire the session later.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
