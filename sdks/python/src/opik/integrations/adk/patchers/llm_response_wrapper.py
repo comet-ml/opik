@@ -5,9 +5,11 @@ from typing import Any, Callable, Dict, Optional
 from google.adk import models as adk_models
 from google.genai import types as genai_types
 
-from . import helpers as adk_helpers
-from ... import LLMProvider, llm_usage
-from ...llm_usage import opik_usage
+from .. import helpers as adk_helpers
+
+import opik
+from opik import llm_usage
+from opik.llm_usage import opik_usage
 
 LOGGER = logging.Logger(__name__)
 
@@ -61,9 +63,9 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
         else:
             return None
 
-    if provider in [LLMProvider.GOOGLE_AI, LLMProvider.GOOGLE_VERTEXAI]:
+    if provider in [opik.LLMProvider.GOOGLE_AI, opik.LLMProvider.GOOGLE_VERTEXAI]:
         usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider(provider),
+            provider=opik.LLMProvider(provider),
             usage=opik_usage_metadata,
             logger=LOGGER,
             error_message="Failed to log token usage from ADK Gemini call",
@@ -71,7 +73,7 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
     # if not google provider was used - usage data will be in OpenAI format
     else:
         usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider.OPENAI,
+            provider=opik.LLMProvider.OPENAI,
             usage=opik_usage_metadata,
             logger=LOGGER,
             error_message=f"Failed to log token usage from ADK {provider} call",

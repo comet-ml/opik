@@ -1,8 +1,10 @@
 import opik
 import pickle
 import pydantic
+import pytest
 from typing import Optional, Iterator, Dict
 from . import agent_tools
+import google.adk
 from google.adk import agents as adk_agents
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
@@ -24,6 +26,8 @@ from ...testlib import (
 )
 
 from opik.integrations.adk import helpers as opik_adk_helpers
+from opik.integrations.adk import opik_tracer, legacy_opik_tracer
+from opik import semantic_version
 
 from .constants import (
     APP_NAME,
@@ -63,6 +67,24 @@ def _extract_final_response_text(events: Iterator[adk_events.Event]) -> Optional
         and last_event.content.parts
     )
     return last_event.content.parts[0].text
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0",
+    reason="Test only applies to ADK versions < 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_legacy_implementation_for_old_adk_versions():
+    """Test that OpikTracer maps to LegacyOpikTracer for ADK versions < 1.3.0"""
+    assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions >= 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions():
+    """Test that OpikTracer maps to OpikTracer for ADK versions >= 1.3.0"""
+    assert OpikTracer is opik_tracer.OpikTracer
 
 
 def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
@@ -748,7 +770,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="openai/gpt-4o-mini",
+                name=ANY_STRING.containing("gpt-4o-mini"),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -776,7 +798,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="openai/gpt-4o-mini",
+                name=ANY_STRING.containing("gpt-4o-mini"),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,

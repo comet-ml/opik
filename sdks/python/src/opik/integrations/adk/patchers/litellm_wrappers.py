@@ -4,7 +4,7 @@ from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING
 
 from google.adk import models as adk_models
 
-from ... import LLMProvider
+import opik
 
 if TYPE_CHECKING:
     import litellm
@@ -14,14 +14,14 @@ LOGGER = logging.Logger(__name__)
 
 def parse_provider_and_model(
     model: str,
-) -> Tuple[Optional[Union[LLMProvider, str]], str]:
+) -> Tuple[Optional[Union[opik.LLMProvider, str]], str]:
     parts = model.split("/", 1)
     if len(parts) != 2:
         return None, parts[0]
 
     provider = parts[0]
     try:
-        provider = LLMProvider(provider)
+        provider = opik.LLMProvider(provider)
     except ValueError:
         pass
     return provider, parts[1]
