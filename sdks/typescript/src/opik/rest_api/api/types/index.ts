@@ -268,6 +268,7 @@ export * from "./SpanFilterPublic";
 export * from "./TraceThreadIdentifier";
 export * from "./TraceWrite";
 export * from "./TraceBatch";
+export * from "./BatchDeleteByProject";
 export * from "./CheckPublicName";
 export * from "./CheckPublicResult";
 export * from "./CheckPublic";
