@@ -20,7 +20,7 @@ from . import (
 from .patchers import (
     litellm_wrappers,
     llm_response_wrapper,
-    adk_tracer_wrapper,
+    adk_tracer_for_opik_context_management,
 )
 from .graph import mermaid_graph_builder
 
@@ -158,7 +158,7 @@ class OpikTracer:
             # So we create a span manually here. This flow is handled inside ADKTracerWrapper.
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
-                    name=adk_tracer_wrapper.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
+                    name=adk_tracer_for_opik_context_management.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
                     project_name=self.project_name,
                     metadata=self.metadata,
                     type="llm",  # for now

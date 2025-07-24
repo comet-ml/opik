@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER = "_OPIK_TRACER_STARTED_LLM_SPAN"
 
 
-class ADKOpenTelemetryTracerPatched(opentelemetry.trace.NoOpTracer):
+class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
     """
     A patched OpenTelemetry tracer for ADK integration.
 

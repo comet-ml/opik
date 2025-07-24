@@ -2,9 +2,9 @@ import functools
 
 from opik import semantic_version
 from opik.api_objects import opik_client
-from . import adk_tracer_wrapper
 from . import llm_response_wrapper
 from . import litellm_wrappers
+from . import adk_tracer_for_opik_context_management
 
 import google.adk.models
 from google.adk.models import lite_llm
@@ -35,8 +35,10 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
         )
 
     if semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0":  # type: ignore
-        no_op_opik_tracer = adk_tracer_wrapper.ADKOpenTelemetryTracerPatched(
-            opik_client
+        no_op_opik_tracer = (
+            adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement(
+                opik_client
+            )
         )
 
         adk_telemetry.tracer.start_as_current_span = (
