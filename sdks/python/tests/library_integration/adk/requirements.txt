@@ -1,1 +1,2 @@
 google-adk
+python-multipart; python_version < "3.10"
