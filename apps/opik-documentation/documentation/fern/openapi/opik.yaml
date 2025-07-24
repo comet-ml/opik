@@ -9289,6 +9289,22 @@ components:
           items:
             minLength: 1
             type: string
+    BatchDeleteByProject:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        project_id:
+          type: string
+          format: uuid
     Check_Public:
       type: object
       properties:
