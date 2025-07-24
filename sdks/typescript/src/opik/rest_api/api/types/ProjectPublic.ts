@@ -14,5 +14,4 @@ export interface ProjectPublic {
     lastUpdatedAt?: Date;
     lastUpdatedBy?: string;
     lastUpdatedTraceAt?: Date;
-    configuration?: OpikApi.ConfigurationPublic;
 }

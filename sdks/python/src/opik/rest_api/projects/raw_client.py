@@ -10,13 +10,10 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
-from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
-from ..types.configuration_timeout_to_mark_thread_as_inactive import ConfigurationTimeoutToMarkThreadAsInactive
-from ..types.configuration_write import ConfigurationWrite
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
@@ -98,7 +95,6 @@ class RawProjectsClient:
         name: str,
         visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
-        configuration: typing.Optional[ConfigurationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -111,8 +107,6 @@ class RawProjectsClient:
         visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
-
-        configuration : typing.Optional[ConfigurationWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -128,9 +122,6 @@ class RawProjectsClient:
                 "name": name,
                 "visibility": visibility,
                 "description": description,
-                "configuration": convert_and_respect_annotation_metadata(
-                    object_=configuration, annotation=ConfigurationWrite, direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",
@@ -617,87 +608,6 @@ class RawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def upsert_project_configurations(
-        self,
-        id: str,
-        *,
-        timeout_to_mark_thread_as_inactive: typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
-        """
-        Upsert project configurations
-
-        Parameters
-        ----------
-        id : str
-
-        timeout_to_mark_thread_as_inactive : typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive]
-            minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}/configurations",
-            method="PUT",
-            json={
-                "timeout_to_mark_thread_as_inactive": convert_and_respect_annotation_metadata(
-                    object_=timeout_to_mark_thread_as_inactive,
-                    annotation=ConfigurationTimeoutToMarkThreadAsInactive,
-                    direction="write",
-                ),
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 422:
-                raise UnprocessableEntityError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
 
 class AsyncRawProjectsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -765,7 +675,6 @@ class AsyncRawProjectsClient:
         name: str,
         visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
-        configuration: typing.Optional[ConfigurationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -778,8 +687,6 @@ class AsyncRawProjectsClient:
         visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
-
-        configuration : typing.Optional[ConfigurationWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -795,9 +702,6 @@ class AsyncRawProjectsClient:
                 "name": name,
                 "visibility": visibility,
                 "description": description,
-                "configuration": convert_and_respect_annotation_metadata(
-                    object_=configuration, annotation=ConfigurationWrite, direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1246,87 +1150,6 @@ class AsyncRawProjectsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 422:
-                raise UnprocessableEntityError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def upsert_project_configurations(
-        self,
-        id: str,
-        *,
-        timeout_to_mark_thread_as_inactive: typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
-        """
-        Upsert project configurations
-
-        Parameters
-        ----------
-        id : str
-
-        timeout_to_mark_thread_as_inactive : typing.Optional[ConfigurationTimeoutToMarkThreadAsInactive]
-            minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}/configurations",
-            method="PUT",
-            json={
-                "timeout_to_mark_thread_as_inactive": convert_and_respect_annotation_metadata(
-                    object_=timeout_to_mark_thread_as_inactive,
-                    annotation=ConfigurationTimeoutToMarkThreadAsInactive,
-                    direction="write",
-                ),
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
                     headers=dict(_response.headers),

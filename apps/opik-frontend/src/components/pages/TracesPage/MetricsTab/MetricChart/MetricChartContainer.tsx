@@ -6,6 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import isNil from "lodash/isNil";
+
 import { ProjectMetricValue, TransformedData } from "@/types/projects";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import useProjectMetric, {
@@ -13,6 +15,7 @@ import useProjectMetric, {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import NoData from "@/components/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import MetricLineChart from "./MetricLineChart";
@@ -107,6 +110,13 @@ const MetricContainerChart = ({
     return [transformedData, lines.sort(), values];
   }, [traces]);
 
+  const noData = useMemo(() => {
+    if (isPending) return false;
+    if (data.length === 0) return true;
+
+    return data.every((record) => lines.every((line) => isNil(record[line])));
+  }, [data, lines, isPending]);
+
   const config = useMemo(() => {
     return getDefaultHashedColorsChartConfig(
       lines,
@@ -126,17 +136,24 @@ const MetricContainerChart = ({
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5">
-        <CHART
-          config={config}
-          interval={interval}
-          renderValue={renderValue}
-          customYTickFormatter={customYTickFormatter}
-          chartId={chartId}
-          isPending={isPending}
-          data={data}
-          lines={lines}
-          values={values}
-        />
+        {noData ? (
+          <NoData
+            className="h-[var(--chart-height)] min-h-32 text-light-slate"
+            message="No data to show"
+          />
+        ) : (
+          <CHART
+            config={config}
+            interval={interval}
+            renderValue={renderValue}
+            customYTickFormatter={customYTickFormatter}
+            chartId={chartId}
+            isPending={isPending}
+            data={data}
+            lines={lines}
+            values={values}
+          />
+        )}
       </CardContent>
     </Card>
   );

@@ -16,6 +16,7 @@ const _Base = core.serialization.object({
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
+    enabled: core.serialization.boolean().optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -69,6 +70,7 @@ export declare namespace AutomationRuleEvaluatorObjectPublic {
         project_name?: string | null;
         name: string;
         sampling_rate?: number | null;
+        enabled?: boolean | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

@@ -1,0 +1,15 @@
+---
+description: Documentation standards and code style guidelines
+globs:
+alwaysApply: true
+---
+
+## Code Documentation
+- Use comprehensive type hints
+- Use comprehensive docstrings for public APIs
+- Follow established code formatting and linting standards
+
+## Comments and Clarity
+- Don't add over-verbose comments, write self-explanatory code
+- Only add comments for non-trivial logic or when readers might ask "Why is it like that?"
+- Write code that explains itself through good naming and structure
