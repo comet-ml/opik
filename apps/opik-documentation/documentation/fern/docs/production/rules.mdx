@@ -69,3 +69,55 @@ The scores returned by the online evaluation rules will be stored as feedback sc
 ![Opik dashboard](/img/production/opik_monitoring_dashboard.gif)
 
 You can also view the average feedback scores for all the traces in your project from the traces table.
+
+## Online thread evaluation rules
+
+It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+
+<Frame>
+  <img src="/img/production/online_evaluation_thread_rule.gif" />
+</Frame>
+
+We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
+1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
+2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
+3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric.
+
+For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
+
+```json
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
+
+```python
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+The sampled threads are scored only after the threads are marked as inactive. This is to ensure that the scoring is done on the full context of the conversation.
+
+<Note>
+  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
+  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
+
+  You can only evaluate/score threads that are inactive.
+</Note>

@@ -76,3 +76,42 @@ functionality.
 <Frame>
   <img src="/img/tracing/chat_conversations_actions.png" />
 </Frame>
+
+## Scoring conversations
+
+It is possible to to assign conversation level feedback scores. For that, you need to understand how threads work in Opik. Threads are aggregated traces 
+that are created when tracking agents or simply traces interconnected by a `thread_id`. In order to score a conversation, we need to ensure that the
+thread is inactive, meaning that no new traces are being created.
+
+<Note>
+  By default, threads are marked as inactive after 15 minutes of inactivity. You can change this value by setting the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable (If you are using the Opik self-hosted version).
+  On cloud, you can change this setting at workspace level.
+</Note>
+
+Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI using the `Status` button on top right corner of the thread view.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations_mark_as_inactive.png" />
+</Frame>
+
+Once a thread is inactive, you can assign a feedback score to the thread. This score will be associated to the thread and will be displayed in the thread view.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations_score.png" />
+</Frame>
+
+And in the conversation list, you can see the feedback score associated to the thread.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations_score_list.png" />
+</Frame>
+
+<Note>
+  Important: The human feedback scores are removed in case the thread is re-activated. This is to avoid any confusion and to ensure that the feedback scores are always based on the full context of the conversation.
+</Note>
+
+You can also tag a thread and add comments to it. This is useful to add additional context during the review process or investigate a specific conversation.
+
+<Frame>
+  <img src="/img/tracing/chat_conversation_tags_comments.png" />
+</Frame>
