@@ -54,11 +54,7 @@ export const secondsToMilliseconds = (seconds: number) => {
   return seconds * 1000;
 };
 
-export const formatDuration = (
-  value?: number | null,
-  onlySeconds = true,
-  hideZeroSeconds = false,
-) => {
+export const formatDuration = (value?: number | null, onlySeconds = true) => {
   if (isUndefined(value) || isNull(value) || isNaN(value)) {
     return "NA";
   }
@@ -104,9 +100,7 @@ export const formatDuration = (
       months ? months + "mth " : ""
     }${weeks ? weeks + "w " : ""}${days ? days + "d " : ""}${
       hours ? hours + "h " : ""
-    }${minutes ? minutes + "m " : ""}${
-      hideZeroSeconds && !seconds ? "" : seconds + "s"
-    }`.trim();
+    }${minutes ? minutes + "m " : ""}${!seconds ? "" : seconds + "s"}`.trim();
 
     return result || "0s";
   }
@@ -147,7 +141,7 @@ export const formatIso8601Duration = (durationString: string): string => {
     const dur = dayjs.duration(durationString);
     const totalMs = dur.asMilliseconds();
 
-    return formatDuration(totalMs, false, true);
+    return formatDuration(totalMs, false);
   } catch {
     return "NA";
   }
