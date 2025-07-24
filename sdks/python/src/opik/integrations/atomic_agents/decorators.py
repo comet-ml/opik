@@ -77,7 +77,7 @@ __all__: List[str] = [
 
 def _patch_atomic_tools() -> None:
     try:
-        from atomic_agents.tools.base_tool import BaseTool
+        from atomic_agents.lib.base.base_tool import BaseTool
     except ModuleNotFoundError:
         return
 
@@ -134,14 +134,14 @@ def _patch_atomic_tools() -> None:
 
 def _patch_atomic_llms() -> None:
     try:
-        from atomic_agents.agents.base_agent import BaseAgent as BaseChatAgent
+        from atomic_agents.agents.base_agent import BaseAgent
     except ModuleNotFoundError:
         return
 
-    if getattr(BaseChatAgent, "__opik_patched_llm__", False):
+    if getattr(BaseAgent, "__opik_patched_llm__", False):
         return
 
-    original_get_response = BaseChatAgent.get_response
+    original_get_response = BaseAgent.get_response
 
     from opik.decorator import arguments_helpers, span_creation_handler
 
@@ -199,5 +199,5 @@ def _patch_atomic_llms() -> None:
         finally:
             context_storage.pop_span_data(ensure_id=span_data.id)
 
-    BaseChatAgent.get_response = _llm_get_response
-    BaseChatAgent.__opik_patched_llm__ = True
+    BaseAgent.get_response = _llm_get_response
+    BaseAgent.__opik_patched_llm__ = True

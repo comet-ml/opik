@@ -12,17 +12,17 @@ import opik
 def test_tool_span_created(fake_backend):
     base_agent_module = sys.modules["atomic_agents.agents.base_agent"]
 
-    original_method = base_agent_module.BaseChatAgent.get_response
+    original_method = base_agent_module.BaseAgent.get_response
 
     def _enhanced_get_response(self, messages):
         result = original_method(self, messages)
 
-        BaseTool = sys.modules["atomic_agents.tools.base_tool"].BaseTool
+        BaseTool = sys.modules["atomic_agents.lib.base.base_tool"].BaseTool
         tool = BaseTool("MyTool")
         tool.run("tool payload")
         return result
 
-    base_agent_module.BaseChatAgent.get_response = _enhanced_get_response
+    base_agent_module.BaseAgent.get_response = _enhanced_get_response
 
     try:
         track_atomic_agents(project_name="tool-span")
@@ -42,4 +42,4 @@ def test_tool_span_created(fake_backend):
         ), f"No tool spans found. Available spans: {[(s.name, s.type) for s in trace_tree.spans]}"
         assert tool_spans[0].name == "MyTool"
     finally:
-        base_agent_module.BaseChatAgent.get_response = original_method
+        base_agent_module.BaseAgent.get_response = original_method

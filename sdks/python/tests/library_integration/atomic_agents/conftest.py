@@ -11,38 +11,31 @@ def _reset_tracking_state() -> None:
     This helper is required only for the test-suite, so it lives here instead
     of the production codebase.
     """
-    try:
-        import importlib
+    import importlib
 
-        decorators_mod = importlib.import_module(
-            "opik.integrations.atomic_agents.decorators"
-        )
-        if hasattr(decorators_mod, "__IS_TRACKING_ENABLED"):
-            decorators_mod.__IS_TRACKING_ENABLED = False  # type: ignore[attr-defined]
-    except ModuleNotFoundError:
-        pass
+    decorators_mod = importlib.import_module(
+        "opik.integrations.atomic_agents.decorators"
+    )
+    if hasattr(decorators_mod, "__IS_TRACKING_ENABLED"):
+        decorators_mod.__IS_TRACKING_ENABLED = False  # type: ignore[attr-defined]
 
     try:
         from atomic_agents.agents.base_agent import BaseAgent
 
         if hasattr(BaseAgent, "__opik_patched__"):
             delattr(BaseAgent, "__opik_patched__")
+
+        # LLM patch flag is stored on the same class
+        if hasattr(BaseAgent, "__opik_patched_llm__"):
+            delattr(BaseAgent, "__opik_patched_llm__")
     except (ModuleNotFoundError, ImportError, AttributeError):
-        pass
+        BaseAgent = None  # noqa: F841
 
     try:
-        from atomic_agents.tools.base_tool import BaseTool
+        from atomic_agents.lib.base.base_tool import BaseTool  # type: ignore
 
         if hasattr(BaseTool, "__opik_patched__"):
             delattr(BaseTool, "__opik_patched__")
-    except (ModuleNotFoundError, ImportError, AttributeError):
-        pass
-
-    try:
-        from atomic_agents.agents.base_agent import BaseChatAgent
-
-        if hasattr(BaseChatAgent, "__opik_patched_llm__"):
-            delattr(BaseChatAgent, "__opik_patched_llm__")
     except (ModuleNotFoundError, ImportError, AttributeError):
         pass
 
@@ -52,9 +45,8 @@ def stub_atomic_agents(monkeypatch):
     """Create a comprehensive stub of the atomic_agents library."""
 
     pkg_root = types.ModuleType("atomic_agents")
-    pkg_root.__path__ = []  # Make it a package
+    pkg_root.__path__ = []
 
-    # agents module
     agents_pkg = types.ModuleType("atomic_agents.agents")
     agents_pkg.__path__ = []
     pkg_root.agents = agents_pkg
@@ -64,7 +56,7 @@ def stub_atomic_agents(monkeypatch):
     class MockConfig:
         model = "test_model"
 
-    class BaseChatAgent:
+    class BaseAgent:
         def __init__(self):
             self.config = MockConfig()
             # Preserve class-level schemas if they exist
@@ -84,16 +76,11 @@ def stub_atomic_agents(monkeypatch):
                 raise ValueError("boom")
             return self.get_response([])
 
-    base_agent_pkg.BaseChatAgent = BaseChatAgent
-    base_agent_pkg.BaseAgent = BaseChatAgent
+    base_agent_pkg.BaseAgent = BaseAgent
     agents_pkg.base_agent = base_agent_pkg
 
-    # tools module
-    tools_pkg = types.ModuleType("atomic_agents.tools")
-    tools_pkg.__path__ = []
-    pkg_root.tools = tools_pkg
-
-    base_tool_pkg = types.ModuleType("atomic_agents.tools.base_tool")
+    # lib.base.base_tool path (new)
+    from types import ModuleType
 
     class BaseTool:
         def __init__(self, name: str = "BaseTool"):
@@ -102,16 +89,26 @@ def stub_atomic_agents(monkeypatch):
         def run(self, payload):
             return {"ok": True}
 
-    base_tool_pkg.BaseTool = BaseTool
-    tools_pkg.base_tool = base_tool_pkg
+    lib_pkg: ModuleType = types.ModuleType("atomic_agents.lib")
+    lib_pkg.__path__ = []
+    pkg_root.lib = lib_pkg
+
+    base_lib_pkg: ModuleType = types.ModuleType("atomic_agents.lib.base")
+    base_lib_pkg.__path__ = []
+    lib_pkg.base = base_lib_pkg
+
+    base_tool_lib_pkg: ModuleType = types.ModuleType("atomic_agents.lib.base.base_tool")
+    base_tool_lib_pkg.BaseTool = BaseTool
+    base_lib_pkg.base_tool = base_tool_lib_pkg
 
     sys.modules.update(
         {
             "atomic_agents": pkg_root,
             "atomic_agents.agents": agents_pkg,
             "atomic_agents.agents.base_agent": base_agent_pkg,
-            "atomic_agents.tools": tools_pkg,
-            "atomic_agents.tools.base_tool": base_tool_pkg,
+            "atomic_agents.lib": lib_pkg,
+            "atomic_agents.lib.base": base_lib_pkg,
+            "atomic_agents.lib.base.base_tool": base_tool_lib_pkg,
         }
     )
     yield

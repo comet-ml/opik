@@ -14,8 +14,8 @@ def test_llm_span_creation(fake_backend) -> None:
 
     track_atomic_agents(project_name="test-project")
 
-    BaseChatAgent = sys.modules["atomic_agents.agents.base_agent"].BaseChatAgent
-    agent = BaseChatAgent()
+    BaseAgent = sys.modules["atomic_agents.agents.base_agent"].BaseAgent
+    agent = BaseAgent()
     agent.run("test")
 
     opik.flush_tracker()

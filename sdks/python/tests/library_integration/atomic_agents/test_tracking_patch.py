@@ -21,4 +21,4 @@ def test_patch_emits_root_trace(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
     assert trace_tree.project_name == "lib-test"
-    assert trace_tree.name == "BaseChatAgent"
+    assert trace_tree.name == "BaseAgent"
