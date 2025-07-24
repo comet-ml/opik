@@ -77,6 +77,7 @@ def _get_provider_and_model(
     Fetches the provider and model information from a given run dictionary.
     """
     provider = LLMProvider.ANTHROPIC
+    model = None
     try:
         if run_dict["outputs"]["llm_output"] is not None:
             model = run_dict["outputs"]["llm_output"]["model_name"]
@@ -90,6 +91,5 @@ def _get_provider_and_model(
             "Failed to extract model name from presumably Anthropic LLM langchain Run object: %s",
             run_dict,
         )
-        return None, None
 
     return provider, model
