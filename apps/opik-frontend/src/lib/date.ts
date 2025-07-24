@@ -54,7 +54,11 @@ export const secondsToMilliseconds = (seconds: number) => {
   return seconds * 1000;
 };
 
-export const formatDuration = (value?: number | null, onlySeconds = true) => {
+export const formatDuration = (
+  value?: number | null,
+  onlySeconds = true,
+  hideZeroSeconds = false,
+) => {
   if (isUndefined(value) || isNull(value) || isNaN(value)) {
     return "NA";
   }
@@ -96,11 +100,15 @@ export const formatDuration = (value?: number | null, onlySeconds = true) => {
       seconds = round(seconds % 60, 1);
     }
 
-    return `${years ? years + "y " : ""}${months ? months + "mth " : ""}${
-      weeks ? weeks + "w " : ""
-    }${days ? days + "d " : ""}${hours ? hours + "h " : ""}${
-      minutes ? minutes + "m " : ""
-    }${seconds}s`.trim();
+    const result = `${years ? years + "y " : ""}${
+      months ? months + "mth " : ""
+    }${weeks ? weeks + "w " : ""}${days ? days + "d " : ""}${
+      hours ? hours + "h " : ""
+    }${minutes ? minutes + "m " : ""}${
+      hideZeroSeconds && !seconds ? "" : seconds + "s"
+    }`.trim();
+
+    return result || "0s";
   }
 };
 
@@ -132,32 +140,15 @@ export const isValidIso8601Duration = (
 /**
  * Converts an ISO-8601 duration string to a human-readable format
  * @param durationString - ISO-8601 duration string
- * @returns Human-readable duration string or null if invalid
+ * @returns Human-readable duration string or "NA" if invalid
  */
-export const formatIso8601Duration = (
-  durationString: string,
-): string | null => {
+export const formatIso8601Duration = (durationString: string): string => {
   try {
     const dur = dayjs.duration(durationString);
     const totalMs = dur.asMilliseconds();
 
-    if (isNaN(totalMs) || totalMs <= 0) {
-      return null;
-    }
-
-    const days = dur.days();
-    const hours = dur.hours();
-    const minutes = dur.minutes();
-    const seconds = dur.seconds();
-
-    const parts: string[] = [];
-    if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
-    if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
-    if (minutes > 0) parts.push(`${minutes} min`);
-    if (seconds > 0) parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
-
-    return parts.length > 0 ? parts.join(", ") : "0 seconds";
+    return formatDuration(totalMs, false, true);
   } catch {
-    return null;
+    return "NA";
   }
 };
