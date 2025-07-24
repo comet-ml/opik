@@ -51,14 +51,36 @@ def collect_tags_once() -> Dict[str, Any]:
     return result
 
 
+@functools.lru_cache
 def _get_installed_packages_details() -> Dict[str, str]:
-    import openai
-    import pydantic
+    DISTRIBUTION_NAMES = [
+        "pydantic",
+        "litellm",
+        "openai",
+        "openai-agents",
+        "anthropic",
+        "google-adk",
+        "google-genai",
+        "langchain",
+        "langchain-community",
+        "langchain-anthropic",
+        "langchain-openai",
+        "langchain-google-vertexai",
+        "langchain-google-genai",
+        "crewai",
+        "dspy",
+        "llama-index",
+        "haystack-ai",
+    ]
+    result = {}
 
-    result = {
-        "openai": openai.__version__,
-        "pydantic": pydantic.__version__,
-        "litellm": importlib.metadata.version("litellm"),
-    }
+    # `importlib.metadata.version` does not perform actual import of the package,
+    # so it's safe to call it here for all packages.
+    # Tests showed it takes about 5ms to collect this data.
+    for distribution_name in DISTRIBUTION_NAMES:
+        try:
+            result[distribution_name] = importlib.metadata.version(distribution_name)
+        except Exception:
+            pass
 
     return result
