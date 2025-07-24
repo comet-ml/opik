@@ -41,12 +41,15 @@ NUM_THREADS=${PYTHON_CODE_EXECUTOR_PARALLEL_NUM:-5}
 echo "OPIK_VERSION=$OPIK_VERSION"
 echo "OPIK_OTEL_SDK_ENABLED=$OPIK_OTEL_SDK_ENABLED"
 
-if [ -z "$OTEL_RESOURCE_ATTRIBUTES" ]; then
-  export OTEL_RESOURCE_ATTRIBUTES="service.name=opik-python-backend,service.version=${OPIK_VERSION}"
-fi
-
 if [ "$OPIK_OTEL_SDK_ENABLED" = "true" ]; then
   echo "Starting the Opik Python Backend server with Open Telemetry instrumentation"
+
+  if [ -z "$OTEL_RESOURCE_ATTRIBUTES" ]; then
+    export OTEL_RESOURCE_ATTRIBUTES="service.name=opik-python-backend,service.version=${OPIK_VERSION}"
+  fi
+
+  export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
+
   opentelemetry-instrument gunicorn --access-logfile '-' \
          --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
          --workers 1 \
