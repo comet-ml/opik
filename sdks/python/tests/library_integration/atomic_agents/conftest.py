@@ -79,7 +79,6 @@ def stub_atomic_agents(monkeypatch):
     base_agent_pkg.BaseAgent = BaseAgent
     agents_pkg.base_agent = base_agent_pkg
 
-    # lib.base.base_tool path (new)
     from types import ModuleType
 
     class BaseTool:

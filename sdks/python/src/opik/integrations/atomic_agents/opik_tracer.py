@@ -97,7 +97,6 @@ class OpikAtomicAgentsTracer:
         self.end(error_info=error)
         return False
 
-    # --------------------------------------------------------------------
     def _extract_json_schema(self, model_cls: Any) -> Optional[Dict[str, Any]]:
         try:
             from pydantic import BaseModel  # type: ignore
