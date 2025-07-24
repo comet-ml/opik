@@ -7,14 +7,15 @@ import { Sorting } from "@/types/sorting";
 import { getJSONPaths } from "@/lib/utils";
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
+import { Filters } from "@/types/filters";
 
 type ExperimentsPathsAutocompleteProps = {
   hasError?: boolean;
   value: string;
   onValueChange: (value: string) => void;
   promptId?: string;
-  datasetId?: string;
   sorting?: Sorting;
+  filters?: Filters;
   placeholder?: string;
   excludeRoot?: boolean;
 };
@@ -26,15 +27,15 @@ const ExperimentsPathsAutocomplete: React.FC<
   value,
   onValueChange,
   promptId,
-  datasetId,
   sorting,
+  filters,
   placeholder = "Select a key from recent experiments",
   excludeRoot = false,
 }) => {
   const { data, isPending } = useExperimentsList({
     promptId,
-    datasetId,
     sorting,
+    filters,
     page: 1,
     size: 100,
   });

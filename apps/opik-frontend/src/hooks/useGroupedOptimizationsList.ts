@@ -20,7 +20,8 @@ import {
   DEFAULT_ITEMS_PER_GROUP,
   DELETED_DATASET_ID,
   GROUPING_COLUMN,
-} from "@/constants/grouping";
+} from "@/constants/groups";
+import { buildMoreRowId } from "@/components/shared/DataTable/utils";
 
 export const GROUP_SORTING = [
   { id: "last_created_optimization_at", desc: true },
@@ -28,7 +29,7 @@ export const GROUP_SORTING = [
 
 export type GroupedOptimization = {
   dataset: Dataset;
-  virtual_dataset_id: string;
+  [GROUPING_COLUMN]: string;
 } & Optimization;
 
 type UseGroupedOptimizationsListParams = {
@@ -64,10 +65,6 @@ const wrapOptimizationRow = (optimization: Optimization, dataset: Dataset) => {
     dataset,
     [GROUPING_COLUMN]: dataset.id,
   } as GroupedOptimization;
-};
-
-const buildMoreRowId = (id: string) => {
-  return `more_${id}`;
 };
 
 const generateMoreRow = (dataset: Dataset) => {

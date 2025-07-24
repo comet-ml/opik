@@ -24,7 +24,7 @@ export const isFilterValid = (filter: Filter) => {
   return hasValue && hasKey;
 };
 
-export const createEmptyFilter = () => {
+export const createFilter = (filter?: Partial<Filter>) => {
   return {
     id: uniqid(),
     field: "",
@@ -32,6 +32,7 @@ export const createEmptyFilter = () => {
     operator: "",
     key: "",
     value: "",
+    ...filter,
   } as Filter;
 };
 

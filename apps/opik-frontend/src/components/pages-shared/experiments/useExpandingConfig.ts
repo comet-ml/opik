@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExpandedState } from "@tanstack/react-table";
 
-import { GROUPING_COLUMN } from "@/constants/grouping";
+import { GROUPING_COLUMN } from "@/constants/groups";
 
 export type UseExpandingConfigProps = {
   groupIds: string[];
+  prefix?: string;
 };
 
-export const useExpandingConfig = ({ groupIds }: UseExpandingConfigProps) => {
+export const useExpandingConfig = ({
+  groupIds,
+  prefix = GROUPING_COLUMN,
+}: UseExpandingConfigProps) => {
   const openGroupsRef = useRef<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
   useEffect(() => {
     const updateForExpandedState: Record<string, boolean> = {};
     groupIds.forEach((groupId) => {
-      const id = `${GROUPING_COLUMN}:${groupId}`;
+      const id = `${prefix}:${groupId}`;
       if (!openGroupsRef.current[id]) {
         openGroupsRef.current[id] = true;
         updateForExpandedState[id] = true;
@@ -30,7 +34,7 @@ export const useExpandingConfig = ({ groupIds }: UseExpandingConfigProps) => {
         };
       });
     }
-  }, [groupIds]);
+  }, [groupIds, prefix]);
 
   return useMemo(
     () => ({

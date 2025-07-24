@@ -3,7 +3,7 @@ import React from "react";
 import { X } from "lucide-react";
 import { Filter, FilterRowConfig } from "@/types/filters";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import ColumnSelector from "@/components/shared/FiltersButton/ColumnSelector";
+import ColumnSelector from "@/components/shared/ColumnSelector/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
 import StringRow from "@/components/shared/FiltersButton/rows/StringRow";
@@ -13,7 +13,7 @@ import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
 import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
 import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
-import { createEmptyFilter } from "@/lib/filters";
+import { createFilter } from "@/lib/filters";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -75,7 +75,7 @@ export const FilterRow = <TColumnData,>({
           field={filter.field}
           onSelect={(column) =>
             onChange({
-              ...createEmptyFilter(),
+              ...createFilter(),
               id: filter.id,
               field: column.id,
               type: column.type as COLUMN_TYPE,

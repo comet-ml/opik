@@ -52,23 +52,23 @@ import { Separator } from "@/components/ui/separator";
 import useGroupedOptimizationsList, {
   GroupedOptimization,
 } from "@/hooks/useGroupedOptimizationsList";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   checkIsMoreRowId,
-  generateGroupedNameColumDef,
+  generateActionsColumDef,
   generateGroupedCellDef,
-  getIsCustomRow,
+  generateGroupedNameColumDef,
+  getIsGroupRow,
   getRowId,
   getSharedShiftCheckboxClickHandler,
-  GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages-shared/experiments/table";
-import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+} from "@/components/shared/DataTable/utils";
 import {
   DEFAULT_GROUPS_PER_PAGE,
   DELETED_DATASET_ID,
   GROUPING_COLUMN,
-} from "@/constants/grouping";
+  GROUPING_CONFIG,
+} from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
@@ -336,10 +336,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
     let index = 0;
 
     optimizations.forEach((optimization) => {
-      if (optimization.virtual_dataset_id !== DELETED_DATASET_ID) {
-        if (!groupsMap[optimization.virtual_dataset_id]) {
-          groupsMap[optimization.virtual_dataset_id] = {
-            id: optimization.virtual_dataset_id,
+      const key = optimization[GROUPING_COLUMN];
+      if (key !== DELETED_DATASET_ID) {
+        if (!groupsMap[key]) {
+          groupsMap[key] = {
+            id: key,
             name: optimization.dataset.name,
             data: [],
             lines: [],
@@ -348,7 +349,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           index += 1;
         }
 
-        groupsMap[optimization.virtual_dataset_id].data.unshift({
+        groupsMap[key].data.unshift({
           entityId: optimization.id,
           entityName: optimization.name,
           createdDate: formatDate(optimization.created_at),
@@ -360,8 +361,8 @@ const OptimizationsPage: React.FunctionComponent = () => {
           }, {}),
         });
 
-        groupsMap[optimization.virtual_dataset_id].lines = uniq([
-          ...groupsMap[optimization.virtual_dataset_id].lines,
+        groupsMap[key].lines = uniq([
+          ...groupsMap[key].lines,
           ...(optimization.feedback_scores || []).map((s) => s.name),
         ]);
       }
@@ -439,7 +440,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         data={optimizations}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
+        getIsCustomRow={getIsGroupRow}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

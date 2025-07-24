@@ -33,18 +33,23 @@ export const getExperimentsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
-    datasetId,
     promptId,
     optimizationId,
     datasetDeleted,
     types = DEFAULT_EXPERIMENTS_TYPES,
-    filters,
+    filters: externalFilters,
     sorting,
     search,
     size,
     page,
   }: UseExperimentsListParams,
 ) => {
+  // TODO lala temporary fix for dataset_id filter
+  const datasetFilter = externalFilters?.find((f) => f.field === "dataset_id");
+  const datasetId = datasetFilter?.value;
+  const filters =
+    externalFilters?.filter((f) => f.field !== "dataset_id") || [];
+
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
     signal,
     params: {

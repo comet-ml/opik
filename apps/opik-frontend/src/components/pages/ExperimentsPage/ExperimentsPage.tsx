@@ -44,7 +44,6 @@ import {
   ColumnData,
   DynamicColumn,
 } from "@/types/shared";
-import { Filter } from "@/types/filters";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
@@ -59,23 +58,19 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { DEFAULT_GROUPS_PER_PAGE } from "@/constants/groups";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
+  buildGroupFieldsName,
   checkIsMoreRowId,
-  generateGroupedNameColumDef,
+  generateActionsColumDef,
   generateGroupedCellDef,
-  getIsCustomRow,
+  generateGroupedNameColumDef,
+  getIsGroupRow,
   getRowId,
   getSharedShiftCheckboxClickHandler,
-  GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages-shared/experiments/table";
-import {
-  DEFAULT_GROUPS_PER_PAGE,
-  DELETED_DATASET_ID,
-  GROUPING_COLUMN,
-} from "@/constants/grouping";
-import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+} from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
@@ -90,11 +85,16 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import uniq from "lodash/uniq";
+import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { Groups } from "@/types/groups";
+import { SORT_DIRECTION } from "@/types/sorting";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
+const COLUMNS_GROUPS_KEY = "experiments-columns-groups";
 const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
@@ -203,7 +203,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
-export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
+export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
@@ -217,16 +217,30 @@ export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID, GROUPING_COLUMN],
-  right: [],
-};
-
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
+
+export const GROUP_CELL_DEFINITION_MAP = {
+  [COLUMN_DATASET_ID]: {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
+  },
+  [COLUMN_METADATA_ID]: {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+  },
+};
 
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -245,6 +259,23 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
+
+  const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
+    localStorageKey: COLUMNS_GROUPS_KEY,
+    queryKey: `groups`,
+    defaultValue: [
+      {
+        id: "default_groups",
+        field: "dataset_id",
+        type: COLUMN_TYPE.string,
+        direction: SORT_DIRECTION.ASC,
+        key: "",
+      },
+    ],
+    queryParamConfig: JsonParam,
+  });
+
+  const firstLevelGrouping = groups[0].field ?? "dataset_id"; // TODO lala
 
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
@@ -273,17 +304,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const datasetId = useMemo(
-    () =>
-      filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)?.value || "",
-    [filters],
-  );
-
-  const preProcessedFilters = useMemo(() => {
-    return filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID);
-  }, [filters]);
-
-  const filtersConfig = useMemo(
+  const filtersAndGroupsConfig = useMemo(
     () => ({
       rowsMap: {
         [COLUMN_DATASET_ID]: {
@@ -299,21 +320,21 @@ const ExperimentsPage: React.FunctionComponent = () => {
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
-            datasetId,
             sorting: sortedColumns,
+            filters,
           },
         },
       },
     }),
-    [datasetId, sortedColumns],
+    [filters, sortedColumns],
   );
 
   const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
-    datasetId,
-    filters: preProcessedFilters,
+    filters,
     sorting: sortedColumns,
+    groups: groups,
     search: search!,
     page: page!,
     size: DEFAULT_GROUPS_PER_PAGE,
@@ -410,15 +431,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
       ),
       generateGroupedCellDef<GroupedExperiment, unknown>(
         {
-          id: GROUPING_COLUMN,
-          label: "Dataset",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "dataset_name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.dataset,
-          },
+          ...GROUP_CELL_DEFINITION_MAP[firstLevelGrouping],
+          id: buildGroupFieldsName(firstLevelGrouping),
         },
         checkboxClickHandler,
       ),
@@ -445,6 +459,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }, [
     checkboxClickHandler,
     sortableBy,
+    firstLevelGrouping,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
@@ -487,7 +502,22 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const expandingConfig = useExpandingConfig({
     groupIds,
+    prefix: buildGroupFieldsName(firstLevelGrouping),
   });
+
+  const columnPinningConfig = useMemo(() => {
+    return {
+      left: [COLUMN_NAME_ID, buildGroupFieldsName(firstLevelGrouping)],
+      right: [],
+    } as ColumnPinningState;
+  }, [firstLevelGrouping]);
+
+  const groupingConfig = useMemo(() => {
+    return {
+      groupedColumnMode: false as const,
+      grouping: [buildGroupFieldsName(firstLevelGrouping)],
+    };
+  }, [firstLevelGrouping]);
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
@@ -517,39 +547,38 @@ const ExperimentsPage: React.FunctionComponent = () => {
     let index = 0;
 
     experiments.forEach((experiment) => {
-      if (experiment.virtual_dataset_id !== DELETED_DATASET_ID) {
-        if (!groupsMap[experiment.virtual_dataset_id]) {
-          groupsMap[experiment.virtual_dataset_id] = {
-            id: experiment.virtual_dataset_id,
-            name: experiment.dataset.name,
-            data: [],
-            lines: [],
-            index,
-          };
-          index += 1;
-        }
-
-        groupsMap[experiment.virtual_dataset_id].data.unshift({
-          entityId: experiment.id,
-          entityName: experiment.name,
-          createdDate: formatDate(experiment.created_at),
-          scores: (experiment.feedback_scores || []).reduce<
-            Record<string, number>
-          >((acc, score) => {
-            acc[score.name] = score.value;
-            return acc;
-          }, {}),
-        });
-
-        groupsMap[experiment.virtual_dataset_id].lines = uniq([
-          ...groupsMap[experiment.virtual_dataset_id].lines,
-          ...(experiment.feedback_scores || []).map((s) => s.name),
-        ]);
+      const key = experiment[buildGroupFieldsName(firstLevelGrouping)];
+      if (!groupsMap[key]) {
+        groupsMap[key] = {
+          id: key,
+          name: key, // TODO lala resolve name
+          data: [],
+          lines: [],
+          index,
+        };
+        index += 1;
       }
+
+      groupsMap[key].data.unshift({
+        entityId: experiment.id,
+        entityName: experiment.name,
+        createdDate: formatDate(experiment.created_at),
+        scores: (experiment.feedback_scores || []).reduce<
+          Record<string, number>
+        >((acc, score) => {
+          acc[score.name] = score.value;
+          return acc;
+        }, {}),
+      });
+
+      groupsMap[key].lines = uniq([
+        ...groupsMap[key].lines,
+        ...(experiment.feedback_scores || []).map((s) => s.name),
+      ]);
     });
 
     return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
-  }, [experiments]);
+  }, [experiments, firstLevelGrouping]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -585,10 +614,16 @@ const ExperimentsPage: React.FunctionComponent = () => {
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={FILTER_COLUMNS}
-            config={filtersConfig as never}
+            columns={FILTER_AND_GROUP_COLUMNS}
+            config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
+          />
+          <GroupsButton
+            columns={FILTER_AND_GROUP_COLUMNS}
+            config={filtersAndGroupsConfig as never}
+            groups={groups}
+            onChange={setGroups}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -639,7 +674,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         data={experiments}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
+        getIsCustomRow={getIsGroupRow}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -647,9 +682,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
           setRowSelection,
         }}
         expandingConfig={expandingConfig}
-        groupingConfig={GROUPING_CONFIG}
+        groupingConfig={groupingConfig}
         getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
+        columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
@@ -663,14 +698,18 @@ const ExperimentsPage: React.FunctionComponent = () => {
         TableBody={DataTableVirtualBody}
         stickyHeader
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page!}
           pageChange={setPage}
           size={DEFAULT_GROUPS_PER_PAGE}
           total={total}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <AddExperimentDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

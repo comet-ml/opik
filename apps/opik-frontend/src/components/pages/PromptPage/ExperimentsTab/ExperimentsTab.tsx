@@ -30,16 +30,10 @@ import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import {
-  checkIsMoreRowId,
-  generateGroupedNameColumDef,
-  generateGroupedCellDef,
-  getIsCustomRow,
-  getRowId,
-  getSharedShiftCheckboxClickHandler,
+  DEFAULT_GROUPS_PER_PAGE,
+  GROUPING_COLUMN,
   GROUPING_CONFIG,
-  renderCustomRow,
-} from "@/components/pages-shared/experiments/table";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+} from "@/constants/groups";
 import {
   COLUMN_DATASET_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -49,7 +43,7 @@ import {
   ColumnData,
   DynamicColumn,
 } from "@/types/shared";
-import { Filter, Filters } from "@/types/filters";
+import { Filters } from "@/types/filters";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
@@ -59,6 +53,15 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import {
+  checkIsMoreRowId,
+  generateGroupedCellDef,
+  generateGroupedNameColumDef,
+  getIsGroupRow,
+  getRowId,
+  getSharedShiftCheckboxClickHandler,
+  renderCustomRow,
+} from "@/components/shared/DataTable/utils";
 
 const SELECTED_COLUMNS_KEY = "prompt-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
@@ -168,17 +171,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     },
   );
 
-  const datasetId = useMemo(
-    () =>
-      (filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)
-        ?.value as string) || "",
-    [filters],
-  );
-
-  const preProcessedFilters = useMemo(() => {
-    return filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID);
-  }, [filters]);
-
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
@@ -195,14 +187,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
-            datasetId,
             promptId,
             sorting: sortedColumns,
+            filters,
           },
         },
       },
     }),
-    [datasetId, promptId, sortedColumns],
+    [filters, promptId, sortedColumns],
   );
 
   const { checkboxClickHandler } = useMemo(() => {
@@ -214,9 +206,8 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const { data, isPending } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
-    datasetId,
     promptId,
-    filters: preProcessedFilters,
+    filters,
     sorting: sortedColumns,
     search,
     page,
@@ -441,7 +432,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         columns={columns}
         data={experiments}
         renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
+        getIsCustomRow={getIsGroupRow}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{

@@ -6,34 +6,38 @@ import {
   useQueries,
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
-import { Dataset, Experiment } from "@/types/datasets";
+import { Experiment } from "@/types/datasets";
 import { Filters } from "@/types/filters";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
-import useExperimentsList, {
+
+import {
   getExperimentsList,
   UseExperimentsListParams,
   UseExperimentsListResponse,
 } from "@/api/datasets/useExperimentsList";
-import useDatasetById from "@/api/datasets/useDatasetById";
+import useExperimentsGroups from "@/api/datasets/useExperimentsGroups";
 import { Sorting } from "@/types/sorting";
+import { DEFAULT_ITEMS_PER_GROUP } from "@/constants/groups";
+import { Groups } from "@/types/groups";
+import { createFilter } from "@/lib/filters";
 import {
-  DEFAULT_ITEMS_PER_GROUP,
-  DELETED_DATASET_ID,
-  GROUPING_COLUMN,
-} from "@/constants/grouping";
+  buildGroupFieldsName,
+  buildMoreRowId,
+} from "@/components/shared/DataTable/utils";
 
-export const GROUP_SORTING = [{ id: "last_created_experiment_at", desc: true }];
+type AbstractGroup = {
+  id: string;
+  name: string;
+  field: string;
+  filters: Filters;
+};
 
-export type GroupedExperiment = {
-  dataset: Dataset;
-  virtual_dataset_id: string;
-} & Experiment;
+export type GroupedExperiment = Record<string, string> & Experiment;
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
   filters?: Filters;
   sorting?: Sorting;
-  datasetId?: string;
+  groups?: Groups;
   promptId?: string;
   search?: string;
   page: number;
@@ -44,7 +48,7 @@ type UseGroupedExperimentsListParams = {
 
 type UseGroupedExperimentsListResponse = {
   data: {
-    content: Array<GroupedExperiment>;
+    content: GroupedExperiment[];
     groupIds: string[];
     sortable_by: string[];
     total: number;
@@ -60,26 +64,19 @@ const extractPageSize = (
   return groupLimit?.[groupId] ?? DEFAULT_ITEMS_PER_GROUP;
 };
 
-const wrapExperimentRow = (experiment: Experiment, dataset: Dataset) => {
+const wrapExperimentRow = (experiment: Experiment, group: AbstractGroup) => {
   return {
     ...experiment,
-    dataset,
-    [GROUPING_COLUMN]: dataset.id,
+    [buildGroupFieldsName(group.field)]: group.id,
   } as GroupedExperiment;
 };
 
-const buildMoreRowId = (id: string) => {
-  return `more_${id}`;
-};
-
-const generateMoreRow = (dataset: Dataset) => {
+const generateMoreRow = (group: AbstractGroup) => {
   return wrapExperimentRow(
     {
-      id: buildMoreRowId(dataset.id),
-      dataset_id: dataset.id,
-      dataset_name: dataset.name,
+      id: buildMoreRowId(group.id),
     } as Experiment,
-    dataset,
+    group,
   );
 };
 
@@ -90,98 +87,58 @@ export default function useGroupedExperimentsList(
   const experimentsCache = useRef<Record<string, UseExperimentsListResponse>>(
     {},
   );
-  const isFilteredByDataset = Boolean(params.datasetId);
 
   const {
-    data: deletedDatasetExperiments,
-    refetch: refetchDeletedDatasetExperiments,
-  } = useExperimentsList(
+    data: groupsData,
+    isPending: isGroupsPending,
+    refetch: refetchGroups,
+  } = useExperimentsGroups(
     {
       workspaceName: params.workspaceName,
       filters: params.filters,
-      sorting: params.sorting,
+      groups: params.groups!,
       search: params.search,
-      datasetDeleted: true,
-      promptId: params.promptId,
-      page: 1,
-      size: extractPageSize(DELETED_DATASET_ID, params?.groupLimit),
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval,
-    },
-  );
-
-  const {
-    data: dataset,
-    isPending: isDatasetPending,
-    refetch: refetchDataset,
-  } = useDatasetById(
-    {
-      datasetId: params.datasetId!,
-    },
-    { enabled: isFilteredByDataset },
-  );
-
-  const hasRemovedDatasetExperiments =
-    (deletedDatasetExperiments?.total || 0) > 0;
-
-  const {
-    data: datasetsRowData,
-    isPending: isDatasetsPending,
-    refetch: refetchDatasetsRowData,
-  } = useDatasetsList(
-    {
-      workspaceName: params.workspaceName,
-      page: params.page,
-      size: params.size,
-      withExperimentsOnly: true,
-      sorting: GROUP_SORTING,
       promptId: params.promptId,
     },
     {
       placeholderData: keepPreviousData,
       refetchInterval,
-      enabled: !isFilteredByDataset,
-    } as never,
+      enabled: Boolean(params.groups?.length),
+    },
   );
 
-  const datasetsData = useMemo(() => {
-    return (
-      (isFilteredByDataset && dataset ? [dataset] : datasetsRowData?.content) ||
-      []
-    );
-  }, [dataset, isFilteredByDataset, datasetsRowData?.content]);
-
-  const total = useMemo(() => {
-    const totalDatasets = datasetsRowData?.total || 0;
-
-    return isFilteredByDataset
-      ? 1
-      : hasRemovedDatasetExperiments
-        ? totalDatasets + 1
-        : totalDatasets;
-  }, [
-    datasetsRowData?.total,
-    isFilteredByDataset,
-    hasRemovedDatasetExperiments,
-  ]);
-
-  const datasetsIds = useMemo(() => {
-    return datasetsData.map(({ id }) => id);
-  }, [datasetsData]);
+  const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
+  const total = 100500; // TODO lala
+  const groups = useMemo(() => params.groups ?? [], [params.groups]);
+  const expandedGroups = useMemo(() => {
+    const group = groups[0];
+    return Object.entries(groupsMap).map(([value, node]) => {
+      return {
+        id: value,
+        name: node.label ?? value,
+        field: group.field,
+        filters: [
+          createFilter({
+            field: group.field,
+            key: group.key,
+            operator: "=",
+            value,
+          }),
+        ],
+      };
+    });
+  }, [groups, groupsMap]);
 
   const experimentsResponse = useQueries({
-    queries: datasetsIds.map((datasetId) => {
+    queries: expandedGroups.map(({ id, filters }) => {
       const p: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
-        filters: params.filters,
+        filters: [...(params.filters ? params.filters : []), ...filters],
         sorting: params.sorting,
         search: params.search,
-        datasetId,
         promptId: params.promptId,
         page: 1,
-        size: extractPageSize(datasetId, params?.groupLimit),
+        size: extractPageSize(id, params?.groupLimit),
       };
 
       return {
@@ -193,51 +150,18 @@ export default function useGroupedExperimentsList(
     }),
   });
 
-  const needToShowDeletedDataset =
-    hasRemovedDatasetExperiments &&
-    !isFilteredByDataset &&
-    Math.ceil(total / params.size) === params.page;
-
-  const deletedDatasetGroupExperiments = useMemo(() => {
-    if (!needToShowDeletedDataset) return null;
-    const hasMoreData =
-      extractPageSize(DELETED_DATASET_ID, params.groupLimit) <
-      (deletedDatasetExperiments?.total || 0);
-    const deletedDatasetExperimentsData =
-      deletedDatasetExperiments?.content || [];
-
-    const deletedDataset = {
-      id: DELETED_DATASET_ID,
-    } as Dataset;
-
-    const retVal = deletedDatasetExperimentsData.map((e) =>
-      wrapExperimentRow(e, deletedDataset),
-    );
-
-    if (hasMoreData) {
-      return [...retVal, generateMoreRow(deletedDataset)];
-    }
-
-    return retVal;
-  }, [
-    deletedDatasetExperiments?.content,
-    deletedDatasetExperiments?.total,
-    needToShowDeletedDataset,
-    params.groupLimit,
-  ]);
-
   const data = useMemo(() => {
     let sortableBy: string[] | undefined;
-    const content = datasetsData.reduce<GroupedExperiment[]>(
-      (acc, dataset, index) => {
+    const content = expandedGroups.reduce<GroupedExperiment[]>(
+      (acc, group, index) => {
         let experimentsData = experimentsResponse[index].data;
         if (isUndefined(experimentsData)) {
-          experimentsData = experimentsCache.current[dataset.id] ?? {
+          experimentsData = experimentsCache.current[group.id] ?? {
             content: [],
             total: 0,
           };
         } else {
-          experimentsCache.current[dataset.id] = experimentsData;
+          experimentsCache.current[group.id] = experimentsData;
         }
 
         // we are taking sortable data from any experiments that have it defined
@@ -246,15 +170,14 @@ export default function useGroupedExperimentsList(
         }
 
         const hasMoreData =
-          extractPageSize(dataset.id, params.groupLimit) <
-          experimentsData.total;
+          extractPageSize(group.id, params.groupLimit) < experimentsData.total;
 
         const retVal = experimentsData.content.map((e: Experiment) =>
-          wrapExperimentRow(e, dataset),
+          wrapExperimentRow(e, group),
         );
 
         if (hasMoreData) {
-          return acc.concat([...retVal, generateMoreRow(dataset)]);
+          return acc.concat([...retVal, generateMoreRow(group)]);
         }
 
         return acc.concat(retVal);
@@ -262,15 +185,7 @@ export default function useGroupedExperimentsList(
       [],
     );
 
-    const groupIds = datasetsData.map((dataset) => dataset.id);
-
-    if (deletedDatasetGroupExperiments) {
-      groupIds.push(DELETED_DATASET_ID);
-
-      deletedDatasetGroupExperiments.forEach((e) => {
-        content.push(e);
-      });
-    }
+    const groupIds = Object.keys(groupsMap);
 
     return {
       content,
@@ -278,33 +193,20 @@ export default function useGroupedExperimentsList(
       sortable_by: sortableBy ?? [],
       total,
     };
-  }, [
-    datasetsData,
-    deletedDatasetGroupExperiments,
-    experimentsResponse,
-    params.groupLimit,
-    total,
-  ]);
+  }, [expandedGroups, experimentsResponse, groupsMap, params.groupLimit]);
 
   const refetch = useCallback(
     (options: RefetchOptions) => {
       return Promise.all([
-        refetchDeletedDatasetExperiments(options),
-        refetchDataset(options),
-        refetchDatasetsRowData(options),
+        refetchGroups(options),
         ...experimentsResponse.map((r) => r.refetch(options)),
       ]);
     },
-    [
-      experimentsResponse,
-      refetchDataset,
-      refetchDatasetsRowData,
-      refetchDeletedDatasetExperiments,
-    ],
+    [experimentsResponse, refetchGroups],
   );
 
   const isPending =
-    (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
+    isGroupsPending ||
     (experimentsResponse.length > 0 &&
       experimentsResponse.some((r) => r.isPending));
 
