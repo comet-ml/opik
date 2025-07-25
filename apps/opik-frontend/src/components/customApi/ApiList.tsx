@@ -90,7 +90,7 @@ const ApiList: React.FC<ApiListProps> = ({
     );
   }
 
-  if (instances.length === 0) {
+  if (!instances || instances.length === 0) {
     return (
       <Alert>
         <Code className="h-4 w-4" />
@@ -222,7 +222,7 @@ const ApiList: React.FC<ApiListProps> = ({
       </div>
 
       <div className="text-sm text-muted-foreground text-center pt-4">
-        {instances.length} API{instances.length !== 1 ? 's' : ''} total
+        {instances?.length || 0} API{(instances?.length || 0) !== 1 ? 's' : ''} total
       </div>
     </div>
   );

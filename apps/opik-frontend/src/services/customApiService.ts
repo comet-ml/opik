@@ -59,18 +59,31 @@ class CustomApiService {
 
       const result = await response.json();
       
-      // The API might return different formats, so we'll normalize it
-      if (Array.isArray(result)) {
-        return result.map(instance => ({
-          instance_name: instance.instance_name || instance.name || instance,
-          code: instance.code || '',
+      // Handle the actual API response format
+      if (result.instances && Array.isArray(result.instances)) {
+        return result.instances.map((instance: any) => ({
+          instance_name: instance.name || instance.instance_name,
+          code: instance.code || '# Code not available - this API was created externally',
           status: instance.status || 'active',
           created_at: instance.created_at,
           updated_at: instance.updated_at,
           description: instance.description,
+          endpoint: instance.endpoint,
+          last_executed: instance.last_executed,
+          timeout: instance.timeout,
         }));
-      } else if (result.instances) {
-        return result.instances;
+      } else if (Array.isArray(result)) {
+        return result.map((instance: any) => ({
+          instance_name: instance.name || instance.instance_name || instance,
+          code: instance.code || '# Code not available - this API was created externally',
+          status: instance.status || 'active',
+          created_at: instance.created_at,
+          updated_at: instance.updated_at,
+          description: instance.description,
+          endpoint: instance.endpoint,
+          last_executed: instance.last_executed,
+          timeout: instance.timeout,
+        }));
       } else {
         return [];
       }

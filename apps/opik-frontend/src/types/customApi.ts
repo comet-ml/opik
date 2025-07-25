@@ -5,6 +5,9 @@ export interface CustomApiInstance {
   updated_at?: string;
   status?: 'active' | 'inactive' | 'error';
   description?: string;
+  endpoint?: string;
+  last_executed?: string;
+  timeout?: number;
 }
 
 export interface CreateCustomApiRequest {

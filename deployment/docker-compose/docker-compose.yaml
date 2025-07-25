@@ -191,7 +191,7 @@ services:
       - CORS=true
       - XSRF=false
       - COMPUTE_ENGINE_DEBUG=TRUE
-      - ALLOWED_DOMAINS=http://localhost:80,http://localhost:8080,http://localhost:9080
+      - ALLOWED_DOMAINS=http://localhost:80,http://localhost:8080,http://localhost:9080,http://localhost:5174,http://localhost:5173
       # Enhanced logging settings
       - STREAMLIT_LOG_LEVEL=info  # More verbose Streamlit logs
       - FLASK_DEBUG=true           # Enable Flask debug mode
