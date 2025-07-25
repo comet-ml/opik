@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
@@ -17,7 +17,7 @@ import { CalendarIcon, Check } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { DateRangePreset, DateRangeValue } from "./types";
 import {
-  createDisabledDateFunction,
+  getDisabledDates,
   getRangeDatesText,
   getRangePreset,
   customDayClick,
@@ -29,14 +29,14 @@ import {
 } from "./DateRangeSelectContext";
 
 type PresetOptionProps = {
-  preset: DateRangePreset;
+  value: DateRangePreset;
   className?: string;
 };
 
-const PresetOption: React.FC<PresetOptionProps> = ({ preset, className }) => {
+const PresetOption: React.FC<PresetOptionProps> = ({ value, className }) => {
   return (
-    <SelectItem value={preset} className={cn("text-sm font-normal", className)}>
-      {PRESET_LABEL_MAP[preset]}
+    <SelectItem value={value} className={cn("text-sm font-normal", className)}>
+      {PRESET_LABEL_MAP[value]}
     </SelectItem>
   );
 };
@@ -56,8 +56,8 @@ const CustomDatesOption: React.FC<CustomDatesOptionProps> = ({ className }) => {
     setDate((prev) => customDayClick(prev, day, setCustomRange));
   };
 
-  const disabled = React.useMemo(
-    () => createDisabledDateFunction(minDate, maxDate),
+  const disabledDates = React.useMemo(
+    () => getDisabledDates(minDate, maxDate),
     [minDate, maxDate],
   );
 
@@ -116,7 +116,7 @@ const CustomDatesOption: React.FC<CustomDatesOptionProps> = ({ className }) => {
             numberOfMonths={1}
             className="rounded-md"
             aria-label="Select date range"
-            disabled={disabled}
+            disabled={disabledDates}
           />
         </PopoverContent>
       </Popover>
@@ -172,7 +172,14 @@ type DateRangeSelectProps = {
   maxDate?: Date;
 };
 
-const DateRangeSelectRoot: React.FC<DateRangeSelectProps> = ({
+type DateRangeSelectComponents = React.FC<DateRangeSelectProps> & {
+  PresetOption: typeof PresetOption;
+  CustomDatesOption: typeof CustomDatesOption;
+  Trigger: typeof Trigger;
+  Content: typeof Content;
+};
+
+const DateRangeSelectRoot: DateRangeSelectComponents = ({
   value,
   onChangeValue,
   children,
@@ -186,15 +193,21 @@ const DateRangeSelectRoot: React.FC<DateRangeSelectProps> = ({
     [value],
   );
 
-  const setPresetRange = (preset: DateRangePreset) => {
-    const newRange = PRESET_DATE_RANGES[preset];
-    onChangeValue(newRange);
-  };
+  const setPresetRange = useCallback(
+    (preset: DateRangePreset) => {
+      const newRange = PRESET_DATE_RANGES[preset];
+      onChangeValue(newRange);
+    },
+    [onChangeValue],
+  );
 
-  const setCustomRange = (newRange: DateRangeValue) => {
-    onChangeValue(newRange);
-    setIsOpen(false);
-  };
+  const setCustomRange = useCallback(
+    (newRange: DateRangeValue) => {
+      onChangeValue(newRange);
+      setIsOpen(false);
+    },
+    [onChangeValue],
+  );
 
   return (
     <DateRangeSelectContext.Provider
@@ -218,21 +231,9 @@ const DateRangeSelectRoot: React.FC<DateRangeSelectProps> = ({
   );
 };
 
-type DateRangeSelectComponents = React.FC<DateRangeSelectProps> & {
-  PresetOption: typeof PresetOption;
-  CustomDatesOption: typeof CustomDatesOption;
-  Trigger: typeof Trigger;
-  Content: typeof Content;
-};
+DateRangeSelectRoot.PresetOption = PresetOption;
+DateRangeSelectRoot.CustomDatesOption = CustomDatesOption;
+DateRangeSelectRoot.Trigger = Trigger;
+DateRangeSelectRoot.Content = Content;
 
-const DateRangeSelect: DateRangeSelectComponents = Object.assign(
-  DateRangeSelectRoot,
-  {
-    PresetOption,
-    CustomDatesOption,
-    Trigger,
-    Content,
-  },
-);
-
-export default DateRangeSelect;
+export default DateRangeSelectRoot;

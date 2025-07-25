@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 import {
   calculateIntervalType,
@@ -34,9 +34,12 @@ export const useMetricDateRangeCore = ({
     [value, defaultDateRange, minDate, maxDate],
   );
 
-  const handleDateRangeChange = (newRange: DateRangeValue) => {
-    setValue(serializeDateRange(newRange));
-  };
+  const handleDateRangeChange = useCallback(
+    (newRange: DateRangeValue) => {
+      setValue(serializeDateRange(newRange));
+    },
+    [setValue],
+  );
 
   const interval: INTERVAL_TYPE = useMemo(
     () => calculateIntervalType(dateRange),

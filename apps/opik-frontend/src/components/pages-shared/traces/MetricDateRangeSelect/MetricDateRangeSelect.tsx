@@ -26,10 +26,10 @@ const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
     >
       <DateRangeSelect.Trigger />
       <DateRangeSelect.Content>
-        <DateRangeSelect.PresetOption preset="today" />
-        <DateRangeSelect.PresetOption preset="last3days" />
-        <DateRangeSelect.PresetOption preset="lastWeek" />
-        <DateRangeSelect.PresetOption preset="lastMonth" />
+        <DateRangeSelect.PresetOption value="today" />
+        <DateRangeSelect.PresetOption value="last3days" />
+        <DateRangeSelect.PresetOption value="lastWeek" />
+        <DateRangeSelect.PresetOption value="lastMonth" />
         <DateRangeSelect.CustomDatesOption />
       </DateRangeSelect.Content>
     </DateRangeSelect>

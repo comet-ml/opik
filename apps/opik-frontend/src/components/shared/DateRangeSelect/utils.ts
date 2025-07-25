@@ -3,7 +3,7 @@ import { DateRangePreset, DateRangeValue } from "./types";
 import { PRESET_DATE_RANGES } from "./constants";
 import { DateRange } from "react-day-picker";
 
-export const createDisabledDateFunction = (minDate?: Date, maxDate?: Date) => {
+export const getDisabledDates = (minDate?: Date, maxDate?: Date) => {
   if (!minDate && !maxDate) return undefined;
 
   return (date: Date): boolean => {

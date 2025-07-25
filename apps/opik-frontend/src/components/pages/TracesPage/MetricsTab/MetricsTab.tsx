@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
 import React, { useRef, useState } from "react";
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  METRIC_NAME_TYPE,
+  INTERVAL_TYPE,
+} from "@/api/projects/useProjectMetric";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
@@ -21,6 +24,29 @@ const DURATION_LABELS_MAP = {
   "duration.p50": "Percentile 50",
   "duration.p90": "Percentile 90",
   "duration.p99": "Percentile 99",
+};
+
+const INTERVAL_DESCRIPTIONS = {
+  TOTALS: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly totals",
+    [INTERVAL_TYPE.DAILY]: "Daily totals",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly totals",
+  },
+  AVERAGES: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly averages",
+    [INTERVAL_TYPE.DAILY]: "Daily averages",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly averages",
+  },
+  QUANTILES: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly quantiles in seconds",
+    [INTERVAL_TYPE.DAILY]: "Daily quantiles in seconds",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly quantiles in seconds",
+  },
+  COST: {
+    [INTERVAL_TYPE.HOURLY]: "Total hourly cost in USD",
+    [INTERVAL_TYPE.DAILY]: "Total daily cost in USD",
+    [INTERVAL_TYPE.WEEKLY]: "Total weekly cost in USD",
+  },
 };
 
 const METRICS_DATE_RANGE_KEY = "range";
@@ -101,7 +127,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="threads_feedback_scores_chart"
               key="threads_feedback_scores_chart"
               name="Threads feedback scores"
-              description="Daily averages"
+              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES}
               interval={interval}
               intervalStart={intervalStart}
@@ -113,7 +139,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="number_of_thread_chart"
               key="number_of_thread_chart"
               name="Number of threads"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_COUNT}
               interval={interval}
               intervalStart={intervalStart}
@@ -125,7 +151,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="thread_duration_chart"
               key="thread_duration_chart"
               name="Thread duration"
-              description="Daily quantiles in seconds"
+              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_DURATION}
               interval={interval}
               intervalStart={intervalStart}
@@ -144,7 +170,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="feedback_scores_chart"
               key="feedback_scores_chart"
               name="Trace feedback scores"
-              description="Daily averages"
+              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
               metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
               interval={interval}
               intervalStart={intervalStart}
@@ -156,7 +182,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="number_of_traces_chart"
               key="number_of_traces_chart"
               name="Number of traces"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.TRACE_COUNT}
               interval={interval}
               intervalStart={intervalStart}
@@ -168,7 +194,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="duration_chart"
               key="duration_chart"
               name="Trace duration"
-              description="Daily quantiles in seconds"
+              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
               metricName={METRIC_NAME_TYPE.TRACE_DURATION}
               interval={interval}
               intervalStart={intervalStart}
@@ -183,7 +209,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="token_usage_chart"
               key="token_usage_chart"
               name="Token usage"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
               interval={interval}
               intervalStart={intervalStart}
@@ -195,7 +221,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="estimated_cost_chart"
               key="estimated_cost_chart"
               name="Estimated cost"
-              description="Total daily cost in USD"
+              description={INTERVAL_DESCRIPTIONS.COST[interval]}
               metricName={METRIC_NAME_TYPE.COST}
               interval={interval}
               intervalStart={intervalStart}
@@ -212,7 +238,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="failed_guardrails_chart"
               key="failed_guardrails_chart"
               name="Failed guardrails"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.FAILED_GUARDRAILS}
               interval={interval}
               intervalStart={intervalStart}
