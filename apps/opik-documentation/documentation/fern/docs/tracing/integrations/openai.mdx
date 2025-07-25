@@ -102,4 +102,22 @@ The `track_openai` wrapper supports the following OpenAI methods:
 - `openai_client.beta.chat.completions.stream()`
 - `openai_client.responses.create()`
 
+## Text-to-Speech (tts-1 / tts-1-hd)
+
+```python
+from opik.integrations.openai import track_openai
+import openai
+
+client = track_openai(openai.OpenAI())
+
+_ = client.audio.speech.create(
+    model="tts-1",
+    input="Hello world",
+    voice="alloy")
+```
+
+Opik automatically logs the call, attaches the generated audio file, adds a
+**Chars** column to usage tables, and the UI shows an inline audio player.  Cost
+is calculated per character using OpenAI’s published rates.
+
 If you would like to track another OpenAI method, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).
