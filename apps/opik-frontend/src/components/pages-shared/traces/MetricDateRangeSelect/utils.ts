@@ -53,7 +53,11 @@ export const calculateIntervalType = (
     return INTERVAL_TYPE.HOURLY;
   }
 
-  return INTERVAL_TYPE.DAILY;
+  if (daysDiff <= 30) {
+    return INTERVAL_TYPE.DAILY;
+  }
+
+  return INTERVAL_TYPE.WEEKLY;
 };
 
 export const calculateIntervalStartAndEnd = (
