@@ -75,7 +75,6 @@ def dummy_openai_client(monkeypatch):
 
     client = openai.OpenAI(api_key="sk-test")
 
-    # Ensure nested attributes exist
     if not hasattr(client, "audio"):
         client.audio = types.SimpleNamespace()
     if not hasattr(client.audio, "speech"):
@@ -90,8 +89,6 @@ def dummy_openai_client(monkeypatch):
     client.audio.speech.create = _sync_create  # type: ignore[attr-defined]
     stream_ns = types.SimpleNamespace(create=_streaming_create)
     client.audio.speech.with_streaming_response = stream_ns  # type: ignore[attr-defined]
-
-    # Use default base_url
 
     return client
 
