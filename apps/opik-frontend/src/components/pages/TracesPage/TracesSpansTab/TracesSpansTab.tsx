@@ -1,26 +1,80 @@
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import findIndex from "lodash/findIndex";
+import get from "lodash/get";
+import isNumber from "lodash/isNumber";
+import isObject from "lodash/isObject";
+import { RotateCw } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import {
   JsonParam,
   NumberParam,
   StringParam,
   useQueryParam,
 } from "use-query-params";
-import useLocalStorageState from "use-local-storage-state";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
-import findIndex from "lodash/findIndex";
-import isObject from "lodash/isObject";
-import isNumber from "lodash/isNumber";
-import get from "lodash/get";
 
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import {
+  DetailsActionSection,
+  DetailsActionSectionParam,
+  DetailsActionSectionValue,
+} from "@/components/pages-shared/traces/DetailsActionSection";
+import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
+import TracesActionsPanel from "@/components/pages/TracesPage/TracesSpansTab/TracesActionsPanel";
+import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import DataTable from "@/components/shared/DataTable/DataTable";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
+import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
+import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import Loader from "@/components/shared/Loader/Loader";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
+import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
+import { formatDate, formatDuration } from "@/lib/date";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { GuardrailResult } from "@/types/guardrails";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -38,60 +92,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
-import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import TracesActionsPanel from "@/components/pages/TracesPage/TracesSpansTab/TracesActionsPanel";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
-import CodeCell from "@/components/shared/DataTableCells/CodeCell";
-import ListCell from "@/components/shared/DataTableCells/ListCell";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
-import DurationCell from "@/components/shared/DataTableCells/DurationCell";
-import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
-import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
-import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
-import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
-import { formatDate, formatDuration } from "@/lib/date";
-import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
-import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import {
-  DetailsActionSection,
-  DetailsActionSectionParam,
-  DetailsActionSectionValue,
-} from "@/components/pages-shared/traces/DetailsActionSection";
-import { GuardrailResult } from "@/types/guardrails";
-import { SelectItem } from "@/components/ui/select";
-import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
-import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
-import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -183,6 +183,15 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     accessorFn: (row) =>
       row.usage && isNumber(row.usage.completion_tokens)
         ? `${row.usage.completion_tokens}`
+        : "-",
+  },
+  {
+    id: "usage.character_count",
+    label: "Chars",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber((row.usage as any).character_count)
+        ? `${(row.usage as any).character_count}`
         : "-",
   },
   {
@@ -316,11 +325,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               },
               ...(isGuardrailsEnabled
                 ? [
-                    {
-                      value: SPAN_TYPE.guardrail,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
-                    },
-                  ]
+                  {
+                    value: SPAN_TYPE.guardrail,
+                    label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
+                  },
+                ]
                 : []),
             ],
             placeholder: "Select type",
@@ -549,41 +558,41 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...SHARED_COLUMNS,
       ...(type === TRACE_DATA_TYPE.traces
         ? [
-            {
-              id: "span_count",
-              label: "Span count",
-              type: COLUMN_TYPE.number,
-              accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
+          {
+            id: "span_count",
+            label: "Span count",
+            type: COLUMN_TYPE.number,
+            accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
+          },
+          {
+            id: "llm_span_count",
+            label: "LLM calls count",
+            type: COLUMN_TYPE.number,
+            accessorFn: (row: BaseTraceData) =>
+              get(row, "llm_span_count", "-"),
+          },
+          {
+            id: "thread_id",
+            label: "Thread ID",
+            type: COLUMN_TYPE.string,
+            cell: LinkCell as never,
+            customMeta: {
+              callback: handleThreadIdClick,
+              asId: true,
             },
-            {
-              id: "llm_span_count",
-              label: "LLM calls count",
-              type: COLUMN_TYPE.number,
-              accessorFn: (row: BaseTraceData) =>
-                get(row, "llm_span_count", "-"),
-            },
-            {
-              id: "thread_id",
-              label: "Thread ID",
-              type: COLUMN_TYPE.string,
-              cell: LinkCell as never,
-              customMeta: {
-                callback: handleThreadIdClick,
-                asId: true,
-              },
-              explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
-            },
-          ]
+            explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
+          },
+        ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
         ? [
-            {
-              id: "type",
-              label: "Type",
-              type: COLUMN_TYPE.category,
-              cell: SpanTypeCell as never,
-            },
-          ]
+          {
+            id: "type",
+            label: "Type",
+            type: COLUMN_TYPE.category,
+            cell: SpanTypeCell as never,
+          },
+        ]
         : []),
       {
         id: "error_info",
@@ -605,18 +614,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
       ...(isGuardrailsEnabled
         ? [
-            {
-              id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
-              statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
-              type: COLUMN_TYPE.category,
-              iconType: "guardrails" as HeaderIconType,
-              accessorFn: (row: BaseTraceData) =>
-                row.guardrails_validations || [],
-              cell: GuardrailsCell as never,
-              statisticDataFormater: (value: number) => `${value} failed`,
-            },
-          ]
+          {
+            id: COLUMN_GUARDRAILS_ID,
+            label: "Guardrails",
+            statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
+            type: COLUMN_TYPE.category,
+            iconType: "guardrails" as HeaderIconType,
+            accessorFn: (row: BaseTraceData) =>
+              row.guardrails_validations || [],
+            cell: GuardrailsCell as never,
+            statisticDataFormater: (value: number) => `${value} failed`,
+          },
+        ]
         : []),
     ];
   }, [type, handleThreadIdClick, isGuardrailsEnabled]);
@@ -631,26 +640,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...SHARED_COLUMNS,
       ...(type === TRACE_DATA_TYPE.traces
         ? [
-            {
-              id: "thread_id",
-              label: "Thread ID",
-              type: COLUMN_TYPE.string,
-            },
-            {
-              id: "llm_span_count",
-              label: "LLM calls count",
-              type: COLUMN_TYPE.number,
-            },
-          ]
+          {
+            id: "thread_id",
+            label: "Thread ID",
+            type: COLUMN_TYPE.string,
+          },
+          {
+            id: "llm_span_count",
+            label: "LLM calls count",
+            type: COLUMN_TYPE.number,
+          },
+        ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
         ? [
-            {
-              id: "type",
-              label: "Type",
-              type: COLUMN_TYPE.category,
-            },
-          ]
+          {
+            id: "type",
+            label: "Type",
+            type: COLUMN_TYPE.category,
+          },
+        ]
         : []),
       {
         id: "error_info",
@@ -664,12 +673,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
       ...(isGuardrailsEnabled
         ? [
-            {
-              id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
-              type: COLUMN_TYPE.category,
-            },
-          ]
+          {
+            id: COLUMN_GUARDRAILS_ID,
+            label: "Guardrails",
+            type: COLUMN_TYPE.category,
+          },
+        ]
         : []),
     ];
   }, [type, isGuardrailsEnabled]);
@@ -719,7 +728,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
+          (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
       );
   }, [columns, selectedColumns]);
 
@@ -818,9 +827,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
-            content={`Refresh ${
-              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-            } list`}
+            content={`Refresh ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+              } list`}
           >
             <Button
               variant="outline"

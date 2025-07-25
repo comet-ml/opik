@@ -1,22 +1,61 @@
+import { keepPreviousData } from "@tanstack/react-query";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import findIndex from "lodash/findIndex";
+import get from "lodash/get";
+import isNumber from "lodash/isNumber";
+import { RotateCw } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import {
   JsonParam,
   NumberParam,
   StringParam,
   useQueryParam,
 } from "use-query-params";
-import { keepPreviousData } from "@tanstack/react-query";
-import useLocalStorageState from "use-local-storage-state";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
-import findIndex from "lodash/findIndex";
-import isNumber from "lodash/isNumber";
-import get from "lodash/get";
 
+import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
+import useThreadList from "@/api/traces/useThreadsList";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
+import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
+import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
+import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
+import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import DataTable from "@/components/shared/DataTable/DataTable";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
+import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
+import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import Loader from "@/components/shared/Loader/Loader";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { formatDate } from "@/lib/date";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -28,47 +67,8 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { Thread } from "@/types/traces";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
-import DurationCell from "@/components/shared/DataTableCells/DurationCell";
-import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
-import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { formatDate } from "@/lib/date";
-import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
-import useThreadList from "@/api/traces/useThreadsList";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
-import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
-import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
-import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { ThreadStatus } from "@/types/thread";
+import { Thread } from "@/types/traces";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -115,6 +115,15 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     accessorFn: (row) =>
       row.usage && isNumber(row.usage.total_tokens)
         ? `${row.usage.total_tokens}`
+        : "-",
+  },
+  {
+    id: `${COLUMN_USAGE_ID}.character_count`,
+    label: "Chars",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber((row.usage as any).character_count)
+        ? `${(row.usage as any).character_count}`
         : "-",
   },
   {
@@ -451,7 +460,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+          (DEFAULT_COLUMN_PINNING.left || []).includes(c),
       );
   }, [columns, selectedColumns]);
 

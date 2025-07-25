@@ -1,36 +1,48 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import get from "lodash/get";
+import isNumber from "lodash/isNumber";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   JsonParam,
   NumberParam,
   StringParam,
   useQueryParam,
 } from "use-query-params";
-import isNumber from "lodash/isNumber";
-import get from "lodash/get";
 
-import { formatNumericData } from "@/lib/utils";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
+import { ProjectRowActionsCell } from "@/components/pages/ProjectsPage/ProjectRowActionsCell";
+import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
+import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import DurationCell from "@/components/shared/DataTableCells/DurationCell";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { ProjectWithStatistic } from "@/types/projects";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import Loader from "@/components/shared/Loader/Loader";
-import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
-import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
-import { ProjectRowActionsCell } from "@/components/pages/ProjectsPage/ProjectRowActionsCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import useAppStore from "@/store/AppStore";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { formatDate } from "@/lib/date";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { formatNumericData } from "@/lib/utils";
+import useAppStore from "@/store/AppStore";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { ProjectWithStatistic } from "@/types/projects";
 import {
   COLUMN_GUARDRAILS_ID,
   COLUMN_NAME_ID,
@@ -39,20 +51,8 @@ import {
   ColumnData,
   HeaderIconType,
 } from "@/types/shared";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
-import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import useLocalStorageState from "use-local-storage-state";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -185,6 +185,15 @@ const ProjectsPage: React.FunctionComponent = () => {
             : "-",
       },
       {
+        id: "usage.character_count",
+        label: "Chars (avg.)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage && isNumber((row.usage as any).character_count)
+            ? formatNumericData((row.usage as any).character_count)
+            : "-",
+      },
+      {
         id: "feedback_scores",
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
@@ -202,18 +211,18 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       ...(isGuardrailsEnabled
         ? [
-            {
-              id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
-              type: COLUMN_TYPE.category,
-              iconType: "guardrails" as HeaderIconType,
-              accessorFn: (row: ProjectWithStatistic) =>
-                row.guardrails_failed_count &&
+          {
+            id: COLUMN_GUARDRAILS_ID,
+            label: "Guardrails",
+            type: COLUMN_TYPE.category,
+            iconType: "guardrails" as HeaderIconType,
+            accessorFn: (row: ProjectWithStatistic) =>
+              row.guardrails_failed_count &&
                 isNumber(row.guardrails_failed_count)
-                  ? `${row.guardrails_failed_count} failed`
-                  : "-",
-            },
-          ]
+                ? `${row.guardrails_failed_count} failed`
+                : "-",
+          },
+        ]
         : []),
 
       {
