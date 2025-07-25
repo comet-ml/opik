@@ -79,6 +79,8 @@ def _get_provider_and_model(
     provider = LLMProvider.ANTHROPIC
     model = None
 
+    # We don't have tests for that, but this key name is not the same
+    # in all versions of langchain-anthropic.
     POSSIBLE_MODEL_NAME_KEYS = ["model", "model_name"]
 
     for model_name_key in POSSIBLE_MODEL_NAME_KEYS:
