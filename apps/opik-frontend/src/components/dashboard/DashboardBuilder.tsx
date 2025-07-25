@@ -20,6 +20,14 @@ import PieChart from '@/components/widgets/PieChart';
 import DataTable from '@/components/widgets/DataTable';
 import KPICard from '@/components/widgets/KPICard';
 import Heatmap from '@/components/widgets/Heatmap';
+import AreaChart from '@/components/widgets/AreaChart';
+import DonutChart from '@/components/widgets/DonutChart';
+import ScatterPlot from '@/components/widgets/ScatterPlot';
+import GaugeChart from '@/components/widgets/GaugeChart';
+import ProgressBar from '@/components/widgets/ProgressBar';
+import NumberCard from '@/components/widgets/NumberCard';
+import FunnelChart from '@/components/widgets/FunnelChart';
+import HorizontalBarChart from '@/components/widgets/HorizontalBarChart';
 import dataService from '@/services/dataService';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -198,6 +206,22 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
         return <KPICardWidget key={widget.id} widget={widget} {...commonProps} />;
       case 'heatmap':
         return <HeatmapWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'area_chart':
+        return <AreaChartWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'donut_chart':
+        return <DonutChartWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'scatter_plot':
+        return <ScatterPlotWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'gauge_chart':
+        return <GaugeChartWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'progress_bar':
+        return <ProgressBarWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'number_card':
+        return <NumberCardWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'funnel_chart':
+        return <FunnelChartWidget key={widget.id} widget={widget} {...commonProps} />;
+      case 'horizontal_bar_chart':
+        return <HorizontalBarChartWidget key={widget.id} widget={widget} {...commonProps} />;
       default:
         return <div key={widget.id}>Unknown widget type</div>;
     }
@@ -458,6 +482,214 @@ const HeatmapWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<
   }, [rawData, widget.config.chartOptions]);
   
   return <Heatmap id={widget.id} title={widget.config.title} data={heatmapData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const AreaChartWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into chart format
+  const chartData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions) return [];
+    return dataService.transformDataForChart(rawData, widget.config.chartOptions, 'line_chart');
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <AreaChart id={widget.id} title={widget.config.title} data={chartData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const DonutChartWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into chart format
+  const chartData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions) return [];
+    return dataService.transformDataForChart(rawData, widget.config.chartOptions, 'pie_chart');
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <DonutChart id={widget.id} title={widget.config.title} data={chartData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const ScatterPlotWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into scatter plot format
+  const scatterData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions) return [];
+    
+    const transformedData = dataService.transformDataForChart(rawData, widget.config.chartOptions, 'scatter_plot');
+    return transformedData.map((item: any, index: number) => ({
+      x: Number(item.x) || index,
+      y: Number(item.y) || 0,
+      label: item.label || `Point ${index + 1}`
+    }));
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <ScatterPlot id={widget.id} title={widget.config.title} data={scatterData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const GaugeChartWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into gauge format
+  const gaugeData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions?.yAxisKey) return null;
+    
+    const values = dataService.extractValueByPath(rawData, widget.config.chartOptions.yAxisKey);
+    const value = values.length > 0 ? values[0] : 0;
+    
+    return {
+      value: Number(value) || 0,
+      min: widget.config.chartOptions.minValue || 0,
+      max: widget.config.chartOptions.maxValue || 100,
+      label: widget.config.chartOptions.yAxisKey.split('.').pop() || 'Value',
+      thresholds: widget.config.chartOptions.thresholds
+    };
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <GaugeChart id={widget.id} title={widget.config.title} data={gaugeData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const ProgressBarWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into progress format
+  const progressData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions?.yAxisKey) return null;
+    
+    const values = dataService.extractValueByPath(rawData, widget.config.chartOptions.yAxisKey);
+    const value = values.length > 0 ? values[0] : 0;
+    const target = widget.config.chartOptions.targetValue || 100;
+    
+    return {
+      value: Number(value) || 0,
+      target: Number(target) || 100,
+      label: widget.config.chartOptions.yAxisKey.split('.').pop() || 'Progress',
+      unit: widget.config.chartOptions.unit || ''
+    };
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <ProgressBar id={widget.id} title={widget.config.title} data={progressData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const NumberCardWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into number card format
+  const numberData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions?.yAxisKey) return null;
+    
+    const values = dataService.extractValueByPath(rawData, widget.config.chartOptions.yAxisKey);
+    const value = values.length > 0 ? values[0] : 0;
+    
+    return {
+      value: Number(value) || 0,
+      label: widget.config.chartOptions.yAxisKey.split('.').pop() || 'Value',
+      unit: widget.config.chartOptions.unit || '',
+      format: widget.config.chartOptions.format || 'number'
+    };
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <NumberCard id={widget.id} title={widget.config.title} data={numberData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const FunnelChartWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into funnel format
+  const funnelData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions) return [];
+    
+    const transformedData = dataService.transformDataForChart(rawData, widget.config.chartOptions, 'funnel_chart');
+    return transformedData.map((item: any) => ({
+      name: item.name || item.category || 'Step',
+      value: Number(item.value) || Number(item.count) || 0
+    }));
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <FunnelChart id={widget.id} title={widget.config.title} data={funnelData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
+};
+
+const HorizontalBarChartWidget: React.FC<{ widget: DashboardLayout; globalFilters?: Record<string, any>; [key: string]: any }> = ({ widget, globalFilters = {}, ...props }) => {
+  const { data: rawData, loading, error } = useWidgetData(
+    widget.id,
+    {
+      endpoint: widget.config.dataSource || '',
+      method: 'GET',
+      queryParams: widget.config.queryParams,
+    },
+    globalFilters,
+    { enabled: !!widget.config.dataSource }
+  );
+  
+  // Transform raw API data into chart format
+  const chartData = React.useMemo(() => {
+    if (!rawData || !widget.config.chartOptions) return [];
+    return dataService.transformDataForChart(rawData, widget.config.chartOptions, 'bar_chart');
+  }, [rawData, widget.config.chartOptions]);
+  
+  return <HorizontalBarChart id={widget.id} title={widget.config.title} data={chartData as any} config={widget.config.chartOptions} loading={loading} error={error} {...props} />;
 };
 
 export default DashboardBuilder;

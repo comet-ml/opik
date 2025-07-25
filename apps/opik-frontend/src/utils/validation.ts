@@ -15,7 +15,7 @@ export const dashboardLayoutSchema = z.object({
   y: z.number().min(0),
   w: z.number().min(1).max(12),
   h: z.number().min(1).max(10),
-  type: z.enum(['line_chart', 'bar_chart', 'pie_chart', 'table', 'kpi_card', 'heatmap']),
+  type: z.enum(['line_chart', 'bar_chart', 'pie_chart', 'table', 'kpi_card', 'heatmap', 'area_chart', 'donut_chart', 'scatter_plot', 'gauge_chart', 'progress_bar', 'number_card', 'funnel_chart', 'horizontal_bar_chart']),
   config: widgetConfigSchema,
 });
 

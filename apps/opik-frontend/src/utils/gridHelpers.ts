@@ -8,6 +8,14 @@ export const defaultWidgetSizes: Record<WidgetType, { w: number; h: number }> = 
   table: { w: 8, h: 6 },
   kpi_card: { w: 3, h: 2 },
   heatmap: { w: 8, h: 5 },
+  area_chart: { w: 6, h: 4 },
+  donut_chart: { w: 4, h: 4 },
+  scatter_plot: { w: 6, h: 4 },
+  gauge_chart: { w: 4, h: 3 },
+  progress_bar: { w: 4, h: 2 },
+  number_card: { w: 3, h: 2 },
+  funnel_chart: { w: 5, h: 5 },
+  horizontal_bar_chart: { w: 6, h: 5 },
 };
 
 export const minWidgetSizes: Record<WidgetType, { w: number; h: number }> = {
@@ -17,6 +25,14 @@ export const minWidgetSizes: Record<WidgetType, { w: number; h: number }> = {
   table: { w: 6, h: 4 },
   kpi_card: { w: 2, h: 2 },
   heatmap: { w: 6, h: 4 },
+  area_chart: { w: 4, h: 3 },
+  donut_chart: { w: 3, h: 3 },
+  scatter_plot: { w: 4, h: 3 },
+  gauge_chart: { w: 3, h: 2 },
+  progress_bar: { w: 3, h: 2 },
+  number_card: { w: 2, h: 2 },
+  funnel_chart: { w: 4, h: 4 },
+  horizontal_bar_chart: { w: 4, h: 3 },
 };
 
 export const maxWidgetSizes: Record<WidgetType, { w: number; h: number }> = {
@@ -26,6 +42,14 @@ export const maxWidgetSizes: Record<WidgetType, { w: number; h: number }> = {
   table: { w: 12, h: 10 },
   kpi_card: { w: 6, h: 4 },
   heatmap: { w: 12, h: 8 },
+  area_chart: { w: 12, h: 8 },
+  donut_chart: { w: 8, h: 8 },
+  scatter_plot: { w: 12, h: 8 },
+  gauge_chart: { w: 8, h: 6 },
+  progress_bar: { w: 8, h: 4 },
+  number_card: { w: 6, h: 4 },
+  funnel_chart: { w: 8, h: 8 },
+  horizontal_bar_chart: { w: 12, h: 8 },
 };
 
 export function convertToReactGridLayout(dashboardLayout: DashboardLayout[]): Layout[] {

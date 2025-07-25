@@ -40,7 +40,15 @@ export type WidgetType =
   | "pie_chart" 
   | "table" 
   | "kpi_card" 
-  | "heatmap";
+  | "heatmap"
+  | "area_chart"
+  | "donut_chart"
+  | "scatter_plot"
+  | "gauge_chart"
+  | "progress_bar"
+  | "number_card"
+  | "funnel_chart"
+  | "horizontal_bar_chart";
 
 export interface GridPosition {
   x: number;

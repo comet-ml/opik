@@ -5,7 +5,14 @@ import {
   PieChart as PieChartIcon, 
   Table, 
   Gauge, 
-  Grid3X3 
+  Grid3X3,
+  AreaChart,
+  Target,
+  Zap,
+  Activity,
+  Hash,
+  Filter,
+  BarChart2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WidgetType } from '@/types/dashboard';
@@ -63,6 +70,62 @@ const widgetTypes: WidgetTypeInfo[] = [
     name: 'Heatmap',
     description: 'Correlation matrix visualization',
     icon: <Grid3X3 className="h-6 w-6" />,
+    category: 'Charts',
+  },
+  {
+    type: 'area_chart',
+    name: 'Area Chart',
+    description: 'Filled line charts for trend visualization',
+    icon: <AreaChart className="h-6 w-6" />,
+    category: 'Charts',
+  },
+  {
+    type: 'donut_chart',
+    name: 'Donut Chart',
+    description: 'Pie chart with center hole',
+    icon: <Target className="h-6 w-6" />,
+    category: 'Charts',
+  },
+  {
+    type: 'scatter_plot',
+    name: 'Scatter Plot',
+    description: 'Correlation analysis between variables',
+    icon: <Zap className="h-6 w-6" />,
+    category: 'Charts',
+  },
+  {
+    type: 'gauge_chart',
+    name: 'Gauge Chart',
+    description: 'Speedometer-style metrics',
+    icon: <Activity className="h-6 w-6" />,
+    category: 'Metrics',
+  },
+  {
+    type: 'progress_bar',
+    name: 'Progress Bar',
+    description: 'Linear progress indicators',
+    icon: <BarChart2 className="h-6 w-6" />,
+    category: 'Metrics',
+  },
+  {
+    type: 'number_card',
+    name: 'Number Card',
+    description: 'Large number displays with trends',
+    icon: <Hash className="h-6 w-6" />,
+    category: 'Metrics',
+  },
+  {
+    type: 'funnel_chart',
+    name: 'Funnel Chart',
+    description: 'Conversion analysis visualization',
+    icon: <Filter className="h-6 w-6" />,
+    category: 'Analytics',
+  },
+  {
+    type: 'horizontal_bar_chart',
+    name: 'Horizontal Bar Chart',
+    description: 'Alternative bar chart layout',
+    icon: <BarChart3 className="h-6 w-6 rotate-90" />,
     category: 'Charts',
   },
 ];

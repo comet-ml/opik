@@ -170,6 +170,13 @@ export class DataService {
     
     // Merge query params with global filters
     const params = { ...queryParams, ...globalFilters };
+    
+    // Clean up params - remove undefined, null, and empty string values
+    Object.keys(params).forEach(key => {
+      if (params[key] === undefined || params[key] === null || params[key] === '') {
+        delete params[key];
+      }
+    });
 
     try {
       let responseData;
@@ -179,6 +186,7 @@ export class DataService {
       if (this.isFullUrl(trimmedEndpoint)) {
         
         console.log('🔴 fetchWidgetData - Using external client for URL:', trimmedEndpoint);
+        console.log('🔴 fetchWidgetData - Params object:', params);
         
         // Use external axios client for full URLs
         const externalClient = this.createExternalClient();

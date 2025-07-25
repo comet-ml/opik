@@ -8,7 +8,15 @@ public enum WidgetType {
     PIE_CHART("pie_chart"),
     TABLE("table"),
     KPI_CARD("kpi_card"),
-    HEATMAP("heatmap");
+    HEATMAP("heatmap"),
+    AREA_CHART("area_chart"),
+    DONUT_CHART("donut_chart"),
+    SCATTER_PLOT("scatter_plot"),
+    GAUGE_CHART("gauge_chart"),
+    PROGRESS_BAR("progress_bar"),
+    NUMBER_CARD("number_card"),
+    FUNNEL_CHART("funnel_chart"),
+    HORIZONTAL_BAR_CHART("horizontal_bar_chart");
 
     private final String value;
 

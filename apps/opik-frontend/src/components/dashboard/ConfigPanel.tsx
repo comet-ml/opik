@@ -33,7 +33,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ widget, onClose, onUpdate, on
 
   // Data preview functionality
   const dataSource = {
-    endpoint: config.dataSource || '',
+    endpoint: (config.dataSource || '').trim(),
     method: 'GET' as const,
     queryParams: config.queryParams || {},
     headers: {},
@@ -184,10 +184,12 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ widget, onClose, onUpdate, on
               <div>
                 <Label>Query Parameters</Label>
                 <Textarea
-                  value={JSON.stringify(config.queryParams, null, 2)}
+                  value={JSON.stringify(config.queryParams || {}, null, 2)}
                   onChange={(e) => {
                     try {
-                      const params = JSON.parse(e.target.value);
+                      // Clean the input by removing trailing commas before parsing
+                      const cleanInput = e.target.value.replace(/,(\s*[}\]])/g, '$1');
+                      const params = JSON.parse(cleanInput);
                       handleConfigChange('queryParams', params);
                       clearPreview(); // Clear preview when params change
                     } catch {
@@ -288,7 +290,16 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ widget, onClose, onUpdate, on
               )}
 
               {/* Field Mapping */}
-              {availableFields.length > 0 && (widget?.type === 'line_chart' || widget?.type === 'bar_chart' || widget?.type === 'pie_chart') && (
+              {availableFields.length > 0 && (
+                widget?.type === 'line_chart' || 
+                widget?.type === 'bar_chart' || 
+                widget?.type === 'pie_chart' ||
+                widget?.type === 'area_chart' ||
+                widget?.type === 'donut_chart' ||
+                widget?.type === 'scatter_plot' ||
+                widget?.type === 'funnel_chart' ||
+                widget?.type === 'horizontal_bar_chart'
+              ) && (
                 <div>
                   <Label>Field Mapping</Label>
                   <div className="grid grid-cols-1 gap-4 mt-2">
@@ -348,8 +359,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ widget, onClose, onUpdate, on
                 </div>
               )}
 
-              {/* KPI Card Value Field */}
-              {availableFields.length > 0 && widget?.type === 'kpi_card' && (
+              {/* Value Field for single-value widgets */}
+              {availableFields.length > 0 && (
+                widget?.type === 'kpi_card' || 
+                widget?.type === 'gauge_chart' || 
+                widget?.type === 'progress_bar' || 
+                widget?.type === 'number_card'
+              ) && (
                 <div>
                   <Label>Value Field</Label>
                   <Select 
@@ -467,7 +483,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ widget, onClose, onUpdate, on
                 />
               </div>
 
-              {(widget.type === 'line_chart' || widget.type === 'bar_chart') && (
+              {(
+                widget.type === 'line_chart' || 
+                widget.type === 'bar_chart' ||
+                widget.type === 'area_chart' ||
+                widget.type === 'scatter_plot' ||
+                widget.type === 'horizontal_bar_chart'
+              ) && (
                 <>
                   <Separator />
                   <div>
