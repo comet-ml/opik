@@ -6,6 +6,7 @@ from dspy.utils import callback as dspy_callback
 
 from opik import types, opik_context, context_storage
 from opik.api_objects import helpers, span, trace, opik_client
+from opik.decorator.tracing_runtime_config import is_tracing_active
 from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module
@@ -42,12 +43,18 @@ class OpikCallback(dspy_callback.BaseCallback):
 
         self._opik_client = opik_client.get_client_cached()
 
+    def _skip_tracking(self) -> bool:
+        return not is_tracing_active()
+
     def on_module_start(
         self,
         call_id: str,
         instance: Any,
         inputs: Dict[str, Any],
     ) -> None:
+        if self._skip_tracking():
+            return
+
         # First we check the callback's context
         if (current_span_data := self._context_storage.top_span_data()) is not None:
             self._attach_span_to_existing_span(
@@ -138,7 +145,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
 
-        if self._opik_client.config.log_start_trace_span:
+        if self._opik_client.config.log_start_trace_span and is_tracing_active():
             self._opik_client.span(**span_data.as_start_parameters)
 
     def _start_trace(
@@ -156,7 +163,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_trace_data[call_id] = trace_data
         self._set_current_context_data(trace_data)
 
-        if self._opik_client.config.log_start_trace_span:
+        if self._opik_client.config.log_start_trace_span and is_tracing_active():
             self._opik_client.trace(**trace_data.as_start_parameters)
 
     def on_module_end(
@@ -174,8 +181,9 @@ class OpikCallback(dspy_callback.BaseCallback):
 
     def _end_trace(self, call_id: str) -> None:
         if trace_data := self._map_call_id_to_trace_data.pop(call_id, None):
-            trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.as_parameters)
+            if is_tracing_active():
+                trace_data.init_end_time()
+                self._opik_client.trace(**trace_data.as_parameters)
 
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
@@ -192,7 +200,8 @@ class OpikCallback(dspy_callback.BaseCallback):
                 span_data.update(error_info=error_info)
 
             span_data.update(output={"output": outputs}).init_end_time()
-            self._opik_client.span(**span_data.as_parameters)
+            if is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
 
             # remove span data from context
             current_span = self._context_storage.top_span_data()
