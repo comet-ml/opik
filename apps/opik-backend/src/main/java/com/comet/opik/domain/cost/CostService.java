@@ -43,11 +43,8 @@ public class CostService {
         }
 
         private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-                        new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
-
-        private static final Map<String, BigDecimal> OPENAI_TTS_PRICE_PER_CHAR = Map.of(
-                        "tts-1", new BigDecimal("0.000015"),
-                        "tts-1-hd", new BigDecimal("0.00003"));
+                        new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
+                        SpanCostCalculator::defaultCost);
 
         public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
                         @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -58,22 +55,6 @@ public class CostService {
 
                 Map<String, Integer> usageMap = Optional.ofNullable(usage).orElse(Map.of());
                 BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, usageMap);
-
-                if (estimatedCost.compareTo(BigDecimal.ZERO) == 0
-                                && modelName != null
-                                && provider != null
-                                && "openai".equalsIgnoreCase(provider)
-                                && modelName.startsWith("tts-1")
-                                && usageMap.containsKey("character_count")) {
-
-                        BigDecimal perChar = OPENAI_TTS_PRICE_PER_CHAR.entrySet().stream()
-                                        .filter(e -> modelName.startsWith(e.getKey()))
-                                        .map(Map.Entry::getValue)
-                                        .findFirst()
-                                        .orElse(BigDecimal.ZERO);
-
-                        estimatedCost = perChar.multiply(BigDecimal.valueOf(usageMap.get("character_count")));
-                }
 
                 return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
         }
@@ -117,8 +98,14 @@ public class CostService {
                                                 .map(BigDecimal::new)
                                                 .orElse(BigDecimal.ZERO);
 
+                                BigDecimal inputCharacterPrice = Optional.ofNullable(modelCost.inputCostPerCharacter())
+                                                .map(BigDecimal::new)
+                                                .orElse(BigDecimal.ZERO);
+
                                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                                if (inputCharacterPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                        calculator = SpanCostCalculator::speechTtsCost;
+                                } else if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
                                                 || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
                                         calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
                                                         SpanCostCalculator::textGenerationCost);
@@ -130,7 +117,8 @@ public class CostService {
                                 parsedModelPrices.put(
                                                 createModelProviderKey(parseModelName(modelName),
                                                                 PROVIDERS_MAPPING.get(provider)),
-                                                new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
+                                                new ModelPrice(inputPrice, outputPrice, inputCharacterPrice,
+                                                                cacheCreationInputTokenPrice,
                                                                 cacheReadInputTokenPrice, calculator));
                         }
                 });
