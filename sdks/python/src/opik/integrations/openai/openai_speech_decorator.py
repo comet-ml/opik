@@ -21,11 +21,6 @@ from opik.types import LLMProvider
 
 from . import stream_patchers
 
-try:
-    from openai.types.audio.speech import AudioSpeechResponse
-except ImportError:  # pragma: no cover
-    AudioSpeechResponse = object  # type: ignore
-
 LOGGER = logging.getLogger(__name__)
 
 KWARGS_KEYS_TO_LOG_AS_INPUTS = [
@@ -43,13 +38,12 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
         super().__init__()
         self.provider = "openai"
 
-    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: Optional[Tuple],
+        kwargs: Optional[Dict[str, Any]],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
@@ -79,14 +73,13 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
         return result
 
-    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Optional[Any],
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        if hasattr(output, "model_dump"):
+        if output is not None and hasattr(output, "model_dump"):
             result_dict = output.model_dump(mode="json")  # type: ignore[arg-type]
         else:
             result_dict = {}
