@@ -1,0 +1,78 @@
+{{- if and .Values.clickhouse.enabled
+      (or
+        ( and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.serviceMonitor.enabled )
+        ( and .Values.clickhouse.backupServer.monitoring.enabled .Values.clickhouse.backupServer.monitoring.serviceMonitor.enabled)
+      )}}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "opik.name" $ }}-ch-monitoring
+  namespace: {{ default .Release.Namespace  .Values.clickhouse.monitoring.serviceMonitor.namespace | quote }}
+  labels:
+    {{- include "opik.clickhouse.labels" $  | nindent 4 }}
+    {{- with .Values.clickhouse.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with  .Values.clickhouse.monitoring.serviceMonitor.annotations }}
+  annotations:
+    {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  endpoints:
+  {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.serviceMonitor.enabled }}
+  {{-   with .Values.clickhouse.monitoring.serviceMonitor }}
+    - port: {{ .portName | default "prometheus-metrics" }}
+      {{- if .targetPort }}
+      targetPort: {{ .targetPort }}
+      {{- end }}
+      interval: {{ .interval | default "60s" }}
+      scrapeTimeout: {{ .scrapeTimeout | default "30s" }}
+      {{- if .honorLabels }}
+      honorLabels: {{ .honorLabels }}
+      {{- end }}
+      {{- if .relabelings }}
+      relabelings:
+      {{- toYaml .relabelings | nindent 6 }}
+      {{- end }}
+      {{- if .metricRelabelings }}
+      metricRelabelings:
+      {{- toYaml .metricRelabelings | nindent 6 }}
+      {{- end }}
+      path: {{ .path | default "/metrics" }}
+  {{-   end }}
+  {{- end }}
+  {{- if and .Values.clickhouse.backupServer.monitoring.enabled .Values.clickhouse.backupServer.monitoring.serviceMonitor.enabled }}
+  {{-   with .Values.clickhouse.backupServer.monitoring.serviceMonitor }}
+    - port: {{ .portName | default "prometheus-metrics" }}
+      {{- if .targetPort }}
+      targetPort: {{ .targetPort }}
+      {{- end }}
+      interval: {{ .interval | default "60s" }}
+      scrapeTimeout: {{ .scrapeTimeout | default "30s" }}
+      {{- if .honorLabels }}
+      honorLabels: {{ .honorLabels }}
+      {{- end }}
+      {{- if .relabelings }}
+      relabelings:
+      {{- toYaml .relabelings | nindent 6 }}
+      {{- end }}
+      {{- if .metricRelabelings }}
+      metricRelabelings:
+      {{- toYaml .metricRelabelings | nindent 6 }}
+      {{- end }}
+      path: {{ .path | default "/metrics" }}
+  {{-   end }}
+  {{- end }}
+  {{- if .Values.clickhouse.monitoring.serviceMonitor.podTargetLabels }}
+  podTargetLabels:
+  {{- toYaml .Values.clickhouse.monitoring.serviceMonitor.podTargetLabels | nindent 4 }}
+  {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ default .Release.Namespace .Values.clickhouse.monitoring.serviceMonitor.namespace | quote }}
+  selector:
+    matchLabels:
+      {{- include "opik.clickhouse.selectorLabels" . | nindent 6 }}
+      comet.com/service-monitoring: "true"
+{{- end }}

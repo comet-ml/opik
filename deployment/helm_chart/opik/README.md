@@ -137,6 +137,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.port | int | `9363` |  |
 | clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
 | clickhouse.monitoring.service.ports[0].port | int | `80` |  |
 | clickhouse.monitoring.service.ports[0].targetPort | int | `9363` |  |
@@ -161,6 +162,10 @@ Call opik api on http://localhost:5173/api
 | clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
+| clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
+| clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
