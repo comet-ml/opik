@@ -45,7 +45,6 @@ public class CostService {
         private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
                         new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
-        // OpenAI TTS per-character prices (USD)
         private static final Map<String, BigDecimal> OPENAI_TTS_PRICE_PER_CHAR = Map.of(
                         "tts-1", new BigDecimal("0.000015"),
                         "tts-1-hd", new BigDecimal("0.00003"));
