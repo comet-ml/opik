@@ -5,6 +5,7 @@ from .opik_usage_factory import (
     build_opik_usage_from_unknown_provider,
 )
 from .llm_usage_info import LLMUsageInfo
+from .openai_speech_usage import OpenAISpeechUsage
 
 __all__ = [
     "OpikUsage",
@@ -12,4 +13,5 @@ __all__ = [
     "LLMUsageInfo",
     "try_build_opik_usage_or_log_error",
     "build_opik_usage_from_unknown_provider",
+    "OpenAISpeechUsage",
 ]

@@ -6,6 +6,9 @@ from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
 )
+
+from . import openai_speech_decorator
+from . import speech_stream_events_aggregator
 from opik import semantic_version
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
@@ -41,6 +44,8 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    _patch_openai_speech(openai_client, project_name)
 
     return openai_client
 
@@ -138,3 +143,45 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_speech(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    if hasattr(openai_client, "_opik_speech_tracked"):
+        return
+
+    speech_decorator_factory = openai_speech_decorator.OpenaiSpeechTrackDecorator()
+    if openai_client.base_url.host != "api.openai.com":
+        speech_decorator_factory.provider = openai_client.base_url.host
+
+    speech_create_decorator = speech_decorator_factory.track(
+        type="llm",
+        name="speech_create",
+        generations_aggregator=speech_stream_events_aggregator.aggregate,
+        project_name=project_name,
+    )
+
+    speech_stream_decorator = speech_decorator_factory.track(
+        type="llm",
+        name="speech_stream",
+        generations_aggregator=speech_stream_events_aggregator.aggregate,
+        project_name=project_name,
+    )
+
+    if hasattr(openai_client.audio.speech, "create"):
+        openai_client.audio.speech.create = speech_create_decorator(
+            openai_client.audio.speech.create
+        )
+
+    if hasattr(openai_client.audio.speech, "with_streaming_response") and hasattr(
+        openai_client.audio.speech.with_streaming_response, "create"
+    ):
+        openai_client.audio.speech.with_streaming_response.create = (
+            speech_stream_decorator(
+                openai_client.audio.speech.with_streaming_response.create
+            )
+        )
+
+    openai_client._opik_speech_tracked = True

@@ -9,6 +9,7 @@ import java.util.function.BiFunction;
 public record ModelPrice(
         @NonNull BigDecimal inputPrice,
         @NonNull BigDecimal outputPrice,
+        @NonNull BigDecimal inputCharacterPrice,
         @NonNull BigDecimal cacheCreationInputTokenPrice,
         @NonNull BigDecimal cacheReadInputTokenPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
