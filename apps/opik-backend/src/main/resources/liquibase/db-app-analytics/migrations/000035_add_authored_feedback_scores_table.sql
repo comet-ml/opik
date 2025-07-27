@@ -1,7 +1,7 @@
 --liquibase formatted sql
---changeset ido:000035_add_authored_feedback_scores_table
+--changeset ido:000035_add_authored_feedback_scores
 
-CREATE TABLE authored_feedback_scores
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}'
 (
     entity_id       FixedString(36),
     entity_type     Enum8('unknown' = 0, 'span' = 1, 'trace' = 2, 'thread' = 3),

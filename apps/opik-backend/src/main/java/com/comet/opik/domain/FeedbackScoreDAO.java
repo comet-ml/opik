@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.ValueEntry;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickhouseUtils;
@@ -118,19 +119,54 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String SELECT_FEEDBACK_SCORE_BY_ID = """
+            WITH combined_scores AS (
+                SELECT
+                    *,
+                    '' as author
+                FROM feedback_scores
+                WHERE entity_id in :entity_ids
+                AND entity_type = :entity_type
+                AND workspace_id = :workspace_id
+                LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    *
+                FROM authored_feedback_scores
+                WHERE entity_id in :entity_ids
+                AND entity_type = :entity_type
+                AND workspace_id = :workspace_id
+                LIMIT 1 BY entity_id, author, name
+            )
             SELECT
-                *
-            FROM feedback_scores
-            WHERE entity_id in :entity_ids
-            AND entity_type = :entity_type
-            AND workspace_id = :workspace_id
+                entity_id,
+                name,
+                category_name,
+                avg(value) as value,
+                reason,
+                source,
+                min(created_at) as created_at,
+                max(last_updated_at) as last_updated_at,
+                created_by,
+                last_updated_by,
+                mapFromArrays(
+                    groupArray(author),
+                    groupArray(tuple(value, category_name))
+                ) as value_by_author
+            FROM combined_scores
+            GROUP BY entity_id, name, category_name, reason, source, created_by, last_updated_by
             ORDER BY entity_id DESC, last_updated_at DESC
-            LIMIT 1 BY entity_id, name
             ;
             """;
 
     private static final String DELETE_FEEDBACK_SCORE = """
             DELETE FROM feedback_scores
+            WHERE entity_id = :entity_id
+            AND entity_type = :entity_type
+            AND name = :name
+            AND workspace_id = :workspace_id
+            ;
+
+            DELETE FROM authored_feedback_scores
             WHERE entity_id = :entity_id
             AND entity_type = :entity_type
             AND name = :name
@@ -152,10 +188,33 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS allow_nondeterministic_mutations = 1
             ;
+
+            DELETE FROM authored_feedback_scores
+            WHERE entity_type = 'span'
+            AND entity_id IN (
+                SELECT id
+                FROM spans
+                WHERE trace_id IN :trace_ids
+                AND workspace_id = :workspace_id
+                <if(project_id)>AND project_id = :project_id<endif>
+            )
+            AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
+            SETTINGS allow_nondeterministic_mutations = 1
+            ;
             """;
 
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
             DELETE FROM feedback_scores
+            WHERE entity_id IN :entity_ids
+            AND entity_type = :entity_type
+            AND workspace_id = :workspace_id
+            <if(names)>AND name IN :names <endif>
+            <if(project_id)>AND project_id = :project_id<endif>
+            <if(sources)>AND source IN :sources<endif>
+            ;
+
+            DELETE FROM authored_feedback_scores
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
@@ -205,6 +264,43 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 AND entity_type = :entity_type
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
+                <if(with_experiments_only)>
+                AND entity_id IN (
+                    SELECT
+                        trace_id
+                    FROM (
+                        SELECT
+                            id
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS e
+                    INNER JOIN (
+                        SELECT
+                            experiment_id,
+                            trace_id
+                        FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(experiment_ids)>
+                        AND experiment_id IN :experiment_ids
+                        <endif>
+                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) ei ON e.id = ei.experiment_id
+                )
+                <endif>
+                AND entity_type = :entity_type
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
@@ -222,6 +318,16 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
@@ -250,6 +356,27 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 AND entity_type = 'span'
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(type)>
+                AND entity_id IN (
+                    SELECT
+                        id
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND type = :type
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                AND entity_type = 'span'
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
@@ -291,6 +418,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     private FeedbackScoreDto mapFeedback(Row row) {
+        // TODO: Implement proper parsing of ClickHouse map format for valueByAuthor
+        // For now, return empty map - this needs to be implemented based on ClickHouse's map format
+        Map<String, ValueEntry> valueByAuthor = Map.of();
+
         return new FeedbackScoreDto(
                 row.get("entity_id", UUID.class),
                 FeedbackScore.builder()
@@ -307,6 +438,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                         .createdBy(row.get("created_by", String.class))
                         .lastUpdatedBy(row.get("last_updated_by", String.class))
+                        .valueByAuthor(valueByAuthor)
                         .build());
     }
 
