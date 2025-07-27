@@ -3,7 +3,9 @@ from unittest.mock import Mock, patch
 
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges.trajectory_accuracy import TrajectoryAccuracy
+from opik.evaluation.metrics.llm_judges.trajectory_accuracy import parser, templates
 from opik.evaluation.metrics import score_result
+from opik.evaluation.models import base_model
 
 
 class TestTrajectoryAccuracy:
@@ -12,7 +14,7 @@ class TestTrajectoryAccuracy:
     @pytest.fixture
     def mock_model(self):
         """Create a mock model for testing."""
-        mock = Mock()
+        mock = Mock(spec=base_model.OpikBaseModel)
         mock.generate_string.return_value = '{"score": 0.8, "explanation": "Good trajectory execution"}'
         mock.agenerate_string.return_value = '{"score": 0.8, "explanation": "Good trajectory execution"}'
         return mock
@@ -20,8 +22,9 @@ class TestTrajectoryAccuracy:
     @pytest.fixture
     def trajectory_metric(self, mock_model):
         """Create a TrajectoryAccuracy metric with mocked model."""
-        metric = TrajectoryAccuracy(track=False)
-        metric._model = mock_model
+        # Pass the mock model directly to the constructor as intended
+        # This avoids mocking protected members and uses the public API properly
+        metric = TrajectoryAccuracy(model=mock_model, track=False)
         return metric
 
     def test_score_basic_trajectory(self, trajectory_metric, mock_model):
@@ -74,61 +77,71 @@ class TestTrajectoryAccuracy:
         """Test error handling when model fails."""
         mock_model.generate_string.side_effect = Exception("Model failed")
 
-        result = trajectory_metric.score(
-            goal="Test goal",
-            trajectory=[{"thought": "test", "action": "test", "observation": "test"}],
-            final_result="Test result"
-        )
+        # Should raise MetricComputationError when model fails
+        with pytest.raises(exceptions.MetricComputationError, match="Trajectory accuracy evaluation failed: Model failed"):
+            trajectory_metric.score(
+                goal="Test goal",
+                trajectory=[{"thought": "test", "action": "test", "observation": "test"}],
+                final_result="Test result"
+            )
 
-        # Should return error result
-        assert isinstance(result, score_result.ScoreResult)
-        assert result.value == 0.0
-        assert "Evaluation failed: Model failed" in result.reason
-
-    def test_parse_evaluation_response_valid_response(self, trajectory_metric):
-        """Test parsing valid evaluation response."""
+    def test_parse_evaluation_response_valid_response(self):
+        """Test parsing valid evaluation response using public parser API."""
         content = '{"score": 0.75, "explanation": "Decent trajectory with some issues"}'
         
-        result = trajectory_metric._parse_evaluation_response(content)
+        result = parser.parse_evaluation_response(content, "test_metric")
         
         assert isinstance(result, score_result.ScoreResult)
         assert result.value == 0.75
         assert result.reason == "Decent trajectory with some issues"
+        assert result.name == "test_metric"
 
-    def test_parse_evaluation_response_score_out_of_range(self, trajectory_metric):
-        """Test parsing response with score out of valid range."""
+    def test_parse_evaluation_response_score_out_of_range(self):
+        """Test parsing response with score out of valid range using public parser API."""
         content = '{"score": 1.5, "explanation": "Score too high"}'
         
         with pytest.raises(exceptions.MetricComputationError, match="Invalid response format"):
-            trajectory_metric._parse_evaluation_response(content)
+            parser.parse_evaluation_response(content, "test_metric")
 
-    def test_format_trajectory_steps_valid_trajectory(self, trajectory_metric):
-        """Test trajectory formatting."""
-        trajectory = [
-            {
-                "thought": "First thought",
-                "action": "first_action()",
-                "observation": "First observation"
-            },
-            {
-                "thought": "Second thought",
-                "action": "second_action()",
-                "observation": "Second observation"
-            }
-        ]
+    def test_format_trajectory_steps_valid_trajectory(self):
+        """Test trajectory formatting using public templates API."""
+        example = {
+            "goal": "Test goal",
+            "trajectory": [
+                {
+                    "thought": "First thought",
+                    "action": "first_action()",
+                    "observation": "First observation"
+                },
+                {
+                    "thought": "Second thought",
+                    "action": "second_action()",
+                    "observation": "Second observation"
+                }
+            ],
+            "final_result": "Test result"
+        }
         
-        formatted = trajectory_metric._format_trajectory_steps(trajectory)
+        formatted_prompt = templates.create_evaluation_prompt(example)
         
-        assert "Step 1:" in formatted
-        assert "Step 2:" in formatted
-        assert "First thought" in formatted
-        assert "first_action()" in formatted
-        assert "Second observation" in formatted
+        assert "Step 1:" in formatted_prompt
+        assert "Step 2:" in formatted_prompt
+        assert "First thought" in formatted_prompt
+        assert "first_action()" in formatted_prompt
+        assert "Second observation" in formatted_prompt
+        assert "Test goal" in formatted_prompt
+        assert "Test result" in formatted_prompt
 
-    def test_format_trajectory_steps_empty_trajectory(self, trajectory_metric):
-        """Test formatting empty trajectory."""
-        formatted = trajectory_metric._format_trajectory_steps([])
-        assert formatted == "No trajectory steps provided"
+    def test_format_trajectory_steps_empty_trajectory(self):
+        """Test formatting empty trajectory using public templates API."""
+        example = {
+            "goal": "Test goal",
+            "trajectory": [],
+            "final_result": "Test result"
+        }
+        
+        formatted_prompt = templates.create_evaluation_prompt(example)
+        assert "No trajectory steps provided" in formatted_prompt
 
     @patch('opik.evaluation.models.models_factory.get')
     def test_init_model_string_model_name(self, mock_factory):
@@ -139,7 +152,13 @@ class TestTrajectoryAccuracy:
         metric = TrajectoryAccuracy(model="gpt-4", track=False)
         
         mock_factory.assert_called_once_with(model_name="gpt-4")
-        assert metric._model == mock_model
+        # Test that the model was initialized correctly by testing behavior
+        # rather than accessing private attributes
+        assert metric is not None
+        # We can test the public interface works correctly
+        mock_model.generate_string.return_value = '{"score": 0.5, "explanation": "test"}'
+        result = metric.score(goal="test", trajectory=[], final_result="test")
+        assert isinstance(result, score_result.ScoreResult)
 
     def test_ignored_kwargs(self, trajectory_metric):
         """Test that extra kwargs are properly ignored."""
