@@ -65,6 +65,9 @@ public interface FeedbackScoreService {
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
     Mono<Void> deleteThreadManualScores(Set<UUID> threadModelId, UUID projectId);
+
+    Mono<Void> scoreAuthoredEntity(EntityType entityType, UUID entityId, FeedbackScore score, String author,
+            UUID projectId);
 }
 
 @Slf4j
@@ -261,6 +264,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         log.info("No manual scores found to delete for projectId '{}'", projectId);
                     }
                 })
+                .then();
+    }
+
+    @Override
+    public Mono<Void> scoreAuthoredEntity(EntityType entityType, UUID entityId, FeedbackScore score, String author,
+            UUID projectId) {
+        return dao.scoreAuthoredEntity(entityType, entityId, score, author, projectId)
                 .then();
     }
 

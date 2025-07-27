@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -72,6 +73,9 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 
     Mono<Long> deleteThreadManualScores(Set<UUID> threadModelIds, UUID projectId);
+
+    Mono<Long> scoreAuthoredEntity(EntityType entityType, UUID entityId, FeedbackScore score, String author,
+            UUID projectId);
 }
 
 @Singleton
@@ -332,7 +336,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private final static String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
+    private static final String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
             SELECT
                 distinct name
             FROM (
@@ -378,6 +382,38 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
             ) AS names
+            ;
+            """;
+
+    private static final String INSERT_AUTHORED_FEEDBACK_SCORE = """
+            INSERT INTO authored_feedback_scores(
+                entity_type,
+                entity_id,
+                project_id,
+                workspace_id,
+                author,
+                name,
+                category_name,
+                value,
+                reason,
+                source,
+                created_by,
+                last_updated_by
+            )
+            VALUES (
+                :entity_type,
+                :entity_id,
+                :project_id,
+                :workspace_id,
+                :author,
+                :name,
+                :category_name,
+                :value,
+                :reason,
+                :source,
+                :user_name,
+                :user_name
+            )
             ;
             """;
 
@@ -674,6 +710,31 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("project_id", projectId);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> scoreAuthoredEntity(@NonNull EntityType entityType,
+            @NonNull UUID entityId,
+            @NonNull FeedbackScore score,
+            @NonNull String author,
+            @NonNull UUID projectId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(INSERT_AUTHORED_FEEDBACK_SCORE)
+                    .bind("entity_type", entityType.getType())
+                    .bind("entity_id", entityId)
+                    .bind("project_id", projectId)
+                    .bind("author", author)
+                    .bind("name", score.name())
+                    .bind("category_name", getValueOrDefault(score.categoryName()))
+                    .bind("value", score.value())
+                    .bind("reason", getValueOrDefault(score.reason()))
+                    .bind("source", score.source().getValue());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
