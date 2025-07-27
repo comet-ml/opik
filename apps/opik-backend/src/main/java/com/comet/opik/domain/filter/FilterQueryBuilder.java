@@ -59,6 +59,8 @@ public class FilterQueryBuilder {
     private static final String VALUE_ANALYTICS_DB = "value";
     private static final String DURATION_ANALYTICS_DB = "duration";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
+    private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
+    private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_DB = "created_at";
@@ -216,6 +218,8 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentField, String>builder()
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
@@ -304,6 +308,8 @@ public class FilterQueryBuilder {
                     .build()),
             FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
                     .add(ExperimentField.METADATA)
+                    .add(ExperimentField.DATASET_ID)
+                    .add(ExperimentField.PROMPT_IDS)
                     .build(),
             FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.ID)

@@ -23,6 +23,8 @@ public interface Field {
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
+    String DATASET_ID_QUERY_PARAM = "dataset_id";
+    String PROMPT_IDS_QUERY_PARAM = "prompt_ids";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
     String FIRST_MESSAGE_QUERY_PARAM = "first_message";
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
