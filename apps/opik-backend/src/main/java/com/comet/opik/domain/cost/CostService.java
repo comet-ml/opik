@@ -52,8 +52,7 @@ public class CostService {
                 .map(modelProviderPrices::get)
                 .orElse(DEFAULT_COST);
 
-        Map<String, Integer> usageMap = Optional.ofNullable(usage).orElse(Map.of());
-        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, usageMap);
+        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, usage);
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
     }
