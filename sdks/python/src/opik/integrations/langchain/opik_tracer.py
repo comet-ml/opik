@@ -115,6 +115,14 @@ class OpikTracer(BaseTracer):
             Optional[str]
         ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
 
+    def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
+        return any(span.id == span_id for span in self._span_data_map.values())
+
+    def _is_opik_trace_created_by_this_tracer(self, trace_id: str) -> bool:
+        return any(
+            trace.id == trace_id for trace in self._created_traces_data_map.values()
+        )
+
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
@@ -130,6 +138,16 @@ class OpikTracer(BaseTracer):
             error_info = None
 
         span_data = self._span_data_map[run.id]
+
+        if (
+            span_data.parent_span_id is not None
+            and self._is_opik_span_created_by_this_tracer(span_data.parent_span_id)
+        ):
+            # Langchain lost parent-child relationship for Run, so it calls _persist_run
+            # for a subchain when the ACTUAL root run is not yet persisted.
+            # However we know that the parent span was created by this tracer, so we don't
+            # want to finalize the trace
+            return
 
         self._ensure_no_hanging_opik_tracer_spans()
 
@@ -251,7 +269,8 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        self._externally_created_traces_ids.add(span_data.trace_id)
+        if not self._is_opik_trace_created_by_this_tracer(span_data.trace_id):
+            self._externally_created_traces_ids.add(span_data.trace_id)
 
         return span_data
 
@@ -277,7 +296,8 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        self._externally_created_traces_ids.add(current_trace_data.id)
+        if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
+            self._externally_created_traces_ids.add(current_trace_data.id)
         return span_data
 
     def _attach_span_to_distributed_headers(
@@ -497,6 +517,7 @@ class OpikTracer(BaseTracer):
             tags=tags,
             name=name,  # type: ignore[arg-type]
         )
+
         self._start_trace(chat_model_run)
         self._on_chat_model_start(chat_model_run)
         return chat_model_run
