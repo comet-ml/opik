@@ -11,6 +11,8 @@ from opik.types import (
     ErrorInfoDict,
 )
 
+from opik.decorator.tracing_runtime_config import is_tracing_active
+
 from . import context_storage, exceptions
 from .decorator import error_info_collector
 
@@ -87,6 +89,9 @@ def update_current_span(
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
     """
+    if not is_tracing_active():
+        return
+
     new_params = {
         "name": name,
         "input": input,
@@ -131,6 +136,9 @@ def update_current_trace(
             The identifier is user-defined and has to be unique per project.
         attachments: The list of attachments to be uploaded to the trace.
     """
+    if not is_tracing_active():
+        return
+
     new_params = {
         "name": name,
         "input": input,
