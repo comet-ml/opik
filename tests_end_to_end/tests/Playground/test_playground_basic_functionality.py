@@ -7,14 +7,6 @@ from tests.model_config_loader import model_config_loader
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
-# Add console handler to ensure logs appear in console
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-logger.setLevel(logging.INFO)
-
 
 def pytest_generate_tests(metafunc):
     """Generate test parameters for all enabled playground models"""
@@ -36,6 +28,7 @@ def pytest_generate_tests(metafunc):
 
 @pytest.mark.regression
 @pytest.mark.playground
+@pytest.mark.llm_models
 @allure.title("Test Opik Playground Basic Functionality")
 @allure.description(
     "Verify that the Playground can successfully generate a response to a user prompt for all configured models"

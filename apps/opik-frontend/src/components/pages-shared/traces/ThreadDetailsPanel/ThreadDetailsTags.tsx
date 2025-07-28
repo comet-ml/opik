@@ -1,5 +1,5 @@
 import React from "react";
-import TagListRenderer from "../TraceDetailsPanel/TagList/TagListRenderer";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import useThreadUpdateMutation from "@/api/traces/useThreadUpdateMutation";
 
 type ThreadDetailsTagsProps = {

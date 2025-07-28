@@ -52,16 +52,23 @@ public class FilterQueryBuilder {
     private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
     private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_DB = "tags";
+    private static final String VERSION_COUNT_DB = "version_count";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
     private static final String DURATION_ANALYTICS_DB = "duration";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
+    private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
+    private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_DB = "created_at";
     private static final String LAST_UPDATED_AT_DB = "last_updated_at";
+    private static final String CREATED_BY_DB = "created_by";
+    private static final String LAST_UPDATED_BY_DB = "last_updated_by";
+    private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
+    private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
@@ -211,6 +218,8 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentField, String>builder()
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
@@ -220,12 +229,24 @@ public class FilterQueryBuilder {
                     .put(PromptField.DESCRIPTION, DESCRIPTION_DB)
                     .put(PromptField.CREATED_AT, CREATED_AT_DB)
                     .put(PromptField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(PromptField.CREATED_BY, CREATED_BY_DB)
+                    .put(PromptField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(PromptField.TAGS, TAGS_DB)
+                    .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
                     .build());
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.ID, ID_DB)
+                    .put(DatasetField.NAME, NAME_DB)
+                    .put(DatasetField.DESCRIPTION, DESCRIPTION_DB)
                     .put(DatasetField.TAGS, TAGS_DB)
+                    .put(DatasetField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetField.CREATED_BY, CREATED_BY_DB)
+                    .put(DatasetField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
+                    .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -287,6 +308,8 @@ public class FilterQueryBuilder {
                     .build()),
             FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
                     .add(ExperimentField.METADATA)
+                    .add(ExperimentField.DATASET_ID)
+                    .add(ExperimentField.PROMPT_IDS)
                     .build(),
             FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.ID)
@@ -294,10 +317,22 @@ public class FilterQueryBuilder {
                     .add(PromptField.DESCRIPTION)
                     .add(PromptField.CREATED_AT)
                     .add(PromptField.LAST_UPDATED_AT)
+                    .add(PromptField.CREATED_BY)
+                    .add(PromptField.LAST_UPDATED_BY)
                     .add(PromptField.TAGS)
+                    .add(PromptField.VERSION_COUNT)
                     .build(),
             FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .add(DatasetField.ID)
+                    .add(DatasetField.NAME)
+                    .add(DatasetField.DESCRIPTION)
                     .add(DatasetField.TAGS)
+                    .add(DatasetField.CREATED_AT)
+                    .add(DatasetField.CREATED_BY)
+                    .add(DatasetField.LAST_UPDATED_AT)
+                    .add(DatasetField.LAST_UPDATED_BY)
+                    .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
+                    .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
                     .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)

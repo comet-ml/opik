@@ -4,6 +4,7 @@ import {
   Copy,
   MessagesSquare,
   MoreHorizontal,
+  Network,
   Share,
   Trash,
 } from "lucide-react";
@@ -47,20 +48,8 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
-
-const PANEL_ELEMENTS_EXPANDED_SIZE = [
-  { name: "SEPARATOR", size: 25 },
-  { name: "GO_TO_THREAD", size: 110 },
-  { name: "PADDING", size: 24 },
-  { name: "FILTER", size: 60 },
-  { name: "SEPARATOR", size: 25 },
-  { name: "MORE", size: 32 },
-];
-
-const MIN_PANEL_WIDTH = PANEL_ELEMENTS_EXPANDED_SIZE.reduce(
-  (acc, e) => acc + e.size,
-  0,
-);
+import NetworkOff from "@/icons/network-off.svg?react";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -77,6 +66,9 @@ type TraceDetailsActionsPanelProps = {
   filters: Filters;
   setFilters: OnChangeFn<Filters>;
   treeData: Array<Trace | Span>;
+  graph: boolean | null;
+  setGraph: OnChangeFn<boolean | null | undefined>;
+  hasAgentGraph: boolean;
 };
 
 const TraceDetailsActionsPanel: React.FunctionComponent<
@@ -93,6 +85,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   setSearch,
   filters,
   setFilters,
+  graph,
+  setGraph,
+  hasAgentGraph,
   treeData,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
@@ -104,8 +99,25 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useTraceDeleteMutation();
 
+  const hasThread = Boolean(setThreadId && threadId);
+
+  const minPanelWidth = useMemo(() => {
+    const elements = [
+      { name: "SEPARATOR", size: 25, visible: hasThread },
+      { name: "GO_TO_THREAD", size: 110, visible: hasThread },
+      { name: "PADDING", size: 24, visible: true },
+      { name: "FILTER", size: 60, visible: true },
+      { name: "SEPARATOR", size: 25, visible: true },
+      { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
+      { name: "SEPARATOR", size: 25, visible: hasAgentGraph },
+      { name: "MORE", size: 32, visible: true },
+    ];
+
+    return elements.reduce((acc, e) => acc + (e.visible ? e.size : 0), 0);
+  }, [hasAgentGraph, hasThread]);
+
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
-    setIsSmall(node.clientWidth < MIN_PANEL_WIDTH + SEARCH_SPACE_RESERVATION);
+    setIsSmall(node.clientWidth < minPanelWidth + SEARCH_SPACE_RESERVATION);
   });
 
   const handleTraceDelete = useCallback(() => {
@@ -139,21 +151,21 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             options: [
               {
                 value: SPAN_TYPE.general,
-                label: "General",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
               },
               {
                 value: SPAN_TYPE.tool,
-                label: "Tool",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
               },
               {
                 value: SPAN_TYPE.llm,
-                label: "LLM call",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
               },
               ...(isGuardrailsEnabled
                 ? [
                     {
                       value: SPAN_TYPE.guardrail,
-                      label: "Guardrail",
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
                     },
                   ]
                 : []),
@@ -271,6 +283,31 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           disabled={isSpansLazyLoading}
           align="end"
         />
+        {hasAgentGraph && (
+          <>
+            <Separator orientation="vertical" className="mx-1 h-4" />
+            <TooltipWrapper
+              content={graph ? "Hide agent graph" : "Show agent graph"}
+            >
+              <Button
+                variant="secondary"
+                size={isSmall ? "icon-sm" : "sm"}
+                onClick={() => setGraph(!graph)}
+              >
+                {graph ? (
+                  <NetworkOff className="size-3.5 shrink-0" />
+                ) : (
+                  <Network className="size-3.5 shrink-0" />
+                )}
+                {isSmall ? null : (
+                  <span className="ml-1.5">
+                    {graph ? "Hide agent graph" : "Show agent graph"}
+                  </span>
+                )}
+              </Button>
+            </TooltipWrapper>
+          </>
+        )}
         <Separator orientation="vertical" className="mx-1 h-4" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

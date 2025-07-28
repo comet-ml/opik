@@ -270,7 +270,8 @@ public class SpanService {
                 .flatMapMany(it -> spanDAO.search(limit, it));
     }
 
-    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
+    @WithSpan
+    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }
@@ -279,7 +280,7 @@ public class SpanService {
                 .flatMap(
                         spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
                                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds))))
-                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)))
+                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds, projectId)))
                 .then();
     }
 

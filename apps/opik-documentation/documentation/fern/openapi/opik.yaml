@@ -2076,46 +2076,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detailed"
-  /v1/private/projects/{id}/configurations:
-    put:
-      tags:
-      - Projects
-      summary: Upsert project configurations
-      description: Upsert project configurations
-      operationId: upsertProjectConfigurations
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Configuration"
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "422":
-          description: Unprocessable Content
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/prompts:
     get:
       tags:
@@ -3665,6 +3625,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/configurations:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace configuration
+      description: Get workspace configuration
+      operationId: getWorkspaceConfiguration
+      responses:
+        "200":
+          description: Workspace Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Workspaces
+      summary: Upsert workspace configuration
+      description: Upsert workspace configuration
+      operationId: upsertWorkspaceConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceConfiguration"
+      responses:
+        "200":
+          description: Configuration Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Workspaces
+      summary: Delete workspace configuration
+      description: Delete workspace configuration
+      operationId: deleteWorkspaceConfiguration
+      responses:
+        "204":
+          description: Configuration Deleted
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/costs:
     post:
       tags:
@@ -4172,6 +4197,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -4436,6 +4463,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         type:
           type: string
           enum:
@@ -4608,6 +4637,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -4825,6 +4856,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -4915,6 +4948,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         project_id:
           type: string
           format: uuid
@@ -5842,6 +5877,10 @@ components:
         total:
           type: integer
           format: int64
+        sortableBy:
+          type: array
+          items:
+            type: string
     Dataset_Public:
       required:
       - name
@@ -7839,53 +7878,6 @@ components:
           - running
           - completed
           - cancelled
-    Configuration:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -7967,55 +7959,6 @@ components:
           readOnly: true
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation"
-        configuration:
-          $ref: "#/components/schemas/Configuration"
-    Configuration_Write:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     Project_Write:
       required:
       - name
@@ -8031,55 +7974,6 @@ components:
           - public
         description:
           type: string
-        configuration:
-          $ref: "#/components/schemas/Configuration_Write"
-    Configuration_Public:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ProjectPage_Public:
       type: object
       properties:
@@ -8137,8 +8031,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-        configuration:
-          $ref: "#/components/schemas/Configuration_Public"
     FeedbackScoreNames:
       type: object
       properties:
@@ -8177,6 +8069,8 @@ components:
           - COST
           - GUARDRAILS_FAILED_COUNT
           - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -8209,6 +8103,8 @@ components:
           - COST
           - GUARDRAILS_FAILED_COUNT
           - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -8259,53 +8155,6 @@ components:
           format: int64
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation"
-    Configuration_Detailed:
-      type: object
-      properties:
-        timeout_to_mark_thread_as_inactive:
-          type: object
-          properties:
-            seconds:
-              type: integer
-              format: int64
-            zero:
-              type: boolean
-            nano:
-              type: integer
-              format: int32
-            negative:
-              type: boolean
-            positive:
-              type: boolean
-            units:
-              type: array
-              items:
-                type: object
-                properties:
-                  durationEstimated:
-                    type: boolean
-                  duration:
-                    type: object
-                    properties:
-                      seconds:
-                        type: integer
-                        format: int64
-                      zero:
-                        type: boolean
-                      nano:
-                        type: integer
-                        format: int32
-                      negative:
-                        type: boolean
-                      positive:
-                        type: boolean
-                  timeBased:
-                    type: boolean
-                  dateBased:
-                    type: boolean
-          description: "minimum precision supported is seconds, please use a duration\
-            \ with seconds precision or higher. Also, the max duration allowed is\
-            \ 7 days."
     ErrorCountWithDeviation_Detailed:
       type: object
       properties:
@@ -8410,8 +8259,6 @@ components:
           readOnly: true
         error_count:
           $ref: "#/components/schemas/ErrorCountWithDeviation_Detailed"
-        configuration:
-          $ref: "#/components/schemas/Configuration_Detailed"
     ErrorMessage_Detailed:
       type: object
       properties:
@@ -9442,6 +9289,22 @@ components:
           items:
             minLength: 1
             type: string
+    BatchDeleteByProject:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        project_id:
+          type: string
+          format: uuid
     Check_Public:
       type: object
       properties:
@@ -9917,6 +9780,15 @@ components:
           format: date-time
         start_before_end:
           type: boolean
+    WorkspaceConfiguration:
+      type: object
+      properties:
+        timeout_to_mark_thread_as_inactive:
+          type: string
+          description: "Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H\
+            \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
+            \ please use a duration with seconds precision or higher. Also, the max\
+            \ duration allowed is 7 days."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

@@ -119,6 +119,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1787,41 +1788,162 @@ class DatasetsResourceTest {
                 datasetsLastExperimentCreated.add(new DatasetLastExperimentCreated(id, Instant.now()));
             });
 
-            mySqlTemplate.inTransaction(WRITE, handle -> {
+            saveDatasetsLastExperimentCreated(datasetsLastExperimentCreated, workspaceId);
 
-                var dao = handle.attach(DatasetDAO.class);
-                dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
+            if (expectedDirection == Direction.DESC) {
+                expected = expected.reversed();
+            }
 
-                return null;
-            });
-
-            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection,
                     SortableFields.LAST_CREATED_EXPERIMENT_AT, null);
         }
 
         @ParameterizedTest
-        @MethodSource("sortDirectionProvider")
-        @DisplayName("when fetching all datasets, then return datasets sorted by tags")
-        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByTags(
-                Direction requestDirection, Direction expectedDirection) {
+        @MethodSource
+        @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields(
+                Comparator<Dataset> comparator,
+                SortingField sorting) {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
-
-            expected.forEach(dataset -> {
-                createAndAssert(dataset, apiKey, workspaceName);
-            });
-
-            expected = expected.stream()
-                    .sorted(Comparator.comparing(d -> d.tags().toString().toLowerCase()))
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                    .map(d -> d.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
                     .toList();
 
-            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
-                    SortableFields.TAGS, null);
+            datasets.forEach(dataset -> {
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+
+                saveDatasetsLastOptimizationCreated(Set.of(new DatasetLastOptimizationCreated(id, Instant.now())),
+                        workspaceId);
+                saveDatasetsLastExperimentCreated(Set.of(new DatasetLastExperimentCreated(id, Instant.now())),
+                        workspaceId);
+            });
+
+            datasets = datasets.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            requestAndAssertDatasetsPage(workspaceName, apiKey, datasets, sorting.direction(),
+                    sorting.field(), null);
+        }
+
+        private Stream<Arguments> getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields() {
+            // Comparators for all sortable fields
+            Comparator<Dataset> idComparator = Comparator.comparing(Dataset::id);
+            Comparator<Dataset> nameComparator = Comparator.comparing(Dataset::name, String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> descriptionComparator = Comparator.comparing(Dataset::description,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> tagsComparator = Comparator.comparing(d -> d.tags().toString(),
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> createdAtComparator = Comparator.comparing(Dataset::createdAt);
+            Comparator<Dataset> createdByComparator = Comparator.comparing(Dataset::createdBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> lastUpdatedAtComparator = Comparator.comparing(Dataset::lastUpdatedAt);
+            Comparator<Dataset> lastUpdatedByComparator = Comparator.comparing(Dataset::lastUpdatedBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> lastCreatedExperimentAtComparator = Comparator.comparing(
+                    Dataset::lastCreatedExperimentAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            Comparator<Dataset> lastCreatedOptimizationAtComparator = Comparator.comparing(
+                    Dataset::lastCreatedOptimizationAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            Comparator<Dataset> idComparatorReversed = Comparator.comparing(Dataset::id).reversed();
+
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(
+                            idComparator,
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            idComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // NAME field sorting
+                    Arguments.of(
+                            nameComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            nameComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+
+                    // DESCRIPTION field sorting
+                    Arguments.of(
+                            descriptionComparator,
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            descriptionComparator.reversed(),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
+
+                    // TAGS field sorting
+                    Arguments.of(
+                            tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            createdAtComparator,
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            createdByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(
+                            lastUpdatedAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(
+                            lastUpdatedByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                                    .build()),
+
+                    // LAST_CREATED_EXPERIMENT_AT field sorting
+                    Arguments.of(
+                            lastCreatedExperimentAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                                    .direction(Direction.ASC).build()),
+                    Arguments.of(
+                            lastCreatedExperimentAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                                    .direction(Direction.DESC).build()),
+
+                    // LAST_CREATED_OPTIMIZATION_AT field sorting
+                    Arguments.of(
+                            lastCreatedOptimizationAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
+                                    .direction(Direction.ASC).build()),
+                    Arguments.of(
+                            lastCreatedOptimizationAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
+                                    .direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
@@ -1843,6 +1965,18 @@ class DatasetsResourceTest {
                 datasetsLastOptimizationCreated.add(new DatasetLastOptimizationCreated(id, Instant.now()));
             });
 
+            saveDatasetsLastOptimizationCreated(datasetsLastOptimizationCreated, workspaceId);
+
+            if (expectedDirection == Direction.DESC) {
+                expected = expected.reversed();
+            }
+
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection,
+                    SortableFields.LAST_CREATED_OPTIMIZATION_AT, null);
+        }
+
+        private void saveDatasetsLastOptimizationCreated(
+                Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated, String workspaceId) {
             mySqlTemplate.inTransaction(WRITE, handle -> {
 
                 var dao = handle.attach(DatasetDAO.class);
@@ -1850,9 +1984,17 @@ class DatasetsResourceTest {
 
                 return null;
             });
+        }
 
-            requestAndAssertDatasetsPage(workspaceName, apiKey, expected, requestDirection, expectedDirection,
-                    SortableFields.LAST_CREATED_OPTIMIZATION_AT, null);
+        private void saveDatasetsLastExperimentCreated(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated,
+                String workspaceId) {
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+
+                var dao = handle.attach(DatasetDAO.class);
+                dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
+
+                return null;
+            });
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
@@ -1863,10 +2005,10 @@ class DatasetsResourceTest {
         }
 
         private void requestAndAssertDatasetsPage(String workspaceName, String apiKey, List<Dataset> allDatasets,
-                Direction request, Direction expected, String sortingField, List<DatasetFilter> filters) {
+                Direction request, String sortingField, List<DatasetFilter> filters) {
 
             WebTarget target = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("size", allDatasets.size());
+                    .queryParam("size", Math.max(1, allDatasets.size()));
 
             if (sortingField != null) {
                 var sorting = List.of(SortingField.builder()
@@ -1894,10 +2036,6 @@ class DatasetsResourceTest {
             assertThat(actualEntity.total()).isEqualTo(allDatasets.size());
             assertThat(actualEntity.page()).isEqualTo(1);
 
-            if (expected == Direction.DESC) {
-                allDatasets = allDatasets.reversed();
-            }
-
             assertThat(actualEntity.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                     .containsExactlyElementsOf(allDatasets);
@@ -1916,19 +2054,28 @@ class DatasetsResourceTest {
 
             List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
 
+            Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated = new HashSet<>();
+            Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated = new HashSet<>();
+
             datasets.forEach(dataset -> {
-                createAndAssert(dataset, apiKey, workspaceName);
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+                datasetsLastOptimizationCreated.add(new DatasetLastOptimizationCreated(id, Instant.now()));
+                datasetsLastExperimentCreated.add(new DatasetLastExperimentCreated(id, Instant.now()));
             });
+
+            saveDatasetsLastOptimizationCreated(datasetsLastOptimizationCreated, workspaceId);
+            saveDatasetsLastExperimentCreated(datasetsLastExperimentCreated, workspaceId);
 
             List<Dataset> expectedDatasets = getExpectedDatasets.apply(datasets).reversed();
             DatasetFilter filter = getFilter.apply(datasets);
 
-            requestAndAssertDatasetsPage(workspaceName, apiKey, expectedDatasets, null, null,
+            requestAndAssertDatasetsPage(workspaceName, apiKey, expectedDatasets, null,
                     null, List.of(filter));
         }
 
         private Stream<Arguments> getValidFilters() {
             return Stream.of(
+                    // TAGS field tests (existing)
                     Arguments.of(
                             (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
                                     .field(DatasetField.TAGS)
@@ -1942,7 +2089,180 @@ class DatasetsResourceTest {
                                     .operator(Operator.NOT_CONTAINS)
                                     .value(datasets.getFirst().tags().iterator().next())
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())));
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+
+                    // ID field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.ID)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+
+                    // NAME field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().name())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().name())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().name().substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> dataset.name()
+                                            .contains(datasets.getFirst().name().substring(0, 3)))
+                                    .toList()),
+
+                    // DESCRIPTION field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().description())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().description())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().description() != null
+                                            ? datasets.getFirst().description().substring(0,
+                                                    Math.min(3, datasets.getFirst().description().length()))
+                                            : "test")
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> {
+                                        String searchValue = datasets.getFirst().description() != null
+                                                ? datasets.getFirst().description().substring(0,
+                                                        Math.min(3, datasets.getFirst().description().length()))
+                                                : "test";
+                                        return dataset.description() != null
+                                                && dataset.description().contains(searchValue);
+                                    })
+                                    .toList()),
+
+                    // CREATED_AT field tests (following prompt test pattern)
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_AT)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_AT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // CREATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_UPDATED_AT field tests (following prompt test pattern)
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_AT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_UPDATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_CREATED_EXPERIMENT_AT field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_CREATED_EXPERIMENT_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_CREATED_OPTIMIZATION_AT field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets));
         }
 
         @Test
@@ -2608,16 +2928,15 @@ class DatasetsResourceTest {
                             "description must not be blank"));
         }
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void updateDataset() {
+        void updateDataset(DatasetUpdate datasetUpdate) {
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build();
 
             var id = createAndAssert(dataset);
-
-            var datasetUpdate = factory.manufacturePojo(DatasetUpdate.class);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(id.toString())
@@ -2635,10 +2954,17 @@ class DatasetsResourceTest {
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
-                    .tags(datasetUpdate.tags())
+                    .tags(datasetUpdate.tags() == null ? dataset.tags() : datasetUpdate.tags())
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
+        }
+
+        Stream<Arguments> updateDataset() {
+            return Stream.of(
+                    arguments(factory.manufacturePojo(DatasetUpdate.class)),
+                    arguments(factory.manufacturePojo(DatasetUpdate.class).toBuilder().tags(Set.of()).build()),
+                    arguments(factory.manufacturePojo(DatasetUpdate.class).toBuilder().tags(null).build()));
         }
 
         @Test
@@ -3968,7 +4294,8 @@ class DatasetsResourceTest {
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
             feedbackScoreBatch = feedbackScoreBatch.toBuilder()
-                    .scores(Stream.concat(feedbackScoreBatch.scores().stream(),
+                    .scores(Stream.concat(
+                            feedbackScoreBatch.scores().stream(),
                             traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
                     .build();
 

@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
@@ -162,6 +163,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       uiType: formUIRuleType,
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
+      enabled: defaultRule?.enabled ?? true,
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
@@ -183,24 +185,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
       const applyChange = () => {
-        if (value === EVALUATORS_RULE_SCOPE.thread) {
-          form.setValue("uiType", UI_EVALUATORS_RULE_TYPE.llm_judge);
-        }
-
         const { uiType } = form.getValues();
         const type = getBackendRuleType(value, uiType);
 
         form.setValue("scope", value);
         form.setValue("type", type);
 
-        form.resetField("llmJudgeDetails", {
-          defaultValue: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[value]),
-          keepDirty: false,
-        });
-        form.resetField("pythonCodeDetails", {
-          defaultValue: cloneDeep(DEFAULT_PYTHON_CODE_DATA[value]),
-          keepDirty: false,
-        });
+        form.setValue(
+          "llmJudgeDetails",
+          cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[value]),
+        );
+        form.setValue(
+          "pythonCodeDetails",
+          cloneDeep(DEFAULT_PYTHON_CODE_DATA[value]),
+        );
       };
 
       if (
@@ -274,6 +272,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       name: formData.ruleName,
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
+      enabled: formData.enabled,
       type: ruleType,
     };
 
@@ -413,12 +412,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       <FormItem className="flex-1">
                         <Label className="flex items-center">
                           Scope{" "}
-                          <TooltipWrapper
-                            content="Choose whether the evaluation rule scores the entire
-                      thread or each individual trace. Thread-level rules assess
-                      the full conversation, while trace-level rules evaluate
-                      one model response at a time."
-                          >
+                          <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
                             <Info className="ml-1 size-4 text-light-slate" />
                           </TooltipWrapper>
                         </Label>
@@ -464,7 +458,34 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   )}
                 />
 
-                {!isEdit && !isThreadScope && (
+                <FormField
+                  control={form.control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
+                      <div className="flex flex-col">
+                        <Label
+                          htmlFor="enabled"
+                          className="text-sm font-medium"
+                        >
+                          Enable rule
+                        </Label>
+                        <Description>
+                          Enable or disable this evaluation rule
+                        </Description>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          id="enabled"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {!isEdit && (
                   <FormField
                     control={form.control}
                     name="uiType"

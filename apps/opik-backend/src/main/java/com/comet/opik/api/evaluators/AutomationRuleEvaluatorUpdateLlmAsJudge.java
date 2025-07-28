@@ -22,10 +22,11 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.Ll
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRuleEvaluatorUpdate<LlmAsJudgeCode> {
 
-    @ConstructorProperties({"name", "samplingRate", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateLlmAsJudge(
-            @NotBlank String name, float samplingRate, @NotNull LlmAsJudgeCode code, @NotNull UUID projectId) {
-        super(name, samplingRate, code, projectId);
+            @NotBlank String name, float samplingRate, boolean enabled, @NotNull LlmAsJudgeCode code,
+            @NotNull UUID projectId) {
+        super(name, samplingRate, enabled, code, projectId);
     }
 
     /**
