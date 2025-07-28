@@ -87,17 +87,17 @@ const WorkspacePreferencesTab: React.FC = () => {
     ];
   }, [handleEdit]);
 
-  if (isPending) {
-    return <Loader />;
-  }
-
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={data}
-        columnPinning={WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING}
-      />
+      {isPending ? (
+        <Loader />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={data}
+          columnPinning={WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING}
+        />
+      )}
 
       <EditThreadTimeoutDialog
         {...getPreferencesDialogConfig(

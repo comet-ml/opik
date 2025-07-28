@@ -32,7 +32,6 @@ interface MetricContainerChartProps {
   interval: INTERVAL_TYPE;
   intervalStart: string;
   intervalEnd: string;
-  disableLoadingData: boolean;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
@@ -65,7 +64,6 @@ const MetricContainerChart = ({
   interval,
   intervalStart,
   intervalEnd,
-  disableLoadingData,
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
@@ -81,7 +79,7 @@ const MetricContainerChart = ({
       intervalEnd,
     },
     {
-      enabled: !!projectId && !disableLoadingData,
+      enabled: !!projectId,
       refetchInterval: 30000,
     },
   );
