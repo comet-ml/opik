@@ -2,7 +2,10 @@ import functools
 import logging
 from typing import List, Optional
 
-from opik import exceptions, logging_messages, opik_context, track
+import opik.exceptions as exceptions
+import opik.logging_messages as logging_messages
+import opik.opik_context as opik_context
+import opik.track as track
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment

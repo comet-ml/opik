@@ -2,7 +2,9 @@ import functools
 import logging
 from typing import Optional, List, Callable, Dict, Literal
 
-from opik import exceptions, track, opik_context
+import opik.exceptions as exceptions
+import opik.track as track
+import opik.opik_context as opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
 

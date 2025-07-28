@@ -12,16 +12,25 @@ from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
 from .decorator.tracker import flush_tracker, track
-from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
-from .integrations.sagemaker import auth as sagemaker_auth
-from .plugins.pytest.decorator import llm_unit
+
+import sys as _sys
+from typing import Any, cast as _cast
+
 from .types import LLMProvider
 from . import opik_context
+
+from .plugins.pytest.decorator import llm_unit
+
+from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
+from .integrations.sagemaker import auth as sagemaker_auth
+
 from .decorator.tracing_runtime_config import (
     set_tracing_active,
     is_tracing_active,
     reset_tracing_to_config_default,
 )
+
+_sys.modules[__name__ + ".track"] = _cast(Any, track)
 
 _logging.setup()
 

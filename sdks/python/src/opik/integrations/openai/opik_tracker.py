@@ -6,7 +6,7 @@ from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
 )
-from opik import semantic_version
+import opik.semantic_version as semantic_version
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 

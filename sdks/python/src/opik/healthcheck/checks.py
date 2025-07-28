@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import httpx
 from rich.console import Console
 
-from opik import Opik
+import opik.Opik as Opik
 
 console = Console()
 

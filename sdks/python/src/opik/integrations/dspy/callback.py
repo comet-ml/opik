@@ -4,9 +4,11 @@ import logging
 import dspy
 from dspy.utils import callback as dspy_callback
 
-from opik import types, opik_context, context_storage
+import opik.types as types
+import opik.opik_context as opik_context
+import opik.context_storage as context_storage
 from opik.api_objects import helpers, span, trace, opik_client
-from opik.decorator.tracing_runtime_config import is_tracing_active
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module
@@ -44,7 +46,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._opik_client = opik_client.get_client_cached()
 
     def _skip_tracking(self) -> bool:
-        return not is_tracing_active()
+        return not tracing_runtime_config.is_tracing_active()
 
     def on_module_start(
         self,
@@ -145,7 +147,10 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
 
-        if self._opik_client.config.log_start_trace_span and is_tracing_active():
+        if (
+            self._opik_client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        ):
             self._opik_client.span(**span_data.as_start_parameters)
 
     def _start_trace(
@@ -163,7 +168,10 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_trace_data[call_id] = trace_data
         self._set_current_context_data(trace_data)
 
-        if self._opik_client.config.log_start_trace_span and is_tracing_active():
+        if (
+            self._opik_client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        ):
             self._opik_client.trace(**trace_data.as_start_parameters)
 
     def on_module_end(
@@ -181,7 +189,7 @@ class OpikCallback(dspy_callback.BaseCallback):
 
     def _end_trace(self, call_id: str) -> None:
         if trace_data := self._map_call_id_to_trace_data.pop(call_id, None):
-            if is_tracing_active():
+            if tracing_runtime_config.is_tracing_active():
                 trace_data.init_end_time()
                 self._opik_client.trace(**trace_data.as_parameters)
 
@@ -200,7 +208,7 @@ class OpikCallback(dspy_callback.BaseCallback):
                 span_data.update(error_info=error_info)
 
             span_data.update(output={"output": outputs}).init_end_time()
-            if is_tracing_active():
+            if tracing_runtime_config.is_tracing_active():
                 self._opik_client.span(**span_data.as_parameters)
 
             # remove span data from context

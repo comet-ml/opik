@@ -5,7 +5,7 @@ from haystack import logging, tracing
 
 from . import opik_tracer
 import opik
-from opik.decorator.tracing_runtime_config import is_tracing_active
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class OpikConnector:
             project_name: The name of the project to use for the tracing run. If not provided, the project name will be
                 set to the default project name.
         """
-        if not is_tracing_active():
+        if not tracing_runtime_config.is_tracing_active():
             # Create a no-op tracer when tracing is disabled
             self.name = name
             self.tracer = None

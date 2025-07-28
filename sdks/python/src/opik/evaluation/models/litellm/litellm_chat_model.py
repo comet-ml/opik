@@ -8,7 +8,7 @@ import pydantic
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
 
-from opik import semantic_version
+import opik.semantic_version as semantic_version
 
 from .. import base_model
 from . import opik_monitor, warning_filters

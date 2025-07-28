@@ -8,10 +8,10 @@ from haystack import logging, tracing
 from haystack.tracing import utils as tracing_utils
 
 import opik
-from opik import url_helpers
+import opik.url_helpers as url_helpers
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace
-from opik.decorator.tracing_runtime_config import is_tracing_active
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 from . import converters
 
@@ -176,7 +176,7 @@ class OpikTracer(tracing.Tracer):
             context = tracing_context_var.get({})
 
             trace = None
-            if is_tracing_active():
+            if tracing_runtime_config.is_tracing_active():
                 trace = self._opik_client.trace(
                     id=context.get("trace_id"),
                     name=self._name,
@@ -187,13 +187,13 @@ class OpikTracer(tracing.Tracer):
         elif tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS:
             span = OpikSpanBridge(
                 parent_span.raw_span().span(name=span_name, type="llm")
-                if is_tracing_active()
+                if tracing_runtime_config.is_tracing_active()
                 else parent_span.raw_span()
             )
         else:
             span = (
                 OpikSpanBridge(parent_span.raw_span().span(name=span_name))
-                if is_tracing_active()
+                if tracing_runtime_config.is_tracing_active()
                 else parent_span
             )
 

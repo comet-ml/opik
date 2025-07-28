@@ -1,7 +1,7 @@
 import contextlib
 from typing import Any, Dict, List, Optional, Union, Iterator
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace, opik_client
 from opik.api_objects.attachment import Attachment
 from opik.types import (
@@ -11,7 +11,7 @@ from opik.types import (
     ErrorInfoDict,
 )
 
-from opik.decorator.tracing_runtime_config import is_tracing_active
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 from . import context_storage, exceptions
 from .decorator import error_info_collector
@@ -89,7 +89,7 @@ def update_current_span(
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
     """
-    if not is_tracing_active():
+    if not tracing_runtime_config.is_tracing_active():
         return
 
     new_params = {
@@ -136,7 +136,7 @@ def update_current_trace(
             The identifier is user-defined and has to be unique per project.
         attachments: The list of attachments to be uploaded to the trace.
     """
-    if not is_tracing_active():
+    if not tracing_runtime_config.is_tracing_active():
         return
 
     new_params = {

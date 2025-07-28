@@ -34,7 +34,7 @@ class TracingRuntimeConfig:
 
         with self._lock:
             self._cached_config_enabled = enabled
-            return enabled
+        return enabled
 
 
 runtime_cfg = TracingRuntimeConfig()

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import configparser
 import logging
 import os
@@ -6,7 +7,7 @@ import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
-from opik.decorator.tracing_runtime_config import TracingRuntimeConfig
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
@@ -257,10 +258,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @property
-    def runtime(self) -> TracingRuntimeConfig:
-        from .decorator.tracing_runtime_config import runtime_cfg
-
-        return runtime_cfg
+    def runtime(self) -> tracing_runtime_config.TracingRuntimeConfig:
+        return tracing_runtime_config.runtime_cfg
 
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> "OpikConfig":

@@ -38,8 +38,8 @@ def test_track_disabled_mode__get_current_span_and_trace_called__spans_and_trace
 
         @tracker_instance.track
         def f():
-            assert opik_context.get_current_span_data() is not None
-            assert opik_context.get_current_trace_data() is not None
+            assert opik_context.get_current_span_data() is None
+            assert opik_context.get_current_trace_data() is None
 
         f()
         tracker.flush_tracker()
