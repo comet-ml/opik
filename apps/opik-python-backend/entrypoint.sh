@@ -35,8 +35,9 @@ else
 fi
 
 echo "Starting the Opik Python Backend server"
-# Use same number of threads as container pool size
-NUM_THREADS=${PYTHON_CODE_EXECUTOR_PARALLEL_NUM:-5}
+# Use same number of workers as container pool size for optimal concurrency
+NUM_WORKERS=${PYTHON_CODE_EXECUTOR_PARALLEL_NUM:-5}
+echo "Configuring $NUM_WORKERS Gunicorn workers to match container pool size"
 
 echo "OPIK_VERSION=$OPIK_VERSION"
 echo "OPIK_OTEL_SDK_ENABLED=$OPIK_OTEL_SDK_ENABLED"
@@ -51,19 +52,29 @@ if [ "$OPIK_OTEL_SDK_ENABLED" = "true" ]; then
   export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
 
   opentelemetry-instrument gunicorn --access-logfile '-' \
-         --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
-         --workers 1 \
-         --threads "$NUM_THREADS" \
-         --worker-class gthread \
-         --bind=0.0.0.0:8000 \
-         --chdir ./src 'opik_backend:create_app()'
+       --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
+       --workers $NUM_WORKERS \
+       --worker-class uvicorn.workers.UvicornWorker \
+       --worker-connections 1000 \
+       --backlog 4096 \
+       --timeout 60 \
+       --keep-alive 5 \
+       --max-requests 1000 \
+       --max-requests-jitter 100 \
+       --bind=0.0.0.0:8000 \
+       --chdir ./src 'opik_backend:create_app()'
 else
   echo "Starting the Opik Python Backend server without Open Telemetry instrumentation"
   gunicorn --access-logfile '-' \
       --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
-      --workers 1 \
-      --threads "$NUM_THREADS" \
-      --worker-class gthread \
+      --workers $NUM_WORKERS \
+      --worker-class uvicorn.workers.UvicornWorker \
+      --worker-connections 1000 \
+      --backlog 4096 \
+      --timeout 60 \
+      --keep-alive 5 \
+      --max-requests 1000 \
+      --max-requests-jitter 100 \
       --bind=0.0.0.0:8000 \
       --chdir ./src 'opik_backend:create_app()'
 fi

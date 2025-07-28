@@ -9,8 +9,6 @@ EVALUATORS_URL = "/v1/private/evaluators/python"
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
     executor_instance = request.param()
-    if hasattr(executor_instance, 'start_services'):
-        executor_instance.start_services()
 
     try:
         yield executor_instance

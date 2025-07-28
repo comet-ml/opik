@@ -1,7 +1,9 @@
 import logging
 import os
 import sys
+import asyncio
 
+from asgiref.wsgi import WsgiToAsgi
 from flask import Flask
 from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -10,6 +12,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
+logger = logging.getLogger(__name__)
 
 def create_app(test_config=None, should_init_executor=True):
     app = Flask(__name__, instance_relative_config=True)
@@ -55,7 +58,8 @@ def create_app(test_config=None, should_init_executor=True):
     app.register_blueprint(evaluator)
     app.register_blueprint(post_user_signup)
 
-    return app
+    return WsgiToAsgi(app)
+
 
 def setup_telemetry(app):
     """Configure OpenTelemetry metrics for the application using OTLP push metrics only."""

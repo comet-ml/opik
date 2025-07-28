@@ -1,9 +1,11 @@
+import asyncio
 from typing import Any
 from opik_backend.executor_docker import DockerExecutor
 
-def test_network_access_blocked():
+async def test_network_access_blocked():
     """Test that network access is blocked in Docker containers."""
     executor = DockerExecutor()
+    
     try:
         # Code that attempts to make a network request
         code = """
@@ -28,7 +30,7 @@ class NetworkAccessTest(base_metric.BaseMetric):
             value=1.0 if success else 0.0,
             reason=error if error else "Network access succeeded")
 """
-        result = executor.run_scoring(code, {"output": "", "reference": ""})
+        result = await executor.run_scoring(code, {"output": "", "reference": ""})
         
         # The execution should succeed but the network request should fail
         assert "scores" in result, "Result should contain scores"
@@ -41,9 +43,10 @@ class NetworkAccessTest(base_metric.BaseMetric):
         executor.cleanup()
 
 
-def test_filesystem_access_blocked():
+async def test_filesystem_access_blocked():
     """Test that filesystem access is blocked in Docker containers."""
     executor = DockerExecutor()
+
     try:
         # Code that attempts to read a file
         code = """
@@ -70,7 +73,7 @@ class FileSystemAccessTest(base_metric.BaseMetric):
             value=1.0 if success else 0.0,
             reason=error if error else "File system access succeeded")
 """
-        result = executor.run_scoring(code, {"output": "", "reference": ""})
+        result = await executor.run_scoring(code, {"output": "", "reference": ""})
         
         # The execution should succeed but the file access should fail
         assert "scores" in result, "Result should contain scores"
@@ -83,9 +86,10 @@ class FileSystemAccessTest(base_metric.BaseMetric):
         executor.cleanup()
 
 
-def test_library_install_blocked():
+async def test_library_install_blocked():
     """Test that installing new libraries is blocked in Docker containers."""
     executor = DockerExecutor()
+
     try:
         # Code that attempts to install a package
         code = """
@@ -108,7 +112,7 @@ class LibraryInstallTest(base_metric.BaseMetric):
             value=1.0 if success else 0.0,
             reason=error if error else "Library installation succeeded")
 """
-        result = executor.run_scoring(code, {"output": "", "reference": ""})
+        result = await executor.run_scoring(code, {"output": "", "reference": ""})
         
         # The execution should succeed but the installation should fail
         assert "scores" in result, "Result should contain scores"
@@ -121,9 +125,10 @@ class LibraryInstallTest(base_metric.BaseMetric):
         executor.cleanup()
 
 
-def test_execution_timeout():
+async def test_execution_timeout():
     """Test that code execution is terminated after 3 seconds."""
     executor = DockerExecutor()
+    
     try:
         # Code that sleeps for longer than the timeout
         code = """
@@ -143,7 +148,7 @@ class TimeoutTest(base_metric.BaseMetric):
             value=1.0,
             reason="Should not reach here")
 """
-        result = executor.run_scoring(code, {"output": "", "reference": ""})
+        result = await executor.run_scoring(code, {"output": "", "reference": ""})
         
         # The execution should timeout
         assert result["code"] == 504, "Should return timeout status code"

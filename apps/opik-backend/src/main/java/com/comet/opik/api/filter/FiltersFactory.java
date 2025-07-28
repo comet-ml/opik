@@ -138,4 +138,9 @@ public class FiltersFactory {
     private boolean validateFieldType(Filter filter) {
         return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter);
     }
+
+    public static void main(String[] args) {
+        System.out.println("Testing Instant parsing:" +
+            Instant.parse("2025-06-25T00:00:00Z").equals(Instant.parse("2025-06-25T00:00:00.000Z")));
+    }
 }
