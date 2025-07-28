@@ -7,9 +7,9 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ModelCostData(String litellmProvider,
-        String inputCostPerToken,
-        String outputCostPerToken,
-        String cacheCreationInputTokenCost,
-        String cacheReadInputTokenCost,
-        String inputCostPerCharacter) {
+                String inputCostPerToken,
+                String outputCostPerToken,
+                String cacheCreationInputTokenCost,
+                String cacheReadInputTokenCost,
+                String inputCostPerCharacter) {
 }

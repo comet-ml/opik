@@ -1,13 +1,5 @@
 package com.comet.opik.domain.cost;
 
-import com.comet.opik.api.ModelCostData;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import lombok.extern.slf4j.Slf4j;
-
-import javax.annotation.Nullable;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -16,6 +8,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
+
+import javax.annotation.Nullable;
+
+import com.comet.opik.api.ModelCostData;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class CostService {
@@ -103,16 +104,14 @@ public class CostService {
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
                 if (inputCharacterPrice.compareTo(BigDecimal.ZERO) > 0) {
                     calculator = SpanCostCalculator::speechTtsCost;
-                } else
-                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                                        SpanCostCalculator::textGenerationCost);
-                            } else
-                        if (inputPrice.compareTo(BigDecimal.ZERO) > 0
-                                || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                                    calculator = SpanCostCalculator::textGenerationCost;
-                                }
+                } else if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                            SpanCostCalculator::textGenerationCost);
+                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0
+                        || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = SpanCostCalculator::textGenerationCost;
+                }
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName),

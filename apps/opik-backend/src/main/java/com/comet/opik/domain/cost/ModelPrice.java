@@ -1,16 +1,16 @@
 package com.comet.opik.domain.cost;
 
-import lombok.NonNull;
-
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+import lombok.NonNull;
+
 public record ModelPrice(
-        @NonNull BigDecimal inputPrice,
-        @NonNull BigDecimal outputPrice,
-        @NonNull BigDecimal inputCharacterPrice,
-        @NonNull BigDecimal cacheCreationInputTokenPrice,
-        @NonNull BigDecimal cacheReadInputTokenPrice,
-        @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
+                @NonNull BigDecimal inputPrice,
+                @NonNull BigDecimal outputPrice,
+                @NonNull BigDecimal inputCharacterPrice,
+                @NonNull BigDecimal cacheCreationInputTokenPrice,
+                @NonNull BigDecimal cacheReadInputTokenPrice,
+                @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
 }
