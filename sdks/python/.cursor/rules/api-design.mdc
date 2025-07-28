@@ -1,0 +1,11 @@
+---
+description: API design principles and consistency guidelines
+globs:
+alwaysApply: true
+---
+
+## Main API Class Usage
+- `opik.Opik` is the main API class - use it to create other API objects (e.g. `create_experiment`)
+- Provide higher level API through `opik.Opik` that wraps complicated REST calls (e.g. `search_spans`)
+- Always look for similar APIs that already exist and make new ones consistent with them
+- Maintain backward compatibility for public interfaces

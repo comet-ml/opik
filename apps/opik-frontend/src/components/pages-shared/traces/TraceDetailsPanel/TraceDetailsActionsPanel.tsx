@@ -49,6 +49,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -150,21 +151,21 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             options: [
               {
                 value: SPAN_TYPE.general,
-                label: "General",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
               },
               {
                 value: SPAN_TYPE.tool,
-                label: "Tool",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
               },
               {
                 value: SPAN_TYPE.llm,
-                label: "LLM call",
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
               },
               ...(isGuardrailsEnabled
                 ? [
                     {
                       value: SPAN_TYPE.guardrail,
-                      label: "Guardrail",
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
                     },
                   ]
                 : []),

@@ -1,13 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import React, { useRef, useState } from "react";
 import {
-  INTERVAL_TYPE,
   METRIC_NAME_TYPE,
+  INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
-import dayjs from "dayjs";
-import { StringParam, useQueryParam, withDefault } from "use-query-params";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
@@ -18,32 +15,10 @@ import { formatDuration } from "@/lib/date";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-
-enum DAYS_OPTION_TYPE {
-  ONE_DAY = "1",
-  THREE_DAYS = "3",
-  SEVEN_DAYS = "7",
-  THIRTY_DAYS = "30",
-}
-
-const DAYS_OPTIONS = [
-  {
-    value: DAYS_OPTION_TYPE.ONE_DAY,
-    label: "1 day",
-  },
-  {
-    value: DAYS_OPTION_TYPE.THREE_DAYS,
-    label: "3 days",
-  },
-  {
-    value: DAYS_OPTION_TYPE.SEVEN_DAYS,
-    label: "7 days",
-  },
-  {
-    value: DAYS_OPTION_TYPE.THIRTY_DAYS,
-    label: "30 days",
-  },
-];
+import {
+  useMetricDateRangeWithQuery,
+  MetricDateRangeSelect,
+} from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
 const DURATION_LABELS_MAP = {
   "duration.p50": "Percentile 50",
@@ -51,34 +26,61 @@ const DURATION_LABELS_MAP = {
   "duration.p99": "Percentile 99",
 };
 
-const POSSIBLE_DAYS_OPTIONS = Object.values(DAYS_OPTION_TYPE);
-const DEFAULT_DAYS_VALUE = DAYS_OPTION_TYPE.THIRTY_DAYS;
+const INTERVAL_DESCRIPTIONS = {
+  TOTALS: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly totals",
+    [INTERVAL_TYPE.DAILY]: "Daily totals",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly totals",
+  },
+  AVERAGES: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly averages",
+    [INTERVAL_TYPE.DAILY]: "Daily averages",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly averages",
+  },
+  QUANTILES: {
+    [INTERVAL_TYPE.HOURLY]: "Hourly quantiles in seconds",
+    [INTERVAL_TYPE.DAILY]: "Daily quantiles in seconds",
+    [INTERVAL_TYPE.WEEKLY]: "Weekly quantiles in seconds",
+  },
+  COST: {
+    [INTERVAL_TYPE.HOURLY]: "Total hourly cost in USD",
+    [INTERVAL_TYPE.DAILY]: "Total daily cost in USD",
+    [INTERVAL_TYPE.WEEKLY]: "Total weekly cost in USD",
+  },
+};
 
-const nowUTC = dayjs().utc();
-const intervalEnd = nowUTC.format();
+const METRICS_DATE_RANGE_KEY = "range";
 
 const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   formatCost(value as number);
 
 const renderDurationTooltipValue = ({
   value,
-}: ChartTooltipRenderValueArguments) => formatDuration(value as number);
+}: ChartTooltipRenderValueArguments) => formatDuration(value as number, false);
 
-const durationYTickFormatter = (value: number) => formatDuration(value);
+const durationYTickFormatter = (value: number) => formatDuration(value, false);
 
 interface MetricsTabProps {
   projectId: string;
 }
 
 const MetricsTab = ({ projectId }: MetricsTabProps) => {
-  const [days, setDays] = useQueryParam(
-    "days",
-    withDefault(StringParam, DEFAULT_DAYS_VALUE),
-  );
   const [requestChartOpen, setRequestChartOpen] = useState(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const {
+    dateRange,
+    handleDateRangeChange,
+    interval,
+    intervalStart,
+    intervalEnd,
+    minDate,
+    maxDate,
+  } = useMetricDateRangeWithQuery({
+    key: METRICS_DATE_RANGE_KEY,
+  });
 
   const { data: traces } = useTracesList(
     {
@@ -105,35 +107,13 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   );
 
   const resetKeyRef = useRef(0);
-  const numDays = Number(days);
-  const isValidDays = POSSIBLE_DAYS_OPTIONS.includes(days as DAYS_OPTION_TYPE);
   const hasTraces = Boolean(traces?.total);
   const hasThreads = Boolean(threads?.total);
-
-  const interval: INTERVAL_TYPE = useMemo(() => {
-    if (numDays <= 3) {
-      return INTERVAL_TYPE.HOURLY;
-    }
-
-    return INTERVAL_TYPE.DAILY;
-  }, [numDays]);
-
-  const intervalStart = useMemo(() => {
-    const startOf = numDays === 1 ? "hour" : "day";
-
-    return nowUTC.subtract(numDays, "days").startOf(startOf).format();
-  }, [numDays]);
 
   const handleRequestChartOpen = (val: boolean) => {
     setRequestChartOpen(val);
     resetKeyRef.current += 1;
   };
-
-  useEffect(() => {
-    if (!isValidDays) {
-      setDays(DEFAULT_DAYS_VALUE);
-    }
-  }, [isValidDays, setDays]);
 
   if (!hasTraces && !hasThreads) {
     return <NoTracesPage />;
@@ -146,40 +126,37 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <MetricContainerChart
               chartId="threads_feedback_scores_chart"
               key="threads_feedback_scores_chart"
-              name="Feedback scores of the threads"
-              description="Daily averages"
+              name="Threads feedback scores"
+              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="line"
             />,
             <MetricContainerChart
               chartId="number_of_thread_chart"
               key="number_of_thread_chart"
               name="Number of threads"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_COUNT}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="line"
             />,
             <MetricContainerChart
               chartId="thread_duration_chart"
               key="thread_duration_chart"
               name="Thread duration"
-              description="Daily quantiles in seconds"
+              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
               metricName={METRIC_NAME_TYPE.THREAD_DURATION}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -192,40 +169,37 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <MetricContainerChart
               chartId="feedback_scores_chart"
               key="feedback_scores_chart"
-              name="Feedback scores"
-              description="Daily averages"
+              name="Trace feedback scores"
+              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
               metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="line"
             />,
             <MetricContainerChart
               chartId="number_of_traces_chart"
               key="number_of_traces_chart"
               name="Number of traces"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.TRACE_COUNT}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="line"
             />,
             <MetricContainerChart
               chartId="duration_chart"
               key="duration_chart"
               name="Trace duration"
-              description="Daily quantiles in seconds"
+              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
               metricName={METRIC_NAME_TYPE.TRACE_DURATION}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               renderValue={renderDurationTooltipValue}
               labelsMap={DURATION_LABELS_MAP}
               customYTickFormatter={durationYTickFormatter}
@@ -235,26 +209,24 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="token_usage_chart"
               key="token_usage_chart"
               name="Token usage"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="line"
             />,
             <MetricContainerChart
               chartId="estimated_cost_chart"
               key="estimated_cost_chart"
               name="Estimated cost"
-              description="Total daily cost in USD"
+              description={INTERVAL_DESCRIPTIONS.COST[interval]}
               metricName={METRIC_NAME_TYPE.COST}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               renderValue={renderCostTooltipValue}
               chartType="line"
             />,
@@ -266,13 +238,12 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               chartId="failed_guardrails_chart"
               key="failed_guardrails_chart"
               name="Failed guardrails"
-              description="Daily totals"
+              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
               metricName={METRIC_NAME_TYPE.FAILED_GUARDRAILS}
               interval={interval}
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              disableLoadingData={!isValidDays}
               chartType="bar"
             />,
           ]
@@ -303,15 +274,12 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <ChartLineIcon className="mr-2 size-3.5" />
           Request a chart
         </Button>
-
-        <div className="w-48">
-          <SelectBox
-            value={days}
-            onChange={setDays}
-            options={DAYS_OPTIONS}
-            className="h-8"
-          />
-        </div>
+        <MetricDateRangeSelect
+          value={dateRange}
+          onChangeValue={handleDateRangeChange}
+          minDate={minDate}
+          maxDate={maxDate}
+        />
       </div>
       <div
         className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"

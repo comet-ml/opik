@@ -34,6 +34,7 @@ export namespace AutomationRuleEvaluatorUpdate {
     export interface _Base {
         name: string;
         samplingRate?: number;
+        enabled?: boolean;
         projectId: string;
         action: "evaluator";
     }

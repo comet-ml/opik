@@ -69,22 +69,24 @@ interface PromptDAO {
     Prompt findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
-                WITH prompt_full AS (
-                    SELECT
-                    p.*,
-                    count(pv.id) as version_count
-                    FROM prompts p
-                    LEFT JOIN prompt_versions pv ON pv.prompt_id = p.id
-                    WHERE p.workspace_id = :workspace_id
-                    GROUP BY p.id
-                )
-                SELECT *
-                FROM prompt_full
-                WHERE 1 = 1
-                <if(filters)> AND <filters> <endif>
+            SELECT
+                *
+            FROM (
+                SELECT
+                  p.*,
+                  (
+                    SELECT COUNT(pv.id)
+                      FROM prompt_versions pv
+                     WHERE pv.workspace_id = p.workspace_id
+                     AND pv.prompt_id = p.id
+                  ) AS version_count
+                FROM prompts AS p
+                WHERE workspace_id = :workspace_id
                 <if(name)> AND name like concat('%', :name, '%') <endif>
-                ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
-                LIMIT :limit OFFSET :offset
+            ) AS prompt_full
+            <if(filters)> WHERE <filters> <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            LIMIT :limit OFFSET :offset
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -95,20 +97,22 @@ interface PromptDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("""
-                WITH prompt_full AS (
-                    SELECT
-                    p.*,
-                    count(pv.id) as version_count
-                    FROM prompts p
-                    LEFT JOIN prompt_versions pv ON pv.prompt_id = p.id
-                    WHERE p.workspace_id = :workspace_id
-                    GROUP BY p.id
-                )
-                SELECT COUNT(id)
-                FROM prompt_full
-                WHERE 1 = 1
-                <if(filters)> AND <filters> <endif>
+             SELECT
+                count(id)
+             FROM (
+                SELECT
+                  p.*,
+                  (
+                    SELECT COUNT(pv.id)
+                      FROM prompt_versions pv
+                     WHERE pv.workspace_id = p.workspace_id
+                     AND pv.prompt_id = p.id
+                  ) AS version_count
+                FROM prompts AS p
+                WHERE workspace_id = :workspace_id
                 <if(name)> AND name like concat('%', :name, '%') <endif>
+            ) AS prompt_full
+            <if(filters)> WHERE <filters> <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -119,14 +123,14 @@ interface PromptDAO {
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id")
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
 
-    @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy "
+    @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +
-            " <if(tags)>, tags = :tags <endif> " +
+            " tags = COALESCE(:tags, tags) " +
             " WHERE id = :bean.id AND workspace_id = :workspace_id")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     int update(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt updatedPrompt,
-            @Define("tags") @Bind("tags") Set<String> tags);
+            @Bind("tags") Set<String> tags);
 
     @SqlUpdate("DELETE FROM prompts WHERE id = :id AND workspace_id = :workspace_id")
     int delete(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);

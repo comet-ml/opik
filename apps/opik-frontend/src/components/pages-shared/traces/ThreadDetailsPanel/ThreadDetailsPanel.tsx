@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
   ChevronDown,
@@ -64,6 +64,8 @@ import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedback
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
+import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -252,21 +254,22 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <MessageCircleOff className="mr-2 size-4" />
             Set as inactive
           </DropdownMenuItem>
-          {/* <DropdownMenuSeparator />
+          <DropdownMenuSeparator />
           <Button variant="link" className="w-full" asChild>
             <Link
               to="/$workspaceName/configuration"
               params={{ workspaceName }}
               search={{
                 tab: "workspace-preferences",
-                editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+                [WORKSPACE_PREFERENCES_QUERY_PARAMS.EDIT_PREFERENCE]:
+                  WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
               }}
               target="_blank"
               rel="noopener noreferrer"
             >
               Manage session timeout
             </Link>
-          </Button> */}
+          </Button>
         </DropdownMenuContent>
       </DropdownMenu>
     );
