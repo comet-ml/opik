@@ -149,6 +149,27 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 if data is not None:
                     buffer.add(data)
 
+            def _attach_buffer_if_needed(
+                buffer: speech_stream_buffer.SpeechStreamBuffer,
+                gen_span: span_module.SpanData,
+            ) -> None:
+                if buffer.should_attach():
+                    path: Optional[Path] = buffer.flush_to_tempfile(".mp3")
+                    if path is not None:
+                        client = opik_client_module.get_client_cached()
+                        attach_obj = attachment_module.Attachment(data=str(path))
+                        client.update_span(
+                            id=gen_span.id,
+                            trace_id=gen_span.trace_id,
+                            parent_span_id=gen_span.parent_span_id,
+                            project_name=gen_span.project_name or "",
+                            attachments=[attach_obj],
+                        )
+                        try:
+                            path.unlink()
+                        except Exception:
+                            pass
+
             def _finally_callback(
                 output: Any,
                 error_info: Any,
@@ -166,22 +187,8 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                     flush=flush,
                 )
 
-                if error_info is None and buffer.should_attach():
-                    path: Optional[Path] = buffer.flush_to_tempfile(".mp3")
-                    if path is not None:
-                        client = opik_client_module.get_client_cached()
-                        attach_obj = attachment_module.Attachment(data=str(path))
-                        client.update_span(
-                            id=generators_span_to_end.id,
-                            trace_id=generators_span_to_end.trace_id,
-                            parent_span_id=generators_span_to_end.parent_span_id,
-                            project_name=generators_span_to_end.project_name or "",
-                            attachments=[attach_obj],
-                        )
-                        try:
-                            path.unlink()
-                        except Exception:
-                            pass
+                if error_info is None:
+                    _attach_buffer_if_needed(buffer, generators_span_to_end)
 
             return stream_patchers.patch_sync_stream(
                 stream=output,
@@ -206,6 +213,27 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 if data is not None:
                     buffer.add(data)
 
+            def _attach_buffer_if_needed(
+                buffer: speech_stream_buffer.SpeechStreamBuffer,
+                gen_span: span_module.SpanData,
+            ) -> None:
+                if buffer.should_attach():
+                    path: Optional[Path] = buffer.flush_to_tempfile(".mp3")
+                    if path is not None:
+                        client = opik_client_module.get_client_cached()
+                        attach_obj = attachment_module.Attachment(data=str(path))
+                        client.update_span(
+                            id=gen_span.id,
+                            trace_id=gen_span.trace_id,
+                            parent_span_id=gen_span.parent_span_id,
+                            project_name=gen_span.project_name or "",
+                            attachments=[attach_obj],
+                        )
+                        try:
+                            path.unlink()
+                        except Exception:
+                            pass
+
             def _finally_callback_async(
                 output: Any,
                 error_info: Any,
@@ -223,22 +251,8 @@ class OpenaiSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                     flush=flush,
                 )
 
-                if error_info is None and buffer.should_attach():
-                    path: Optional[Path] = buffer.flush_to_tempfile(".mp3")
-                    if path is not None:
-                        client = opik_client_module.get_client_cached()
-                        attach_obj = attachment_module.Attachment(data=str(path))
-                        client.update_span(
-                            id=generators_span_to_end.id,
-                            trace_id=generators_span_to_end.trace_id,
-                            parent_span_id=generators_span_to_end.parent_span_id,
-                            project_name=generators_span_to_end.project_name or "",
-                            attachments=[attach_obj],
-                        )
-                        try:
-                            path.unlink()
-                        except Exception:
-                            pass
+                if error_info is None:
+                    _attach_buffer_if_needed(buffer, generators_span_to_end)
 
             return stream_patchers.patch_async_stream(
                 stream=output,
