@@ -49,10 +49,10 @@ class GEval(base_metric.BaseMetric):
         self.evaluation_criteria = evaluation_criteria
         self._log_probs_supported = False
 
-        self._chain_of_thought_response = ""
+        self._chain_of_thought_response: Optional[str] = None
 
     def llm_chain_of_thought(self) -> str:
-        if not self._chain_of_thought_response:
+        if self._chain_of_thought_response is None:
             prompt = template.G_EVAL_COT_TEMPLATE.format(
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
@@ -60,7 +60,6 @@ class GEval(base_metric.BaseMetric):
             self._chain_of_thought_response = self._model.generate_string(input=prompt)
 
         return self._chain_of_thought_response
-
 
     async def allm_chain_of_thought(self) -> str:
         if not self._chain_of_thought_response:
