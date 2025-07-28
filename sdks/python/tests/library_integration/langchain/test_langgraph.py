@@ -11,11 +11,11 @@ import opik
 from opik.integrations.langchain import OpikTracer
 from opik import jsonable_encoder
 
-from sdks.python.tests.testlib.any_compare_helpers import ANY_STRING
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_LIST,
     ANY_DICT,
+    ANY_STRING,
     SpanModel,
     TraceModel,
     assert_equal,
