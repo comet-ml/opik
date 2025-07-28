@@ -28,7 +28,7 @@ const LLMPromptMessagesVariable = ({
   return (
     <div className="relative flex justify-between">
       <div className="flex max-h-10 max-w-[50%] basis-1/2 items-center pr-2">
-        <Tag variant="green" size="lg" className="truncate">
+        <Tag variant="green" size="md" className="truncate">
           {variable.label}
         </Tag>
       </div>
@@ -43,7 +43,9 @@ const LLMPromptMessagesVariable = ({
               onChange({ ...variable, value: value })
             }
           />
-          {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
+          {errorText && (
+            <FormErrorSkeleton className="mt-2">{errorText}</FormErrorSkeleton>
+          )}
         </div>
       </div>
     </div>

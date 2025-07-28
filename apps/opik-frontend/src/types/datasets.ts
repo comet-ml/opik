@@ -1,5 +1,9 @@
-import { TraceFeedbackScore } from "@/types/traces";
-import { AggregatedFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { TRACE_VISIBILITY_MODE, TraceFeedbackScore } from "@/types/traces";
+import {
+  AggregatedDuration,
+  AggregatedFeedbackScore,
+  DYNAMIC_COLUMN_TYPE,
+} from "@/types/shared";
 import { CommentItems } from "./comment";
 
 export interface Dataset {
@@ -13,6 +17,7 @@ export interface Dataset {
   most_recent_optimization_at: string;
   last_created_optimization_at: string;
   optimization_count: number;
+  tags?: string[];
   created_at: string;
   last_updated_at: string;
 }
@@ -67,10 +72,13 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
+  duration?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
+  total_estimated_cost?: number;
+  total_estimated_cost_avg?: number;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
@@ -81,9 +89,11 @@ export interface ExperimentItem {
   experiment_id: string;
   dataset_item_id: string;
   trace_id?: string;
+  trace_visibility_mode?: TRACE_VISIBILITY_MODE;
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
+  duration?: number;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;

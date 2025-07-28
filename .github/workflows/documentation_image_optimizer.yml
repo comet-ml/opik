@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4.2.2
-
+          
       - name: Compress Images
         uses: calibreapp/image-actions@1.1.0
         with:

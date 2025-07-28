@@ -4,8 +4,6 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -17,6 +15,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -43,7 +42,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.hc.core5.http.HttpStatus;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -73,9 +71,10 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -134,6 +133,9 @@ class RateLimitE2ETest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
         customLimit = new LimitConfig(CUSTOM_LIMIT, CUSTOM_LIMIT, 1, 1, "custom limit");
 
         getSpanIdLimit = new LimitConfig("Get-Span-Id", GET_SPAN_ID_LIMIT, 3, 1, "get span id");
@@ -158,16 +160,8 @@ class RateLimitE2ETest {
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    void setUpAll(ClientSupport client) {
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -599,17 +593,17 @@ class RateLimitE2ETest {
                         .build())
                 .toList();
 
-        var tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
+        List<FeedbackScoreBatchItem> tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
-                .toList();
+                .collect(Collectors.toList());
 
-        var spansFeedbackScores = IntStream.range(0, (int) LIMIT)
+        List<FeedbackScoreBatchItem> spansFeedbackScores = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
-                .toList();
+                .collect(Collectors.toList());
 
         var experimentItems = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -625,11 +619,11 @@ class RateLimitE2ETest {
                 Arguments.of(new DatasetItemBatch(projectName, null, datasetItems),
                         new DatasetItemBatch(projectName, null, List.of(datasetItems.getFirst())),
                         "%s/v1/private/datasets".formatted(baseURI) + "/items", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(tracesFeedbackScores),
-                        new FeedbackScoreBatch(List.of(tracesFeedbackScores.getFirst())),
+                Arguments.of(FeedbackScoreBatch.builder().scores(tracesFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(tracesFeedbackScores.getFirst())).build(),
                         BASE_RESOURCE_URI.formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(spansFeedbackScores),
-                        new FeedbackScoreBatch(List.of(spansFeedbackScores.getFirst())),
+                Arguments.of(FeedbackScoreBatch.builder().scores(spansFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(spansFeedbackScores.getFirst())).build(),
                         "%s/v1/private/spans".formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
                 Arguments.of(new ExperimentItemsBatch(experimentItems),
                         new ExperimentItemsBatch(Set.of(experimentItems.stream().findFirst().orElseThrow())),

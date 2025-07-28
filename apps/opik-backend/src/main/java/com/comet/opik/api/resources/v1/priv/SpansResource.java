@@ -6,12 +6,11 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
-import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -21,6 +20,8 @@ import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanSearchCriteria;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
@@ -47,7 +48,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -70,8 +70,8 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
@@ -93,6 +93,7 @@ public class SpansResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull SpanSortingFactory sortingFactory;
+    private final @NonNull ProjectService projectService;
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
@@ -205,27 +206,12 @@ public class SpansResource {
     @UsageLimited
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
-
-        spans.spans()
-                .stream()
-                .filter(span -> span.id() != null) // Filter out spans with null IDs
-                .collect(Collectors.groupingBy(Span::id))
-                .forEach((id, spanGroup) -> {
-                    if (spanGroup.size() > 1) {
-                        throw new ClientErrorException("Duplicate span id '%s'".formatted(id), 422);
-                    }
-                });
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+        var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
-
         spanService.create(spans)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
         log.info("Created spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
-
         return Response.noContent().build();
     }
 
@@ -301,7 +287,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatchContainer.FeedbackScoreBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -394,6 +380,7 @@ public class SpansResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
+        var visibility = requestContext.get().getVisibility();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
 
@@ -409,9 +396,12 @@ public class SpansResource {
                 .sortingFields(List.of())
                 .build();
 
+        projectService.resolveProjectIdAndVerifyVisibility(request.projectId(), request.projectName())
+                .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
+                .block();
+
         var items = spanService.search(request.limit(), criteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed spans search results by '{}', workspaceId '{}'", request, workspaceId));

@@ -12,9 +12,9 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
-
+                
             - name: Install Fern
-              run: npm install -g fern-api
+              run: npm install -g fern-api@0.64.26
 
             - name: Generate preview URL
               id: generate-docs

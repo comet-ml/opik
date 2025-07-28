@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -10,6 +9,8 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -127,7 +128,7 @@ class ExperimentDAO {
     private static final String FIND = """
             WITH experiments_final AS (
                 SELECT
-                    *
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -138,6 +139,7 @@ class ExperimentDAO {
                 <if(id)> AND id = :id <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(filters)> AND <filters> <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -154,10 +156,14 @@ class ExperimentDAO {
             ), experiment_durations AS (
                 SELECT
                     experiment_id,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                    ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
-                    avg(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost_sum,
+                    avg(total_estimated_cost) as total_estimated_cost_avg
                 FROM (
                     SELECT DISTINCT
                         ei.experiment_id,
@@ -184,6 +190,7 @@ class ExperimentDAO {
                             sum(total_estimated_cost) as total_estimated_cost
                         FROM spans final
                         WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         GROUP BY workspace_id, project_id, trace_id
                     ) AS s ON ei.trace_id = s.trace_id
                 )
@@ -271,7 +278,8 @@ class ExperimentDAO {
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
                 ed.usage as usage,
-                ed.total_estimated_cost as total_estimated_cost,
+                ed.total_estimated_cost_sum as total_estimated_cost,
+                ed.total_estimated_cost_avg as total_estimated_cost_avg,
                 ca.comments_array_agg as comments_array_agg
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
@@ -286,7 +294,7 @@ class ExperimentDAO {
             SELECT count(id) as count
             FROM
             (
-                SELECT id
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -295,6 +303,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -308,6 +317,7 @@ class ExperimentDAO {
                 null AS trace_count,
                 null AS duration,
                 null AS total_estimated_cost,
+                null AS total_estimated_cost_avg,
                 null AS usage,
                 null AS comments_array_agg
             FROM experiments
@@ -382,6 +392,7 @@ class ExperimentDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -494,7 +505,8 @@ class ExperimentDAO {
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
-                    .totalEstimatedCost(getTotalEstimatedCost(row))
+                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -507,20 +519,19 @@ class ExperimentDAO {
         });
     }
 
-    private static BigDecimal getTotalEstimatedCost(Row row) {
-        return Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+    private static BigDecimal getCostValue(Row row, String fieldName) {
+        return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                 .orElse(null);
     }
 
     private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", List.class))
-                .filter(value -> !value.isEmpty()
-                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+        return Optional.ofNullable(row.get("duration", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        getP(durations, 0),
-                        getP(durations, 1),
-                        getP(durations, 2)))
+                        (BigDecimal) durations.get("p50"),
+                        (BigDecimal) durations.get("p90"),
+                        (BigDecimal) durations.get("p99")))
                 .orElse(null);
     }
 
@@ -643,6 +654,9 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
+                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
         return template;
     }
 
@@ -660,6 +674,10 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.filters())
+                .ifPresent(filters -> {
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
+                });
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }

@@ -1,6 +1,7 @@
 import { UsageData } from "@/types/shared";
 import { CommentItems } from "./comment";
 import { GuardrailValidation } from "./guardrails";
+import { ThreadStatus } from "./thread";
 
 export enum USER_FEEDBACK_SCORE {
   dislike,
@@ -11,6 +12,11 @@ export enum FEEDBACK_SCORE_TYPE {
   sdk = "sdk",
   ui = "ui",
   online_scoring = "online_scoring",
+}
+
+export enum TRACE_VISIBILITY_MODE {
+  default = "default",
+  hidden = "hidden",
 }
 
 export interface TraceFeedbackScore {
@@ -51,9 +57,11 @@ export interface BaseTraceData {
 
 export interface Trace extends BaseTraceData {
   span_count?: number;
+  llm_span_count?: number;
   thread_id?: string;
   project_id: string;
   workspace_name?: string;
+  visibility_mode?: TRACE_VISIBILITY_MODE;
 }
 
 export enum SPAN_TYPE {
@@ -69,6 +77,8 @@ export interface Span extends BaseTraceData {
   trace_id: string;
   project_id: string;
   workspace_name?: string;
+  model?: string;
+  provider?: string;
 }
 
 export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";
@@ -80,6 +90,7 @@ export interface AgentGraphData {
 
 export interface Thread {
   id: string;
+  thread_model_id: string;
   project_id: string;
   start_time: string;
   end_time: string;
@@ -87,7 +98,13 @@ export interface Thread {
   first_message: object;
   last_message: object;
   number_of_messages: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   last_updated_at: string;
   created_by: string;
   created_at: string;
+  status: ThreadStatus;
+  feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
+  tags?: string[];
 }

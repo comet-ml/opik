@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
 
+from .threads import threads_client
 from .. import (
     config,
     datetime_helpers,
@@ -20,7 +21,14 @@ from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
-from ..rest_api.types import dataset_public, project_public, span_public, trace_public
+from ..rest_api.types import (
+    dataset_public,
+    project_public,
+    span_public,
+    trace_public,
+    span_filter_public,
+    trace_filter_public,
+)
 from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
 from . import (
     constants,
@@ -28,10 +36,8 @@ from . import (
     experiment,
     optimization,
     helpers,
-    opik_query_language,
     span,
     trace,
-    validation_helpers,
 )
 from .attachment import converters as attachment_converters
 from .attachment import Attachment
@@ -124,6 +130,17 @@ class Opik:
             OpikApi: The REST client used by the Opik client.
         """
         return self._rest_client
+
+    @property
+    def project_name(self) -> str:
+        """
+        This property retrieves the name of the project associated with the instance.
+        It is a read-only property.
+
+        Returns:
+            str: The name of the project.
+        """
+        return self._project_name
 
     def _initialize_streamer(
         self,
@@ -237,6 +254,7 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+        last_updated_at = datetime_helpers.local_timestamp()
 
         if project_name is None:
             project_name = self._project_name
@@ -253,6 +271,7 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            last_updated_at=last_updated_at,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -336,10 +355,10 @@ class Opik:
         )
 
         for trace_data_ in new_trace_data:
-            self.trace(**trace_data_.__dict__)
+            self.trace(**trace_data_.as_parameters)
 
         for span_data_ in new_span_data:
-            self.span(**span_data_.__dict__)
+            self.span(**span_data_.as_parameters)
 
         if delete_original_project:
             trace_ids = [trace_.id for trace_ in trace_data]
@@ -386,11 +405,11 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
+            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require having an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when the Opik instance
                 was created will be used.
-            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
+            usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
@@ -408,15 +427,6 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-
-        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
-            usage=usage,
-            logger=LOGGER,
-            provider=provider,
-        )
-
-        if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         if project_name is None:
             project_name = self._project_name
@@ -437,13 +447,22 @@ class Opik:
                 tags=tags,
                 error_info=error_info,
                 thread_id=None,
+                last_updated_at=datetime_helpers.local_timestamp(),
             )
             self._streamer.put(create_trace_message)
 
-        create_span_message = messages.CreateSpanMessage(
-            span_id=id,
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_spans_feedback_scores(feedback_scores, project_name)
+
+        return span.span_client.create_span(
             trace_id=trace_id,
             project_name=project_name,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            span_id=id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -453,38 +472,93 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=backend_compatible_usage,
+            usage=usage,
             model=model,
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
+            attachments=attachments,
         )
-        self._streamer.put(create_span_message)
 
-        if feedback_scores is not None:
-            for feedback_score in feedback_scores:
-                feedback_score["id"] = id
+    def update_span(
+        self,
+        id: str,
+        trace_id: str,
+        parent_span_id: Optional[str],
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+    ) -> None:
+        """
+        Update the attributes of an existing span.
 
-            self.log_spans_feedback_scores(feedback_scores, project_name)
+        This method should only be used after the span has been fully created and stored.
+        If called before or immediately after span creation, the update may silently fail or result in incorrect data.
 
-        if attachments is not None:
-            for attachment_data in attachments:
-                self._streamer.put(
-                    attachment_converters.attachment_to_message(
-                        attachment_data=attachment_data,
-                        entity_type="span",
-                        entity_id=id,
-                        project_name=project_name,
-                        url_override=self._config.url_override,
-                    )
-                )
+        This method uses four parameters to identify the span:
+            - `id`
+            - `trace_id`
+            - `parent_span_id`
+            - `project_name`
 
-        return span.Span(
+        These parameters **must match exactly** the values used when the span was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the span.
+        If a parameter is not provided, the existing value will remain unchanged.
+
+        Args:
+            id: The unique identifier for the span to update.
+            trace_id: The unique identifier for the trace to which the span belongs.
+            parent_span_id: The unique identifier for the parent span.
+            project_name: The project name to which the span belongs.
+            end_time: The new end time of the span.
+            metadata: The new metadata to be associated with the span.
+            input: The new input data for the span.
+            output: The new output data for the span.
+            tags: A new list of tags to be associated with the span.
+            usage: The new usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
+            model: The new name of LLM.
+            provider: The new provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
+            error_info: The new dictionary with error information (typically used when the span function has failed).
+            total_cost: The new cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The new list of attachments to be uploaded to the span.
+
+        Returns:
+            None
+        """
+        span.span_client.update_span(
             id=id,
-            parent_span_id=parent_span_id,
             trace_id=trace_id,
-            project_name=project_name,
+            parent_span_id=parent_span_id,
+            url_override=self._config.url_override,
             message_streamer=self._streamer,
+            project_name=project_name,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
         )
 
     def log_spans_feedback_scores(
@@ -497,28 +571,22 @@ class Opik:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+                which was configured when the Opik instance was created will be used.
 
         Returns:
             None
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
-
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=project_name or self._project_name,
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid spans feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
@@ -541,38 +609,34 @@ class Opik:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+                which was configured when the Opik instance was created will be used.
 
         Returns:
             None
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=project_name or self._project_name,
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
 
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid traces feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
+
         for batch in sequence_splitter.split_into_batches(
             score_messages,
             max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
-            add_span_feedback_scores_batch_message = (
+            add_trace_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
             )
 
-            self._streamer.put(add_span_feedback_scores_batch_message)
+            self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
@@ -912,12 +976,11 @@ class Opik:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
         """
-        filter_expressions = opik_query_language.OpikQueryLanguage(
-            filter_string
-        ).get_filter_expressions()
-        filters_ = helpers.parse_search_span_expressions(filter_expressions)
+        filters_ = helpers.parse_filter_expressions(
+            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+        )
 
         traces = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
@@ -951,12 +1014,11 @@ class Opik:
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search.
             max_results: The maximum number of spans to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
         """
-        filter_expressions = opik_query_language.OpikQueryLanguage(
-            filter_string
-        ).get_filter_expressions()
-        filters = helpers.parse_search_span_expressions(filter_expressions)
+        filters = helpers.parse_filter_expressions(
+            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+        )
 
         spans = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
@@ -1032,6 +1094,18 @@ class Opik:
         return url_helpers.get_project_url_by_workspace(
             workspace=dereferenced_workspace, project_name=project_name
         )
+
+    def get_threads_client(self) -> threads_client.ThreadsClient:
+        """
+        Creates and provides an instance of the ``ThreadsClient`` tied to the current context.
+
+        The ``ThreadsClient`` can be used to interact with the threads API to manage and interact with conversational threads.
+
+        Returns:
+            ThreadsClient: An instance of ``threads_client.ThreadsClient`` initialized
+            with the current context.
+        """
+        return threads_client.ThreadsClient(self)
 
     def create_prompt(
         self,

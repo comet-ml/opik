@@ -34,6 +34,7 @@ class CreateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
+    last_updated_at: Optional[datetime.datetime]
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -94,6 +95,7 @@ class CreateSpanMessage(BaseMessage):
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+    last_updated_at: Optional[datetime.datetime]
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -161,11 +163,6 @@ class AddFeedbackScoresBatchMessage(BaseMessage):
     batch: List[FeedbackScoreMessage]
     supports_batching: bool = True
 
-    def as_payload_dict(self) -> Dict[str, Any]:
-        data = super().as_payload_dict()
-        data.pop("supports_batching")
-        return data
-
 
 @dataclasses.dataclass
 class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
@@ -175,6 +172,25 @@ class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
 @dataclasses.dataclass
 class AddSpanFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
     pass
+
+
+@dataclasses.dataclass
+class ThreadsFeedbackScoreMessage(FeedbackScoreMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of AddThreadsFeedbackScoresBatchMessage
+    """
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["thread_id"] = data.pop("id")
+        return data
+
+
+@dataclasses.dataclass
+class AddThreadsFeedbackScoresBatchMessage(BaseMessage):
+    batch: List[ThreadsFeedbackScoreMessage]
+    supports_batching: bool = True
 
 
 @dataclasses.dataclass

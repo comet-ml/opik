@@ -2,9 +2,9 @@ export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
-  OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  CUSTOM = "custom-llm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -14,6 +14,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
+  GPT_4_1 = "gpt-4.1",
+  GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -26,6 +28,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
 
   //  <----- anthropic
+  CLAUDE_4_SONNET = "claude-4-sonnet",
   CLAUDE_3_5_SONNET_LATEST = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_SONNET_20241022 = "claude-3-5-sonnet-20241022",
   CLAUDE_3_5_HAIKU_LATEST = "claude-3-5-haiku-latest",
@@ -183,6 +186,9 @@ export enum PROVIDER_MODEL_TYPE {
   META_LLAMA_LLAMA_3_8B_INSTRUCT_FREE = "meta-llama/llama-3-8b-instruct:free",
   META_LLAMA_LLAMA_GUARD_2_8B = "meta-llama/llama-guard-2-8b",
   META_LLAMA_LLAMA_GUARD_3_8B = "meta-llama/llama-guard-3-8b",
+  META_LLAMA_LLAMA_GUARD_4_12B = "meta-llama/llama-guard-4-12b",
+  META_LLAMA_LLAMA_4_MAVERICK = "meta-llama/llama-4-maverick",
+  META_LLAMA_LLAMA_4_SCOUT = "meta-llama/llama-4-scout",
   MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT = "microsoft/phi-3.5-mini-128k-instruct",
   MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT = "microsoft/phi-3-medium-128k-instruct",
   MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT_FREE = "microsoft/phi-3-medium-128k-instruct:free",
@@ -253,7 +259,9 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_3_5_TURBO_16K = "openai/gpt-3.5-turbo-16k",
   OPENAI_GPT_3_5_TURBO_INSTRUCT = "openai/gpt-3.5-turbo-instruct",
   OPENAI_GPT_4 = "openai/gpt-4",
+  OPENAI_GPT_4_ONLINE = "openai/gpt-4:online",
   OPENAI_GPT_4O = "openai/gpt-4o",
+  OPENAI_GPT_4O_ONLINE = "openai/gpt-4o:online",
   OPENAI_GPT_4O_2024_05_13 = "openai/gpt-4o-2024-05-13",
   OPENAI_GPT_4O_2024_08_06 = "openai/gpt-4o-2024-08-06",
   OPENAI_GPT_4O_2024_11_20 = "openai/gpt-4o-2024-11-20",
@@ -267,6 +275,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_4_TURBO = "openai/gpt-4-turbo",
   OPENAI_GPT_4_TURBO_PREVIEW = "openai/gpt-4-turbo-preview",
   OPENAI_GPT_4_VISION_PREVIEW = "openai/gpt-4-vision-preview",
+  OPENAI_GPT_4_1 = "openai/gpt-4.1",
+  OPENAI_GPT_4_1_MINI = "openai/gpt-4.1-mini",
   OPENAI_O1 = "openai/o1",
   OPENAI_O1_MINI = "openai/o1-mini",
   OPENAI_O1_MINI_2024_09_12 = "openai/o1-mini-2024-09-12",
@@ -313,6 +323,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN_PLUS = "qwen/qwen-plus",
   QWEN_QWEN_TURBO = "qwen/qwen-turbo",
   QWEN_QWEN_VL_PLUS_FREE = "qwen/qwen-vl-plus:free",
+  QWEN_QWQ_32B = "qwen/qwq-32b",
   QWEN_QWQ_32B_PREVIEW = "qwen/qwq-32b-preview",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   RECURSAL_EAGLE_7B = "recursal/eagle-7b",
@@ -359,6 +370,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_5_PRO = "gemini-2.5-pro",
+  GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
@@ -367,25 +381,21 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
+  VERTEX_AI_GEMINI_2_5_PRO = "vertex_ai/gemini-2.5-pro",
+  VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash",
+  VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
 }
 
 export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
-    structuredOutput?: boolean;
   }[];
 };
 
-export enum PROVIDER_LOCATION_TYPE {
-  cloud = "cloud",
-  local = "local",
-}
-
-export interface LocalAIProviderData {
-  url: string;
-  models: string;
-  created_at: string;
+export interface ProviderKeyConfiguration {
+  location?: string;
+  models?: string;
 }
 
 export interface ProviderKey {
@@ -393,11 +403,12 @@ export interface ProviderKey {
   keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
+  base_url?: string;
+  configuration: ProviderKeyConfiguration;
 }
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
-  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -438,10 +449,19 @@ export interface LLMVertexAIConfigsType {
   topP: number;
 }
 
+export interface LLMCustomConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexAIConfigsType;
+  | LLMVertexAIConfigsType
+  | LLMCustomConfigsType;

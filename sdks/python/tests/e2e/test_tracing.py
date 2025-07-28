@@ -166,7 +166,7 @@ def test_tracked_function__error_inside_inner_function__caught_in_top_level_span
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -205,7 +205,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -221,7 +221,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -237,7 +237,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -763,7 +763,7 @@ def test_tracked_function__update_current_trace__with_attachments(
     )
 
 
-def test_opik_span__attachments(opik_client, data_file):
+def test_opik_client_span__attachments(opik_client, data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -807,6 +807,60 @@ def test_opik_span__attachments(opik_client, data_file):
         opik_client=opik_client,
         entity_type="span",
         entity_id=span.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_span_span__attachments(opik_client, data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(data_file.name)
+    names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span = opik_client.span(
+        trace_id=trace_id,
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+    last_span = span.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=last_span.id,
         attachments=attachments,
         data_sizes=data_sizes,
     )
@@ -907,6 +961,60 @@ def test_tracked_function__update_current_span__with_attachments(
         opik_client=opik_client,
         entity_type="span",
         entity_id=ID_STORAGE["f_span-id"],
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_opik_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
+    opik_client: opik.Opik, data_file
+):
+    root_span_client = opik_client.span(
+        name="root-span-name",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    child_span_client = root_span_client.span(
+        name="child-span-name",
+        input={"input": "original-span-input"},
+        output={"output": "original-span-output"},
+    )
+    opik_client.flush()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
+
+    opik_client.update_span(
+        id=child_span_client.id,
+        trace_id=child_span_client.trace_id,
+        parent_span_id=child_span_client.parent_span_id,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input={"input": "new-span-input"},
+        attachments=attachments.values(),
+    )
+    opik_client.flush()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=child_span_client.id,
+        parent_span_id=root_span_client.id,
+        trace_id=child_span_client.trace_id,
+        input={"input": "new-span-input"},
+        output={"output": "original-span-output"},
+        name="child-span-name",
+    )
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=child_span_client.id,
         attachments=attachments,
         data_sizes=data_sizes,
     )

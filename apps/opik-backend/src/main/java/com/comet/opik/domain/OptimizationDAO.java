@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
@@ -18,7 +17,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -421,7 +419,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         row.get("most_recent_optimization_at", Instant.class))));
     }
 
-    private Mono<Long> getCount(@NotNull OptimizationSearchCriteria searchCriteria) {
+    private Mono<Long> getCount(OptimizationSearchCriteria searchCriteria) {
         var template = new ST(COUNT);
 
         bindTemplateParams(template, searchCriteria);
@@ -554,7 +552,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
-                .bind("ids", ids);
+                .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

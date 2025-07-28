@@ -1,0 +1,707 @@
+---
+subtitle: Step by step guide to logging evaluation results using Python SDK and REST API
+---
+
+Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through logging pre-computed evaluation results to Opik using both the Python SDK and REST API.
+
+<Tip>
+  This guide focuses on logging pre-computed evaluation results. If you're looking to run evaluations with Opik
+  computing the metrics, refer to the [Evaluate Your LLM](/evaluation/evaluate_your_llm) guide.
+</Tip>
+
+The process involves these key steps:
+
+1. Create a dataset with your test cases
+2. Prepare your evaluation results
+3. Log experiment items in bulk
+
+## 1. Create a Dataset
+
+First, you'll need to create a dataset containing your test cases. This dataset will be linked to your experiments.
+
+<Tabs>
+  <Tab value="Python" title="Python SDK">
+    ```python
+    from opik import Opik
+    import opik
+
+    # Configure Opik
+    opik.configure()
+
+    # Create dataset items
+    dataset_items = [
+        {
+            "user_question": "What is the capital of France?",
+            "expected_output": "Paris"
+        },
+        {
+            "user_question": "What is the capital of Japan?",
+            "expected_output": "Tokyo"
+        },
+        {
+            "user_question": "What is the capital of Brazil?",
+            "expected_output": "Brasília"
+        }
+    ]
+
+    # Get or create a dataset
+    client = Opik()
+    dataset = client.get_or_create_dataset(name="geography-questions")
+
+    # Add dataset items
+    dataset.insert(dataset_items)
+    ```
+
+  </Tab>
+  <Tab value="REST" title="REST API">
+    ```bash
+    # First, create the dataset
+    curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets' \
+      -H 'Content-Type: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>' \
+      -d '{
+        "name": "geography-questions",
+        "description": "Geography quiz dataset"
+      }'
+
+    # Then add dataset items
+    curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets/items' \
+      -H 'Content-Type: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>' \
+      -d '{
+        "dataset_name": "geography-questions",
+        "items": [
+          {
+            "user_question": "What is the capital of France?",
+            "expected_output": "Paris"
+          },
+          {
+            "user_question": "What is the capital of Japan?",
+            "expected_output": "Tokyo"
+          },
+          {
+            "user_question": "What is the capital of Brazil?",
+            "expected_output": "Brasília"
+          }
+        ]
+      }'
+    ```
+
+  </Tab>
+</Tabs>
+
+<Tip>
+  Dataset item IDs will be automatically generated if not provided. If you do provide your own IDs, ensure they are in
+  UUID7 format.
+</Tip>
+
+## 2. Prepare Evaluation Results
+
+Structure your evaluation results with the necessary fields. Each experiment item should include:
+
+- `dataset_item_id`: The ID of the dataset item being evaluated
+- `evaluate_task_result`: The output from your LLM application
+- `feedback_scores`: Array of evaluation metrics (optional)
+
+<Tabs>
+  <Tab value="Python" title="Python SDK">
+    ```python
+    # Get dataset items from the dataset object
+    dataset_items = list(dataset.get_items())
+    
+    # Mock LLM responses for this example
+    # In a real scenario, you would call your actual LLM here
+    mock_responses = {
+        "France": "The capital of France is Paris.",
+        "Japan": "Japan's capital is Tokyo.",
+        "Brazil": "The capital of Brazil is Rio de Janeiro."  # Incorrect
+    }
+    
+    # Prepare evaluation results
+    evaluation_items = []
+    
+    for item in dataset_items[:3]:  # Process first 3 items for this example
+        # Determine which mock response to use
+        question = item['user_question']
+        response = "I don't know"
+        
+        for country, mock_response in mock_responses.items():
+            if country.lower() in question.lower():
+                response = mock_response
+                break
+        
+        # Calculate accuracy (1.0 if expected answer is in response)
+        accuracy = 1.0 if item['expected_output'].lower() in response.lower() else 0.0
+        
+        evaluation_items.append({
+            "dataset_item_id": item['id'],
+            "evaluate_task_result": {
+                "prediction": response
+            },
+            "feedback_scores": [
+                {
+                    "name": "accuracy",
+                    "value": accuracy,
+                    "source": "sdk"
+                }
+            ]
+        })
+    
+    print(f"Prepared {len(evaluation_items)} evaluation items")
+    ```
+  </Tab>
+  <Tab value="REST" title="REST API">
+    ```json
+    {
+      "experiment_name": "geography-bot-v1",
+      "dataset_name": "geography-questions",
+      "items": [
+        {
+          "dataset_item_id": "dataset-item-id-1",
+          "evaluate_task_result": {
+            "prediction": "The capital of France is Paris."
+          },
+          "feedback_scores": [
+            {
+              "name": "accuracy",
+              "value": 1.0,
+              "source": "sdk"
+            }
+          ]
+        },
+        {
+          "dataset_item_id": "dataset-item-id-2",
+          "evaluate_task_result": {
+            "prediction": "Japan's capital is Tokyo."
+          },
+          "feedback_scores": [
+            {
+              "name": "accuracy",
+              "value": 1.0,
+              "source": "sdk"
+            }
+          ]
+        },
+        {
+          "dataset_item_id": "dataset-item-id-3",
+          "evaluate_task_result": {
+            "prediction": "The capital of Brazil is Rio de Janeiro."
+          },
+          "feedback_scores": [
+            {
+              "name": "accuracy",
+              "value": 0.0,
+              "source": "sdk"
+            }
+          ]
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## 3. Log Experiment Items in Bulk
+
+Use the bulk endpoint to efficiently log multiple evaluation results at once.
+
+<Tabs>
+  <Tab value="Python" title="Python SDK">
+    ```python
+    experiment_name = "Bulk experiment upload"
+    # Log experiment results using the bulk method
+    client.rest_client.experiments.experiment_items_bulk(
+        experiment_name=experiment_name,
+        dataset_name="geography-questions",
+        items=[
+            {
+                "dataset_item_id": item["dataset_item_id"],
+                "evaluate_task_result": item["evaluate_task_result"],
+                "feedback_scores": [
+                    {**score, "source": "sdk"} 
+                    for score in item["feedback_scores"]
+                ]
+            } 
+            for item in evaluation_items
+        ]
+    )
+    ```
+  </Tab>
+  <Tab value="REST" title="REST API">
+    ```bash
+    curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
+      -H 'Content-Type: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>' \
+      -d '{
+        "experiment_name": "geography-bot-v1",
+        "dataset_name": "geography-questions",
+        "items": [
+          {
+            "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-111111111111",
+            "evaluate_task_result": {
+              "prediction": "The capital of France is Paris."
+            },
+            "feedback_scores": [
+              {
+                "name": "accuracy",
+                "value": 1.0,
+                "source": "sdk"
+              }
+            ]
+          },
+          {
+            "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-222222222222",
+            "evaluate_task_result": {
+              "prediction": "Japans capital is Tokyo."
+            },
+            "feedback_scores": [
+              {
+                "name": "accuracy",
+                "value": 1.0,
+                "source": "sdk"
+              }
+            ]
+          }
+        ]
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  **Request Size Limit**: The maximum allowed payload size is **4MB**. For larger submissions, divide the data into
+  smaller batches.
+</Warning>
+
+## Complete Example
+
+Here's a complete example that puts all the steps together:
+
+<Tabs>
+  <Tab value="Python" title="Python SDK">
+    ```python
+    from opik import Opik
+    import opik
+    import uuid
+
+    # Configure Opik
+    opik.configure()
+
+    # Step 1: Create dataset
+    client = Opik()
+    dataset = client.get_or_create_dataset(name="geography-questions")
+
+    dataset_items = [
+        {
+            "user_question": "What is the capital of France?",
+            "expected_output": "Paris"
+        },
+        {
+            "user_question": "What is the capital of Japan?",
+            "expected_output": "Tokyo"
+        }
+    ]
+
+    dataset.insert(dataset_items)
+
+    # Step 2: Run your LLM application and collect results
+    # (In a real scenario, you would call your LLM here)
+
+    # Helper function to get dataset item ID
+    def get_dataset_item(country):
+        items = dataset.get_items()
+        for item in items:
+            if country.lower() in item['user_question'].lower():
+                return item
+        return None
+
+    # Prepare evaluation results
+    evaluation_items = [
+        {
+            "dataset_item_id": get_dataset_item("France")['id'],
+            "evaluate_task_result": {"prediction": "The capital of France is Paris."},
+            "feedback_scores": [{"name": "accuracy", "value": 1.0}]
+        },
+        {
+            "dataset_item_id": get_dataset_item("Japan")['id'],
+            "evaluate_task_result": {"prediction": "Japan's capital is Tokyo."},
+            "feedback_scores": [{"name": "accuracy", "value": 1.0}]
+        }
+    ]
+
+    # Step 3: Log experiment results
+    rest_client = client.rest_client
+    experiment_name = f"geography-bot-{str(uuid.uuid4())[0:4]}"
+    rest_client.experiments.experiment_items_bulk(
+        experiment_name=experiment_name,
+        dataset_name="geography-questions",
+        items=[
+            {
+                "dataset_item_id": item["dataset_item_id"],
+                "evaluate_task_result": item["evaluate_task_result"],
+                "feedback_scores": [
+                    {**score, "source": "sdk"}
+                    for score in item["feedback_scores"]
+                ]
+            }
+            for item in evaluation_items
+        ]
+    )
+
+    print(f"Experiment '{experiment_name}' created successfully!")
+    ```
+
+  </Tab>
+  <Tab value="REST" title="REST API">
+    ```python
+    import requests
+    import os
+
+    # Configuration
+    base_url = os.getenv('OPIK_URL_OVERRIDE', 'https://www.comet.com/opik/api')
+    headers = {
+        "Authorization": os.getenv('OPIK_API_KEY'),
+        "Comet-Workspace": os.getenv('OPIK_WORKSPACE'),
+        "Content-Type": "application/json"
+    }
+
+    # Step 1: Create dataset
+    dataset_response = requests.post(
+        f"{base_url}/v1/private/datasets",
+        headers=headers,
+        json={
+            "name": "geography-questions",
+            "description": "Geography quiz dataset"
+        }
+    )
+
+    # Step 2: Add dataset items
+    items_response = requests.post(
+        f"{base_url}/v1/private/datasets/items",
+        headers=headers,
+        json={
+            "dataset_name": "geography-questions",
+            "items": [
+                {
+                    "user_question": "What is the capital of France?",
+                    "expected_output": "Paris"
+                },
+                {
+                    "user_question": "What is the capital of Japan?",
+                    "expected_output": "Tokyo"
+                }
+            ]
+        }
+    )
+
+    # Get dataset item IDs (you would typically store these)
+    # For this example, assume we have the IDs
+
+    # Step 3: Log experiment results in bulk
+    bulk_response = requests.put(
+        f"{base_url}/v1/private/experiments/items/bulk",
+        headers=headers,
+        json={
+            "experiment_name": "geography-bot-v1",
+            "dataset_name": "geography-questions",
+            "items": [
+                {
+                    "dataset_item_id": "your-dataset-item-id-1",
+                    "evaluate_task_result": {
+                        "prediction": "The capital of France is Paris."
+                    },
+                    "feedback_scores": [
+                        {
+                            "name": "accuracy",
+                            "value": 1.0,
+                            "source": "sdk"
+                        }
+                    ]
+                },
+                {
+                    "dataset_item_id": "your-dataset-item-id-2",
+                    "evaluate_task_result": {
+                        "prediction": "Japan's capital is Tokyo."
+                    },
+                    "feedback_scores": [
+                        {
+                            "name": "accuracy",
+                            "value": 1.0,
+                            "source": "sdk"
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+    if bulk_response.status_code == 204:
+        print("Experiment items successfully created!")
+    else:
+        print(f"Error: {bulk_response.status_code} - {bulk_response.text}")
+    ```
+
+  </Tab>
+</Tabs>
+
+## Advanced Usage
+
+### Including Traces and Spans
+
+You can include full execution traces with your experiment items for complete observability:
+
+<Tabs>
+  <Tab value="Python" title="Python SDK">
+    ```python
+    # Include trace information
+    items_with_traces = [
+        {
+            "dataset_item_id": "your-dataset-item-id",
+            "trace": {
+                "name": "geography_query",
+                "input": {"question": "What is the capital of France?"},
+                "output": {"answer": "Paris"},
+                "metadata": {"model": "gpt-3.5-turbo"},
+                "start_time": "2024-01-01T00:00:00Z",
+                "end_time": "2024-01-01T00:00:01Z"
+            },
+            "spans": [
+                {
+                    "name": "llm_call",
+                    "type": "llm",
+                    "start_time": "2024-01-01T00:00:00Z",
+                    "end_time": "2024-01-01T00:00:01Z",
+                    "input": {"prompt": "What is the capital of France?"},
+                    "output": {"response": "Paris"}
+                }
+            ],
+            "feedback_scores": [
+                {"name": "accuracy", "value": 1.0, "source": "sdk"}
+            ]
+        }
+    ]
+    ```
+  </Tab>
+  <Tab value="REST" title="REST API">
+    ```json
+    {
+      "experiment_name": "geography-bot-v1",
+      "dataset_name": "geography-questions",
+      "items": [
+        {
+          "dataset_item_id": "your-dataset-item-id",
+          "trace": {
+            "name": "geography_query",
+            "input": {"question": "What is the capital of France?"},
+            "output": {"answer": "Paris"},
+            "metadata": {"model": "gpt-3.5-turbo"},
+            "start_time": "2024-01-01T00:00:00Z",
+            "end_time": "2024-01-01T00:00:01Z"
+          },
+          "spans": [
+            {
+              "name": "llm_call",
+              "type": "llm",
+              "start_time": "2024-01-01T00:00:00Z",
+              "end_time": "2024-01-01T00:00:01Z",
+              "input": {"prompt": "What is the capital of France?"},
+              "output": {"response": "Paris"}
+            }
+          ],
+          "feedback_scores": [
+            {
+              "name": "accuracy",
+              "value": 1,
+              "source": "sdk"
+            }
+          ]
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>Important: You may supply either `evaluate_task_result` or `trace` — not both.</Warning>
+
+### Java Example
+
+For Java developers, here's how to integrate with Opik using Jackson and HttpClient:
+
+```java
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+
+public class OpikExperimentLogger {
+
+    public static void main(String[] args) {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String baseURI = System.getenv("OPIK_URL_OVERRIDE");
+        String workspaceName = System.getenv("OPIK_WORKSPACE");
+        String apiKey = System.getenv("OPIK_API_KEY");
+
+        String datasetName = "geography-questions";
+        String experimentName = "geography-bot-v1";
+
+        try (var client = HttpClient.newHttpClient()) {
+            // Stream dataset items
+            var streamRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(baseURI).resolve("/v1/private/datasets/items/stream"))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/octet-stream")
+                    .header("Authorization", apiKey)
+                    .header("Comet-Workspace", workspaceName)
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                        mapper.writeValueAsString(Map.of("dataset_name", datasetName))
+                    ))
+                    .build();
+
+            HttpResponse<InputStream> streamResponse = client.send(
+                streamRequest,
+                HttpResponse.BodyHandlers.ofInputStream()
+            );
+
+            List<JsonNode> experimentItems = new ArrayList<>();
+
+            try (var reader = new BufferedReader(new InputStreamReader(streamResponse.body()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    JsonNode datasetItem = mapper.readTree(line);
+                    String question = datasetItem.get("data").get("user_question").asText();
+                    UUID datasetItemId = UUID.fromString(datasetItem.get("id").asText());
+
+                    // Call your LLM application
+                    JsonNode llmOutput = callYourLLM(question);
+
+                    // Calculate metrics
+                    List<JsonNode> scores = calculateMetrics(llmOutput);
+
+                    // Build experiment item
+                    ArrayNode scoresArray = JsonNodeFactory.instance.arrayNode().addAll(scores);
+                    JsonNode experimentItem = JsonNodeFactory.instance.objectNode()
+                            .put("dataset_item_id", datasetItemId.toString())
+                            .setAll(Map.of(
+                                "evaluate_task_result", llmOutput,
+                                "feedback_scores", scoresArray
+                            ));
+
+                    experimentItems.add(experimentItem);
+                }
+            }
+
+            // Send experiment results in bulk
+            var bulkBody = JsonNodeFactory.instance.objectNode()
+                    .put("dataset_name", datasetName)
+                    .put("experiment_name", experimentName)
+                    .setAll(Map.of("items",
+                        JsonNodeFactory.instance.arrayNode().addAll(experimentItems)
+                    ));
+
+            var bulkRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(baseURI).resolve("/v1/private/experiments/items/bulk"))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", apiKey)
+                    .header("Comet-Workspace", workspaceName)
+                    .PUT(HttpRequest.BodyPublishers.ofString(bulkBody.toString()))
+                    .build();
+
+            HttpResponse<String> bulkResponse = client.send(
+                bulkRequest,
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            if (bulkResponse.statusCode() == 204) {
+                System.out.println("Experiment items successfully created.");
+            } else {
+                System.err.printf("Failed to create experiment items: %s %s",
+                    bulkResponse.statusCode(), bulkResponse.body());
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
+## Authentication
+
+Configure authentication based on your deployment:
+
+<Tabs>
+  <Tab value="Open Source" title="Open-Source (No Auth Required)">
+    ```bash
+    # No authentication headers required for local deployments
+    curl -X PUT 'http://localhost:5173/api/v1/private/experiments/items/bulk' \
+      -H 'Content-Type: application/json' \
+      -d '{ ... }'
+    ```
+  </Tab>
+  <Tab value="Cloud" title="Opik Cloud">
+    ```bash
+    # Include workspace and API key headers
+    curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
+      -H 'Content-Type: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>' \
+      -d '{ ... }'
+    ```
+    
+    <Warning>
+      Do **not** prefix your API key with `Bearer` — use it as a raw value.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Environment Variables
+
+For security and flexibility, use environment variables for credentials:
+
+```bash
+export OPIK_API_KEY="your_api_key"
+export OPIK_WORKSPACE="your_workspace_name"
+export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
+```
+
+Then use them in your code:
+
+<Tabs>
+  <Tab value="Python" title="Python">
+    ```python
+    import os
+    from opik import Opik
+    
+    # Opik SDK will automatically use these environment variables
+    client = Opik()
+    
+    # Or for direct REST API calls
+    headers = {
+        "Authorization": os.getenv('OPIK_API_KEY'),
+        "Comet-Workspace": os.getenv('OPIK_WORKSPACE')
+    }
+    ```
+  </Tab>
+  <Tab value="Bash" title="Bash">
+    ```bash
+    curl -X PUT "${OPIK_URL_OVERRIDE}/v1/private/experiments/items/bulk" \
+      -H "Content-Type: application/json" \
+      -H "Comet-Workspace: ${OPIK_WORKSPACE}" \
+      -H "authorization: ${OPIK_API_KEY}" \
+      -d '{ ... }'
+    ```
+  </Tab>
+</Tabs>
+
+## Reference
+
+- **Endpoint**: `PUT /api/v1/private/experiments/items/bulk`
+- **Max Payload Size**: 4MB
+- **Required Fields**: `experiment_name`, `dataset_name`, `items` (with `dataset_item_id`)
+- **SDK Reference**: [ExperimentsClient.experiment_items_bulk](https://www.comet.com/docs/opik/python-sdk-reference/rest_api/clients/experiments.html#opik.rest_api.experiments.client.ExperimentsClient.experiment_items_bulk)
+- **REST API Reference**: [Experiments API](https://www.comet.com/docs/opik/reference/rest-api/experiments/experiment-items-bulk)

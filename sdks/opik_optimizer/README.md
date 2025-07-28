@@ -73,55 +73,40 @@ Available sample datasets for testing:
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import FewShotBayesianOptimizer
-from opik_optimizer.demo import get_or_create_dataset
-
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)
+from opik_optimizer import FewShotBayesianOptimizer, ChatPrompt
+from opik_optimizer.datasets import hotpot_300
 
 # Load a sample dataset
-hot_pot_dataset = get_or_create_dataset("hotpot-300")
+hot_pot_dataset = hotpot_300()
+
+project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
 
 # Define the instruction for your chat prompt.
 # Input parameters from dataset examples will be interpolated into the full prompt.
-prompt_instruction = """
-Answer the question based on the provided context.
-"""
-project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
+prompt = ChatPrompt(
+    project_name=project_name,
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "{question}"}
+    ]
+)
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini", # LiteLLM name to use for generation and optimization
-    project_name=project_name, # Associates the run with a Comet project
     min_examples=3,      # Min few-shot examples
     max_examples=8,      # Max few-shot examples
     n_threads=16,        # Parallel threads for evaluation
     seed=42,
 )
 
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(project_name=project_name), # Metric for evaluation
-    inputs={
-        "output": from_llm_response_text(), # Get output from LLM
-        "reference": from_dataset_field(name="answer"), # Get reference from dataset
-    },
-)
-
-task_config = TaskConfig(
-    instruction_prompt=prompt_instruction,
-    input_dataset_fields=["question"], # Fields from dataset to use as input
-    output_dataset_field="answer",     # Field in dataset for reference answer
-    use_chat_prompt=True,              # Use chat-style prompting
-)
+def levenshtein_ratio(dataset_item, llm_output):
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
 
 # Run the optimization
 result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=hot_pot_dataset,
-    metric_config=metric_config,
-    task_config=task_config,
+    metric=levenshtein_ratio,
     n_trials=10,   # Number of optimization trials
     n_samples=150, # Number of dataset samples for evaluation per trial
 )

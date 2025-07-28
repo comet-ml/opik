@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageCircleWarning } from "lucide-react";
@@ -9,6 +9,7 @@ import isFunction from "lodash/isFunction";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -23,29 +24,24 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import {
-  LocalAIProviderData,
-  PROVIDER_LOCATION_TYPE,
-  PROVIDER_TYPE,
-  ProviderKey,
-} from "@/types/providers";
+import { PROVIDER_TYPE, ProviderKey } from "@/types/providers";
 
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
-import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
-import { PROVIDERS } from "@/constants/providers";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
-import LocalAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/LocalAIProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { convertCustomProviderModels } from "@/lib/provider";
 
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderKey;
@@ -65,19 +61,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   configuredProvidersList,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
-
-  const { getLocalAIProviderData, setLocalAIProviderData } =
-    useLocalAIProviderData();
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
-  const { deleteLocalAIProviderData } = useLocalAIProviderData();
-
-  const [localData, setLocalData] = useState<LocalAIProviderData | undefined>(
-    providerKey?.provider
-      ? getLocalAIProviderData(providerKey.provider)
-      : undefined,
-  );
 
   const form: UseFormReturn<AIProviderFormType> = useForm<
     z.infer<typeof AIProviderFormSchema>
@@ -85,13 +71,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
       provider: providerKey?.provider || "",
-      locationType: providerKey?.provider
-        ? PROVIDERS[providerKey.provider]?.locationType
-        : PROVIDER_LOCATION_TYPE.cloud,
       apiKey: "",
-      url: localData?.url ?? "",
-      models: localData?.models ?? "",
-      location: undefined,
+      // @ts-expect-error not to trigger type error when we have different schemas to different providers
+      location: providerKey?.configuration?.location ?? "",
+      url: providerKey?.base_url ?? "",
+      models: convertCustomProviderModels(
+        providerKey?.configuration?.models ?? "",
+      ),
     },
   });
 
@@ -106,25 +92,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     return configuredProvidersList?.find((p) => provider === p.provider);
   }, [configuredProvidersList, provider]);
 
-  useEffect(() => {
-    if (
-      calculatedProviderKey &&
-      PROVIDERS[calculatedProviderKey.provider]?.locationType ===
-        PROVIDER_LOCATION_TYPE.local
-    ) {
-      const ld = getLocalAIProviderData(calculatedProviderKey.provider);
-      if (ld) {
-        setLocalData(ld);
-        form.setValue("url", ld.url);
-        form.setValue("models", ld.models);
-      }
-    }
-  }, [calculatedProviderKey, form, getLocalAIProviderData]);
-
-  const isCloudProvider =
-    provider === "" ||
-    PROVIDERS[provider]?.locationType === PROVIDER_LOCATION_TYPE.cloud;
-
   const isConfiguredProvider = Boolean(calculatedProviderKey);
 
   const buttonText = provider
@@ -133,42 +100,32 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : "Add configuration"
     : "Done";
 
-  const localConfigHandler = useCallback(() => {
-    const data: LocalAIProviderData = {
-      created_at: new Date().toISOString(),
-      ...localData,
-      url: form.getValues("url"),
-      models: form.getValues("models"),
-    };
-
-    if (provider) {
-      setLocalAIProviderData(provider, data);
-      if (isFunction(onAddProvider)) {
-        onAddProvider(provider);
-      }
-    }
-
-    setOpen(false);
-  }, [
-    localData,
-    form,
-    provider,
-    setOpen,
-    setLocalAIProviderData,
-    onAddProvider,
-  ]);
-
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
+    const url = form.getValues("url");
     const location = form.getValues("location");
+    const models = convertCustomProviderModels(
+      form.getValues("models") ?? "",
+      true,
+    );
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
+    const isCustom = provider === PROVIDER_TYPE.CUSTOM;
+
+    const configuration =
+      isVertex || isCustom
+        ? {
+            location: isVertex ? location : undefined,
+            models: isCustom ? models : undefined,
+          }
+        : undefined;
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
-          location: isVertex ? location : undefined,
+          base_url: isCustom ? url : undefined,
+          ...(configuration && { configuration }),
         },
       });
     } else if (provider) {
@@ -180,7 +137,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
-          location: isVertex ? location : undefined,
+          base_url: isCustom ? url : undefined,
+          ...(configuration && { configuration }),
         },
       });
     }
@@ -196,16 +154,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     createMutate,
   ]);
 
-  const onSubmit = useCallback(
-    () => (isCloudProvider ? cloudConfigHandler() : localConfigHandler()),
-    [isCloudProvider, cloudConfigHandler, localConfigHandler],
-  );
-
   const deleteProviderKeyHandler = useCallback(() => {
-    const config = PROVIDERS[provider as PROVIDER_TYPE];
-    if (config.locationType === PROVIDER_LOCATION_TYPE.local) {
-      deleteLocalAIProviderData(config.value);
-    } else if (calculatedProviderKey) {
+    if (calculatedProviderKey) {
       deleteMutate({
         providerId: calculatedProviderKey.id,
       });
@@ -214,21 +164,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     if (isFunction(onDeleteProvider)) {
       onDeleteProvider(provider as PROVIDER_TYPE);
     }
-  }, [
-    provider,
-    calculatedProviderKey,
-    onDeleteProvider,
-    deleteLocalAIProviderData,
-    deleteMutate,
-  ]);
+  }, [provider, calculatedProviderKey, onDeleteProvider, deleteMutate]);
 
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       return <VertexAIProviderDetails form={form} />;
     }
 
-    if (!isCloudProvider) {
-      return <LocalAIProviderDetails provider={provider} form={form} />;
+    if (provider === PROVIDER_TYPE.CUSTOM) {
+      return <CustomProviderDetails form={form} />;
     }
 
     return <CloudAIProviderDetails provider={provider} form={form} />;
@@ -240,53 +184,70 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Provider configuration</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form
-            className="flex flex-col gap-4 pb-4"
-            onSubmit={form.handleSubmit(onSubmit)}
-          >
-            <FormField
-              control={form.control}
-              name="provider"
-              render={({ field, formState }) => {
-                const validationErrors = get(formState.errors, ["provider"]);
+        <DialogAutoScrollBody>
+          <ExplainerDescription
+            className="mb-4"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
+          />
+          <Form {...form}>
+            <form
+              className="flex flex-col gap-4 pb-4"
+              onSubmit={form.handleSubmit(cloudConfigHandler)}
+            >
+              <FormField
+                control={form.control}
+                name="provider"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, ["provider"]);
 
-                return (
-                  <FormItem>
-                    <Label>Provider</Label>
-                    <FormControl>
-                      <ProviderSelect
-                        disabled={Boolean(providerKey)}
-                        value={(field.value as PROVIDER_TYPE) || ""}
-                        onChange={(v) => {
-                          const p = v as PROVIDER_TYPE;
+                  return (
+                    <FormItem>
+                      <Label>Provider</Label>
+                      <FormControl>
+                        <ProviderSelect
+                          disabled={Boolean(providerKey)}
+                          value={(field.value as PROVIDER_TYPE) || ""}
+                          onChange={(v) => {
+                            const p = v as PROVIDER_TYPE;
+                            const providerData = configuredProvidersList?.find(
+                              (c) => p === c.provider,
+                            );
 
-                          form.setValue(
-                            "locationType",
-                            PROVIDERS[p].locationType,
-                          );
-                          field.onChange(p);
-                        }}
-                        configuredProviderKeys={configuredProviderKeys}
-                        hasError={Boolean(validationErrors?.message)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
-            {(isConfiguredProvider || providerKey) && isCloudProvider && (
-              <CalloutAlert
-                Icon={MessageCircleWarning}
-                {...EXPLAINERS_MAP[
-                  EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
-                ]}
+                            form.setValue("url", providerData?.base_url ?? "");
+                            form.setValue(
+                              "models",
+                              convertCustomProviderModels(
+                                providerData?.configuration?.models ?? "",
+                              ),
+                            );
+                            form.setValue(
+                              "location",
+                              providerData?.configuration?.location ?? "",
+                            );
+
+                            field.onChange(p);
+                          }}
+                          configuredProviderKeys={configuredProviderKeys}
+                          hasError={Boolean(validationErrors?.message)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
-            )}
-            {getProviderDetails()}
-          </form>
-        </Form>
+              {(isConfiguredProvider || providerKey) && (
+                <ExplainerCallout
+                  Icon={MessageCircleWarning}
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
+                  ]}
+                />
+              )}
+              {getProviderDetails()}
+            </form>
+          </Form>
+        </DialogAutoScrollBody>
         <DialogFooter>
           {isConfiguredProvider && (
             <>
@@ -303,7 +264,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+          <Button type="submit" onClick={form.handleSubmit(cloudConfigHandler)}>
             {buttonText}
           </Button>
         </DialogFooter>
@@ -315,6 +276,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         title="Delete configuration"
         description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
+        confirmButtonVariant="destructive"
       />
     </Dialog>
   );

@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -17,6 +17,7 @@ import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -31,7 +32,6 @@ import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -45,23 +45,22 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.sql.SQLException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -97,6 +96,8 @@ class AttachmentResourceMinIOTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
         MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
@@ -117,25 +118,15 @@ class AttachmentResourceMinIOTest {
     private SpanResourceClient spanResourceClient;
     private String baseURI;
     private String baseURIEncoded;
-    private TransactionTemplate mySqlTemplate;
     private ProjectService projectService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate, ProjectService projectService)
-            throws SQLException {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
+    void setUpAll(ClientSupport client, ProjectService projectService) {
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.baseURIEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(baseURI.getBytes());
-        this.mySqlTemplate = mySqlTemplate;
         this.projectService = projectService;
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
@@ -230,16 +221,20 @@ class AttachmentResourceMinIOTest {
         deleteTrace.accept(traceId);
 
         // Verify trace attachments were actually deleted via list endpoint and download link
-        tracePage = attachmentResourceClient.attachmentList(project.id(), EntityType.TRACE,
-                traceId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
-        assertThat(tracePage).isEqualTo(Attachment.AttachmentPage.empty(1));
-        attachmentResourceClient.downloadFile(traceDownloadLink, API_KEY, 404);
+        Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var tracePageUpdated = attachmentResourceClient.attachmentList(project.id(), EntityType.TRACE,
+                    traceId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
+            assertThat(tracePageUpdated).isEqualTo(Attachment.AttachmentPage.empty(1));
+            attachmentResourceClient.downloadFile(traceDownloadLink, API_KEY, 404);
+        });
 
         // Verify span attachments were actually deleted via list endpoint and download link
-        spanPage = attachmentResourceClient.attachmentList(project.id(), EntityType.SPAN,
-                spanId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
-        assertThat(spanPage).isEqualTo(Attachment.AttachmentPage.empty(1));
-        attachmentResourceClient.downloadFile(spanDownloadLink, API_KEY, 404);
+        Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var spanPageUpdated = attachmentResourceClient.attachmentList(project.id(), EntityType.SPAN,
+                    spanId, baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
+            assertThat(spanPageUpdated).isEqualTo(Attachment.AttachmentPage.empty(1));
+            attachmentResourceClient.downloadFile(spanDownloadLink, API_KEY, 404);
+        });
     }
 
     Stream<Arguments> deleteTraceDeletesTraceAndSpanAttachments() {
@@ -247,7 +242,8 @@ class AttachmentResourceMinIOTest {
                 Arguments.of(
                         (Consumer<UUID>) traceId -> traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY)),
                 Arguments.of((Consumer<UUID>) traceId -> traceResourceClient
-                        .deleteTraces(BatchDelete.builder().ids(Set.of(traceId)).build(), TEST_WORKSPACE, API_KEY)));
+                        .deleteTraces(BatchDeleteByProject.builder().ids(Set.of(traceId)).build(), TEST_WORKSPACE,
+                                API_KEY)));
     }
 
     Pair<StartMultipartUploadRequest, byte[]> uploadFile(String projectName, EntityType type, UUID entityId)

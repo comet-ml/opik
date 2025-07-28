@@ -30,11 +30,11 @@ The MetaPrompter is a specialized optimizer designed for meta-prompt optimizatio
 
 The `MetaPromptOptimizer` automates the process of prompt refinement by using a "reasoning" LLM to critique and improve your initial prompt. Here's a conceptual breakdown:
 
-1.  **Initial Prompt Evaluation**: Your starting `instruction_prompt` is first evaluated on the dataset using the specified `metric_config` to establish a baseline score.
+1.  **Initial Prompt Evaluation**: Your starting `prompt` messages is first evaluated on the dataset using the specified `metric` to establish a baseline score.
 
 2.  **Reasoning and Candidate Generation**:
 
-    - The optimizer takes your current best prompt and detailed context about the task (derived from `task_config` and `metric_config`).
+    - The optimizer takes your current best prompt and detailed context about the task (derived from `prompt` and `metric`).
     - It then queries a `reasoning_model` (which can be the same as the evaluation `model` or a different, potentially more powerful one). This `reasoning_model` is guided by a system prompt (the "meta-prompt") that instructs it to act as an expert prompt engineer.
     - The `reasoning_model` analyzes the provided prompt and task context, then generates a set of new candidate prompts. Each candidate is designed to improve upon the previous best, with specific reasoning for the suggested changes (e.g., "added more specific constraints," "rephrased for clarity").
 
@@ -53,9 +53,9 @@ The `MetaPromptOptimizer` automates the process of prompt refinement by using a 
 This iterative loop of generation, evaluation, and selection allows the `MetaPromptOptimizer` to explore different phrasings and structures, guided by the reasoning capabilities of an LLM.
 
 <Tip>
-  The evaluation of each candidate prompt (Step 3) uses the `MetricConfig` you provide and runs against the `dataset`.
-  This process is fundamental to how the optimizer determines which prompts are better. For a deeper understanding of
-  Opik's evaluation capabilities, refer to: - [Evaluation Overview](/evaluation/overview) - [Evaluate
+  The evaluation of each candidate prompt (Step 3) uses the `metric` you provide and runs against the `dataset`. This
+  process is fundamental to how the optimizer determines which prompts are better. For a deeper understanding of Opik's
+  evaluation capabilities, refer to: - [Evaluation Overview](/evaluation/overview) - [Evaluate
   Prompts](/evaluation/evaluate_prompt) - [Metrics Overview](/evaluation/metrics/overview)
 </Tip>
 
@@ -68,7 +68,6 @@ from opik_optimizer import MetaPromptOptimizer
 
 prompter = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
-    project_name="my-project",
     # LLM parameters like temperature, max_tokens are passed as keyword arguments
     temperature=0.1,
     max_tokens=5000,
@@ -76,7 +75,7 @@ prompter = MetaPromptOptimizer(
     reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
     max_rounds=3,
     num_prompts_per_round=4,
-    num_threads=8,
+    n_threads=8,
     seed=42 # Seed for LLM calls if supported by the model
 )
 ```
@@ -101,20 +100,14 @@ The optimizer works by iteratively generating new prompt suggestions using its `
 ```python
 from opik_optimizer import MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_llm_response_text,
-    from_dataset_field,
-)
-from opik_optimizer import datasets
+from opik_optimizer import datasets, ChatPrompt
 
 # Initialize optimizer
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
     temperature=0.1,
     max_tokens=5000,
-    num_threads=8,
+    n_threads=8,
     seed=42
 )
 
@@ -122,25 +115,22 @@ optimizer = MetaPromptOptimizer(
 dataset = datasets.hotpot_300()
 
 # Define metric and task configuration (see docs for more options)
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(),
-    inputs={
-        "output": from_llm_response_text(),  # Model's output
-        "reference": from_dataset_field(name="answer"),  # Ground truth
-    }
-)
-task_config = TaskConfig(
-    instruction_prompt="Provide an answer to the question.",
-    input_dataset_fields=["question"],
-    output_dataset_field="answer",
-    use_chat_prompt=True
+def levenshtein_ratio(dataset_item, llm_output):
+    return LevenshteinRatio().score(reference=dataset_item['answer'], output=llm_output)
+
+prompt = ChatPrompt(
+    project_name="my-project",
+    messages=[
+        {"role": "system", "content": "Provide an answer to the question."},
+        {"role": "user", "content": "{question}"}
+    ]
 )
 
 # Run optimization
 results = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=dataset,
-    metric_config=metric_config,
-    task_config=task_config
+    metric=levenshtein_ratio,
 )
 
 # Access results
@@ -149,16 +139,18 @@ results.display()
 
 ## Model Support
 
-The MetaPrompter supports all models available through LiteLLM. This provides broad compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally hosted models.
+The MetaPrompter supports all models available through LiteLLM. This provides broad compatibility
+with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally
+hosted models.
 
-For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
+For detailed instructions on how to specify different models and configure providers, please refer
+to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
 ### Configuration Example using LiteLLM model string
 
 ```python
 optimizer = MetaPromptOptimizer(
     model="google/gemini-pro",  # or any LiteLLM supported model
-    project_name="my-project",
     temperature=0.1,
     max_tokens=5000
 )

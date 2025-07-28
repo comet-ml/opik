@@ -1,8 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -34,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -113,7 +113,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
@@ -198,7 +198,11 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Map<String, Integer> getTokenUsage() {
-        return Map.of("completion_tokens", randomNumber(1, 500), "prompt_tokens", randomNumber(1, 500));
+        int completionTokens = randomNumber(1, 500);
+        int promptTokens = randomNumber(1, 500);
+        return Map.of("completion_tokens", completionTokens,
+                "prompt_tokens", promptTokens,
+                "total_tokens", completionTokens + promptTokens);
     }
 
     public List<Span> getStreamAndAssertContent(String apiKey, String workspaceName,

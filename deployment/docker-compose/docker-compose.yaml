@@ -71,7 +71,7 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: docker.io/bitnami/zookeeper:3.9.2-debian-12-r0
+    image: docker.io/bitnami/zookeeper:3.9.3-debian-12-r16
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
@@ -151,6 +151,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
       PYTHON_EVALUATOR_URL: http://python-backend:8000
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
@@ -182,6 +183,7 @@ services:
       PYTHON_CODE_EXECUTOR_STRATEGY: ${PYTHON_CODE_EXECUTOR_STRATEGY:-process}
       PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
+      PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:

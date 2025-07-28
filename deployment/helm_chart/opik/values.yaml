@@ -13,13 +13,20 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 demoDataJob: true
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
 component:
   backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-backend
     metrics:
@@ -50,7 +57,6 @@ component:
       path: /health-check?name=all&type=ready
       port:  8080
       initialDelaySeconds: 20
-
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
@@ -79,7 +85,6 @@ component:
     envFrom:
       - configMapRef:
           name: opik-backend
-
     service:
       type: ClusterIP
       ports:
@@ -87,18 +92,23 @@ component:
         port:  8080
         protocol: TCP
         targetPort:  8080
-      - name: backend
+      - name: swagger
         port:  3003
         protocol: TCP
         targetPort:  3003
-
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
 
   python-backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-python-backend
     metrics:
@@ -119,6 +129,7 @@ component:
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
+      PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
       OTEL_SERVICE_NAME: "opik-python-backend"
       OTEL_METRIC_EXPORT_INTERVAL: "60000"
@@ -153,11 +164,17 @@ component:
 
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
 
   frontend:
     enabled: true
     serviceAccount:
-      enabled: true
       create: true
       name: opik-frontend
     metrics:
@@ -190,6 +207,18 @@ component:
         targetPort:  5173
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+        # - host: opik.example.com
+        #   paths:
+        #     - path: /
+        #       port: 5173
+        #       pathType: Prefix
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
     # throttled locations
     throttling: {}
     # map variables for use with throttling and other places
@@ -306,6 +335,7 @@ altinity-clickhouse-operator:
     enabled: false
   serviceMonitor:
     enabled: false
+    interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
 clickhouse:
   enabled: true
@@ -321,29 +351,90 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
+      annotations: {}
+      create: false
+      name: ""
+    schedule: "0 0 * * *" # daily at midnight
+    command:
+      - /bin/bash
+      - '-cx'
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+  backupServer:
+    enabled: false
+    image: altinity/clickhouse-backup:2.6.23
+    port: 7171
+    monitoring:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      service:
+        type: ClusterIP
+        ports:
+          - name: ch-backup-rest
+            port: 80
+            targetPort: 7171
+      serviceMonitor:
         enabled: false
-        create: true
+        additionalLabels: {}
         annotations: {}
-    # bucketURL: ""
-    # secretName: ""
-    # schedule: ""
-    # baseBackup: ""
+        namespace: ""
+        portName: ""
+        interval: "60s"
+        scrapeTimeout: "30s"
+        relabelings: []
+        metricRelabelings: []
+        podTargetLabels: []
+        honorLabels: false
+    env:
+      LOG_LEVEL: info
+      ALLOW_EMPTY_BACKUPS: true
+      API_LISTEN: 0.0.0.0:7171
+      API_CREATE_INTEGRATION_TABLES: true
   monitoring:
     enabled: false
     username: opikmon # readonly user
     password: opikmon
+    useSecret:
+      enabled: false
     # resources:
     #   requests:
     #     cpu: 300m
     #     memory: 1Gi
     #   limits:
     #     memory: 1Gi
+    additionalLabels: {}
+    annotations: {}
+    service:
+      type: ClusterIP
+      ports:
+        - name: prometheus-metrics
+          port: 80
+          targetPort: 9363
+    serviceMonitor:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      namespace: ""
+      portName: ""
+      interval: "60s"
+      scrapeTimeout: "30s"
+      relabelings: []
+      metricRelabelings: []
+      podTargetLabels: []
+      honorLabels: false
 
 zookeeper:
     enabled: true

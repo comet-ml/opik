@@ -1,22 +1,17 @@
 import React from "react";
-import { Filter } from "@/types/filters";
+import { Filter, FilterOperator, FilterRowConfig } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
-import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
+import {
+  DEFAULT_OPERATORS,
+  NO_VALUE_OPERATORS,
+  OPERATORS_MAP,
+} from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 import { cn } from "@/lib/utils";
 
-export type DictionaryRowConfig = {
-  keyComponent: React.FC<unknown> & {
-    placeholder: string;
-    value: string;
-    onValueChange: (value: string) => void;
-  };
-  keyComponentProps: unknown;
-};
-
 type DictionaryRowProps = {
-  config?: DictionaryRowConfig;
+  config?: FilterRowConfig;
   filter: Filter;
   onChange: (filter: Filter) => void;
 };
@@ -29,8 +24,9 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
   const type: "string" | "number" =
     filter.type === COLUMN_TYPE.dictionary ? "string" : "number";
 
-  const noInput =
-    filter.operator === "is_empty" || filter.operator === "is_not_empty";
+  const noInput = NO_VALUE_OPERATORS.includes(
+    filter.operator as FilterOperator,
+  );
 
   const keyValueChangeHandler = (value: unknown) =>
     onChange({ ...filter, key: value as string });

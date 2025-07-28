@@ -4,6 +4,9 @@
 
 import * as OpikApi from "../index";
 
+/**
+ * Please provide either none, only one of evaluate_task_result or trace, but never both
+ */
 export interface TraceExperimentItemBulkWriteView {
     id?: string;
     /** If null, the default project is used */

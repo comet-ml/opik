@@ -94,23 +94,24 @@ describe("prettifyMessage", () => {
 
   it("handles LangGraph input message format", () => {
     const message = {
-      messages: [["role", "User message"]],
+      messages: [{ type: "human", content: "User message" }],
     };
     const result = prettifyMessage(message, { type: "input" });
     expect(result).toEqual({ message: "User message", prettified: true });
   });
 
-  it("handles LangGraph output message format with multiple human messages", () => {
+  it("handles LangGraph output message format with multiple AI messages", () => {
     const message = {
       messages: [
-        { type: "human", content: "Message 1" },
-        { type: "ai", content: "AI response" },
-        { type: "human", content: "Message 2" },
+        { type: "human", content: "User question" },
+        { type: "ai", content: "AI response 1" },
+        { type: "human", content: "Follow-up question" },
+        { type: "ai", content: "AI response 2" },
       ],
     };
     const result = prettifyMessage(message, { type: "output" });
     expect(result).toEqual({
-      message: "Message 1\n\n  ----------------- \n\nMessage 2",
+      message: "AI response 2",
       prettified: true,
     });
   });
@@ -143,5 +144,130 @@ describe("prettifyMessage", () => {
     };
     const result = prettifyMessage(message, { type: "output" });
     expect(result).toEqual({ message: "Nested response", prettified: true });
+  });
+
+  it("handles OpenAI Agents input message with multiple user messages", () => {
+    const message = {
+      input: [
+        { role: "system", content: "System message" },
+        { role: "user", content: "User message 1" },
+        { role: "assistant", content: "Assistant message" },
+        { role: "user", content: "User message 2" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "User message 1\n\n  ----------------- \n\nUser message 2",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenAI Agents output message with multiple assistant outputs", () => {
+    const message = {
+      output: [
+        {
+          role: "assistant",
+          type: "message",
+          content: [{ type: "output_text", text: "Assistant response 1" }],
+        },
+        { role: "user", content: "User message" },
+        {
+          role: "assistant",
+          type: "message",
+          content: [{ type: "output_text", text: "Assistant response 2" }],
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Assistant response 1\n\n  ----------------- \n\nAssistant response 2",
+      prettified: true,
+    });
+  });
+
+  it("handles Demo project blocks structure with text content", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "text",
+          text: "Opik is a tool that has been specifically designed to support high volumes of traces, making it suitable for monitoring production applications, particularly LLM applications.",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Opik is a tool that has been specifically designed to support high volumes of traces, making it suitable for monitoring production applications, particularly LLM applications.",
+      prettified: true,
+    });
+  });
+
+  it("handles Demo project blocks structure with multiple text blocks", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "text",
+          text: "First paragraph content.",
+        },
+        {
+          block_type: "text",
+          text: "Second paragraph content.",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "First paragraph content.\n\nSecond paragraph content.",
+      prettified: true,
+    });
+  });
+
+  it("handles Demo project blocks structure with mixed block types, extracting only text blocks", () => {
+    const message = {
+      role: "assistant",
+      blocks: [
+        {
+          block_type: "image",
+          url: "https://example.com/image.jpg",
+        },
+        {
+          block_type: "text",
+          text: "This is the text content.",
+        },
+        {
+          block_type: "code",
+          language: "python",
+          code: "print('hello')",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "This is the text content.",
+      prettified: true,
+    });
+  });
+
+  it("handles Demo project nested blocks structure under output property", () => {
+    const message = {
+      output: {
+        role: "assistant",
+        blocks: [
+          {
+            block_type: "text",
+            text: "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
+          },
+        ],
+      },
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
+      prettified: true,
+    });
   });
 });

@@ -14,6 +14,7 @@ import { Experiment } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Checkbox } from "@/components/ui/checkbox";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 type FilterExperimentsToCompareDialogProps = {
   experiments: Experiment[];
@@ -96,10 +97,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
           <DialogTitle>Select experiments to compare</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <div className="comet-body-s py-2 text-muted-slate">
-            You can only compare experiments that use the same dataset. Please
-            make sure all the experiments use the same dataset.
-          </div>
+          <ExplainerDescription description="You can only compare experiments that use the same dataset. Please make sure all the experiments use the same dataset." />
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch gap-2.5 overflow-y-auto">
             {renderListItems()}
           </div>

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -469,7 +468,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.comments_array_agg,
                     tfs.duration,
                     tfs.total_estimated_cost,
-                    tfs.usage
+                    tfs.usage,
+                    tfs.visibility_mode as trace_visibility_mode
                 )) AS experiment_items_array
             FROM dataset_items_final AS di
             INNER JOIN experiment_items_final AS ei ON di.id = ei.dataset_item_id
@@ -479,6 +479,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.input,
                     t.output,
                     t.duration,
+                    t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage,
                     groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
@@ -491,7 +492,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
+                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                        visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
@@ -515,6 +517,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.input,
                     t.output,
                     t.duration,
+                    t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage
             ) AS tfs ON ei.trace_id = tfs.id

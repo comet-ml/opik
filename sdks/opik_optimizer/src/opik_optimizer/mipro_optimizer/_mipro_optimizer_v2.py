@@ -1,15 +1,12 @@
-import logging
 import random
 import textwrap
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
+import dspy
 import numpy as np
 import opik
 import optuna
-from optuna.distributions import CategoricalDistribution
-
-import dspy
 from dspy.evaluate.evaluate import Evaluate
 from dspy.propose import GroundedProposer
 from dspy.teleprompt.teleprompt import Teleprompter
@@ -23,11 +20,17 @@ from dspy.teleprompt.utils import (
     save_candidate_program,
     set_signature,
 )
+from optuna.distributions import CategoricalDistribution
+
+from ..optimization_config.configs import TaskConfig
+from opik_optimizer import task_evaluator
+from opik_optimizer.optimization_config import mappers
 
 
-class Logger():
+class Logger:
     def info(self, *args, **kwargs):
         print(*args)
+
 
 logger = Logger()
 
@@ -49,10 +52,6 @@ BLUE = "\033[94m"
 BOLD = "\033[1m"
 ENDC = "\033[0m"  # Resets the color to default
 
-import opik
-from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
-from opik_optimizer.optimization_config import mappers
 
 def get_prompt(program):
     """
@@ -64,6 +63,7 @@ def get_prompt(program):
         instructions = program.signature.instructions
 
     return instructions
+
 
 class MIPROv2(Teleprompter):
     def __init__(
@@ -85,7 +85,7 @@ class MIPROv2(Teleprompter):
         log_dir: Optional[str] = None,
         metric_threshold: Optional[float] = None,
         opik_dataset: Optional[opik.Dataset] = None,
-        opik_metric_config: Optional[MetricConfig] = None,
+        opik_metric: Optional[Callable] = None,
         opik_prompt_task_config: Optional[TaskConfig] = None,
         opik_project_name: Optional[str] = None,
         opik_optimization_id: Optional[str] = None,
@@ -119,7 +119,7 @@ class MIPROv2(Teleprompter):
         self.rng = None
 
         self.opik_dataset = opik_dataset
-        self.opik_metric_config = opik_metric_config
+        self.opik_metric = opik_metric
         self.opik_prompt_task_config = opik_prompt_task_config
         self.opik_project_name = opik_project_name
         self.opik_optimization_id = opik_optimization_id
@@ -554,32 +554,33 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l in demo:
-                for example in l:
+            for l_ in demo:
+                for example in l_:
                     examples.append(example.toDict())
         prompt = get_prompt(program)
         experiment_config = {
             **self.experiment_config,
-            **{"configuration": {
-                "prompt": prompt,
-                "examples": examples,
+            **{
+                "configuration": {
+                    "prompt": prompt,
+                    "examples": examples,
+                },
+                "evaluation": "initial",
             },
-               "evaluation": "initial",
-            }
         }
 
         default_score = eval_candidate_program_with_opik(
             opik_dataset=self.opik_dataset,
             trainset=valset,
             candidate_program=program,
-            metric_config=self.opik_metric_config,
+            metric=self.opik_metric,
             prompt_task_config=self.opik_prompt_task_config,
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
             experiment_config=experiment_config,
             optimization_id=self.opik_optimization_id,
         )
-        
+
         logger.info(f"Default program score: {default_score}\n")
 
         trial_logs = {}
@@ -606,7 +607,13 @@ class MIPROv2(Teleprompter):
 
         # Define the objective function
         def objective(trial):
-            nonlocal program, best_program, best_score, trial_logs, total_eval_calls, score_data
+            nonlocal \
+                program, \
+                best_program, \
+                best_score, \
+                trial_logs, \
+                total_eval_calls, \
+                score_data
 
             trial_num = trial.number + 1
             if minibatch:
@@ -643,15 +650,7 @@ class MIPROv2(Teleprompter):
             score = eval_candidate_program(
                 batch_size, valset, candidate_program, evaluate, self.rng
             )
-            # score = eval_candidate_program_with_opik(
-            #     opik_dataset=self.opik_dataset,
-            #     trainset=valset,
-            #     candidate_program=candidate_program,
-            #     metric_config=self.opik_metric_config,
-            #     prompt_task_config=self.opik_prompt_task_config,
-            #     project_name=self.opik_project_name,
-            #     experiment_config=experiment_config,
-            # )
+
             total_eval_calls += batch_size
 
             # Update best score and program
@@ -935,25 +934,26 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l in demo:
-                for example in l:
+            for l_ in demo:
+                for example in l_:
                     examples.append(example.toDict())
         prompt = get_prompt(highest_mean_program)
         experiment_config = {
             **self.experiment_config,
-            **{"configuration": {
-                "prompt": prompt,
-                "examples": examples,
-              },
-               "evaluation": "full",
-            }
+            **{
+                "configuration": {
+                    "prompt": prompt,
+                    "examples": examples,
+                },
+                "evaluation": "full",
+            },
         }
 
         full_eval_score = eval_candidate_program_with_opik(
             opik_dataset=self.opik_dataset,
             trainset=valset,
             candidate_program=highest_mean_program,
-            metric_config=self.opik_metric_config,
+            metric=self.opik_metric,
             prompt_task_config=self.opik_prompt_task_config,
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
@@ -996,7 +996,7 @@ class MIPROv2(Teleprompter):
         trial_logs[trial_num + 1]["full_eval_score"] = full_eval_score
 
         if full_eval_score == 1.0:
-            return self.early_stop(default_score, program)
+            return self.early_stop(default_score, program)  # noqa
 
         # Update best score and program if necessary
         if full_eval_score > best_score:
@@ -1029,7 +1029,7 @@ def eval_candidate_program_with_opik(
     trainset: List,
     candidate_program: Any,
     project_name: str,
-    metric_config: MetricConfig,
+    metric: Callable,
     prompt_task_config: TaskConfig,
     num_threads: int,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -1050,19 +1050,22 @@ def eval_candidate_program_with_opik(
             candidate_program._assert_failures += dspy.settings.get("assert_failures")
         if hasattr(candidate_program, "_suggest_failures"):
             candidate_program._suggest_failures += dspy.settings.get("suggest_failures")
-        
-        return {mappers.from_llm_response_text(): prediction[prompt_task_config.output_dataset_field]}
 
+        return {
+            mappers.from_llm_response_text(): prediction[
+                prompt_task_config.output_dataset_field
+            ]
+        }
 
     score = task_evaluator.evaluate(
         dataset=opik_dataset,
         evaluated_task=program_task,
-        metric_config=metric_config,
+        metric=metric,
         dataset_item_ids=dataset_item_ids,
         project_name=project_name,
         num_threads=num_threads,
         experiment_config=experiment_config,
         optimization_id=optimization_id,
     )
-    
+
     return score

@@ -6,7 +6,7 @@ docker==7.1.0
 Flask==3.1.0
 gunicorn==23.0.0
 uuid6==2024.7.10
-opik==1.6.1
+opik==1.8.4
 idna==3.10
 itsdangerous==2.2.0
 Jinja2==3.1.5
@@ -22,3 +22,4 @@ opentelemetry-exporter-otlp-proto-http==1.31.1
 opentelemetry-exporter-prometheus==0.52b1
 opentelemetry-instrumentation-flask==0.52b1
 prometheus-client==0.21.1
+schedule==1.2.1

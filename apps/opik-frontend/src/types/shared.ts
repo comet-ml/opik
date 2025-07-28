@@ -17,9 +17,12 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_USAGE_ID = "usage";
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
+export const COLUMN_DATASET_ID = "dataset";
+export const COLUMN_DURATION_ID = "duration";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 
@@ -32,7 +35,8 @@ export enum COLUMN_TYPE {
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
-  guardrails = "guardrails",
+  category = "category",
+  errors = "errors",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
@@ -47,6 +51,7 @@ export enum DYNAMIC_COLUMN_TYPE {
 type explainerType = "info" | "help";
 
 export type Explainer = {
+  id: string;
   title?: string;
   type?: explainerType;
   description: string;
@@ -54,7 +59,7 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE;
+export type HeaderIconType = COLUMN_TYPE | "guardrails";
 
 export type ColumnData<T> = {
   id: string;
@@ -74,6 +79,7 @@ export type ColumnData<T> = {
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
   sortable?: boolean;
+  disposable?: boolean;
 };
 
 export type DynamicColumn = {
@@ -151,4 +157,10 @@ export interface UsageData {
 export interface AggregatedFeedbackScore {
   name: string;
   value: number;
+}
+
+export interface AggregatedDuration {
+  p50: number;
+  p90: number;
+  p99: number;
 }

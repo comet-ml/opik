@@ -16,9 +16,10 @@ Answer Relevance, Context Precision/Recall and more. You can learn more about th
 [Metrics Overview](/evaluation/metrics/overview) section.
 
 <Tip>
-  If you are interested in evaluating your LLM application in production, please refer to the [Online evaluation
-  guide](/production/rules). Online evaluation rules allow you to define LLM as a Judge metrics that will automatically
-  score all, or a subset, of your production traces.
+  If you are interested in evaluating your LLM application in production, please
+  refer to the [Online evaluation guide](/production/rules). Online evaluation
+  rules allow you to define LLM as a Judge metrics that will automatically score
+  all, or a subset, of your production traces.
 </Tip>
 
 ## Running an Evaluation
@@ -33,6 +34,14 @@ Each evaluation is defined by a dataset, an evaluation task and a set of evaluat
 
 To simplify the evaluation process, Opik provides two main evaluation methods: `evaluate_prompt` for evaluation prompt
 templates and a more general `evaluate` method for more complex evaluation scenarios.
+
+<Tip>
+  **TypeScript SDK Support** This document covers evaluation using Python, but
+  we also offer full support for TypeScript via our dedicated TypeScript SDK.
+  See the [TypeScript SDK Evaluation
+  documentation](/reference/typescript-sdk/evaluation/overview) for
+  implementation details and examples.
+</Tip>
 
 <Tabs>
     <Tab value="Evaluating Prompts" title="Evaluating Prompts">
@@ -146,6 +155,7 @@ You can learn more about Opik's evaluation features in:
 
 1. [Evaluation concepts](/evaluation/concepts)
 1. [Evaluate prompts](/evaluation/evaluate_prompt)
+1. [Evaluate threads](/evaluation/evaluate_threads)
 1. [Evaluate complex LLM applications](/evaluation/evaluate_your_llm)
 1. [Evaluation metrics](/evaluation/metrics/overview)
 1. [Manage datasets](/evaluation/manage_datasets)

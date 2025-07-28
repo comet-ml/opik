@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -38,7 +39,7 @@ public class ChatCompletionsClient {
 
     public ChatCompletionsClient(ClientSupport clientSupport) {
         this.clientSupport = clientSupport;
-        this.baseURI = "http://localhost:%d".formatted(clientSupport.getPort());
+        this.baseURI = TestUtils.getBaseUrl(clientSupport);
     }
 
     public ChatCompletionResponse create(String apiKey, String workspaceName, ChatCompletionRequest request) {

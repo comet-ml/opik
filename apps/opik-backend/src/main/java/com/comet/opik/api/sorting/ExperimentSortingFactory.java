@@ -4,11 +4,14 @@ import java.util.List;
 
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
+import static com.comet.opik.api.sorting.SortableFields.DURATION_AGG;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
+import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
+import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST_AVG;
 import static com.comet.opik.api.sorting.SortableFields.TRACE_COUNT;
 
 public class ExperimentSortingFactory extends SortingFactory {
@@ -23,6 +26,9 @@ public class ExperimentSortingFactory extends SortingFactory {
                 CREATED_BY,
                 LAST_UPDATED_BY,
                 TRACE_COUNT,
-                FEEDBACK_SCORES);
+                TOTAL_ESTIMATED_COST,
+                TOTAL_ESTIMATED_COST_AVG,
+                FEEDBACK_SCORES,
+                DURATION_AGG);
     }
 }

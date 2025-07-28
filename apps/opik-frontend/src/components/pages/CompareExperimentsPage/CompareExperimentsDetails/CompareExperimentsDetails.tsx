@@ -83,12 +83,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
     if (isCompare) {
       const tag =
         experimentsIds.length === 2 ? (
-          <Tag size="lg" variant="gray" className="flex items-center gap-2">
+          <Tag size="md" variant="gray" className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0" />
             <div className="truncate">{experiments[1]?.name}</div>
           </Tag>
         ) : (
-          <Tag size="lg" variant="gray">
+          <Tag size="md" variant="gray">
             {`${experimentsIds.length - 1} experiments`}
           </Tag>
         );
@@ -96,7 +96,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
-          <Tag size="lg" variant="gray" className="flex items-center gap-2">
+          <Tag size="md" variant="gray" className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0" />
             <div className="truncate">{experiment?.name}</div>
           </Tag>

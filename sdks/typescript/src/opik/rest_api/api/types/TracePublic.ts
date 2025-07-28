@@ -29,4 +29,5 @@ export interface TracePublic {
     duration?: number;
     threadId?: string;
     visibilityMode?: OpikApi.TracePublicVisibilityMode;
+    llmSpanCount?: number;
 }

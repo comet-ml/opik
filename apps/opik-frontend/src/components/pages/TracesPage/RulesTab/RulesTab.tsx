@@ -39,10 +39,13 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import RuleEnabledCell from "@/components/pages-shared/automations/RuleEnabledCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { capitalizeFirstLetter } from "@/lib/utils";
+import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -77,6 +80,18 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
+  {
+    id: "scope",
+    label: "Scope",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  },
+  {
+    id: "enabled",
+    label: "State",
+    type: COLUMN_TYPE.string,
+    cell: RuleEnabledCell as never,
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -89,6 +104,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
+  "scope",
+  "enabled",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
@@ -234,12 +251,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <CalloutAlert
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
         />
       </PageBodyStickyContainer>

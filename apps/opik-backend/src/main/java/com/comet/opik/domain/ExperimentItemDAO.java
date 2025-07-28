@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -145,7 +144,8 @@ class ExperimentItemDAO {
                 ei.created_at,
                 ei.last_updated_at,
                 ei.created_by,
-                ei.last_updated_by
+                ei.last_updated_by,
+                tfs.visibility_mode AS trace_visibility_mode
             FROM experiment_items_scope AS ei
             LEFT JOIN (
                 SELECT
@@ -153,6 +153,7 @@ class ExperimentItemDAO {
                     t.input,
                     t.output,
                     t.duration,
+                    t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage,
                     groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
@@ -165,7 +166,8 @@ class ExperimentItemDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
+                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                        visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_scope)
@@ -189,6 +191,7 @@ class ExperimentItemDAO {
                     t.input,
                     t.output,
                     t.duration,
+                    t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage
             ) AS tfs ON ei.trace_id = tfs.id

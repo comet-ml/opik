@@ -8,6 +8,7 @@ import * as core from "../../core";
 import { JsonListString } from "./JsonListString";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
+import { ExperimentItemTraceVisibilityMode } from "./ExperimentItemTraceVisibilityMode";
 
 export const ExperimentItem: core.serialization.ObjectSchema<serializers.ExperimentItem.Raw, OpikApi.ExperimentItem> =
     core.serialization.object({
@@ -29,6 +30,10 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        traceVisibilityMode: core.serialization.property(
+            "trace_visibility_mode",
+            ExperimentItemTraceVisibilityMode.optional(),
+        ),
     });
 
 export declare namespace ExperimentItem {
@@ -48,5 +53,6 @@ export declare namespace ExperimentItem {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        trace_visibility_mode?: ExperimentItemTraceVisibilityMode.Raw | null;
     }
 }

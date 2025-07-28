@@ -5,6 +5,8 @@ icon: https://www.comet.com/site/favicon-32x32.png
 maintainers:
   - name: Liya Katz
     email: liyak@comet.com
+  - name: Alex Bezpalko
+    email: obezpalko@gmail.com
 
 # A chart can be either an 'application' or a 'library' chart.
 #
@@ -32,7 +34,7 @@ dependencies:
   repository: "https://charts.bitnami.com/bitnami"
   condition: mysql.enabled
 - name: zookeeper
-  version: 12.12.1
+  version: 13.8.3
   repository: https://charts.bitnami.com/bitnami
   condition: zookeeper.enabled
 - name: redis
@@ -44,7 +46,7 @@ dependencies:
   repository: https://charts.bitnami.com/bitnami
   condition: minio.enabled
 - name: altinity-clickhouse-operator
-  version: "0.23.7"
+  version: "0.25.0"
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
 - name: common

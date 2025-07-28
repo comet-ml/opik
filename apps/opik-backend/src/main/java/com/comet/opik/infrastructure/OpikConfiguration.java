@@ -78,4 +78,6 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 
+    @Valid @NotNull @JsonProperty
+    private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
 }

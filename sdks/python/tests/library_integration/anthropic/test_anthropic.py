@@ -42,8 +42,8 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
     "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
 }
 
-MODEL_FOR_TESTS_FULL = "claude-3-5-haiku-latest"
-MODEL_FOR_TESTS_SHORT = "claude-3-5-haiku"
+MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
+MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
 
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
@@ -84,6 +84,7 @@ def test_anthropic_messages_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -101,7 +102,7 @@ def test_anthropic_messages_create__happyflow(
                 project_name=expected_project_name,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -137,11 +138,12 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
         metadata={"created_from": "anthropic", "model": None, "base_url": ANY},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         error_info={
-            "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -161,9 +163,9 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 provider="anthropic",
                 spans=[],
@@ -216,6 +218,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name="anthropic-integration-test",
         spans=[
             SpanModel(
@@ -242,7 +245,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
                         project_name="anthropic-integration-test",
                         type="llm",
                         usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                         provider="anthropic",
                         spans=[],
                     )
@@ -286,6 +289,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         spans=[
             SpanModel(
@@ -312,7 +316,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
                         project_name=ANY_BUT_NONE,
                         type="llm",
                         usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                         provider="anthropic",
                         spans=[],
                     )
@@ -360,6 +364,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -375,7 +380,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -434,6 +439,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -449,7 +455,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -464,6 +470,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -479,7 +486,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -525,6 +532,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -540,7 +548,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -587,6 +595,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -602,7 +611,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -651,6 +660,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -666,7 +676,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -715,6 +725,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -730,7 +741,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -776,6 +787,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -791,7 +803,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )
@@ -847,6 +859,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -867,7 +880,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
             )

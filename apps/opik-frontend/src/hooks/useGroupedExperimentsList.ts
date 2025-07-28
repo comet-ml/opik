@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   keepPreviousData,
   QueryFunctionContext,
@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
 import { Dataset, Experiment } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList, {
   getExperimentsList,
@@ -30,6 +31,7 @@ export type GroupedExperiment = {
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
+  filters?: Filters;
   sorting?: Sorting;
   datasetId?: string;
   promptId?: string;
@@ -47,7 +49,6 @@ type UseGroupedExperimentsListResponse = {
     sortable_by: string[];
     total: number;
   };
-  datasetsData: Dataset[];
   isPending: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
@@ -97,6 +98,7 @@ export default function useGroupedExperimentsList(
   } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
+      filters: params.filters,
       sorting: params.sorting,
       search: params.search,
       datasetDeleted: true,
@@ -173,6 +175,7 @@ export default function useGroupedExperimentsList(
     queries: datasetsIds.map((datasetId) => {
       const p: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
+        filters: params.filters,
         sorting: params.sorting,
         search: params.search,
         datasetId,
@@ -303,13 +306,16 @@ export default function useGroupedExperimentsList(
   const isPending =
     (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
-      experimentsResponse.every((r) => r.isPending) &&
-      data.content.length === 0);
+      experimentsResponse.some((r) => r.isPending));
+
+  const [isInitialPending, setIsInitialPending] = useState(true);
+  useEffect(() => {
+    setIsInitialPending((s) => (!isPending && s ? false : s));
+  }, [isPending]);
 
   return {
     data,
-    isPending,
+    isPending: isInitialPending,
     refetch,
-    datasetsData,
   } as UseGroupedExperimentsListResponse;
 }

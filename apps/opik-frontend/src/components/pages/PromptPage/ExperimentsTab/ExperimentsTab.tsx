@@ -8,11 +8,14 @@ import {
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -20,6 +23,8 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -36,12 +41,15 @@ import {
 } from "@/components/pages-shared/experiments/table";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 import {
+  COLUMN_DATASET_ID,
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_METADATA_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
 } from "@/types/shared";
+import { Filter, Filters } from "@/types/filters";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
@@ -77,6 +85,16 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
@@ -86,6 +104,41 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: "duration.p50",
+    label: "Duration (avg.)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p50,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p90",
+    label: "Duration (p90)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p90,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p99",
+    label: "Duration (p99)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p99,
+    cell: DurationCell as never,
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
   },
 ];
 
@@ -104,7 +157,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [datasetId, setDatasetId] = useState("");
+  const [filters = [], setFilters] = useState<Filters>([]);
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -113,6 +166,43 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     {
       defaultValue: [],
     },
+  );
+
+  const datasetId = useMemo(
+    () =>
+      (filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)
+        ?.value as string) || "",
+    [filters],
+  );
+
+  const preProcessedFilters = useMemo(() => {
+    return filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID);
+  }, [filters]);
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_DATASET_ID]: {
+          keyComponent: DatasetSelectBox,
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=",
+          operators: [{ label: "=", value: "=" }],
+        },
+        [COLUMN_METADATA_ID]: {
+          keyComponent: ExperimentsPathsAutocomplete,
+          keyComponentProps: {
+            placeholder: "key",
+            excludeRoot: true,
+            datasetId,
+            promptId,
+            sorting: sortedColumns,
+          },
+        },
+      },
+    }),
+    [datasetId, promptId, sortedColumns],
   );
 
   const { checkboxClickHandler } = useMemo(() => {
@@ -126,6 +216,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     groupLimit,
     datasetId,
     promptId,
+    filters: preProcessedFilters,
     sorting: sortedColumns,
     search,
     page,
@@ -150,7 +241,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
-  const noData = !search && !datasetId;
+  const noData = !search && filters.length === 0;
   const noDataText = noData
     ? "There are no experiments used this prompt"
     : "No search results";
@@ -326,9 +417,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <ExperimentsFiltersButton
-            datasetId={datasetId}
-            onChangeDatasetId={setDatasetId}
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            config={filtersConfig as never}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">

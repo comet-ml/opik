@@ -1,7 +1,7 @@
 import React from "react";
 
 import { X } from "lucide-react";
-import { Filter } from "@/types/filters";
+import { Filter, FilterRowConfig } from "@/types/filters";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import ColumnSelector from "@/components/shared/FiltersButton/ColumnSelector";
 import { Button } from "@/components/ui/button";
@@ -10,19 +10,16 @@ import StringRow from "@/components/shared/FiltersButton/rows/StringRow";
 import NumberRow from "@/components/shared/FiltersButton/rows/NumberRow";
 import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
 import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
-import DictionaryRow, {
-  DictionaryRowConfig,
-} from "@/components/shared/FiltersButton/rows/DictionaryRow";
+import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
+import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
 import { createEmptyFilter } from "@/lib/filters";
-import GuardrailsRow from "./rows/GuardrailsRow";
-
-export type FilterRowConfig = DictionaryRowConfig;
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
   columns: ColumnData<TColumnData>[];
-  config?: FilterRowConfig;
+  getConfig?: (field: string) => FilterRowConfig | undefined;
+  disabledColumns?: string[];
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
@@ -32,14 +29,20 @@ export const FilterRow = <TColumnData,>({
   filter,
   columns,
   prefix,
-  config,
+  getConfig,
+  disabledColumns,
   onRemove,
   onChange,
 }: FilterRowProps<TColumnData>) => {
   const renderByType = () => {
+    const config = getConfig?.(filter.field);
+
     switch (filter.type) {
       case COLUMN_TYPE.string:
-        return <StringRow filter={filter} onChange={onChange} />;
+      case COLUMN_TYPE.errors:
+        return (
+          <StringRow filter={filter} onChange={onChange} config={config} />
+        );
       case COLUMN_TYPE.duration:
       case COLUMN_TYPE.cost:
       case COLUMN_TYPE.number:
@@ -53,8 +56,10 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
-      case COLUMN_TYPE.guardrails:
-        return <GuardrailsRow filter={filter} onChange={onChange} />;
+      case COLUMN_TYPE.category:
+        return (
+          <CategoryRow filter={filter} onChange={onChange} config={config} />
+        );
       case "":
       default:
         return <DefaultRow filter={filter} />;
@@ -75,11 +80,13 @@ export const FilterRow = <TColumnData,>({
               field: column.id,
               type: column.type as COLUMN_TYPE,
               operator:
+                getConfig?.(column.id)?.defaultOperator ??
                 DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
                 OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
                 "",
             })
           }
+          disabledColumns={disabledColumns}
         ></ColumnSelector>
       </td>
       {renderByType()}
