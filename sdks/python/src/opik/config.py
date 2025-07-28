@@ -258,9 +258,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def runtime(self) -> TracingRuntimeConfig:
-        from .decorator.tracing_runtime_config import _runtime_cfg
+        from .decorator.tracing_runtime_config import runtime_cfg
 
-        return _runtime_cfg
+        return runtime_cfg
 
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> "OpikConfig":

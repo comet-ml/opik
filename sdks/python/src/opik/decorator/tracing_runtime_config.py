@@ -37,16 +37,16 @@ class TracingRuntimeConfig:
             return enabled
 
 
-_runtime_cfg = TracingRuntimeConfig()
+runtime_cfg = TracingRuntimeConfig()
 
 
 def set_tracing_active(active: bool) -> None:
-    _runtime_cfg.set_tracing_active(active)
+    runtime_cfg.set_tracing_active(active)
 
 
 def is_tracing_active() -> bool:
-    return _runtime_cfg.is_tracing_active()
+    return runtime_cfg.is_tracing_active()
 
 
 def reset_tracing_to_config_default() -> None:
-    _runtime_cfg.reset_to_config_default()
+    runtime_cfg.reset_to_config_default()
