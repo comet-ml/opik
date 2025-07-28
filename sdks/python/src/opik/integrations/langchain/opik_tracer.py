@@ -115,10 +115,10 @@ class OpikTracer(BaseTracer):
             Optional[str]
         ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
 
-    def _is_parent_opik_span_stored_in_span_data_map(self, span_id: str) -> bool:
+    def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
         return any(span.id == span_id for span in self._span_data_map.values())
 
-    def _is_trace_stored_in_created_traces_data_map(self, trace_id: str) -> bool:
+    def _is_opik_trace_created_by_this_tracer(self, trace_id: str) -> bool:
         return any(
             trace.id == trace_id for trace in self._created_traces_data_map.values()
         )
@@ -141,13 +141,12 @@ class OpikTracer(BaseTracer):
 
         if (
             span_data.parent_span_id is not None
-            and self._is_parent_opik_span_stored_in_span_data_map(
-                span_data.parent_span_id
-            )
+            and self._is_opik_span_created_by_this_tracer(span_data.parent_span_id)
         ):
             # Langchain lost parent-child relationship for Run, so it calls _persist_run
-            # for a subchain when the root run is not yet persisted.
-            # We restored this relationship
+            # for a subchain when the ACTUAL root run is not yet persisted.
+            # However we know that the parent span was created by this tracer, so we don't
+            # want to finalize the trace
             return
 
         self._ensure_no_hanging_opik_tracer_spans()
@@ -270,7 +269,7 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        if not self._is_trace_stored_in_created_traces_data_map(span_data.trace_id):
+        if not self._is_opik_trace_created_by_this_tracer(span_data.trace_id):
             self._externally_created_traces_ids.add(span_data.trace_id)
 
         return span_data
@@ -297,7 +296,7 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        if not self._is_trace_stored_in_created_traces_data_map(current_trace_data.id):
+        if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
             self._externally_created_traces_ids.add(current_trace_data.id)
         return span_data
 
