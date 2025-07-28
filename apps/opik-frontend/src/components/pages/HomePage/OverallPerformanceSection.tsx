@@ -20,6 +20,7 @@ const SELECTED_PROJECTS_KEY = "home-selected-projects";
 
 const OverallPerformanceSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const [period, setPeriod] = useLocalStorageState<PERIOD_OPTION_TYPE>(
     TIME_PERIOD_KEY,
     {
@@ -74,9 +75,7 @@ const OverallPerformanceSection = () => {
   return (
     <div className="pt-6">
       <div className="sticky top-0 z-10 bg-soft-background pb-3 pt-2">
-        <h2 className="comet-title-s truncate break-words">
-          Overall performance
-        </h2>
+        <h2 className="comet-title-s truncate break-words">Overall performance</h2>
         <OverallPerformanceActionsPanel
           period={period}
           setPeriod={setPeriod}
