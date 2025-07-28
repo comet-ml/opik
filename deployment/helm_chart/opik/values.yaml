@@ -371,6 +371,7 @@ clickhouse:
       create: false
       name: ""
     schedule: "0 0 * * *" # daily at midnight
+    extraEnv: {}
     command:
       - /bin/bash
       - '-cx'
