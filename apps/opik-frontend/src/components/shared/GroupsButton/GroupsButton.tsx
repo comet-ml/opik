@@ -176,7 +176,7 @@ const GroupsButton = <TColumnData,>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="min-w-[540px] px-8 py-6" align={align}>
+      <PopoverContent className="min-w-[340px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
             <span className="comet-title-s">Groups</span>

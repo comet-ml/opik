@@ -58,7 +58,6 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
-import { DEFAULT_GROUPS_PER_PAGE } from "@/constants/groups";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   buildGroupFieldsName,
@@ -96,6 +95,7 @@ const COLUMNS_ORDER_KEY = "experiments-columns-order";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 const COLUMNS_GROUPS_KEY = "experiments-columns-groups";
 const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
+const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -103,6 +103,17 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
   },
   {
     id: "created_at",
@@ -275,10 +286,18 @@ const ExperimentsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const firstLevelGrouping = groups[0].field ?? "dataset_id"; // TODO lala
-
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
+  });
+
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
@@ -337,7 +356,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     groups: groups,
     search: search!,
     page: page!,
-    size: DEFAULT_GROUPS_PER_PAGE,
+    size: size!,
     polling: true,
   });
 
@@ -424,18 +443,31 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }, [rowSelection, experiments]);
 
   const columns = useMemo(() => {
+    // Generate group columns for all levels
+    const groupColumns = groups.map((group) => {
+      const groupCellDef =
+        GROUP_CELL_DEFINITION_MAP[
+          group.field as keyof typeof GROUP_CELL_DEFINITION_MAP
+        ];
+      return generateGroupedCellDef<GroupedExperiment, unknown>(
+        {
+          ...(groupCellDef || {
+            id: group.field,
+            label: group.field,
+            type: COLUMN_TYPE.string,
+          }),
+          id: buildGroupFieldsName(group.field),
+        },
+        checkboxClickHandler,
+      );
+    });
+
     return [
       generateGroupedNameColumDef<GroupedExperiment>(
         checkboxClickHandler,
         isColumnSortable(COLUMN_NAME_ID, sortableBy),
       ),
-      generateGroupedCellDef<GroupedExperiment, unknown>(
-        {
-          ...GROUP_CELL_DEFINITION_MAP[firstLevelGrouping],
-          id: buildGroupFieldsName(firstLevelGrouping),
-        },
-        checkboxClickHandler,
-      ),
+      ...groupColumns,
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         DEFAULT_COLUMNS,
         {
@@ -459,7 +491,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }, [
     checkboxClickHandler,
     sortableBy,
-    firstLevelGrouping,
+    groups,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
@@ -500,24 +532,31 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
+  const hasGroups = groups.length > 0;
+
+  const groupFieldNames = useMemo(
+    () => groups.map((group) => buildGroupFieldsName(group.field)),
+    [groups],
+  );
+
   const expandingConfig = useExpandingConfig({
     groupIds,
-    prefix: buildGroupFieldsName(firstLevelGrouping),
+    prefix: groups.length > 0 ? buildGroupFieldsName(groups[0].field) : "", // TODO lala
   });
 
   const columnPinningConfig = useMemo(() => {
     return {
-      left: [COLUMN_NAME_ID, buildGroupFieldsName(firstLevelGrouping)],
+      left: [COLUMN_NAME_ID, ...groupFieldNames],
       right: [],
     } as ColumnPinningState;
-  }, [firstLevelGrouping]);
+  }, [groupFieldNames]);
 
   const groupingConfig = useMemo(() => {
     return {
       groupedColumnMode: false as const,
-      grouping: [buildGroupFieldsName(firstLevelGrouping)],
+      grouping: groupFieldNames,
     };
-  }, [firstLevelGrouping]);
+  }, [groupFieldNames]);
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
@@ -547,7 +586,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
     let index = 0;
 
     experiments.forEach((experiment) => {
-      const key = experiment[buildGroupFieldsName(firstLevelGrouping)];
+      // Use the first level grouping for charts
+      const key =
+        groupFieldNames.map((n) => experiment[n]).join("_") ||
+        "Visible experiments"; // TODO lala
       if (!groupsMap[key]) {
         groupsMap[key] = {
           id: key,
@@ -578,7 +620,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     });
 
     return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
-  }, [experiments, firstLevelGrouping]);
+  }, [experiments, groupFieldNames]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -703,12 +745,15 @@ const ExperimentsPage: React.FunctionComponent = () => {
         direction="horizontal"
         limitWidth
       >
-        <DataTablePagination
-          page={page!}
-          pageChange={setPage}
-          size={DEFAULT_GROUPS_PER_PAGE}
-          total={total}
-        ></DataTablePagination>
+        {!hasGroups && (
+          <DataTablePagination
+            page={page!}
+            pageChange={setPage}
+            size={size!}
+            sizeChange={setSize}
+            total={total}
+          ></DataTablePagination>
+        )}
       </PageBodyStickyContainer>
       <AddExperimentDialog
         key={resetDialogKeyRef.current}

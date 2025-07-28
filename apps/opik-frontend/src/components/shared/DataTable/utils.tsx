@@ -394,6 +394,9 @@ export const generateGroupedCellDef = <TData, TValue>(
         <div className="flex size-full h-11 items-center">
           <div className="flex shrink-0 items-center pl-5">
             <Checkbox
+              style={{
+                marginLeft: `${context.row.depth * 28}px`,
+              }}
               checked={
                 row.getIsAllSubRowsSelected() ||
                 (row.getIsSomeSelected() && "indeterminate")
