@@ -5,6 +5,7 @@ import openai
 from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
+    openai_audio_speech_decorator,
 )
 from opik import semantic_version
 
@@ -22,6 +23,8 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.audio.speech.create()`
+    * `openai_client.audio.speech.with_streaming_response.create()`
 
     Can be used within other Opik-tracked functions.
 
@@ -41,6 +44,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio_speech(openai_client, project_name)
 
     return openai_client
 
@@ -138,3 +144,35 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_audio_speech(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    audio_speech_decorator_factory = (
+        openai_audio_speech_decorator.OpenaiAudioSpeechTrackDecorator()
+    )
+    if openai_client.base_url.host != "api.openai.com":
+        audio_speech_decorator_factory.provider = openai_client.base_url.host
+
+    if hasattr(openai_client.audio, "speech") and hasattr(openai_client.audio.speech, "create"):
+        audio_speech_create_decorator = audio_speech_decorator_factory.track(
+            type="llm",
+            name="audio_speech_create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = audio_speech_create_decorator(
+            openai_client.audio.speech.create
+        )
+        
+        # Also support streaming responses
+        if hasattr(openai_client.audio.speech, "with_streaming_response"):
+            audio_speech_streaming_decorator = audio_speech_decorator_factory.track(
+                type="llm",
+                name="audio_speech_streaming_create",
+                project_name=project_name,
+            )
+            openai_client.audio.speech.with_streaming_response.create = audio_speech_streaming_decorator(
+                openai_client.audio.speech.with_streaming_response.create
+            )
