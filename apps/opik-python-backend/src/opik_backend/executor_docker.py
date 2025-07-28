@@ -186,8 +186,7 @@ class DockerExecutor(CodeExecutorBase):
             # Record the start time
             start_time = time.time()
 
-            # Stop and remove the container
-            container.stop(timeout=1)
+            # Remove the container
             container.remove(force=True)
 
             # Calculate and record the latency
