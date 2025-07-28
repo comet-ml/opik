@@ -11,7 +11,9 @@ from . import verifiers
 
 
 @pytest.fixture
-def active_threads_and_project(opik_client: opik.Opik, temporary_project_name: str) -> Tuple[list[str], str]:
+def active_threads_and_project(
+    opik_client: opik.Opik, temporary_project_name: str
+) -> Tuple[list[str], str]:
     thread_ids = [str(uuid.uuid4())[-6:], str(uuid.uuid4())[-6:]]
 
     for thread_id in thread_ids:
@@ -29,7 +31,9 @@ def active_threads_and_project(opik_client: opik.Opik, temporary_project_name: s
     return thread_ids, temporary_project_name
 
 
-def test_threads_client__search_threads__happy_path(opik_client: opik.Opik, active_threads_and_project: Tuple[list[str], str]):
+def test_threads_client__search_threads__happy_path(
+    opik_client: opik.Opik, active_threads_and_project: Tuple[list[str], str]
+):
     active_threads, temporary_project_name = active_threads_and_project
     threads_client = opik_client.get_threads_client()
 
@@ -108,7 +112,9 @@ def test_threads_client__log_threads_feedback_scores__happy_path(
     )
 
 
-def test_threads_client__close_thread__happy_path(opik_client: opik.Opik, temporary_project_name):
+def test_threads_client__close_thread__happy_path(
+    opik_client: opik.Opik, temporary_project_name
+):
     threads_client = opik_client.get_threads_client()
 
     thread_id = str(uuid.uuid4())[-6:]
@@ -122,7 +128,7 @@ def test_threads_client__close_thread__happy_path(opik_client: opik.Opik, tempor
 
     threads = threads_client.search_threads(
         project_name=temporary_project_name,
-        filter_string=f'status = "active"',
+        filter_string='status = "active"',
     )
     assert len(threads) == 1
     assert threads[0].id == thread_id

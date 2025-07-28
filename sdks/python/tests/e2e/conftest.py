@@ -36,6 +36,7 @@ def experiment_name(opik_client: opik.Opik):
     name = f"e2e-tests-experiment-{random_chars()}"
     yield name
 
+
 @pytest.fixture
 def temporary_project_name(opik_client: opik.Opik):
     name = f"e2e-tests-temporary-project-{random_chars()}"

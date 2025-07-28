@@ -144,8 +144,7 @@ class ThreadsClient:
         """
         project_name = project_name or self._opik_client.project_name
         self._opik_client.rest_client.traces.close_trace_thread(
-            thread_id=id,
-            project_name=project_name
+            thread_id=id, project_name=project_name
         )
 
     @property
