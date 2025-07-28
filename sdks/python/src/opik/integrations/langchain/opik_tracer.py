@@ -124,7 +124,6 @@ class OpikTracer(BaseTracer):
         )
 
     def _persist_run(self, run: "Run") -> None:
-        print("_persist_run", run.name)
         run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
@@ -466,7 +465,6 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
-        print("on_llm_start", run.name)
         if self._skip_tracking():
             return
 
@@ -501,9 +499,6 @@ class OpikTracer(BaseTracer):
         Returns:
             Run: The run.
         """
-        import threading
-
-        print("on_chat_model_start", name, threading.current_thread().ident)
         start_time = datetime.datetime.now(datetime.timezone.utc)
         if metadata:
             kwargs.update({"metadata": metadata})
@@ -530,7 +525,6 @@ class OpikTracer(BaseTracer):
 
     def _on_chat_model_start(self, run: "Run") -> None:
         """Process the Chat Model Run upon start."""
-        print("_on_chat_model_start", run.name)
         if self._skip_tracking():
             return
 
@@ -538,7 +532,6 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_end(self, run: "Run") -> None:
         """Process the LLM Run."""
-        print("on_llm_end", run.name)
         if self._skip_tracking():
             return
 
@@ -546,7 +539,6 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_error(self, run: "Run") -> None:
         """Process the LLM Run upon error."""
-        print("on_llm_error", run.name)
         if self._skip_tracking():
             return
 
@@ -554,7 +546,6 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_start(self, run: "Run") -> None:
         """Process the Chain Run upon start."""
-        print("on_chain_start", run.name)
         if self._skip_tracking():
             return
 
@@ -562,7 +553,6 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_end(self, run: "Run") -> None:
         """Process the Chain Run."""
-        print("on_chain_end", run.name)
         if self._skip_tracking():
             return
 
@@ -570,7 +560,6 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
-        print("on_chain_error", run.name)
         if self._skip_tracking():
             return
 
@@ -578,7 +567,6 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
-        print("on_tool_start", run.name)
         if self._skip_tracking():
             return
 
@@ -586,7 +574,6 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_end(self, run: "Run") -> None:
         """Process the Tool Run."""
-        print("on_tool_end", run.name)
         if self._skip_tracking():
             return
 
@@ -594,7 +581,6 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
-        print("on_tool_error", run.name)
         if self._skip_tracking():
             return
 
