@@ -1,9 +1,9 @@
 import React from "react";
 
+import ProjectSelector from "@/components/pages/HomePage/ProjectSelector";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Project } from "@/types/projects";
 import { DropdownOption } from "@/types/shared";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import ProjectSelector from "@/components/pages/HomePage/ProjectSelector";
 
 export enum PERIOD_OPTION_TYPE {
   THREE_DAYS = "3",
@@ -50,24 +50,24 @@ const OverallPerformanceActionsPanel: React.FC<
   projects,
   totalProjects,
 }) => {
-  return (
-    <div className="flex items-center justify-between gap-4 pt-3">
-      <ProjectSelector
-        projectIds={projectsIds}
-        setProjectIds={setProjectsIds}
-        projects={projects}
-        totalProjects={totalProjects}
-      ></ProjectSelector>
-      <div className="w-32 shrink-0">
-        <SelectBox
-          value={period}
-          onChange={setPeriod}
-          options={PERIOD_OPTIONS}
-          className="h-8"
-        />
+    return (
+      <div className="flex items-center justify-between gap-4 pt-3">
+        <ProjectSelector
+          projectIds={projectsIds}
+          setProjectIds={setProjectsIds}
+          projects={projects}
+          totalProjects={totalProjects}
+        ></ProjectSelector>
+        <div className="w-32 shrink-0">
+          <SelectBox
+            value={period}
+            onChange={setPeriod}
+            options={PERIOD_OPTIONS}
+            className="h-8"
+          />
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 export default OverallPerformanceActionsPanel;

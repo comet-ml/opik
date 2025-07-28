@@ -1,16 +1,17 @@
-import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import dayjs from "dayjs";
+import { useMemo } from "react";
 
-import { LOADED_PROJECTS_COUNT } from "@/components/pages/HomePage/ProjectSelector";
+import useProjectsList from "@/api/projects/useProjectsList";
+import CostOverview from "@/components/pages/HomePage/CostOverview";
+import MetricsOverview from "@/components/pages/HomePage/MetricsOverview";
 import OverallPerformanceActionsPanel, {
   PERIOD_OPTION_TYPE,
 } from "@/components/pages/HomePage/OverallPerformanceActionsPanel";
-import MetricsOverview from "@/components/pages/HomePage/MetricsOverview";
-import CostOverview from "@/components/pages/HomePage/CostOverview";
-import useLocalStorageState from "use-local-storage-state";
-import useProjectsList from "@/api/projects/useProjectsList";
+import { LOADED_PROJECTS_COUNT } from "@/components/pages/HomePage/ProjectSelector";
 import useAppStore from "@/store/AppStore";
+import useLocalStorageState from "use-local-storage-state";
+
+import dayjs from "dayjs";
 
 const nowUTC = dayjs().utc();
 
