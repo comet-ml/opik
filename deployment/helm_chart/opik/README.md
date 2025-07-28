@@ -100,6 +100,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.command[1] | string | `"-cx"` |  |
 | clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.extraEnv | object | `{}` |  |
 | clickhouse.backup.schedule | string | `"0 0 * * *"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.backup.serviceAccount.create | bool | `false` |  |
