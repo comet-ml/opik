@@ -115,7 +115,16 @@ class OpikTracer(BaseTracer):
             Optional[str]
         ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
 
+    def _is_parent_opik_span_stored_in_span_data_map(self, span_id: str) -> bool:
+        return any(span.id == span_id for span in self._span_data_map.values())
+
+    def _is_trace_stored_in_created_traces_data_map(self, trace_id: str) -> bool:
+        return any(
+            trace.id == trace_id for trace in self._created_traces_data_map.values()
+        )
+
     def _persist_run(self, run: "Run") -> None:
+        print("_persist_run", run.name)
         run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
@@ -130,6 +139,17 @@ class OpikTracer(BaseTracer):
             error_info = None
 
         span_data = self._span_data_map[run.id]
+
+        if (
+            span_data.parent_span_id is not None
+            and self._is_parent_opik_span_stored_in_span_data_map(
+                span_data.parent_span_id
+            )
+        ):
+            # Langchain lost parent-child relationship for Run, so it calls _persist_run
+            # for a subchain when the root run is not yet persisted.
+            # We restored this relationship
+            return
 
         self._ensure_no_hanging_opik_tracer_spans()
 
@@ -251,7 +271,8 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        self._externally_created_traces_ids.add(span_data.trace_id)
+        if not self._is_trace_stored_in_created_traces_data_map(span_data.trace_id):
+            self._externally_created_traces_ids.add(span_data.trace_id)
 
         return span_data
 
@@ -277,7 +298,8 @@ class OpikTracer(BaseTracer):
             type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
-        self._externally_created_traces_ids.add(current_trace_data.id)
+        if not self._is_trace_stored_in_created_traces_data_map(current_trace_data.id):
+            self._externally_created_traces_ids.add(current_trace_data.id)
         return span_data
 
     def _attach_span_to_distributed_headers(
@@ -444,6 +466,7 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
+        print("on_llm_start", run.name)
         if self._skip_tracking():
             return
 
@@ -478,6 +501,9 @@ class OpikTracer(BaseTracer):
         Returns:
             Run: The run.
         """
+        import threading
+
+        print("on_chat_model_start", name, threading.current_thread().ident)
         start_time = datetime.datetime.now(datetime.timezone.utc)
         if metadata:
             kwargs.update({"metadata": metadata})
@@ -497,12 +523,14 @@ class OpikTracer(BaseTracer):
             tags=tags,
             name=name,  # type: ignore[arg-type]
         )
+
         self._start_trace(chat_model_run)
         self._on_chat_model_start(chat_model_run)
         return chat_model_run
 
     def _on_chat_model_start(self, run: "Run") -> None:
         """Process the Chat Model Run upon start."""
+        print("_on_chat_model_start", run.name)
         if self._skip_tracking():
             return
 
@@ -510,6 +538,7 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_end(self, run: "Run") -> None:
         """Process the LLM Run."""
+        print("on_llm_end", run.name)
         if self._skip_tracking():
             return
 
@@ -517,6 +546,7 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_error(self, run: "Run") -> None:
         """Process the LLM Run upon error."""
+        print("on_llm_error", run.name)
         if self._skip_tracking():
             return
 
@@ -524,6 +554,7 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_start(self, run: "Run") -> None:
         """Process the Chain Run upon start."""
+        print("on_chain_start", run.name)
         if self._skip_tracking():
             return
 
@@ -531,6 +562,7 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_end(self, run: "Run") -> None:
         """Process the Chain Run."""
+        print("on_chain_end", run.name)
         if self._skip_tracking():
             return
 
@@ -538,6 +570,7 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
+        print("on_chain_error", run.name)
         if self._skip_tracking():
             return
 
@@ -545,6 +578,7 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
+        print("on_tool_start", run.name)
         if self._skip_tracking():
             return
 
@@ -552,6 +586,7 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_end(self, run: "Run") -> None:
         """Process the Tool Run."""
+        print("on_tool_end", run.name)
         if self._skip_tracking():
             return
 
@@ -559,6 +594,7 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
+        print("on_tool_error", run.name)
         if self._skip_tracking():
             return
 
