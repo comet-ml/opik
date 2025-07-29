@@ -16,6 +16,7 @@ def test_parse_evaluation_response_valid_response():
     assert result.reason == "Decent trajectory with some issues"
     assert result.name == "test_metric"
 
+
 def test_parse_evaluation_response_score_out_of_range():
     """Test parsing response with score out of valid range using public parser API."""
     content = '{"score": 1.5, "explanation": "Score too high"}'

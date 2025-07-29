@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges.trajectory_accuracy import TrajectoryAccuracy
-from opik.evaluation.metrics.llm_judges.trajectory_accuracy import parser, templates
+from opik.evaluation.metrics.llm_judges.trajectory_accuracy import templates
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model
 
