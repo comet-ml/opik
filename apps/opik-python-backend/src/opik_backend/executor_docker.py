@@ -55,6 +55,8 @@ class DockerExecutor(CodeExecutorBase):
         self.container_pool = Queue()
         self.pool_lock = Lock()
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
+        self.scoring_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
+
         self.stop_event = Event()
 
         # Pre-warm the container pool
@@ -106,11 +108,10 @@ class DockerExecutor(CodeExecutorBase):
         This ensures containers are ready when the service starts.
         """
         logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
-            # Submit container creation tasks in parallel
-            futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
-            # Wait for all containers to be created
-            concurrent.futures.wait(futures)
+        # Submit container creation tasks in parallel
+        futures = [self.scoring_executor.submit(self.create_container) for _ in range(self.max_parallel)]
+        # Wait for all containers to be created
+        concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
         if self.stop_event.is_set():
@@ -216,21 +217,20 @@ class DockerExecutor(CodeExecutorBase):
             
         container = self.get_container()
         try:
-            with concurrent.futures.ThreadPoolExecutor() as command_executor:
-                future = command_executor.submit(
-                    container.exec_run,
-                    cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
-                    detach=False,
-                    stdin=False,
-                    tty=False
-                )
+            future = self.scoring_executor.submit(
+                container.exec_run,
+                cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
+                detach=False,
+                stdin=False,
+                tty=False
+            )
 
-                result = future.result(timeout=self.exec_timeout)
-                exec_result = ExecutionResult(
-                    exit_code=result.exit_code,
-                    output=result.output
-                )               
-                return self.parse_execution_result(exec_result)
+            result = future.result(timeout=self.exec_timeout)
+            exec_result = ExecutionResult(
+                exit_code=result.exit_code,
+                output=result.output
+            )               
+            return self.parse_execution_result(exec_result)
         except concurrent.futures.TimeoutError:
             logger.error(f"Execution timed out in container {container.id}")
             return {"code": 504, "error": "Server processing exceeded timeout limit."}
@@ -261,3 +261,4 @@ class DockerExecutor(CodeExecutorBase):
         # Shutdown the executor
         logger.info("Shutting down executor")
         self.releaser_executor.shutdown(wait=False, cancel_futures=True)
+        self.scoring_executor.shutdown(wait=False, cancel_futures=True)
