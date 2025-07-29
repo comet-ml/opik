@@ -1,19 +1,20 @@
-import React, { useState, useRef, useCallback } from "react";
-import { Database, Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
+import { Database, PencilLine, Tag, Trash } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
 import slugify from "slugify";
 
-import { Button } from "@/components/ui/button";
-import { Span, Trace } from "@/types/traces";
-import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/components/ui/button";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import { Span, Trace } from "@/types/traces";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -74,9 +75,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const generateFileName = useCallback(
     (extension = "csv") => {
-      return `${slugify(projectName, { lower: true })}-${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
-      }.${extension}`;
+      return `${slugify(projectName, { lower: true })}-${type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
+        }.${extension}`;
     },
     [projectName, type],
   );
@@ -108,6 +108,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
+      <BatchAnnotateDialog
+        key={`annotate-${resetKeyRef.current}`}
+        rows={rows as Trace[]}
+        open={open === 4}
+        setOpen={setOpen}
+        projectId={projectId}
+        onSuccess={onClearSelection}
+      />
       <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
@@ -134,6 +142,20 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         >
           <Tag className="mr-2 size-4" />
           Add tags
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Annotate">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(4);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <PencilLine className="mr-2 size-4" />
+          Annotate
         </Button>
       </TooltipWrapper>
       <ExportToButton
