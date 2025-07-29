@@ -9,7 +9,7 @@ import time
 from typing import Dict, Any
 
 import opik
-from opik.integrations.openai import track_openai
+from opik.integrations import openai as openai_integration
 
 
 def simulate_openai_client() -> object:
@@ -163,14 +163,14 @@ def main() -> None:
 
     # Disable tracing before setting up integration
     opik.set_tracing_active(False)
-    track_openai(mock_client)
+    openai_integration.track_openai(mock_client)
     print(
         "OpenAI client tracking setup with tracing disabled - no instrumentation applied"
     )
 
     # Enable tracing and set up integration
     opik.set_tracing_active(True)
-    track_openai(mock_client)
+    openai_integration.track_openai(mock_client)
     print("OpenAI client tracking setup with tracing enabled - instrumentation applied")
     print()
 

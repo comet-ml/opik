@@ -16,6 +16,8 @@ from .decorator.tracker import flush_tracker, track
 import sys as _sys
 from typing import Any, cast as _cast
 
+_sys.modules[__name__ + ".track"] = _cast(Any, track)
+
 from .types import LLMProvider
 from . import opik_context
 
@@ -29,8 +31,6 @@ from .decorator.tracing_runtime_config import (
     is_tracing_active,
     reset_tracing_to_config_default,
 )
-
-_sys.modules[__name__ + ".track"] = _cast(Any, track)
 
 _logging.setup()
 
