@@ -30,9 +30,9 @@
         <testcontainers.version>1.21.0</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
-        <redisson.version>3.49.0</redisson.version>
-        <opentelmetry.version>2.16.0</opentelmetry.version>
-        <aws.java.sdk.version>2.31.50</aws.java.sdk.version>
+        <redisson.version>3.50.0</redisson.version>
+        <opentelmetry.version>2.18.0</opentelmetry.version>
+        <aws.java.sdk.version>2.32.4</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -258,6 +258,11 @@
             <artifactId>langchain4j-google-ai-gemini</artifactId>
         </dependency>
         <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-http-client-jdk</artifactId>
+            <version>1.1.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
             <version>1.27.1</version>
@@ -282,7 +287,6 @@
             <artifactId>tika-core</artifactId>
             <version>3.2.0</version>
         </dependency>
-
 
         <!-- Test -->
 
@@ -424,7 +428,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.44.2</version>
+                <version>2.46.0</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>

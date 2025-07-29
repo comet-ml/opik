@@ -1,7 +1,10 @@
 import opik
 import pickle
+import pydantic
+import pytest
 from typing import Optional, Iterator, Dict
 from . import agent_tools
+import google.adk
 from google.adk import agents as adk_agents
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
@@ -23,6 +26,8 @@ from ...testlib import (
 )
 
 from opik.integrations.adk import helpers as opik_adk_helpers
+from opik.integrations.adk import opik_tracer, legacy_opik_tracer
+from opik import semantic_version
 
 from .constants import (
     APP_NAME,
@@ -62,6 +67,24 @@ def _extract_final_response_text(events: Iterator[adk_events.Event]) -> Optional
         and last_event.content.parts
     )
     return last_event.content.parts[0].text
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0",
+    reason="Test only applies to ADK versions < 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_legacy_implementation_for_old_adk_versions():
+    """Test that OpikTracer maps to LegacyOpikTracer for ADK versions < 1.3.0"""
+    assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions >= 1.3.0",
+)
+def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions():
+    """Test that OpikTracer maps to OpikTracer for ADK versions >= 1.3.0"""
+    assert OpikTracer is opik_tracer.OpikTracer
 
 
 def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
@@ -118,6 +141,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -243,6 +267,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {
@@ -314,6 +339,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": time_question_response}], "role": "model"}}
@@ -459,6 +485,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -601,6 +628,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -728,6 +756,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -741,7 +770,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="openai/gpt-4o-mini",
+                name=ANY_STRING.containing("gpt-4o-mini"),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -769,7 +798,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="openai/gpt-4o-mini",
+                name=ANY_STRING.containing("gpt-4o-mini"),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -864,6 +893,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -984,6 +1014,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
@@ -1198,6 +1229,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
         output=ANY_DICT.containing(
@@ -1261,3 +1293,94 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+def test_adk__agent_with_response_schema__happyflow(
+    fake_backend,
+):
+    opik_tracer = OpikTracer()
+
+    class SummaryResult(pydantic.BaseModel):
+        summary: str
+
+    summarizer = adk_agents.Agent(
+        name="Summarizer",
+        model=MODEL_NAME,
+        description="Summarizes text to 1 sentence.",
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        output_schema=SummaryResult,
+    )
+
+    runner = _build_runner(summarizer)
+
+    INPUT_GERMAN_TEXT = (
+        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
+        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
+        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
+        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
+        "zwischen Wörtern zu verstehen.\n"
+        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
+        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
+        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
+        "weil es so viele Daten gesehen hat.\n"
+        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
+        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
+    )
+
+    events = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+        ),
+    )
+    final_response = _extract_final_response_text(events)
+
+    opik.flush_tracker()
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="Summarizer",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
+        },
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": INPUT_GERMAN_TEXT}],
+        },
+        thread_id=SESSION_ID,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=MODEL_NAME,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider=opik_adk_helpers.get_adk_provider(),
+                model=MODEL_NAME,
+                usage=ANY_DICT,
+            )
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)

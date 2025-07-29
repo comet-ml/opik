@@ -68,6 +68,7 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
     This is the initial instruction that the `MetaPromptOptimizer` will try to enhance:
     ```python
     prompt = ChatPrompt(
+      project_name="Prompt Optimization Quickstart",
       messages=[
         {"role": "system", "content": "You are an expert assistant. Your task is to answer questions accurately and concisely. Consider the context carefully before responding."},
         {"role": "user", "content": "{text}"}
@@ -82,7 +83,6 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
     ```python
     optimizer = MetaPromptOptimizer(
         model="gpt-4",
-        project_name="Prompt Optimization Quickstart",
     )
     print(f"Optimizer configured: {type(optimizer).__name__}")
     ```
@@ -93,9 +93,9 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
     ```python
     print("Starting optimization...")
     result = optimizer.optimize_prompt(
+        prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        prompt=prompt,
     )
     print("Optimization finished.")
     ```
@@ -140,6 +140,6 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
 
 <Info>
   🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects &
-  Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks covering real-world optimization workflows,
+  Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable Colab notebooks covering real-world optimization workflows,
   including HotPotQA and synthetic data generation.
 </Info>

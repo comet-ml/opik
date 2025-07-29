@@ -2,22 +2,26 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
-import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
+import com.comet.opik.api.TraceThreadSearchStreamRequest;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -29,6 +33,7 @@ import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
@@ -76,8 +81,12 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
@@ -174,14 +183,13 @@ public class TracesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceSearchStreamRequest.class))) @NotNull @Valid TraceSearchStreamRequest request) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
 
         log.info("Streaming traces search results by '{}', workspaceId '{}'", request, workspaceId);
 
         var searchCriteria = TraceSearchCriteria.builder()
-                .lastReceivedTraceId(request.lastRetrievedId())
+                .lastReceivedId(request.lastRetrievedId())
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
@@ -189,9 +197,19 @@ public class TracesResource {
                 .sortingFields(List.of())
                 .build();
 
+        Visibility visibility = requestContext.get().getVisibility();
+        String userName = requestContext.get().getUserName();
+
+        UUID projectId = projectService.resolveProjectIdAndVerifyVisibility(request.projectId(), request.projectName())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        searchCriteria = searchCriteria.toBuilder().projectId(projectId).build();
+
         Flux<Trace> items = service.search(request.limit(), searchCriteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed traces search results by '{}', workspaceId '{}'", request, workspaceId));
@@ -294,7 +312,7 @@ public class TracesResource {
 
         log.info("Deleting trace with id '{}'", id);
 
-        service.delete(id)
+        service.delete(Set.of(id), null)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -308,12 +326,12 @@ public class TracesResource {
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request) {
-        log.info("Deleting traces, count '{}'", request.ids().size());
-        service.delete(request.ids())
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDeleteByProject request) {
+        log.info("Deleting traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
+        service.delete(request.ids(), request.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted traces, count '{}'", request.ids().size());
+        log.info("Deleted traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
         return Response.noContent().build();
     }
 
@@ -392,7 +410,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatchContainer.FeedbackScoreBatch feedbackScoreBatch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -580,6 +598,46 @@ public class TracesResource {
     }
 
     @POST
+    @Path("/threads/search")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "searchTraceThreads", summary = "Search trace threads", description = "Search trace threads", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace threads stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    TraceThread.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public ChunkedOutput<JsonNode> searchTraceThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadSearchStreamRequest.class))) @NotNull @Valid TraceThreadSearchStreamRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
+        String userName = requestContext.get().getUserName();
+
+        validateProjectNameAndProjectId(request.projectName(), request.projectId());
+
+        log.info("Streaming trace threads search results by '{}', workspaceId '{}'", request, workspaceId);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .lastReceivedId(request.lastRetrievedThreadModelId())
+                .projectName(request.projectName())
+                .projectId(request.projectId())
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .truncate(request.truncate())
+                .sortingFields(List.of())
+                .build();
+
+        Flux<TraceThread> items = service.threadsSearch(request.limit(), searchCriteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
+
+        return streamer.getOutputStream(items,
+                () -> log.info("Streamed trace threads search results by '{}', workspaceId '{}'", request,
+                        workspaceId));
+    }
+
+    @POST
     @Path("/threads/retrieve")
     @Operation(operationId = "getTraceThread", summary = "Get trace thread", description = "Get trace thread", responses = {
             @ApiResponse(responseCode = "200", description = "Trace thread resource", content = @Content(schema = @Schema(implementation = TraceThread.class))),
@@ -651,14 +709,14 @@ public class TracesResource {
         // Validate project identifier and get projectId
         UUID projectId = validateProjectIdentifier(identifier, workspaceId);
 
-        log.info("Open trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         traceThreadService.openThread(projectId, identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Opened trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Opened trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         return Response.noContent().build();
@@ -667,7 +725,9 @@ public class TracesResource {
     @PUT
     @Path("/threads/close")
     @Operation(operationId = "closeTraceThread", summary = "Close trace thread", description = "Close trace thread", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")})
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response closeTraceThread(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
@@ -676,17 +736,194 @@ public class TracesResource {
         // Validate project identifier and get projectId
         UUID projectId = validateProjectIdentifier(identifier, workspaceId);
 
-        log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Close trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         traceThreadService.closeThread(projectId, identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
+        log.info("Closed trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
 
         return Response.noContent().build();
     }
 
+    @PATCH
+    @Path("/threads/{threadModelId}")
+    @Operation(operationId = "updateThread", summary = "Update thread", description = "Update thread", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found")})
+    public Response updateThread(@PathParam("threadModelId") UUID threadModelId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Update thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
+
+        traceThreadService.update(threadModelId, threadUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/threads/feedback-scores")
+    @Operation(operationId = "scoreBatchOfThreads", summary = "Batch feedback scoring for threads", description = "Batch feedback scoring for threads", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
+    public Response scoreBatchOfThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatchThread.class))) @NotNull @Valid FeedbackScoreBatchThread batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Feedback scores batch for threads, size '{}' on  workspaceId '{}'", batch.scores().size(),
+                workspaceId);
+
+        feedbackScoreService.scoreBatchOfThreads(batch.scores())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(AsyncUtils.handleConnectionError())
+                .block();
+
+        log.info("Feedback scores batch for threads, size '{}' on  workspaceId '{}'", batch.scores().size(),
+                workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/threads/feedback-scores/delete")
+    @Operation(operationId = "deleteThreadFeedbackScores", summary = "Delete thread feedback scores", description = "Delete thread feedback scores", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteThreadFeedbackScores(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteThreadFeedbackScores.class))) @NotNull @Valid DeleteThreadFeedbackScores scores) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        String projectName = scores.projectName();
+
+        log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
+                projectName, workspaceId);
+
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
+                projectName, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/threads/feedback-scores/names")
+    @Operation(operationId = "findTraceThreadsFeedbackScoreNames", summary = "Find Trace Threads Feedback Score names", description = "Find Trace Threads Feedback Score names", responses = {
+            @ApiResponse(responseCode = "200", description = "Find Trace Threads Feedback Score names", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+    })
+    @JsonView({FeedbackDefinition.View.Public.class})
+    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") @NotNull UUID projectId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find trace threads feedback score names by project_id '{}', on workspaceId '{}'",
+                projectId, workspaceId);
+
+        FeedbackScoreNames feedbackScoreNames = feedbackScoreService
+                .getTraceThreadsFeedbackScoreNames(projectId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found trace threads feedback score names '{}' by project_id '{}', on workspaceId '{}'",
+                feedbackScoreNames.scores().size(), projectId, workspaceId);
+
+        return Response.ok(feedbackScoreNames).build();
+    }
+
+    @POST
+    @Path("/threads/{id}/comments")
+    @Operation(operationId = "addThreadComment", summary = "Add thread comment", description = "Add thread comment", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/threads/{threadId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    public Response addThreadComment(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
+            @Context UriInfo uriInfo) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add comment for thread with id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var commentId = commentService.create(id, comment, CommentDAO.EntityType.THREAD)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(commentId)).build();
+        log.info("Added comment with id '{}' for thread with id '{}' on workspaceId '{}'", comment.id(), id,
+                workspaceId);
+
+        return Response.created(uri).build();
+    }
+
+    @GET
+    @Path("/threads/{threadId}/comments/{commentId}")
+    @Operation(operationId = "getThreadComment", summary = "Get thread comment", description = "Get thread comment", responses = {
+            @ApiResponse(responseCode = "200", description = "Comment resource", content = @Content(schema = @Schema(implementation = Comment.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    public Response getThreadComment(@PathParam("commentId") @NotNull UUID commentId,
+            @PathParam("threadId") @NotNull UUID threadId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting thread comment by id '{}' on workspace_id '{}'", commentId, workspaceId);
+
+        Comment comment = commentService.get(threadId, commentId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got thread comment by id '{}', on workspace_id '{}'", comment.id(), workspaceId);
+
+        return Response.ok(comment).build();
+    }
+
+    @PATCH
+    @Path("/threads/comments/{commentId}")
+    @Operation(operationId = "updateThreadComment", summary = "Update thread comment by id", description = "Update thread comment by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found")})
+    public Response updateThreadComment(@PathParam("commentId") UUID commentId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Update thread comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        commentService.update(commentId, comment)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated thread comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/threads/comments/delete")
+    @Operation(operationId = "deleteThreadComments", summary = "Delete thread comments", description = "Delete thread comments", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteThreadComments(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        commentService.delete(batchDelete)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        return Response.noContent().build();
+    }
 }

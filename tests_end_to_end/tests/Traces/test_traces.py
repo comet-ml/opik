@@ -25,6 +25,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @allure.title("Trace creation - {create_traces}")
     def test_traces_visibility(
         self, page: Page, create_project_api, traces_number, create_traces
@@ -67,7 +69,7 @@ class TestTracesCrud:
         _ = create_traces
 
         # Wait for traces to appear on UI
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         traces_page.wait_for_traces_to_be_visible()
 
         # Verify traces in UI
@@ -118,6 +120,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.regression
+    @pytest.mark.tracing
     @allure.title("Trace deletion in SDK - {create_traces}")
     def test_delete_traces_sdk(
         self, page: Page, create_project_api, traces_number, create_traces
@@ -180,7 +184,7 @@ class TestTracesCrud:
             projects_page.go_to_page()
             projects_page.click_project(project_name)
 
-            traces_page = TracesPage(page)
+            traces_page = TracesPage(page, traces_created=True)
             for trace in traces_to_delete:
                 expect(
                     traces_page.page.get_by_role("row", name=trace["name"])
@@ -224,6 +228,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @allure.title("Trace deletion in UI - {create_traces}")
     def test_delete_traces_ui(
         self, page: Page, create_project_api, traces_number, create_traces
@@ -280,7 +286,7 @@ class TestTracesCrud:
 
         # Delete traces via UI
         logger.info("Deleting traces via UI")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
 
         # Wait for traces to appear on UI
         traces_page.wait_for_traces_to_be_visible()

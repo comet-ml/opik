@@ -6,7 +6,6 @@ import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -101,6 +100,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
@@ -1519,7 +1519,7 @@ class ProjectsResourceTest {
                             .projectName(project.name())
                             .id(trace.id())
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
 
@@ -1990,6 +1990,7 @@ class ProjectsResourceTest {
 
     private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,
             Direction request, Direction expected, int page, int size) {
+
         var sorting = List.of(SortingField.builder()
                 .field(SortableFields.LAST_UPDATED_TRACE_AT)
                 .direction(request)
@@ -2016,7 +2017,8 @@ class ProjectsResourceTest {
             allProjects = allProjects.reversed();
         }
 
-        assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+        assertThat(actualEntity.content())
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                 .containsExactlyElementsOf(allProjects);
     }
 

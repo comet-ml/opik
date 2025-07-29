@@ -18,4 +18,5 @@ export interface PromptWrite {
     metadata?: OpikApi.JsonNodeWrite;
     changeDescription?: string;
     type?: OpikApi.PromptWriteType;
+    tags?: string[];
 }

@@ -84,6 +84,7 @@ databaseAnalytics:
   #  Description: query parameters that will be added to the connection string
   queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
 
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -271,6 +272,12 @@ onlineScoring:
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
+    - scorer: trace_thread_llm_as_judge
+      streamName: stream_scoring_trace_thread_llm_as_judge
+      codec: java
+    - scorer: trace_thread_user_defined_metric_python
+      streamName: stream_scoring_trace_thread_user_defined_metric_python
+      codec: java
 
 # LLM providers client configuration
 llmProviderClient:
@@ -380,12 +387,15 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
-  # Default: 10min
-  # Description: Inactive thread timeout in minutes. If a thread is inactive for this amount of time, it will be marked as inactive
-  timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE_IN_MIN:-10m}
+  # Default: 15min
+  # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
+  timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
   # Default: trace_thread_closing
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_GROUP_NAME:-'trace_thread_closing'}
@@ -398,6 +408,15 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
-  # Default: 5s
+  # Default: 3s
   # Description: The interval at which the close trace thread job will run to inactive threads
-  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-5s}
+  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-3s}
+  # Default: 4s
+  # Description: The time to wait for the close trace threads job to finish before releasing the lock
+  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: The time to wait for the close trace threads job to acquire the lock before giving up
+  closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: 1000
+  # Description: The maximum number of item to process in a single close trace thread run
+  closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}

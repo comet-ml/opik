@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import sys
 import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
@@ -176,7 +177,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, Opik will send the information about the errors to Sentry.
     """
 
-    sentry_dsn: str = "https://ceea3c150b0c2968e5913e9e9e919d5b@o168229.ingest.us.sentry.io/4508620148441088"  # 14.05.2025
+    sentry_dsn: str = "https://34bd6f9621ca2783be63f320e35de0dc@o168229.ingest.us.sentry.io/4508620148441088"  # 24.07.2025
     """
     Sentry project DSN which is used as a destination for sentry events.
     In case there is a need to update reporting rules and stop receiving events from existing users,
@@ -313,6 +314,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
         show_misconfiguration_message : A flag indicating whether to display detailed error messages if the configuration
             is determined to be misconfigured. Defaults to False.
         """
+        if "pytest" in sys.modules:
+            return False
 
         is_misconfigured_flag, error_message = (
             self.get_misconfiguration_detection_results()

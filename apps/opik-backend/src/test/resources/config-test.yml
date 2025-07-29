@@ -284,13 +284,15 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
-
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
-  # Default: 500ms
-  # Description: Inactive thread timeout in minutes. If a thread is inactive for this amount of time, it will be marked as inactive
-  timeoutToMarkThreadAsInactive: 500ms
+  # Default: 1s
+  # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
+  timeoutToMarkThreadAsInactive: 1s
   # Default: trace_thread_closing
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'trace_thread_closing'
@@ -305,4 +307,13 @@ traceThreadConfig:
   streamName: 'trace_thread_closing_stream'
   # Default: 1s
   # Description: The interval at which the close trace thread job will run to inactive threads
-  closeTraceThreadJobInterval: 1s
+  closeTraceThreadJobInterval: 1500ms
+  # Default: 4s
+  # Description: The time to wait for the close trace threads job to finish before releasing the lock
+  closeTraceThreadJobLockTime: 3s
+  # Default: 300ms
+  # Description: The time to wait for the close trace threads job to acquire the lock before giving up
+  closeTraceThreadJobLockWaitTime: 300ms
+  # Default: 1000
+  # Description: The maximum number of item to process in a single close trace thread run
+  closeTraceThreadMaxItemPerRun: 2000

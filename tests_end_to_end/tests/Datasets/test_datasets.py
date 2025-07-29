@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class TestDatasetsCrud:
+    @pytest.mark.regression
+    @pytest.mark.datasets
     @allure.title("Dataset creation via traces page (add traces to new dataset)")
     def test_create_dataset_ui_add_traces_to_new_dataset(
         self, page: Page, create_project_api, create_10_test_traces
@@ -41,7 +43,7 @@ class TestDatasetsCrud:
 
         # Create dataset from traces
         logger.info(f"Creating dataset {dataset_name} from traces")
-        traces_page = TracesPage(page)
+        traces_page = TracesPage(page, traces_created=True)
         try:
             traces_page.add_all_traces_to_new_dataset(dataset_name=dataset_name)
             logger.info("Successfully created dataset from traces")
@@ -75,6 +77,8 @@ class TestDatasetsCrud:
         "dataset_fixture", ["create_dataset_ui", "create_dataset_sdk"]
     )
     @pytest.mark.sanity
+    @pytest.mark.datasets
+    @pytest.mark.regression
     @allure.title("Dataset visibility - {dataset_fixture}")
     def test_dataset_visibility(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -128,6 +132,8 @@ class TestDatasetsCrud:
         ["create_dataset_sdk", "create_dataset_ui"],
     )
     @allure.title("Dataset name update - {dataset_fixture}")
+    @pytest.mark.datasets
+    @pytest.mark.regression
     def test_dataset_name_update(
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
@@ -226,6 +232,8 @@ class TestDatasetsCrud:
     @allure.title(
         "Dataset deletion - {dataset_fixture} and delete via {deletion_method}"
     )
+    @pytest.mark.datasets
+    @pytest.mark.regression
     def test_dataset_deletion(
         self, request, page: Page, client: opik.Opik, dataset_fixture, deletion_method
     ):

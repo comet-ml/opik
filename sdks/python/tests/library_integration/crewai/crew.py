@@ -1,6 +1,8 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
+from . import constants
+
 
 @CrewBase
 class LatestAiDevelopmentCrew:
@@ -14,11 +16,16 @@ class LatestAiDevelopmentCrew:
             tools=[
                 # SerperDevTool()
             ],
+            llm=constants.MODEL_NAME_SHORT,
         )
 
     @agent
     def reporting_analyst(self) -> Agent:
-        return Agent(config=self.agents_config["reporting_analyst"], verbose=True)
+        return Agent(
+            config=self.agents_config["reporting_analyst"],
+            verbose=True,
+            llm=constants.MODEL_NAME_SHORT,
+        )
 
     @task
     def research_task(self) -> Task:

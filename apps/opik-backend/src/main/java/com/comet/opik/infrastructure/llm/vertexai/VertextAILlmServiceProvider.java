@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -30,7 +30,7 @@ class VertextAILlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public ChatModel getLanguageModel(LlmProviderClientApiConfig apiKey,
-            AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+            LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(apiKey, modelParameters);
     }
 }

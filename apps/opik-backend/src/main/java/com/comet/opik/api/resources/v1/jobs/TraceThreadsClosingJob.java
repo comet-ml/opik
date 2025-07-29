@@ -18,7 +18,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -45,31 +44,34 @@ public class TraceThreadsClosingJob extends Job {
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
-        var timeoutToMarkThreadAsInactive = traceThreadConfig
-                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
-        int limit = 1000; // Limit to a process in each job execution
+        var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
+                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
+        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
-        lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
+        lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
                         error -> log.error("Error processing closing of trace threads", error));
     }
 
-    private Mono<Void> lockAndProcessJob(Lock lock, Duration timeoutToMarkThreadAsInactive, int limit) {
+    private Mono<Void> lockAndProcessJob(Lock lock, Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
         return lockService.bestEffortLock(
                 lock,
-                Mono.defer(() -> enqueueInRedis(
-                        traceThreadService
-                                .getProjectsWithPendingClosureThreads(
-                                        Instant.now().minus(timeoutToMarkThreadAsInactive)
-                                                .truncatedTo(ChronoUnit.MICROS),
-                                        limit))),
+                Mono.defer(() -> {
+                    var now = Instant.now();
+                    return enqueueInRedis(
+                            traceThreadService
+                                    .getProjectsWithPendingClosureThreads(
+                                            now,
+                                            defaultTimeoutToMarkThreadAsInactive,
+                                            limit));
+                }),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
                     return null;
                 }),
-                Duration.ofSeconds(4), // Timeout to release the lock
-                Duration.ofMillis(300)); // Timeout to acquiring the lock
+                traceThreadConfig.getCloseTraceThreadJobLockTime().toJavaDuration(), // Timeout to release the lock
+                traceThreadConfig.getCloseTraceThreadJobLockWaitTime().toJavaDuration()); // Timeout to acquiring the lock
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {

@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
@@ -553,7 +552,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
-                .bind("ids", ids);
+                .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

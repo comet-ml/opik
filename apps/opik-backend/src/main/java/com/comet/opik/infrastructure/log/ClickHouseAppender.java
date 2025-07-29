@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.log;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
-import com.comet.opik.domain.UserLog;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

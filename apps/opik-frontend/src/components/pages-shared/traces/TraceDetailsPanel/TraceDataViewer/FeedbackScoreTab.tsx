@@ -1,20 +1,20 @@
 import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
-import { Span, Trace, TraceFeedbackScore } from "@/types/traces";
+import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreRowDeleteCell from "./FeedbackScoreRowDeleteCell";
 import FeedbackScoreValueCell from "./FeedbackScoreValueCell";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
+import FeedbackScoreTableNoData from "./FeedbackScoreTableNoData";
 
-const SELECTED_COLUMNS_KEY = "trace-feedback-scores-tab-selected-columns";
-const COLUMNS_ORDER_KEY = "trace-feedback-scores-tab-columns-order";
+const SELECTED_COLUMNS_KEY = "feedback-scores-tab-selected-columns";
+const COLUMNS_ORDER_KEY = "feedback-scores-tab-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   {
@@ -56,25 +56,29 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
 const DEFAULT_SELECTED_COLUMNS = ["name", "value", "reason"];
 
 type FeedbackScoreTabProps = {
-  data: Trace | Span;
-  spanId?: string;
-  traceId: string;
+  onDeleteFeedbackScore: (name: string) => void;
+  onAddHumanReview: () => void;
+  entityName: string;
+  feedbackScores?: TraceFeedbackScore[];
+  entityType: "trace" | "thread";
 };
 
 const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
-  data,
-  spanId,
-  traceId,
+  onDeleteFeedbackScore,
+  onAddHumanReview,
+  entityName,
+  feedbackScores = [],
+  entityType,
 }) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    `${entityType}-${SELECTED_COLUMNS_KEY}`,
     {
       defaultValue: DEFAULT_SELECTED_COLUMNS,
     },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    `${entityType}-${COLUMNS_ORDER_KEY}`,
     {
       defaultValue: [],
     },
@@ -92,8 +96,8 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
       cell: FeedbackScoreRowDeleteCell,
       meta: {
         custom: {
-          traceId,
-          spanId,
+          onDelete: onDeleteFeedbackScore,
+          entityName,
         },
       },
       size: 48,
@@ -101,11 +105,11 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
     });
 
     return retVal;
-  }, [traceId, spanId, selectedColumns, columnsOrder]);
+  }, [onDeleteFeedbackScore, selectedColumns, columnsOrder, entityName]);
 
-  const feedbackScores: TraceFeedbackScore[] = useMemo(
-    () => sortBy(data.feedback_scores || [], "name"),
-    [data.feedback_scores],
+  const sortedFeedbackScores: TraceFeedbackScore[] = useMemo(
+    () => sortBy(feedbackScores, "name"),
+    [feedbackScores],
   );
 
   return (
@@ -122,8 +126,13 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
 
       <DataTable
         columns={columns}
-        data={feedbackScores}
-        noData={<DataTableNoData title="No feedback scores" />}
+        data={sortedFeedbackScores}
+        noData={
+          <FeedbackScoreTableNoData
+            entityType={entityType}
+            onAddHumanReview={onAddHumanReview}
+          />
+        }
       />
     </>
   );
