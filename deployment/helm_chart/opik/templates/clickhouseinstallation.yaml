@@ -142,7 +142,6 @@ spec:
               port: 9000
               targetPort: 9000
           type: LoadBalancer
-
       - name: clickhouse-cluster-svc-template
         metadata:
           annotations:
@@ -160,10 +159,6 @@ spec:
           type: ClusterIP
       - name: clickhouse-replica-svc-template
         metadata:
-          annotations:
-            {{- with .Values.clickhouse.service.annotations }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
           labels:
             comet.com/service-monitoring: "true"
         spec:
