@@ -214,3 +214,32 @@ def test__ragas_llm_context_precision():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
+
+
+def test_trajectory_usage_metric():
+    trajectory_usage_metric = metrics.TrajectoryUsage(track=False)
+    result = trajectory_usage_metric.score(
+        trajectory={
+            "total_tokens": 100,
+            "total_cost": 0.5,
+        }
+    )
+    assert result.score == 1
+    assert result.name == "trajectory_usage"
+    assert result.reason is None
+    assert result.metadata == {"total_tokens": 100, "total_cost": 0.5}
+
+
+def test_trajectory_length_metric():
+    trajectory_length_metric = metrics.TrajectoryLength(track=False)
+    result = trajectory_length_metric.score(
+        trajectory=[
+            1,
+            2,
+            3,
+        ]
+    )
+    assert result.score == 3
+    assert result.name == "trajectory_length"
+    assert result.reason is None
+    assert result.metadata is None

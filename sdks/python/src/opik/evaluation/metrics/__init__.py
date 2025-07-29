@@ -19,6 +19,8 @@ from .llm_judges.moderation.metric import Moderation
 from .llm_judges.usefulness.metric import Usefulness
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
+from .trajectory.trajectory_length import TrajectoryLength
+from .trajectory.trajectory_usage import TrajectoryUsage
 from opik.exceptions import MetricComputationError
 
 # from .llm_judges.factuality.metric import Factuality
@@ -47,5 +49,7 @@ __all__ = [
     "SessionCompletenessQuality",
     "Usefulness",
     "UserFrustrationMetric",
+    "TrajectoryLength",
+    "TrajectoryUsage",
     # "Factuality",
 ]
