@@ -61,7 +61,7 @@ const useTracesBatchFeedbackScoresMutation = () => {
                 variant: "destructive",
             });
         },
-        onSuccess: (data, vars) => {
+        onSuccess: (_, vars) => {
             toast({
                 title: "Success",
                 description: `Annotated ${vars.traceIds.length} traces`,
