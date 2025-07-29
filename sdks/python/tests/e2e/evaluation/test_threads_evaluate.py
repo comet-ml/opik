@@ -1,6 +1,6 @@
 import time
 import uuid
-
+import os
 import pytest
 
 from opik import synchronization
@@ -9,7 +9,6 @@ from opik.evaluation import metrics
 from opik.evaluation.threads import evaluator
 from opik.types import FeedbackScoreDict
 from .. import verifiers
-from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
 
 @pytest.fixture
@@ -37,7 +36,9 @@ def real_model_conversation():
 
 
 @pytest.fixture
-def active_thread(opik_client, real_model_conversation):
+def active_thread_and_project_name(
+    opik_client, real_model_conversation, temporary_project_name
+):
     thread_id = str(uuid.uuid4())[-6:]
 
     # create conversation traces
@@ -47,7 +48,7 @@ def active_thread(opik_client, real_model_conversation):
             name=f"trace-name-{i}:{thread_id}",
             input={"input": f"{real_model_conversation[i]['content']}"},
             output={"output": f"{real_model_conversation[i + 1]['content']}"},
-            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            project_name=temporary_project_name,
             thread_id=thread_id,
         )
         time.sleep(0.1)
@@ -55,49 +56,57 @@ def active_thread(opik_client, real_model_conversation):
 
     opik_client.flush()
 
-    yield thread_id
-
-    # close threads
-    opik_client.rest_client.traces.close_trace_thread(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME, thread_id=thread_id
-    )
+    return thread_id, temporary_project_name
 
 
-def _all_threads_closed(threads_client_: threads_client.ThreadsClient) -> bool:
+def _all_threads_closed(
+    project_name: str, threads_client_: threads_client.ThreadsClient
+) -> bool:
     threads = threads_client_.search_threads(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string='status = "active"'
+        project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 0
 
 
-def _one_thread_is_active(threads_client_: threads_client.ThreadsClient) -> bool:
+def _one_thread_is_active(
+    project_name: str, threads_client_: threads_client.ThreadsClient
+) -> bool:
     threads = threads_client_.search_threads(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string='status = "active"'
+        project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 1
 
 
-def test_evaluate_threads__happy_path(opik_client, active_thread):
+@pytest.fixture
+def eval_project_name(temporary_project_name: str) -> str:
+    return temporary_project_name
+
+
+@pytest.mark.skipif(
+    "OPENAI_API_KEY" not in os.environ, reason="OPENAI_API_KEY is not set"
+)
+def test_evaluate_threads__happy_path(
+    opik_client, active_thread_and_project_name, eval_project_name
+):
+    active_thread, project_name = active_thread_and_project_name
     threads_client_ = opik_client.get_threads_client()
     # wait for active threads to propagate
     if not synchronization.until(
-        lambda: _one_thread_is_active(threads_client_), max_try_seconds=30
+        lambda: _one_thread_is_active(project_name, threads_client_), max_try_seconds=30
     ):
-        raise AssertionError(
-            f"Failed to create threads in project '{OPIK_E2E_TESTS_PROJECT_NAME}'"
-        )
+        raise AssertionError(f"Failed to create threads in project '{project_name}'")
 
     # close threads before evaluating - otherwise backend will return 409 error on logging scores
     opik_client.rest_client.traces.close_trace_thread(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME, thread_id=active_thread
+        project_name=project_name, thread_id=active_thread
     )
 
     # wait for closed threads to propagate
     if not synchronization.until(
-        lambda: _all_threads_closed(threads_client_), max_try_seconds=30
+        lambda: _all_threads_closed(project_name, threads_client_), max_try_seconds=30
     ):
         raise AssertionError(
-            f"Failed to get closed threads from project '{OPIK_E2E_TESTS_PROJECT_NAME}'"
+            f"Failed to get closed threads from project '{project_name}'"
         )
 
     metrics_ = [
@@ -107,10 +116,10 @@ def test_evaluate_threads__happy_path(opik_client, active_thread):
     ]
 
     result = evaluator.evaluate_threads(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name,
         filter_string=f'id = "{active_thread}"',
         metrics=metrics_,
-        eval_project_name=OPIK_E2E_TESTS_PROJECT_NAME + "-eval",
+        eval_project_name=eval_project_name,
         trace_input_transform=lambda x: x["input"],
         trace_output_transform=lambda x: x["output"],
         verbose=1,
@@ -138,6 +147,6 @@ def test_evaluate_threads__happy_path(opik_client, active_thread):
     verifiers.verify_thread(
         opik_client=opik_client,
         thread_id=active_thread,
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name,
         feedback_scores=feedback_scores,
     )

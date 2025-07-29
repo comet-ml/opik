@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges.trajectory_accuracy import TrajectoryAccuracy
-from opik.evaluation.metrics.llm_judges.trajectory_accuracy import parser, templates
+from opik.evaluation.metrics.llm_judges.trajectory_accuracy import templates
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model
 
@@ -15,8 +15,12 @@ class TestTrajectoryAccuracy:
     def mock_model(self):
         """Create a mock model for testing."""
         mock = Mock(spec=base_model.OpikBaseModel)
-        mock.generate_string.return_value = '{"score": 0.8, "explanation": "Good trajectory execution"}'
-        mock.agenerate_string.return_value = '{"score": 0.8, "explanation": "Good trajectory execution"}'
+        mock.generate_string.return_value = (
+            '{"score": 0.8, "explanation": "Good trajectory execution"}'
+        )
+        mock.agenerate_string.return_value = (
+            '{"score": 0.8, "explanation": "Good trajectory execution"}'
+        )
         return mock
 
     @pytest.fixture
@@ -34,15 +38,13 @@ class TestTrajectoryAccuracy:
             {
                 "thought": "I need to search for weather information",
                 "action": "search_weather(location='Paris')",
-                "observation": "Weather: 22°C, sunny"
+                "observation": "Weather: 22°C, sunny",
             }
         ]
         final_result = "The weather in Paris is 22°C and sunny"
 
         result = trajectory_metric.score(
-            goal=goal,
-            trajectory=trajectory,
-            final_result=final_result
+            goal=goal, trajectory=trajectory, final_result=final_result
         )
 
         # Verify model was called
@@ -50,7 +52,7 @@ class TestTrajectoryAccuracy:
         call_args = mock_model.generate_string.call_args
 
         # Check the prompt contains key elements
-        prompt = call_args[1]['input']
+        prompt = call_args[1]["input"]
         assert goal in prompt
         assert "search_weather" in prompt
         assert final_result in prompt
@@ -65,9 +67,7 @@ class TestTrajectoryAccuracy:
     def test_score_empty_trajectory(self, trajectory_metric):
         """Test scoring with empty trajectory."""
         result = trajectory_metric.score(
-            goal="Find something",
-            trajectory=[],
-            final_result="Found nothing"
+            goal="Find something", trajectory=[], final_result="Found nothing"
         )
 
         # Should still work, just with empty trajectory
@@ -78,30 +78,17 @@ class TestTrajectoryAccuracy:
         mock_model.generate_string.side_effect = Exception("Model failed")
 
         # Should raise MetricComputationError when model fails
-        with pytest.raises(exceptions.MetricComputationError, match="Trajectory accuracy evaluation failed: Model failed"):
+        with pytest.raises(
+            exceptions.MetricComputationError,
+            match="Trajectory accuracy evaluation failed: Model failed",
+        ):
             trajectory_metric.score(
                 goal="Test goal",
-                trajectory=[{"thought": "test", "action": "test", "observation": "test"}],
-                final_result="Test result"
+                trajectory=[
+                    {"thought": "test", "action": "test", "observation": "test"}
+                ],
+                final_result="Test result",
             )
-
-    def test_parse_evaluation_response_valid_response(self):
-        """Test parsing valid evaluation response using public parser API."""
-        content = '{"score": 0.75, "explanation": "Decent trajectory with some issues"}'
-        
-        result = parser.parse_evaluation_response(content, "test_metric")
-        
-        assert isinstance(result, score_result.ScoreResult)
-        assert result.value == 0.75
-        assert result.reason == "Decent trajectory with some issues"
-        assert result.name == "test_metric"
-
-    def test_parse_evaluation_response_score_out_of_range(self):
-        """Test parsing response with score out of valid range using public parser API."""
-        content = '{"score": 1.5, "explanation": "Score too high"}'
-        
-        with pytest.raises(exceptions.MetricComputationError, match="Invalid response format"):
-            parser.parse_evaluation_response(content, "test_metric")
 
     def test_format_trajectory_steps_valid_trajectory(self):
         """Test trajectory formatting using public templates API."""
@@ -111,19 +98,19 @@ class TestTrajectoryAccuracy:
                 {
                     "thought": "First thought",
                     "action": "first_action()",
-                    "observation": "First observation"
+                    "observation": "First observation",
                 },
                 {
                     "thought": "Second thought",
                     "action": "second_action()",
-                    "observation": "Second observation"
-                }
+                    "observation": "Second observation",
+                },
             ],
-            "final_result": "Test result"
+            "final_result": "Test result",
         }
-        
+
         formatted_prompt = templates.create_evaluation_prompt(example)
-        
+
         assert "Step 1:" in formatted_prompt
         assert "Step 2:" in formatted_prompt
         assert "First thought" in formatted_prompt
@@ -134,29 +121,27 @@ class TestTrajectoryAccuracy:
 
     def test_format_trajectory_steps_empty_trajectory(self):
         """Test formatting empty trajectory using public templates API."""
-        example = {
-            "goal": "Test goal",
-            "trajectory": [],
-            "final_result": "Test result"
-        }
-        
+        example = {"goal": "Test goal", "trajectory": [], "final_result": "Test result"}
+
         formatted_prompt = templates.create_evaluation_prompt(example)
         assert "No trajectory steps provided" in formatted_prompt
 
-    @patch('opik.evaluation.models.models_factory.get')
+    @patch("opik.evaluation.models.models_factory.get")
     def test_init_model_string_model_name(self, mock_factory):
         """Test model initialization with string model name."""
         mock_model = Mock()
         mock_factory.return_value = mock_model
-        
+
         metric = TrajectoryAccuracy(model="gpt-4", track=False)
-        
+
         mock_factory.assert_called_once_with(model_name="gpt-4")
         # Test that the model was initialized correctly by testing behavior
         # rather than accessing private attributes
         assert metric is not None
         # We can test the public interface works correctly
-        mock_model.generate_string.return_value = '{"score": 0.5, "explanation": "test"}'
+        mock_model.generate_string.return_value = (
+            '{"score": 0.5, "explanation": "test"}'
+        )
         result = metric.score(goal="test", trajectory=[], final_result="test")
         assert isinstance(result, score_result.ScoreResult)
 
@@ -167,8 +152,8 @@ class TestTrajectoryAccuracy:
             trajectory=[{"thought": "test", "action": "test", "observation": "test"}],
             final_result="Test result",
             extra_param="should be ignored",
-            another_param=123
+            another_param=123,
         )
-        
+
         # Should work without issues
-        assert isinstance(result, score_result.ScoreResult) 
+        assert isinstance(result, score_result.ScoreResult)

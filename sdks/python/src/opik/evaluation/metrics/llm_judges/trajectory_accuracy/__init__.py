@@ -1,3 +1,3 @@
 from .metric import TrajectoryAccuracy
 
-__all__ = ["TrajectoryAccuracy"] 
+__all__ = ["TrajectoryAccuracy"]

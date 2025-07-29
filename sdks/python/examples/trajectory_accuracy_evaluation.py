@@ -15,13 +15,13 @@ import json
 
 def create_trajectory_dataset():
     """Create a dataset with ReAct-style trajectories for evaluation."""
-    
+
     client = Opik()
     dataset = client.get_or_create_dataset(
         name="trajectory_evaluation_dataset",
-        description="Dataset for evaluating ReAct-style agent trajectories"
+        description="Dataset for evaluating ReAct-style agent trajectories",
     )
-    
+
     # Sample trajectory data
     trajectory_data = [
         {
@@ -31,15 +31,15 @@ def create_trajectory_dataset():
                     {
                         "thought": "I need to search for weather information in Paris",
                         "action": "search_weather(location='Paris')",
-                        "observation": "Found weather data for Paris: 22°C, sunny"
+                        "observation": "Found weather data for Paris: 22°C, sunny",
                     },
                     {
                         "thought": "I have the weather data, now I should summarize it",
                         "action": "summarize_result()",
-                        "observation": "Summary created: The weather in Paris is 22°C and sunny"
-                    }
+                        "observation": "Summary created: The weather in Paris is 22°C and sunny",
+                    },
                 ],
-                "final_result": "The weather in Paris is 22°C and sunny"
+                "final_result": "The weather in Paris is 22°C and sunny",
             }
         },
         {
@@ -49,10 +49,10 @@ def create_trajectory_dataset():
                     {
                         "thought": "I need to add 15 and 27 together",
                         "action": "calculate(15 + 27)",
-                        "observation": "Result: 42"
+                        "observation": "Result: 42",
                     }
                 ],
-                "final_result": "The sum of 15 and 27 is 42"
+                "final_result": "The sum of 15 and 27 is 42",
             }
         },
         {
@@ -62,15 +62,15 @@ def create_trajectory_dataset():
                     {
                         "thought": "I need to find France's capital",
                         "action": "search('weather in France')",  # Poor action choice
-                        "observation": "Found weather information for various French cities"
+                        "observation": "Found weather information for various French cities",
                     },
                     {
                         "thought": "This doesn't help, let me try something else",
                         "action": "search('French cuisine')",  # Still poor choice
-                        "observation": "Found information about French food"
-                    }
+                        "observation": "Found information about French food",
+                    },
                 ],
-                "final_result": "Paris is the capital of France"  # Result doesn't match trajectory
+                "final_result": "Paris is the capital of France",  # Result doesn't match trajectory
             }
         },
         {
@@ -80,30 +80,30 @@ def create_trajectory_dataset():
                     {
                         "thought": "I need to search for Tokyo population data",
                         "action": "search('Tokyo population 2024')",
-                        "observation": "Tokyo has approximately 14 million people in the city, 37 million in metro area"
+                        "observation": "Tokyo has approximately 14 million people in the city, 37 million in metro area",
                     },
                     {
                         "thought": "I found the data, let me verify with another source",
                         "action": "search('Tokyo metropolitan area population')",
-                        "observation": "Confirmed: Tokyo metro area has about 37-38 million residents"
+                        "observation": "Confirmed: Tokyo metro area has about 37-38 million residents",
                     },
                     {
                         "thought": "Now I should summarize this information clearly",
                         "action": "summarize_findings()",
-                        "observation": "Summary prepared with population figures"
-                    }
+                        "observation": "Summary prepared with population figures",
+                    },
                 ],
-                "final_result": "Tokyo city has about 14 million people, while the greater Tokyo metropolitan area has approximately 37-38 million residents, making it the world's largest urban agglomeration."
+                "final_result": "Tokyo city has about 14 million people, while the greater Tokyo metropolitan area has approximately 37-38 million residents, making it the world's largest urban agglomeration.",
             }
-        }
+        },
     ]
-    
+
     # Insert data into dataset
     dataset.insert_from_json(
         json_array=json.dumps(trajectory_data),
-        keys_mapping={"trajectory_input": "input"}
+        keys_mapping={"trajectory_input": "input"},
     )
-    
+
     return dataset
 
 
@@ -115,39 +115,38 @@ def trajectory_evaluation_task(item: Dict[str, Any]) -> Dict[str, Any]:
     """
     # Extract the trajectory components
     trajectory_data = item["input"]
-    
+
     # For this example, we're just passing through the pre-made trajectory
     # In a real scenario, this is where your agent would generate the trajectory
     return {
         "goal": trajectory_data["goal"],
-        "trajectory": trajectory_data["trajectory"], 
+        "trajectory": trajectory_data["trajectory"],
         "final_result": trajectory_data["final_result"],
         "metadata": {
             "trajectory_steps": len(trajectory_data["trajectory"]),
-            "evaluation_type": "react_agent_trajectory"
-        }
+            "evaluation_type": "react_agent_trajectory",
+        },
     }
 
 
 def main():
     """Run the trajectory accuracy evaluation example."""
-    
+
     print("🚀 Starting Trajectory Accuracy Evaluation with Opik")
     print("=" * 60)
-    
+
     # Create dataset
     print("📊 Creating trajectory dataset...")
     dataset = create_trajectory_dataset()
     print(f"✅ Dataset '{dataset.name}' created with trajectory examples")
-    
+
     # Create trajectory accuracy metric
     trajectory_metric = TrajectoryAccuracy(
-        name="trajectory_accuracy_evaluation",
-        track=True
+        name="trajectory_accuracy_evaluation", track=True
     )
-    
+
     print("\n🎯 Running evaluation...")
-    
+
     # Run evaluation
     evaluation_result = evaluate(
         experiment_name="trajectory_accuracy_experiment",
@@ -157,20 +156,22 @@ def main():
         experiment_config={
             "model": "gpt-4o-mini",  # Following user rules
             "evaluation_type": "react_agent_trajectory",
-            "metric": "trajectory_accuracy"
-        }
+            "metric": "trajectory_accuracy",
+        },
     )
-    
+
     print("\n✅ Evaluation completed!")
     print(f"📊 Experiment: {evaluation_result.experiment_name}")
-    print(f"📈 Results available in Opik dashboard")
-    
+    print("📈 Results available in Opik dashboard")
+
     # Display summary
-    print(f"\n📋 Summary:")
+    print("\n📋 Summary:")
     print(f"   Total test cases: {len(evaluation_result.test_results)}")
-    print(f"   Metric used: TrajectoryAccuracy")
-    print(f"   Evaluation assesses: reasoning quality, action appropriateness, goal achievement")
-    
+    print("   Metric used: TrajectoryAccuracy")
+    print(
+        "   Evaluation assesses: reasoning quality, action appropriateness, goal achievement"
+    )
+
     return evaluation_result
 
 
@@ -184,4 +185,4 @@ if __name__ == "__main__":
         print("💡 Make sure you have:")
         print("   - OPENAI_API_KEY set in environment")
         print("   - Opik properly configured")
-        print("   - Network connectivity for LLM calls") 
+        print("   - Network connectivity for LLM calls")

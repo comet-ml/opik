@@ -12,21 +12,26 @@ LOGGER = logging.getLogger(__name__)
 
 class TrajectoryAccuracyResponseFormat(pydantic.BaseModel):
     """Expected format for LLM response when evaluating trajectory accuracy."""
-    score: float = pydantic.Field(..., ge=0.0, le=1.0, description="Score between 0.0 and 1.0")
-    explanation: str = pydantic.Field(..., min_length=1, description="Detailed explanation for the score")
+
+    score: float = pydantic.Field(
+        ..., ge=0.0, le=1.0, description="Score between 0.0 and 1.0"
+    )
+    explanation: str = pydantic.Field(
+        ..., min_length=1, description="Detailed explanation for the score"
+    )
 
 
 class TrajectoryAccuracy(base_metric.BaseMetric):
     """
     A metric that evaluates the accuracy of ReAct-style agent trajectories.
-    
-    This metric uses an LLM to judge whether an agent's sequence of thought/action/observation 
+
+    This metric uses an LLM to judge whether an agent's sequence of thought/action/observation
     steps demonstrates effective reasoning and appropriate action selection to achieve the goal.
-    It returns a score between 0.0 and 1.0 based on reasoning quality, action appropriateness, 
+    It returns a score between 0.0 and 1.0 based on reasoning quality, action appropriateness,
     observation integration, goal achievement, and efficiency.
 
     Args:
-        model: The LLM to use for evaluation. Can be a string (model name) or an 
+        model: The LLM to use for evaluation. Can be a string (model name) or an
             `opik.evaluation.models.OpikBaseModel` subclass instance.
             `opik.evaluation.models.LiteLLMChatModel` is used by default.
         name: The name of the metric.
@@ -85,25 +90,24 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
-            score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0 
+            score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
             example = {
-                'goal': goal,
-                'trajectory': trajectory,
-                'final_result': final_result
+                "goal": goal,
+                "trajectory": trajectory,
+                "final_result": final_result,
             }
-            
+
             prompt = templates.create_evaluation_prompt(example)
-            
+
             response = self._model.generate_string(
-                input=prompt, 
-                response_format=TrajectoryAccuracyResponseFormat
+                input=prompt, response_format=TrajectoryAccuracyResponseFormat
             )
-            
+
             return parser.parse_evaluation_response(response, self.name)
-            
+
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)
             raise exceptions.MetricComputationError(
@@ -127,27 +131,26 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
-            score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0 
+            score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0
                 indicating trajectory accuracy, along with an explanation for the verdict.
         """
         try:
             example = {
-                'goal': goal,
-                'trajectory': trajectory,
-                'final_result': final_result
+                "goal": goal,
+                "trajectory": trajectory,
+                "final_result": final_result,
             }
-            
+
             prompt = templates.create_evaluation_prompt(example)
-            
+
             response = await self._model.agenerate_string(
-                input=prompt, 
-                response_format=TrajectoryAccuracyResponseFormat
+                input=prompt, response_format=TrajectoryAccuracyResponseFormat
             )
-            
+
             return parser.parse_evaluation_response(response, self.name)
-            
+
         except Exception as e:
             LOGGER.error(f"Trajectory accuracy evaluation failed: {e}", exc_info=True)
             raise exceptions.MetricComputationError(
                 f"Trajectory accuracy evaluation failed: {str(e)}"
-            ) from e 
+            ) from e

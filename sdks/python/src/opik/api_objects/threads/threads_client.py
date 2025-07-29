@@ -134,6 +134,18 @@ class ThreadsClient:
 
             self._opik_client._streamer.put(add_threads_feedback_scores_batch_message)
 
+    def close_thread(self, thread_id: str, project_name: str) -> None:
+        """
+        Closes a thread in a specific project.
+
+        Args:
+            thread_id: The identifier of the thread to close.
+            project_name: The name of the project to close the thread in.
+        """
+        self._opik_client.rest_client.traces.close_trace_thread(
+            thread_id=thread_id, project_name=project_name
+        )
+
     @property
     def opik_client(self) -> "opik.Opik":
         return self._opik_client
