@@ -146,7 +146,7 @@ class ThreadsEvaluationEngine:
             scores=results,
         )
 
-    @opik.track(name="metrics_calculation")
+    @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _evaluate_conversation(
         self,
         conversation: List[Dict[Literal["role", "content"], str]],

@@ -42,7 +42,7 @@ class EvaluationEngine:
         self._scoring_metrics = scoring_metrics
         self._scoring_key_mapping = scoring_key_mapping
 
-    @opik.track(name="metrics_calculation")
+    @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
@@ -106,7 +106,7 @@ class EvaluationEngine:
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-            task = opik.track(name=name)(task)
+            task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
 
         trace_data = trace.TraceData(
             input=item.get_content(),
