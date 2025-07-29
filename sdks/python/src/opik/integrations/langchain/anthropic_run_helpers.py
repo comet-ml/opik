@@ -78,15 +78,25 @@ def _get_provider_and_model(
     """
     provider = LLMProvider.ANTHROPIC
     model = None
-    try:
-        if run_dict["outputs"]["llm_output"] is not None:
-            model = run_dict["outputs"]["llm_output"]["model_name"]
-        else:
-            # Handle the streaming mode
-            model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
-                "response_metadata"
-            ]["model_name"]
-    except Exception:
+
+    POSSIBLE_MODEL_NAME_KEYS = [
+        "model",  # detected in langchain-anthropic 0.3.5
+        "model_name",  # detected in langchain-anthropic 0.3.17
+    ]
+
+    for model_name_key in POSSIBLE_MODEL_NAME_KEYS:
+        try:
+            if run_dict["outputs"]["llm_output"] is not None:
+                model = run_dict["outputs"]["llm_output"][model_name_key]
+            else:
+                # Handle the streaming mode
+                model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
+                    "response_metadata"
+                ][model_name_key]
+        except KeyError:
+            continue
+
+    if model is None:
         LOGGER.error(
             "Failed to extract model name from presumably Anthropic LLM langchain Run object: %s",
             run_dict,
