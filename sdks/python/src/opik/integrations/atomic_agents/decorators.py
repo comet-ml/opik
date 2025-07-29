@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from opik.api_objects import opik_client
-from opik.integrations.atomic_agents.opik_tracer import OpikAtomicAgentsTracer
-from opik.decorator import (
-    arguments_helpers,
-    span_creation_handler,
-    error_info_collector,
-)
+import opik.api_objects.opik_client as opik_client
+import opik.integrations.atomic_agents.opik_tracer as opik_tracer
+import opik.decorator.arguments_helpers as arguments_helpers
+import opik.decorator.span_creation_handler as span_creation_handler
+import opik.decorator.error_info_collector as error_info_collector
 
 from opik import context_storage
 
@@ -40,7 +38,7 @@ def track_atomic_agents(
     original_run = BaseAgent.run  # type: ignore[attr-defined]
 
     def _agent_run(self: Any, *args: Any, **kwargs: Any) -> Any:  # type: ignore[no-self-use]
-        tracer = OpikAtomicAgentsTracer(
+        tracer = opik_tracer.OpikAtomicAgentsTracer(
             project_name=project_name,
             tags=tags,
             metadata=metadata,

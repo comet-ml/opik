@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 
-from atomic_agents.lib.components.system_prompt_generator import (
-    SystemPromptContextProviderBase,
-)
+import atomic_agents.lib.components.system_prompt_generator as system_prompt_generator
 
 
 def _format_trace_info(trace_id: str, project_name: Optional[str]) -> str:  # noqa: D401
@@ -15,7 +13,7 @@ def _format_trace_info(trace_id: str, project_name: Optional[str]) -> str:  # no
     return f"[Opik Trace Info]\ntrace_id: {trace_id}\n{project_line}"
 
 
-class OpikContextProvider(SystemPromptContextProviderBase):  # type: ignore[misc]
+class OpikContextProvider(system_prompt_generator.SystemPromptContextProviderBase):  # type: ignore[misc]
     """Inject minimal Opik trace context into Atomic Agents system prompt."""
 
     def __init__(

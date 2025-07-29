@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from opik.api_objects import opik_client, trace
-from opik.decorator import error_info_collector
+import opik.api_objects.opik_client as opik_client
+import opik.api_objects.trace as trace
+import opik.decorator.error_info_collector as error_info_collector
 
 from opik import context_storage
 
