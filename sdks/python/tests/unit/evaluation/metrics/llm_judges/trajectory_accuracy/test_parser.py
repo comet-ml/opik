@@ -11,20 +11,28 @@ class TestTrajectoryAccuracyParser:
     def test_trajectory_accuracy_score_out_of_range_high(self):
         """Test trajectory accuracy score validation with score > 1.0."""
         metric = TrajectoryAccuracy(track=False)
-        invalid_model_output = '{"score": 1.2, "explanation": "Score exceeds valid range."}'
+        invalid_model_output = (
+            '{"score": 1.2, "explanation": "Score exceeds valid range."}'
+        )
 
         # The parsing helper itself doesn't validate range - that's done in the metric
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert parsed_content["score"] == 1.2
         assert parsed_content["explanation"] == "Score exceeds valid range."
 
     def test_trajectory_accuracy_score_out_of_range_low(self):
         """Test trajectory accuracy score validation with score < 0.0."""
         metric = TrajectoryAccuracy(track=False)
-        invalid_model_output = '{"score": -0.1, "explanation": "Score below valid range."}'
+        invalid_model_output = (
+            '{"score": -0.1, "explanation": "Score below valid range."}'
+        )
 
         # The parsing helper itself doesn't validate range - that's done in the metric
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert parsed_content["score"] == -0.1
         assert parsed_content["explanation"] == "Score below valid range."
 
@@ -34,7 +42,9 @@ class TestTrajectoryAccuracyParser:
         invalid_model_output = '{"explanation": "Missing score field."}'
 
         # This should parse successfully but missing fields will be caught in metric validation
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert "score" not in parsed_content
         assert parsed_content["explanation"] == "Missing score field."
 
@@ -44,14 +54,16 @@ class TestTrajectoryAccuracyParser:
         invalid_model_output = '{"score": 0.8}'
 
         # This should parse successfully but missing fields will be caught in metric validation
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert parsed_content["score"] == 0.8
         assert "explanation" not in parsed_content
 
     def test_trajectory_accuracy_invalid_json_format(self):
         """Test trajectory accuracy parsing with invalid JSON format."""
         metric = TrajectoryAccuracy(track=False)
-        invalid_model_output = 'This is not valid JSON at all'
+        invalid_model_output = "This is not valid JSON at all"
 
         with pytest.raises(exceptions.JSONParsingError):
             parsing_helpers.extract_json_content_or_raise(invalid_model_output)
@@ -62,10 +74,15 @@ class TestTrajectoryAccuracyParser:
         valid_model_output = '{"score": 0.85, "explanation": "Good trajectory with logical reasoning and appropriate actions."}'
 
         # This should parse successfully
-        parsed_content = parsing_helpers.extract_json_content_or_raise(valid_model_output)
-        
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            valid_model_output
+        )
+
         assert parsed_content["score"] == 0.85
-        assert parsed_content["explanation"] == "Good trajectory with logical reasoning and appropriate actions."
+        assert (
+            parsed_content["explanation"]
+            == "Good trajectory with logical reasoning and appropriate actions."
+        )
 
     def test_trajectory_accuracy_json_with_extra_fields(self):
         """Test trajectory accuracy parsing with extra fields in JSON."""
@@ -73,8 +90,10 @@ class TestTrajectoryAccuracyParser:
         valid_model_output = '{"score": 0.7, "explanation": "Decent trajectory", "extra_field": "should be ignored"}'
 
         # Should parse successfully and ignore extra fields
-        parsed_content = parsing_helpers.extract_json_content_or_raise(valid_model_output)
-        
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            valid_model_output
+        )
+
         assert parsed_content["score"] == 0.7
         assert parsed_content["explanation"] == "Decent trajectory"
         assert "extra_field" in parsed_content  # Extra fields are preserved
@@ -85,8 +104,10 @@ class TestTrajectoryAccuracyParser:
         metric = TrajectoryAccuracy(track=False)
         valid_model_output = f'{{"score": {score_value}, "explanation": "Test explanation for score {score_value}"}}'
 
-        parsed_content = parsing_helpers.extract_json_content_or_raise(valid_model_output)
-        
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            valid_model_output
+        )
+
         assert parsed_content["score"] == score_value
         assert f"score {score_value}" in parsed_content["explanation"]
 
@@ -96,7 +117,9 @@ class TestTrajectoryAccuracyParser:
         invalid_model_output = '{"score": 0.8, "explanation": ""}'
 
         # Empty explanation should be caught in validation
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert parsed_content["explanation"] == ""
         # The metric's _parse_evaluation_response would catch this as invalid
 
@@ -106,6 +129,8 @@ class TestTrajectoryAccuracyParser:
         invalid_model_output = '{"score": "high", "explanation": "Non-numeric score"}'
 
         # This should parse but fail validation in the metric
-        parsed_content = parsing_helpers.extract_json_content_or_raise(invalid_model_output)
+        parsed_content = parsing_helpers.extract_json_content_or_raise(
+            invalid_model_output
+        )
         assert parsed_content["score"] == "high"
-        # The metric's _parse_evaluation_response would catch this when converting to float 
+        # The metric's _parse_evaluation_response would catch this when converting to float

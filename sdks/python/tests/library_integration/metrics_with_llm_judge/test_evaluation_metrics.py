@@ -191,15 +191,15 @@ def test__trajectory_accuracy():
             {
                 "thought": "I need to search for weather information in Paris",
                 "action": "search_weather(location='Paris')",
-                "observation": "Found weather data for Paris: 22°C, sunny"
+                "observation": "Found weather data for Paris: 22°C, sunny",
             },
             {
                 "thought": "I have the weather data, now I should summarize it",
                 "action": "summarize_result()",
-                "observation": "Summary created: The weather in Paris is 22°C and sunny"
-            }
+                "observation": "Summary created: The weather in Paris is 22°C and sunny",
+            },
         ],
-        final_result="The weather in Paris is 22°C and sunny"
+        final_result="The weather in Paris is 22°C and sunny",
     )
 
     assert_helpers.assert_score_result(result)
@@ -215,10 +215,10 @@ async def test__trajectory_accuracy__async():
             {
                 "thought": "I need to add 15 and 27 together",
                 "action": "calculate(15 + 27)",
-                "observation": "Result: 42"
+                "observation": "Result: 42",
             }
         ],
-        final_result="The sum of 15 and 27 is 42"
+        final_result="The sum of 15 and 27 is 42",
     )
 
     assert_helpers.assert_score_result(result)
@@ -234,15 +234,15 @@ def test__trajectory_accuracy__poor_quality():
             {
                 "thought": "I need to find France's capital",
                 "action": "search('weather in France')",  # Wrong action
-                "observation": "Found weather information for various French cities"
+                "observation": "Found weather information for various French cities",
             },
             {
                 "thought": "This doesn't help, let me try something else",
                 "action": "search('French cuisine')",  # Still wrong
-                "observation": "Found information about French food"
-            }
+                "observation": "Found information about French food",
+            },
         ],
-        final_result="Paris is the capital of France"  # Result doesn't match trajectory
+        final_result="Paris is the capital of France",  # Result doesn't match trajectory
     )
 
     assert_helpers.assert_score_result(result)
