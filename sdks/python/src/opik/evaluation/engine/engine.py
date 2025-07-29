@@ -5,7 +5,7 @@ from typing import List, Optional
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
 import opik.opik_context as opik_context
-import opik.track as track
+import opik
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
@@ -42,7 +42,7 @@ class EvaluationEngine:
         self._scoring_metrics = scoring_metrics
         self._scoring_key_mapping = scoring_key_mapping
 
-    @track(name="metrics_calculation")
+    @opik.track(name="metrics_calculation")
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
@@ -106,7 +106,7 @@ class EvaluationEngine:
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-            task = track(name=name)(task)
+            task = opik.track(name=name)(task)
 
         trace_data = trace.TraceData(
             input=item.get_content(),

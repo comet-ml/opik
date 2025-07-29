@@ -1,6 +1,3 @@
-import sys
-from typing import Any, cast
-
 from . import _logging, environment, error_tracking, package_version
 from .api_objects.attachment import Attachment
 from .api_objects.dataset import Dataset
@@ -26,7 +23,6 @@ from .decorator.tracing_runtime_config import (
     set_tracing_active,
 )
 
-sys.modules[__name__ + ".track"] = cast(Any, track)
 
 _logging.setup()
 
