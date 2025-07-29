@@ -1,5 +1,6 @@
-from typing import Tuple
 from __future__ import annotations
+
+from typing import Tuple
 import uuid
 
 import pytest
