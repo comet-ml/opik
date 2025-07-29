@@ -134,7 +134,7 @@ def test_threads_client__close_thread__happy_path(
     assert threads[0].id == thread_id
 
     threads_client.close_thread(
-        id=thread_id,
+        thread_id=thread_id,
         project_name=temporary_project_name,
     )
 
