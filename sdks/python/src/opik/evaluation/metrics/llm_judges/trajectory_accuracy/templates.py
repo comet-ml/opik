@@ -4,7 +4,7 @@ EVALUATION_PROMPT_TEMPLATE = """You are an expert evaluator of ReAct-style agent
 
 Evaluation Criteria:
 1. Reasoning Quality: Logical, relevant thoughts that guide action selection
-2. Action Appropriateness: Actions align with thoughts and progress toward the goal  
+2. Action Appropriateness: Actions align with thoughts and progress toward the goal
 3. Observation Integration: Effective use of feedback to inform next steps
 4. Goal Achievement: Successfully accomplishes the stated objective
 5. Efficiency: Reasonable path without unnecessary detours
@@ -32,17 +32,15 @@ Respond in JSON format:
 
 def create_evaluation_prompt(example: Dict[str, Any]) -> str:
     """Create the evaluation prompt for trajectory assessment."""
-    
-    goal = example.get('goal', 'No goal specified')
-    trajectory = example.get('trajectory', [])
-    final_result = example.get('final_result', 'No result specified')
-    
+
+    goal = example.get("goal", "No goal specified")
+    trajectory = example.get("trajectory", [])
+    final_result = example.get("final_result", "No result specified")
+
     trajectory_steps = _format_trajectory_steps(trajectory)
-    
+
     return EVALUATION_PROMPT_TEMPLATE.format(
-        goal=goal,
-        trajectory_steps=trajectory_steps,
-        final_result=final_result
+        goal=goal, trajectory_steps=trajectory_steps, final_result=final_result
     )
 
 
@@ -50,18 +48,18 @@ def _format_trajectory_steps(trajectory: List[Dict[str, Any]]) -> str:
     """Format trajectory steps for prompt inclusion."""
     if not trajectory:
         return "No trajectory steps provided"
-    
+
     formatted_steps = []
     for i, step in enumerate(trajectory, 1):
-        thought = step.get('thought', 'No thought')
-        action = step.get('action', 'No action') 
-        observation = step.get('observation', 'No observation')
-        
+        thought = step.get("thought", "No thought")
+        action = step.get("action", "No action")
+        observation = step.get("observation", "No observation")
+
         formatted_steps.append(
             f"Step {i}:\n"
             f"  Thought: {thought}\n"
             f"  Action: {action}\n"
             f"  Observation: {observation}"
         )
-    
-    return "\n\n".join(formatted_steps) 
+
+    return "\n\n".join(formatted_steps)
