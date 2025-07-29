@@ -5227,6 +5227,15 @@ class SpansResourceTest {
                                                         Math.abs(podamFactory.manufacturePojo(Integer.class))),
                                                         "us-west-2/mistral.mixtral-8x7b-instruct-v0:1", "_bedrock",
                                                         null, null),
+                                        Arguments.of(
+                                                        Map.of("completion_tokens",
+                                                                        Math.abs(podamFactory.manufacturePojo(
+                                                                                        Integer.class)),
+                                                                        "prompt_tokens",
+                                                                        Math.abs(podamFactory.manufacturePojo(
+                                                                                        Integer.class))),
+                                                        "eu.mistral.pixtral-large-2502-v1:0", "_bedrock",
+                                                        null, null),
                 }
 
                 @Test
