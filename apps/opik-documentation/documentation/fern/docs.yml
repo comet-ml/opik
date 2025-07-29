@@ -21,6 +21,10 @@ js:
     strategy: lazyOnload
 css: ./styles.css
 
+analytics:
+  segment:
+    write-key: ${SEGMENT_WRITE_KEY}
+
 layout:
   searchbar-placement: header
   tabs-placement: header
