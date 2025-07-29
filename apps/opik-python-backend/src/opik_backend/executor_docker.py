@@ -33,10 +33,27 @@ container_stop_histogram = meter.create_histogram(
     unit="ms",
 )
 
+scoring_executor_histogram = meter.create_histogram(
+    name="scoring_executor_latency",
+    description="Latency of scoring executor operations in milliseconds",
+    unit="ms",
+)
+
 # Create a gauge metric to track the number of available containers in the pool
 container_pool_size_gauge = meter.create_gauge(
     name="container_pool_size",
     description="Number of available containers in the pool queue",
+)
+
+scoring_executor_queue_size_gauge = meter.create_gauge(
+    name="scoring_executor_queue_size",
+    description="Number of tasks in the scoring executor queue",
+)
+
+get_container_histogram = meter.create_histogram(
+    name="get_container_latency",
+    description="Latency of getting a container from the pool in milliseconds",
+    unit="ms",
 )
 
 class DockerExecutor(CodeExecutorBase):
@@ -109,9 +126,10 @@ class DockerExecutor(CodeExecutorBase):
         """
         logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
         # Submit container creation tasks in parallel
-        futures = [self.scoring_executor.submit(self.create_container) for _ in range(self.max_parallel)]
-        # Wait for all containers to be created
-        concurrent.futures.wait(futures)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
+            futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
+            # Wait for all containers to be created
+            concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
         if self.stop_event.is_set():
@@ -214,8 +232,13 @@ class DockerExecutor(CodeExecutorBase):
     def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
-            
+        
+        start_time = time.time()
         container = self.get_container()
+        latency = self._calculate_latency_ms(start_time)
+        logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
+        get_container_histogram.record(latency, attributes={"method": "get_container"})
+
         try:
             future = self.scoring_executor.submit(
                 container.exec_run,
@@ -229,7 +252,15 @@ class DockerExecutor(CodeExecutorBase):
             exec_result = ExecutionResult(
                 exit_code=result.exit_code,
                 output=result.output
-            )               
+            )
+            latency = self._calculate_latency_ms(start_time)
+            logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
+
+            # Access ThreadPoolExecutor's internal work queue (private attribute)
+            queue_size = self.scoring_executor._work_queue.qsize()
+            scoring_executor_queue_size_gauge.set(queue_size)
+
+            scoring_executor_histogram.record(latency, attributes={"method": "run_scoring"})
             return self.parse_execution_result(exec_result)
         except concurrent.futures.TimeoutError:
             logger.error(f"Execution timed out in container {container.id}")
