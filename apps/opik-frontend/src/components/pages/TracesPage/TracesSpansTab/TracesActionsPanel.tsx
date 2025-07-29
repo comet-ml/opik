@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash, Brain } from "lucide-react";
+import { Brain, PencilLine, Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -15,6 +15,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -84,6 +85,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   return (
     <div className="flex items-center gap-2">
+      {type === TRACE_DATA_TYPE.traces && (
+        <BatchAnnotateDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows as Trace[]}
+          open={open === 1}
+          setOpen={setOpen}
+          projectId={projectId}
+        />
+      )}
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}
@@ -118,6 +128,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
+      {type === TRACE_DATA_TYPE.traces && (
+        <TooltipWrapper content="Annotate">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(1);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <PencilLine className="mr-2 size-4" />
+            Annotate
+          </Button>
+        </TooltipWrapper>
+      )}
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
