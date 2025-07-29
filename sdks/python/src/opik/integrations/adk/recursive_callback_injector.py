@@ -2,7 +2,7 @@ import types
 from typing import TypeVar, List, Any, Set
 from . import opik_tracer
 import logging
-import opik._logging as _logging
+from opik import _logging
 
 from google.adk.tools import agent_tool
 from google.adk import agents

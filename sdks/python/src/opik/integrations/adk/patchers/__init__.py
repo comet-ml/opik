@@ -1,6 +1,6 @@
 import functools
 
-import opik.semantic_version as semantic_version
+from opik import semantic_version
 from opik.api_objects import opik_client
 from . import llm_response_wrapper
 from . import litellm_wrappers

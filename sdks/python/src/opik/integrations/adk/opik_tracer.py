@@ -1,6 +1,5 @@
 import logging
-import contextvars
-from typing import Any, Dict, List, Optional, Union, Set
+from typing import Any, Dict, List, Optional, Union
 
 import google.adk.agents
 from google.adk.agents import callback_context
@@ -8,9 +7,8 @@ from google.adk import models
 from google.adk.tools import base_tool
 from google.adk.tools import tool_context
 
-import opik.context_storage as context_storage
+from opik import context_storage
 from opik.api_objects import opik_client, span, trace
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
 from opik.types import DistributedTraceHeadersDict
 from opik.decorator import span_creation_handler, arguments_helpers
 
@@ -53,64 +51,10 @@ class OpikTracer:
         self._last_model_output: Optional[Dict[str, Any]] = None
         self._opik_client = opik_client.get_client_cached()
 
-        # Opik-specific context storage for spans/traces created by this tracer
-        self._context_storage = context_storage.get_current_context_instance()
-
-        self._opik_created_spans: Set[str] = set()
-        self._current_trace_created_by_opik_tracer: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("current_trace_created_by_opik_tracer", default=None)
-
         patchers.patch_adk(self._opik_client)
 
     def flush(self) -> None:
         self._opik_client.flush()
-
-    # ----- helper methods for managing lifecycle of spans/traces created by this tracer -----
-
-    def _end_current_trace(self) -> None:
-        trace_data = self._context_storage.pop_trace_data()
-        assert trace_data is not None
-        trace_data.init_end_time()
-        if tracing_runtime_config.is_tracing_active():
-            self._opik_client.trace(**trace_data.as_parameters)
-
-    def _end_current_span(
-        self,
-    ) -> None:
-        span_data = self._context_storage.pop_span_data()
-        assert span_data is not None
-        span_data.init_end_time()
-        if tracing_runtime_config.is_tracing_active():
-            self._opik_client.span(**span_data.as_parameters)
-
-    def _start_span(self, span_data: span.SpanData) -> None:
-        self._context_storage.add_span_data(span_data)
-        self._opik_created_spans.add(span_data.id)
-
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.span(**span_data.as_start_parameters)
-
-    def _start_trace(self, trace_data: trace.TraceData) -> None:
-        self._context_storage.set_trace_data(trace_data)
-        self._current_trace_created_by_opik_tracer.set(trace_data.id)
-
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.trace(**trace_data.as_start_parameters)
-
-    def _set_current_context_data(self, value: SpanOrTraceData) -> None:
-        if isinstance(value, span.SpanData):
-            self._context_storage.add_span_data(value)
-        elif isinstance(value, trace.TraceData):
-            self._context_storage.set_trace_data(value)
-        else:
-            raise ValueError(f"Invalid context type: {type(value)}")
 
     def before_agent_callback(
         self,

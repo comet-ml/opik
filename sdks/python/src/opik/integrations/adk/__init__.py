@@ -1,5 +1,5 @@
 import google.adk
-import opik.semantic_version as semantic_version
+from opik import semantic_version
 
 if semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0":  # type: ignore
     from .legacy_opik_tracer import LegacyOpikTracer as OpikTracer

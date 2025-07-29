@@ -8,7 +8,7 @@ from google.genai import types as genai_types
 from .. import helpers as adk_helpers
 
 import opik
-import opik.llm_usage as llm_usage
+from opik import llm_usage
 from opik.llm_usage import opik_usage
 
 LOGGER = logging.Logger(__name__)

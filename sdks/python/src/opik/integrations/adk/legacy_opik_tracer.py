@@ -8,7 +8,7 @@ from google.adk import models
 from google.adk.tools import base_tool
 from google.adk.tools import tool_context
 
-import opik.context_storage as context_storage
+from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
