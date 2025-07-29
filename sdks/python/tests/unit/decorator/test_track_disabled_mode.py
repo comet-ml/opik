@@ -24,13 +24,13 @@ def test_track_disabled_mode__nothing_logged__happyflow(fake_backend):
     assert len(fake_backend.span_trees) == 0
 
 
-def test_track_disabled_mode__get_current_span_and_trace_called__spans_and_trace_exist__but_nothing_logged(
+def test_track_disabled_mode__get_current_span_and_trace_called__spans_and_trace_are_none__nothing_logged(
     fake_backend,
 ):
     """
-    SpanData and TraceData are still returned intentionally to make sure that scripts
-    which called them continue working and don't fail because they started return `None`
-    in disabled mode.
+    When tracing is disabled, ``get_current_span_data()`` and ``get_current_trace_data()``
+    must return ``None``. This safeguards existing scripts from unexpected failures
+    when tracing is turned off.
     """
     tracker_instance = tracker.OpikTrackDecorator()
 
