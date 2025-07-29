@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import httpx
 from rich.console import Console
 
-import opik.Opik as Opik
+import opik
 
 console = Console()
 
@@ -12,7 +12,7 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     is_available = False
     err_msg = None
 
-    opik_obj = Opik(_show_misconfiguration_message=False)
+    opik_obj = opik.Opik(_show_misconfiguration_message=False)
     console.print(
         f"--> Checking backend workspace availability at: {opik_obj.config.url_override}"
     )
