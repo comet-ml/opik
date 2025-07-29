@@ -29,3 +29,14 @@ def test_opik_usage_factory__anthropic_happyflow():
 
     assert result.provider_usage.input_tokens == 10
     assert result.provider_usage.output_tokens == 20
+
+
+def test_opik_usage_factory__bedrock_happyflow():
+    result = llm_usage.build_opik_usage(
+        provider=opik.LLMProvider.BEDROCK,
+        usage={"completion_tokens": 5, "prompt_tokens": 10},
+    )
+
+    assert result.completion_tokens == 5
+    assert result.prompt_tokens == 10
+    assert result.total_tokens == 15
