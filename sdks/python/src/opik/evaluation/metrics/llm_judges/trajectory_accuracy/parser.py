@@ -35,4 +35,4 @@ def parse_evaluation_response(
     except Exception as e:
         raise exceptions.MetricComputationError(
             f"Failed to parse trajectory accuracy evaluation: {str(e)}"
-        ) 
+        )

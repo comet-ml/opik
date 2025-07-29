@@ -99,7 +99,7 @@ if True:
     print("\n\nTrajectoryAccuracy metric example:")
 
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
-    
+
     # Example 1: High-quality ReAct-style agent trajectory
     print("Example 1: High-quality trajectory")
     trajectory_accuracy_score = trajectory_accuracy_metric.score(
@@ -108,18 +108,18 @@ if True:
             {
                 "thought": "I need to search for weather information in Paris",
                 "action": "search_weather(location='Paris')",
-                "observation": "Found weather data for Paris: 22°C, sunny"
+                "observation": "Found weather data for Paris: 22°C, sunny",
             },
             {
                 "thought": "I have the weather data, now I should summarize it",
                 "action": "summarize_result()",
-                "observation": "Summary created: The weather in Paris is 22°C and sunny"
-            }
+                "observation": "Summary created: The weather in Paris is 22°C and sunny",
+            },
         ],
-        final_result="The weather in Paris is 22°C and sunny"
+        final_result="The weather in Paris is 22°C and sunny",
     )
     print("trajectory_accuracy_score:", trajectory_accuracy_score)
-    
+
     # Example 2: Poor-quality trajectory with wrong actions
     print("\nExample 2: Poor-quality trajectory")
     poor_trajectory_score = trajectory_accuracy_metric.score(
@@ -128,14 +128,14 @@ if True:
             {
                 "thought": "I need to find France's capital",
                 "action": "search('weather in France')",  # Wrong action
-                "observation": "Found weather information for various French cities"
+                "observation": "Found weather information for various French cities",
             },
             {
                 "thought": "This doesn't help, let me try something else",
                 "action": "search('French cuisine')",  # Still wrong
-                "observation": "Found information about French food"
-            }
+                "observation": "Found information about French food",
+            },
         ],
-        final_result="Paris is the capital of France"  # Result doesn't match trajectory
+        final_result="Paris is the capital of France",  # Result doesn't match trajectory
     )
     print("poor_trajectory_score:", poor_trajectory_score)
