@@ -1,5 +1,6 @@
 import logging
-from opik import exceptions, logging_messages
+import opik.exceptions as exceptions
+import opik.logging_messages as logging_messages
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 
