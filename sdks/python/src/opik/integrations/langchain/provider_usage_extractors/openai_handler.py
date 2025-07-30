@@ -1,12 +1,12 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, Literal
+from typing import TYPE_CHECKING, Any, Dict, Optional
 import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
 from . import usage_extractor_protocol
 
 if TYPE_CHECKING:
-    from langchain_core.tracers.schemas import Run
+    pass
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,17 +32,13 @@ class OpenAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtoc
             )
             return False
 
-    
-    def get_llm_usage_info(
-        self, run_dict: Dict[str, Any]
-    ) -> llm_usage.LLMUsageInfo:
+    def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
         opik_usage = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
         provider = self._get_provider(run_dict)
 
         return llm_usage.LLMUsageInfo(provider=provider, model=model, usage=opik_usage)
 
-    
     def _get_provider(self, run_dict: Dict[str, Any]) -> str:
         """
         Returns "openai" unless the base url is different (in that case returns the base url)

@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Literal
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import opik
 from opik import _logging as opik_logging
@@ -7,7 +7,7 @@ from opik import llm_usage, logging_messages
 from . import usage_extractor_protocol
 
 if TYPE_CHECKING:
-    from langchain_core.tracers.schemas import Run
+    pass
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,13 +33,13 @@ class GroqUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol
             )
             return False
 
-    def get_llm_usage_info(
-        self, run_dict: Dict[str, Any]
-    ) -> llm_usage.LLMUsageInfo:
+    def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
         opik_usage = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
 
-        return llm_usage.LLMUsageInfo(provider=self.PROVIDER, model=model, usage=opik_usage)
+        return llm_usage.LLMUsageInfo(
+            provider=self.PROVIDER, model=model, usage=opik_usage
+        )
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
@@ -91,5 +91,5 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     model = run_dict["extra"].get("metadata", {}).get("ls_model_name")
     if model is not None:
         model = model.split("/")[-1]
-    
+
     return model

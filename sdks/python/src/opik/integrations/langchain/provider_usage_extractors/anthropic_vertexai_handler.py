@@ -1,16 +1,19 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import opik
 from opik import llm_usage
 from . import usage_extractor_protocol
 
 if TYPE_CHECKING:
-    from langchain_core.tracers.schemas import Run
+    pass
 
 LOGGER = logging.getLogger(__name__)
 
-class AnthropicVertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
+
+class AnthropicVertexAIUsageExtractor(
+    usage_extractor_protocol.ProviderUsageExtractorProtocol
+):
     PROVIDER = opik.LLMProvider.ANTHROPIC_VERTEXAI
 
     def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
@@ -33,14 +36,13 @@ class AnthropicVertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtr
             )
             return False
 
-
-    def get_llm_usage_info(
-        self, run_dict: Dict[str, Any]
-    ) -> llm_usage.LLMUsageInfo:
+    def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
         usage_dict = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
 
-        return llm_usage.LLMUsageInfo(provider=self.PROVIDER, model=model, usage=usage_dict)
+        return llm_usage.LLMUsageInfo(
+            provider=self.PROVIDER, model=model, usage=usage_dict
+        )
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:

@@ -1,26 +1,33 @@
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from opik import llm_usage, logging_messages
-from opik.types import LLMProvider
 from . import langchain_run_helpers
 from . import usage_extractor_protocol
 
 LOGGER = logging.getLogger(__name__)
 
-class GoogleGenerativeAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
 
+class GoogleGenerativeAIUsageExtractor(
+    usage_extractor_protocol.ProviderUsageExtractorProtocol
+):
     def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
         try:
             if run_dict.get("serialized") is None:
                 return False
 
-            if (ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)) is not None:
+            if (
+                ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)
+            ) is not None:
                 if "google_genai" == ls_metadata.provider:
                     return True
 
-            if (invocation_params := run_dict["extra"].get("invocation_params")) is not None:
-                if _is_invocation_param_of_google_gen_ai_type(invocation_params.get("_type").lower()):
+            if (
+                invocation_params := run_dict["extra"].get("invocation_params")
+            ) is not None:
+                if _is_invocation_param_of_google_gen_ai_type(
+                    invocation_params.get("_type").lower()
+                ):
                     return True
 
             return False
@@ -32,14 +39,14 @@ class GoogleGenerativeAIUsageExtractor(usage_extractor_protocol.ProviderUsageExt
                 exc_info=True,
             )
             return False
-    
-    def get_llm_usage_info(
-        self, run_dict: Dict[str, Any]
-    ) -> llm_usage.LLMUsageInfo:
+
+    def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
         usage_dict = _try_get_token_usage(run_dict)
         model = _get_model_name(run_dict)
 
-        return llm_usage.LLMUsageInfo(provider=self.PROVIDER, model=model, usage=usage_dict)
+        return llm_usage.LLMUsageInfo(
+            provider=self.PROVIDER, model=model, usage=usage_dict
+        )
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:

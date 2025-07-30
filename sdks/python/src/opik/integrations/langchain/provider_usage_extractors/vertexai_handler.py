@@ -1,11 +1,12 @@
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 import opik
 from opik import llm_usage, logging_messages
 from . import langchain_run_helpers
 from . import usage_extractor_protocol
 
 LOGGER = logging.getLogger(__name__)
+
 
 class VertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
     PROVIDER = opik.LLMProvider.GOOGLE_VERTEXAI
@@ -15,11 +16,15 @@ class VertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProt
             if run_dict.get("serialized") is None:
                 return False
 
-            if (ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)) is not None:
+            if (
+                ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)
+            ) is not None:
                 if "google_vertexai" == ls_metadata.provider:
                     return True
 
-            if (invocation_params := run_dict["extra"].get("invocation_params")) is not None:
+            if (
+                invocation_params := run_dict["extra"].get("invocation_params")
+            ) is not None:
                 if "vertexai" == invocation_params.get("_type"):
                     return True
 
@@ -30,14 +35,17 @@ class VertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProt
                 exc_info=True,
             )
             return False
-    
+
     def get_llm_usage_info(
-        self, run_dict: Optional[Dict[str, Any]] = None,
+        self,
+        run_dict: Optional[Dict[str, Any]] = None,
     ) -> llm_usage.LLMUsageInfo:
         usage_dict = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
 
-        return llm_usage.LLMUsageInfo(provider=self.PROVIDER, model=model, usage=usage_dict)
+        return llm_usage.LLMUsageInfo(
+            provider=self.PROVIDER, model=model, usage=usage_dict
+        )
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:

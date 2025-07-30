@@ -1,7 +1,6 @@
 from typing import Optional, Dict, Any
 
 import pydantic
-from opik import llm_usage
 
 
 class InputTokenDetails(pydantic.BaseModel):

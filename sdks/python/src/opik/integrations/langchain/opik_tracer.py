@@ -370,7 +370,9 @@ class OpikTracer(BaseTracer):
             run_dict: Dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
 
-            usage_info = provider_usage_extractors.try_extract_provider_usage_data(run_dict)
+            usage_info = provider_usage_extractors.try_extract_provider_usage_data(
+                run_dict
+            )
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
 
