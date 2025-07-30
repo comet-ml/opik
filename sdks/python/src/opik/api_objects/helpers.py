@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
 
 from .. import config, datetime_helpers, logging_messages
