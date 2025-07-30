@@ -9,32 +9,32 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { DropdownOption } from "@/types/shared";
+import { isValidIso8601Duration, formatIso8601Duration } from "@/lib/date";
 
 const formSchema = z.object({
-  timeout: z.string().min(1, "Please select a timeout value"),
+  timeout_to_mark_thread_as_inactive: z
+    .string()
+    .refine((value) => isValidIso8601Duration(value, 7), {
+      message: "Please select a valid timeout duration (maximum 7 days)",
+    }),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+export type EditThreadTimeoutFormValues = z.infer<typeof formSchema>;
 
-const TIMEOUT_OPTIONS = [
-  { value: "5", label: "5 min" },
-  { value: "10", label: "10 min" },
-  { value: "15", label: "15 min" },
-  { value: "20", label: "20 min" },
-  { value: "30", label: "30 min" },
-  { value: "60", label: "60 min" },
-];
+const TIMEOUT_VALUES = ["PT5M", "PT10M", "PT15M", "PT20M", "PT30M", "PT1H"];
+
+const TIMEOUT_OPTIONS: DropdownOption<string>[] = TIMEOUT_VALUES.map(
+  (value) => ({
+    value,
+    label: formatIso8601Duration(value) ?? "Invalid duration",
+  }),
+);
 
 export interface EditThreadTimeoutFormProps {
   defaultValue: string;
-  onSubmit: (values: { timeout: string }) => void;
+  onSubmit: (values: EditThreadTimeoutFormValues) => void;
   formId: string;
 }
 
@@ -43,10 +43,10 @@ const EditThreadTimeoutForm: React.FC<EditThreadTimeoutFormProps> = ({
   onSubmit,
   formId,
 }) => {
-  const form = useForm<FormValues>({
+  const form = useForm<EditThreadTimeoutFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      timeout: defaultValue,
+      timeout_to_mark_thread_as_inactive: defaultValue,
     },
   });
 
@@ -59,26 +59,18 @@ const EditThreadTimeoutForm: React.FC<EditThreadTimeoutFormProps> = ({
       <form id={formId} onSubmit={handleSubmit} className="space-y-6">
         <FormField
           control={form.control}
-          name="timeout"
+          name="timeout_to_mark_thread_as_inactive"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Thread Timeout</FormLabel>
               <FormControl>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select timeout duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEOUT_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectBox
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={TIMEOUT_OPTIONS}
+                  placeholder="Select timeout duration"
+                  className="w-full"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

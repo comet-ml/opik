@@ -21,6 +21,10 @@ js:
     strategy: lazyOnload
 css: ./styles.css
 
+analytics:
+  segment:
+    write-key: ${SEGMENT_WRITE_KEY}
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -103,6 +107,9 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
+          - page: Debug Mode & Environment Variables
+            path: docs/tracing/debug_mode.mdx
+            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations

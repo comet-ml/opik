@@ -25,6 +25,7 @@ on:
           - genai
           - adk
           - atomic_agents
+          - adk_legacy_1_3_0
           - metrics
   schedule:
     - cron: "0 0 */1 * *"
@@ -120,11 +121,17 @@ jobs:
     if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-adk-tests.yml
     secrets: inherit
-
+    
   atomic_agents_tests:
     needs: [init_environment]
     if: contains(fromJSON('["atomic_agents", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-atomic-agents-tests.yml
+    secrets: inherit
+    
+  adk_legacy_1_3_0_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["adk_legacy_1_3_0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-adk-legacy-1-3-0-tests.yml
     secrets: inherit
 
   evaluation_metrics_tests:
