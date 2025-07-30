@@ -132,6 +132,9 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
 | clickhouse.enabled | bool | `true` |  |
+| clickhouse.extraPodTemplates | list | `[]` |  |
+| clickhouse.extraServiceTemplates | list | `[]` |  |
+| clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
