@@ -7575,7 +7575,8 @@ class TracesResourceTest {
             var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
-                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class).stream()
+                            .map(score -> score.toBuilder().valueByAuthor(null).build()).toList())
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
