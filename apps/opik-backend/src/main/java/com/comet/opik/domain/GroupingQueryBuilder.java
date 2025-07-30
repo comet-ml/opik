@@ -17,7 +17,7 @@ import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 @Slf4j
 public class GroupingQueryBuilder {
 
-    public static final String JSON_FIELD = "JSON_VALUE(%s, %s)";
+    public static final String JSON_FIELD = "JSON_VALUE(%s, '%s')";
 
     public void addGroupingTemplateParams(@NonNull List<GroupBy> groups, @NonNull ST template) {
         List<String> groupings = groups.stream()

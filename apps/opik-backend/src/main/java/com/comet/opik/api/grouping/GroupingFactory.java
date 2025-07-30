@@ -30,7 +30,7 @@ public abstract class GroupingFactory {
 
     public abstract List<String> getSupportedFields();
 
-    public List<GroupBy> newGrouping(@NonNull String queryParam) {
+    public List<GroupBy> newGrouping(String queryParam) {
         if (StringUtils.isBlank(queryParam)) {
             throw new BadRequestException(ERR_MISSING_GROUPING_PARAM);
         }

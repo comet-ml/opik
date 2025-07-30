@@ -67,7 +67,7 @@ public class ExperimentService {
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
 
-    private static final String DELETED_DATASET = "__DELETED";
+    public static final String DELETED_DATASET = "__DELETED";
 
     @WithSpan
     public Mono<ExperimentPage> find(
