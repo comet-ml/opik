@@ -12,14 +12,9 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
-    vertexai_run_helpers,
-    google_generative_ai_helpers,
-    openai_run_helpers,
-    anthropic_run_helpers,
-    anthropic_vertexai_run_helpers,
     opik_encoder_extension,
-    groq_run_helpers,
 )
+
 from ...api_objects import helpers, opik_client
 from opik import context_storage
 

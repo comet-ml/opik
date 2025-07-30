@@ -1,8 +1,9 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, Literal
-
+import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
+from . import usage_extractor_protocol
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
@@ -11,16 +12,49 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def get_llm_usage_info(
-    run_dict: Optional[Dict[str, Any]] = None,
-) -> llm_usage.LLMUsageInfo:
-    if run_dict is None:
-        return llm_usage.LLMUsageInfo()
+class OpenAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
+    PROVIDER = opik.LLMProvider.OPENAI
 
-    opik_usage = _try_get_token_usage(run_dict)
-    provider, model = _get_provider_and_model(run_dict)
+    def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
+        try:
+            if run_dict.get("serialized") is None:
+                return False
 
-    return llm_usage.LLMUsageInfo(provider=provider, model=model, usage=opik_usage)
+            serialized_kwargs = run_dict["serialized"].get("kwargs", {})
+            has_openai_key = "openai_api_key" in serialized_kwargs
+
+            return has_openai_key
+
+        except Exception:
+            LOGGER.debug(
+                "Failed to check if Run instance is from OpenAI LLM, returning False.",
+                exc_info=True,
+            )
+            return False
+
+    
+    def get_llm_usage_info(
+        self, run_dict: Dict[str, Any]
+    ) -> llm_usage.LLMUsageInfo:
+        opik_usage = _try_get_token_usage(run_dict)
+        model = _try_get_model_name(run_dict)
+        provider = self._get_provider(run_dict)
+
+        return llm_usage.LLMUsageInfo(provider=provider, model=model, usage=opik_usage)
+
+    
+    def _get_provider(self, run_dict: Dict[str, Any]) -> str:
+        """
+        Returns "openai" unless the base url is different (in that case returns the base url)
+        """
+        provider = self.PROVIDER
+
+        # Check base URL to detect custom providers
+        if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
+            if base_url.host != "api.openai.com":
+                provider = base_url.host
+
+        return provider
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
@@ -70,44 +104,17 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         return None
 
 
-def is_openai_run(run: "Run") -> bool:
-    try:
-        if run.serialized is None:
-            return False
-
-        serialized_kwargs = run.serialized.get("kwargs", {})
-        has_openai_key = "openai_api_key" in serialized_kwargs
-
-        return has_openai_key
-
-    except Exception:
-        LOGGER.debug(
-            "Failed to check if Run instance is from OpenAI LLM, returning False.",
-            exc_info=True,
-        )
-        return False
-
-
-def _get_provider_and_model(
-    run_dict: Dict[str, Any],
-) -> Tuple[Optional[Union[Literal["openai"], str]], Optional[str]]:
+def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     """
-    Fetches the provider and model information from a given run dictionary.
-
-    By default, the provider is assumed to be OpenAI (will be available in extra/metadata field).
-    If LLM output is available, the model version is included.
-    If the Client is available, the BaseURL is also checked.
+    Extracts the model name from the run dictionary.
     """
-    provider = None
     model = None
 
-    # here will be always provider and model
-    # but model name may not be full (model+version)
+    # Get model from metadata
     if metadata := run_dict["extra"].get("metadata"):
-        provider = metadata.get("ls_provider")
         model = metadata.get("ls_model_name")
 
-    # try to detect model+version more precise way if possible
+    # Try to detect model+version more precise way if possible
     # .invoke() mode
     if llm_output := run_dict["outputs"].get("llm_output"):
         model = llm_output.get("model_name", model)
@@ -117,9 +124,4 @@ def _get_provider_and_model(
     ]:
         model = generation_info.get("model_name", model)
 
-    # provider: check base url
-    if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
-        if base_url.host != "api.openai.com":
-            provider = base_url.host
-
-    return provider, model
+    return model
