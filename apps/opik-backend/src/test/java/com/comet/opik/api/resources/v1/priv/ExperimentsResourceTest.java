@@ -2071,7 +2071,7 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        void groupExperimentsWithDeletedDateset() {
+        void groupExperimentsWithDeletedDataset() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
