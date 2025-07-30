@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Info, RotateCw } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
@@ -16,6 +22,7 @@ import {
   useQueryParam,
 } from "use-query-params";
 import get from "lodash/get";
+import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -29,6 +36,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import GroupTextCell from "@/components/shared/DataTableCells/GroupTextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -60,8 +68,10 @@ import useGroupedExperimentsList, {
 } from "@/hooks/useGroupedExperimentsList";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
-  buildGroupFieldsName,
+  buildGroupFieldName,
+  buildGroupFieldNameForMeta,
   checkIsMoreRowId,
+  checkIsPendingRowId,
   generateActionsColumDef,
   generateGroupedCellDef,
   generateGroupedNameColumDef,
@@ -83,11 +93,16 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
-import uniq from "lodash/uniq";
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Groups } from "@/types/groups";
 import { SORT_DIRECTION } from "@/types/sorting";
+import { GROUP_ID_SEPARATOR } from "@/constants/groups";
+import {
+  generateExpandedMapForAllGroups,
+  isGroupFullyExpanded,
+} from "@/lib/groups";
+import NoData from "@/components/shared/NoData/NoData";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -234,25 +249,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
-export const GROUP_CELL_DEFINITION_MAP = {
-  [COLUMN_DATASET_ID]: {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "dataset_name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.dataset,
-    },
-  },
-  [COLUMN_METADATA_ID]: {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-  },
-};
-
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -310,6 +306,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
+  const expandingConfig = useExpandingConfig({ groups });
+
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
     {
@@ -357,6 +355,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     search: search!,
     page: page!,
     size: size!,
+    expandedMap: expandingConfig.expanded as Record<string, boolean>,
     polling: true,
   });
 
@@ -376,7 +375,52 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [data?.sortable_by],
   );
 
-  const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
+  const flattenGroups = useMemo(
+    () => data?.flattenGroups ?? [],
+    [data?.flattenGroups],
+  );
+
+  // Auto-expand all groups when groups parameter changes and new group structure is available
+  const previousGroupsRef = useRef<Groups | undefined>();
+  const previousFlattenGroupsRef = useRef<typeof flattenGroups>([]);
+
+  useEffect(() => {
+    const hasGroupsChanged =
+      JSON.stringify(previousGroupsRef.current) !== JSON.stringify(groups);
+    const hasFlattenGroupsChanged =
+      JSON.stringify(previousFlattenGroupsRef.current) !==
+      JSON.stringify(flattenGroups);
+
+    console.log("Auto-expand debug:", {
+      hasGroupsChanged,
+      hasFlattenGroupsChanged,
+      flattenGroupsLength: flattenGroups?.length,
+      isPending,
+      groups,
+      flattenGroups,
+      currentExpanded: expandingConfig.expanded,
+    });
+
+    // Auto-expand when:
+    // 1. Groups configuration changed, OR
+    // 2. FlattenGroups data changed (new data from backend)
+    // AND we have flattenGroups data AND data is not pending
+    if (
+      (hasGroupsChanged || hasFlattenGroupsChanged) &&
+      flattenGroups &&
+      flattenGroups.length > 0 &&
+      !isPending
+    ) {
+      const newExpandedMap = generateExpandedMapForAllGroups(flattenGroups);
+      console.log("Generated expanded map:", newExpandedMap);
+      expandingConfig.setExpanded(newExpandedMap);
+    }
+
+    // Update refs
+    previousGroupsRef.current = groups;
+    previousFlattenGroupsRef.current = flattenGroups;
+  }, [groups, flattenGroups, isPending, expandingConfig]);
+
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
@@ -438,26 +482,57 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+      (row) =>
+        rowSelection[row.id] &&
+        !checkIsMoreRowId(row.id) &&
+        !checkIsPendingRowId(row.id),
     );
   }, [rowSelection, experiments]);
 
   const columns = useMemo(() => {
     // Generate group columns for all levels
     const groupColumns = groups.map((group) => {
-      const groupCellDef =
-        GROUP_CELL_DEFINITION_MAP[
-          group.field as keyof typeof GROUP_CELL_DEFINITION_MAP
-        ];
-      return generateGroupedCellDef<GroupedExperiment, unknown>(
-        {
-          ...(groupCellDef || {
-            id: group.field,
-            label: group.field,
-            type: COLUMN_TYPE.string,
-          }),
-          id: buildGroupFieldsName(group.field),
+      const label = group.field + (group.key ? ` (${group.key})` : "");
+      const id = buildGroupFieldName(group);
+      const metaKey = buildGroupFieldNameForMeta(group);
+
+      let groupCellDef = {
+        id,
+        label,
+        type: COLUMN_TYPE.string,
+        cell: GroupTextCell as never,
+        customMeta: {
+          valueKey: `${metaKey}.value`,
+          labelKey: `${metaKey}.label`,
+          defaultValue: "NA",
         },
+      } as ColumnData<GroupedExperiment>;
+
+      switch (group.field) {
+        case COLUMN_DATASET_ID:
+          groupCellDef = {
+            ...groupCellDef,
+            label: "Dataset",
+            type: COLUMN_TYPE.string,
+            cell: ResourceCell as never,
+            customMeta: {
+              nameKey: `${metaKey}.label`,
+              idKey: `${metaKey}.value`,
+              resource: RESOURCE_TYPE.dataset,
+            },
+          } as ColumnData<GroupedExperiment>;
+          break;
+        case COLUMN_METADATA_ID:
+          groupCellDef = {
+            ...groupCellDef,
+            label: `Configuration (${group.key})`,
+            type: COLUMN_TYPE.dictionary,
+          } as ColumnData<GroupedExperiment>;
+          break;
+      }
+
+      return generateGroupedCellDef<GroupedExperiment, unknown>(
+        groupCellDef,
         checkboxClickHandler,
       );
     });
@@ -532,17 +607,12 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
-  const hasGroups = groups.length > 0;
+  const hasGroups = Boolean(groups.length);
 
   const groupFieldNames = useMemo(
-    () => groups.map((group) => buildGroupFieldsName(group.field)),
+    () => groups.map((group) => buildGroupFieldName(group)),
     [groups],
   );
-
-  const expandingConfig = useExpandingConfig({
-    groupIds,
-    prefix: groups.length > 0 ? buildGroupFieldsName(groups[0].field) : "", // TODO lala
-  });
 
   const columnPinningConfig = useMemo(() => {
     return {
@@ -583,44 +653,98 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
-    let index = 0;
 
-    experiments.forEach((experiment) => {
-      // Use the first level grouping for charts
-      const key =
-        groupFieldNames.map((n) => experiment[n]).join("_") ||
-        "Visible experiments"; // TODO lala
-      if (!groupsMap[key]) {
-        groupsMap[key] = {
-          id: key,
-          name: key, // TODO lala resolve name
+    // Handle no grouping case - create a single group with all visible experiments
+    const deepestExpandedGroups = !hasGroups
+      ? [
+          {
+            id: "visible_experiments",
+            name: "Visible experiments",
+            experiments,
+          },
+        ]
+      : flattenGroups
+          .filter(
+            (group) =>
+              group.level === groups.length - 1 &&
+              isGroupFullyExpanded(
+                group,
+                expandingConfig.expanded as Record<string, boolean>,
+              ),
+          )
+          .map((group) => {
+            const groupExperiments = experiments.filter((experiment) => {
+              return groupFieldNames.every(
+                (fieldName) =>
+                  experiment[fieldName] === group.rowGroupData[fieldName],
+              );
+            });
+            return {
+              id: group.id,
+              name:
+                group.metadataPath
+                  .map(
+                    (metadataPath) =>
+                      get(
+                        groupExperiments[0],
+                        `${metadataPath}.label`,
+                        undefined,
+                      ) ||
+                      get(
+                        groupExperiments[0],
+                        `${metadataPath}.value`,
+                        undefined,
+                      ) ||
+                      "NA",
+                  )
+                  .join(` ${GROUP_ID_SEPARATOR} `) || "Expanded experiments",
+              experiments: groupExperiments,
+            };
+          });
+
+    deepestExpandedGroups.forEach((group) => {
+      const groupExperiments = group.experiments;
+
+      if (groupExperiments.length === 0) return;
+
+      const groupKey = group.id;
+      if (!groupsMap[groupKey]) {
+        groupsMap[groupKey] = {
+          id: groupKey,
+          name: group.name,
           data: [],
           lines: [],
-          index,
         };
-        index += 1;
       }
+      groupExperiments.forEach((experiment) => {
+        groupsMap[groupKey].data.unshift({
+          entityId: experiment.id,
+          entityName: experiment.name,
+          createdDate: formatDate(experiment.created_at),
+          scores: (experiment.feedback_scores || []).reduce<
+            Record<string, number>
+          >((acc, score) => {
+            acc[score.name] = score.value;
+            return acc;
+          }, {}),
+        });
 
-      groupsMap[key].data.unshift({
-        entityId: experiment.id,
-        entityName: experiment.name,
-        createdDate: formatDate(experiment.created_at),
-        scores: (experiment.feedback_scores || []).reduce<
-          Record<string, number>
-        >((acc, score) => {
-          acc[score.name] = score.value;
-          return acc;
-        }, {}),
+        groupsMap[groupKey].lines = uniq([
+          ...groupsMap[groupKey].lines,
+          ...(experiment.feedback_scores || []).map((s) => s.name),
+        ]);
       });
-
-      groupsMap[key].lines = uniq([
-        ...groupsMap[key].lines,
-        ...(experiment.feedback_scores || []).map((s) => s.name),
-      ]);
     });
 
-    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
-  }, [experiments, groupFieldNames]);
+    return Object.values(groupsMap);
+  }, [
+    hasGroups,
+    experiments,
+    flattenGroups,
+    groups.length,
+    expandingConfig.expanded,
+    groupFieldNames,
+  ]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -707,6 +831,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
         >
           <FeedbackScoresChartsWrapper
             chartsData={chartsData}
+            noDataComponent={
+              <NoData
+                title="No Expanded groups"
+                message="Please expand low level group to see charts.You can expand maximum 5 groups simultaneously."
+                className="h-[208px] min-h-[208px] w-full"
+              />
+            }
             isAverageScores
           />
         </PageBodyStickyContainer>

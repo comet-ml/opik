@@ -4,41 +4,35 @@ import {
   QueryFunctionContext,
   RefetchOptions,
   useQueries,
+  UseQueryResult,
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
-import { Experiment } from "@/types/datasets";
-import { Filters } from "@/types/filters";
+import md5 from "md5";
 
+import { Experiment, ExperimentsGroupNode } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import useExperimentsList, {
   getExperimentsList,
   UseExperimentsListParams,
   UseExperimentsListResponse,
 } from "@/api/datasets/useExperimentsList";
 import useExperimentsGroups from "@/api/datasets/useExperimentsGroups";
-import { ExperimentsGroupNode } from "@/types/datasets";
-import { Sorting, SORT_DIRECTION } from "@/types/sorting";
-import { DEFAULT_ITEMS_PER_GROUP } from "@/constants/groups";
-import { Groups } from "@/types/groups";
+import { SORT_DIRECTION, Sorting } from "@/types/sorting";
+import {
+  DEFAULT_ITEMS_PER_GROUP,
+  DELETED_DATASET_LABEL,
+  GROUP_ID_SEPARATOR,
+} from "@/constants/groups";
+import { FlattenGroup, Groups } from "@/types/groups";
 import { createFilter } from "@/lib/filters";
 import {
-  buildGroupFieldsName,
+  buildGroupFieldId,
+  buildGroupFieldName,
+  buildGroupFieldNameForMeta,
   buildMoreRowId,
+  buildPendingRowId,
 } from "@/components/shared/DataTable/utils";
-
-// Types
-type GroupPathEntry = {
-  value: string;
-  label: string;
-};
-
-type AbstractGroup = {
-  id: string;
-  name: string;
-  field: string;
-  filters: Filters;
-  path: GroupPathEntry[];
-  level: number;
-};
+import { isGroupFullyExpanded } from "@/lib/groups";
 
 export type GroupedExperiment = Record<string, string> & Experiment;
 
@@ -53,12 +47,13 @@ type UseGroupedExperimentsListParams = {
   size: number;
   groupLimit?: Record<string, number>;
   polling?: boolean;
+  expandedMap?: Record<string, boolean>;
 };
 
 type UseGroupedExperimentsListResponse = {
   data: {
     content: GroupedExperiment[];
-    groupIds: string[];
+    flattenGroups: FlattenGroup[];
     sortable_by: string[];
     total: number;
   };
@@ -77,30 +72,32 @@ const extractPageSize = (
 const buildGroupPath = (
   currentGroupsMap: Record<string, ExperimentsGroupNode>,
   groups: Groups,
-  groupIndex: number,
-  currentPath: GroupPathEntry[] = [],
+  parentId: string = "",
+  groupIndex: number = 0,
+  currentPath: string[] = [],
   accumulatedFilters: Filters = [],
-  maxDepth: number,
-): AbstractGroup[] => {
+  accumulatedRowGroupData: Record<string, unknown> = {},
+): FlattenGroup[] => {
   if (groupIndex >= groups.length) {
     return [];
   }
 
   const currentGroup = groups[groupIndex];
-  const result: AbstractGroup[] = [];
+  const result: FlattenGroup[] = [];
 
-  // Sort entries based on the direction specified in the group configuration
   const entries = Object.entries(currentGroupsMap);
   const sortedEntries = entries.sort(([a], [b]) => {
+    const labelA = currentGroupsMap[a].label ?? a;
+    const labelB = currentGroupsMap[b].label ?? b;
+
     if (currentGroup.direction === SORT_DIRECTION.ASC) {
-      return a.localeCompare(b);
+      return labelA.localeCompare(labelB);
     } else {
-      return b.localeCompare(a);
+      return labelB.localeCompare(labelA);
     }
   });
 
   sortedEntries.forEach(([value, node]) => {
-    const label = node.label ?? value;
     const currentFilters = [
       ...accumulatedFilters,
       createFilter({
@@ -111,28 +108,44 @@ const buildGroupPath = (
       }),
     ];
 
-    const currentPathEntry = { value, label };
-    const newPath = [...currentPath, currentPathEntry];
+    const uniqId = md5(value);
+    const metadataFieldName = buildGroupFieldNameForMeta(currentGroup);
 
-    // Only create experiment queries for groups at the maximum depth
-    if (groupIndex === maxDepth) {
-      result.push({
-        id: newPath.map((p) => p.value).join("::"),
-        name: newPath.map((p) => p.label).join(" > "),
-        field: currentGroup.field,
-        filters: currentFilters,
-        path: newPath,
-        level: groupIndex,
-      });
-    } else if (node.groups && Object.keys(node.groups).length > 0) {
+    const currentRowGroupData = {
+      ...accumulatedRowGroupData,
+      [buildGroupFieldName(currentGroup)]: uniqId,
+      [metadataFieldName]: {
+        value: value,
+        label:
+          DELETED_DATASET_LABEL === node.label || "" === node.label
+            ? undefined
+            : node.label,
+      },
+    };
+
+    const metadataPath = [...currentPath, metadataFieldName];
+    const id = `${
+      parentId ? `${parentId}${GROUP_ID_SEPARATOR}` : ""
+    }${buildGroupFieldId(currentGroup, uniqId)}`;
+
+    result.push({
+      id,
+      rowGroupData: currentRowGroupData,
+      filters: currentFilters,
+      metadataPath,
+      level: groupIndex,
+    });
+
+    if (node.groups && Object.keys(node.groups).length > 0) {
       // Intermediate node - recurse into nested groups
       const nestedGroups = buildGroupPath(
         node.groups,
         groups,
+        id,
         groupIndex + 1,
-        newPath,
+        metadataPath,
         currentFilters,
-        maxDepth,
+        currentRowGroupData,
       );
       result.push(...nestedGroups);
     }
@@ -141,115 +154,44 @@ const buildGroupPath = (
   return result;
 };
 
-const buildExpandedGroups = (
+const flattenExperimentsGroups = (
   groupsMap: Record<string, ExperimentsGroupNode>,
   groups: Groups,
-): AbstractGroup[] => {
+): FlattenGroup[] => {
   if (!groups.length || !Object.keys(groupsMap).length) {
     return [];
   }
 
-  return buildGroupPath(groupsMap, groups, 0, [], [], groups.length - 1);
+  return buildGroupPath(groupsMap, groups);
 };
 
 const wrapExperimentWithGroupData = (
   experiment: Experiment,
-  group: AbstractGroup,
-  allGroups: Groups,
-): GroupedExperiment => {
-  const wrappedExperiment = { ...experiment } as GroupedExperiment;
+  group: FlattenGroup,
+): GroupedExperiment =>
+  ({
+    ...experiment,
+    ...group.rowGroupData,
+  }) as GroupedExperiment;
 
-  // Add group fields for all levels in the hierarchy
-  group.path.forEach((pathEntry, index) => {
-    const groupField = allGroups[index];
-    if (groupField) {
-      wrappedExperiment[buildGroupFieldsName(groupField.field)] =
-        pathEntry.value;
-    }
-  });
-
-  return wrappedExperiment;
-};
-
-const generateMoreRow = (
-  group: AbstractGroup,
-  allGroups: Groups,
-): GroupedExperiment => {
+const generateMoreRow = (group: FlattenGroup): GroupedExperiment => {
   return wrapExperimentWithGroupData(
     { id: buildMoreRowId(group.id) } as Experiment,
     group,
-    allGroups,
   );
 };
 
-const transformExperimentsData = (
-  expandedGroups: AbstractGroup[],
-  experimentsResponses: Array<{
-    data?: UseExperimentsListResponse;
-    isPending: boolean;
-  }>,
-  groups: Groups,
-  groupsMap: Record<string, ExperimentsGroupNode>,
-  groupLimit?: Record<string, number>,
-  experimentsCache?: Record<string, UseExperimentsListResponse>,
-) => {
-  let sortableBy: string[] | undefined;
-
-  const content = expandedGroups.reduce<GroupedExperiment[]>(
-    (acc, group, index) => {
-      let experimentsData = experimentsResponses[index]?.data;
-
-      if (isUndefined(experimentsData) && experimentsCache) {
-        experimentsData = experimentsCache[group.id] ?? {
-          content: [],
-          total: 0,
-        };
-      } else if (experimentsData && experimentsCache) {
-        experimentsCache[group.id] = experimentsData;
-      }
-
-      if (!experimentsData) {
-        return acc;
-      }
-
-      // Extract sortable fields from any response that has them
-      if (!sortableBy && experimentsData.sortable_by?.length) {
-        sortableBy = experimentsData.sortable_by;
-      }
-
-      const hasMoreData =
-        extractPageSize(group.id, groupLimit) < experimentsData.total;
-
-      const wrappedExperiments = experimentsData.content.map(
-        (experiment: Experiment) =>
-          wrapExperimentWithGroupData(experiment, group, groups),
-      );
-
-      if (hasMoreData) {
-        return acc.concat([
-          ...wrappedExperiments,
-          generateMoreRow(group, groups),
-        ]);
-      }
-
-      return acc.concat(wrappedExperiments);
-    },
-    [],
+const generatePendingRow = (group: FlattenGroup): GroupedExperiment => {
+  return wrapExperimentWithGroupData(
+    { id: buildPendingRowId(group.id) } as Experiment,
+    group,
   );
-
-  return {
-    content,
-    groupIds: Object.keys(groupsMap),
-    sortable_by: sortableBy ?? [],
-    total: content.length, // TODO: This should come from the API when available
-  };
 };
 
 const useExperimentsCache = () => {
   return useRef<Record<string, UseExperimentsListResponse>>({});
 };
 
-// Main hook
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ): UseGroupedExperimentsListResponse {
@@ -296,88 +238,144 @@ export default function useGroupedExperimentsList(
 
   const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
 
-  const expandedGroups = useMemo(
-    () => buildExpandedGroups(groupsMap, groups),
+  const flattenGroups = useMemo(
+    () => flattenExperimentsGroups(groupsMap, groups),
     [groupsMap, groups],
   );
 
-  const experimentsQueries = useMemo(
-    () =>
-      expandedGroups.map(({ id, filters }) => {
-        const queryParams: UseExperimentsListParams = {
-          workspaceName: params.workspaceName,
-          filters: [...(params.filters ?? []), ...filters],
-          sorting: params.sorting,
-          search: params.search,
-          promptId: params.promptId,
-          page: 1,
-          size: extractPageSize(id, params.groupLimit),
-        };
+  const flattenDeepestGroups = useMemo(() => {
+    return flattenGroups.filter((group) => group.level === groups.length - 1);
+  }, [flattenGroups, groups]);
 
-        return {
-          queryKey: ["experiments", queryParams],
-          queryFn: (context: QueryFunctionContext) =>
-            getExperimentsList(context, queryParams),
-          refetchInterval,
-        };
-      }),
-    [expandedGroups, params, refetchInterval],
-  );
+  const expandedGroups = useMemo(() => {
+    return flattenDeepestGroups.filter((group) =>
+      isGroupFullyExpanded(group, params.expandedMap),
+    );
+  }, [flattenDeepestGroups, params.expandedMap]);
 
-  const experimentsResponses = useQueries({ queries: experimentsQueries });
+  console.log(111, flattenDeepestGroups, expandedGroups, params.expandedMap);
 
-  const groupedData = useMemo(
-    () =>
-      transformExperimentsData(
-        expandedGroups,
-        experimentsResponses,
-        groups,
-        groupsMap,
-        params.groupLimit,
-        experimentsCache.current,
-      ),
-    [
-      expandedGroups,
-      experimentsResponses,
-      groups,
-      groupsMap,
-      params.groupLimit,
-      experimentsCache,
-    ],
-  );
+  const experimentsResponses = useQueries({
+    queries: expandedGroups.map(({ id, filters }) => {
+      const queryParams: UseExperimentsListParams = {
+        workspaceName: params.workspaceName,
+        filters: [...(params.filters ?? []), ...filters],
+        sorting: params.sorting,
+        search: params.search,
+        promptId: params.promptId,
+        page: 1,
+        size: extractPageSize(id, params.groupLimit),
+      };
+
+      return {
+        queryKey: ["experiments", queryParams],
+        queryFn: (context: QueryFunctionContext) =>
+          getExperimentsList(context, queryParams),
+        refetchInterval,
+      };
+    }),
+    combine: (results) => {
+      return results.reduce<
+        Record<string, UseQueryResult<UseExperimentsListResponse>>
+      >((acc, result, idx) => {
+        acc[expandedGroups[idx].id] = result;
+        return acc;
+      }, {});
+    },
+  });
+
+  const groupedData = useMemo(() => {
+    let sortableBy: string[] | undefined;
+
+    const content = flattenDeepestGroups.reduce<GroupedExperiment[]>(
+      (acc, flattenGroup) => {
+        let experimentsData = experimentsResponses[flattenGroup.id]?.data;
+
+        if (isUndefined(experimentsData) && experimentsCache.current) {
+          experimentsData = experimentsCache.current[flattenGroup.id] ?? {
+            content: [],
+            total: 0,
+          };
+        } else if (experimentsData && experimentsCache) {
+          experimentsCache.current[flattenGroup.id] = experimentsData;
+        }
+
+        // TODO lala add pending row if query is pending
+        // TODO lala need to align header border for groups
+        if (!experimentsData) {
+          return acc;
+        }
+
+        // Extract sortable fields from any response that has them
+        if (!sortableBy && experimentsData.sortable_by?.length) {
+          sortableBy = experimentsData.sortable_by;
+        }
+
+        const hasMoreData =
+          extractPageSize(flattenGroup.id, params.groupLimit) <
+          experimentsData.total;
+
+        const wrappedExperiments = experimentsData.content.map(
+          (experiment: Experiment) =>
+            wrapExperimentWithGroupData(experiment, flattenGroup),
+        );
+
+        if (hasMoreData) {
+          return acc.concat([
+            ...wrappedExperiments,
+            generateMoreRow(flattenGroup),
+          ]);
+        }
+
+        // TODO lala need to rethink
+        if (wrappedExperiments.length === 0) {
+          return acc.concat(generatePendingRow(flattenGroup));
+        }
+
+        return acc.concat(wrappedExperiments);
+      },
+      [],
+    );
+
+    return {
+      content,
+      flattenGroups,
+      sortable_by: sortableBy ?? [],
+      total: content.length,
+    };
+  }, [
+    flattenDeepestGroups,
+    experimentsResponses,
+    flattenGroups,
+    params.groupLimit,
+    experimentsCache,
+  ]);
 
   const groupedRefetch = useCallback(
     (options?: RefetchOptions) => {
       return Promise.all([
         refetchGroups(options),
-        ...experimentsResponses.map((response) => response.refetch(options)),
+        ...Object.values(experimentsResponses).map((response) =>
+          response.refetch(options),
+        ),
       ]);
     },
     [experimentsResponses, refetchGroups],
   );
 
-  // Transform non-grouped data to match expected structure
-  const transformedData = useMemo(() => {
-    if (hasGroups) {
-      return groupedData;
-    }
-
-    if (!data) {
-      return {
-        content: [],
-        groupIds: [],
-        sortable_by: [],
-        total: 0,
-      };
-    }
-
-    return {
-      content: data.content as GroupedExperiment[],
-      groupIds: [],
-      sortable_by: data.sortable_by ?? [],
-      total: data.total,
-    };
-  }, [hasGroups, groupedData, data]);
+  const transformedData = useMemo(
+    () => ({
+      content: hasGroups
+        ? groupedData.content
+        : (data?.content as GroupedExperiment[]) ?? [],
+      flattenGroups: hasGroups ? groupedData.flattenGroups : [],
+      sortable_by: hasGroups
+        ? groupedData.sortable_by
+        : data?.sortable_by ?? [],
+      total: hasGroups ? groupedData.total : data?.total ?? 0,
+    }),
+    [hasGroups, groupedData, data],
+  );
 
   return {
     data: transformedData,

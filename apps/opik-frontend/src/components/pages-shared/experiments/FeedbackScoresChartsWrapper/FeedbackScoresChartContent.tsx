@@ -30,7 +30,7 @@ export type ChartData = {
   name: string;
   data: DataRecord[];
   lines: string[];
-  index: number;
+  index?: number;
 };
 
 type FeedbackScoresChartContentProps = {

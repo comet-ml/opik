@@ -34,15 +34,17 @@ import {
   DEFAULT_ITEMS_PER_GROUP,
   GROUPING_KEY,
   MORE_ROW_PREFIX,
+  PENDING_ROW_PREFIX,
 
   // TODO lala check import
 } from "@/constants/groups";
 import { mapColumnDataFields } from "@/lib/table";
 import ResourceLink, {
   RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink"; // TODO lala check import
-
-// TODO lala check better place for type definition
+} from "@/components/shared/ResourceLink/ResourceLink";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Group } from "@/types/groups";
+import Loader from "@/components/shared/Loader/Loader"; // TODO lala check import
 
 export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
@@ -214,9 +216,14 @@ export const generateActionsColumDef = <TData,>({
   } as ColumnDef<TData>;
 };
 
-export const buildGroupFieldsName = (name: string) => {
-  return `${GROUPING_KEY}${name}`;
-};
+export const buildGroupFieldName = (group: Group) =>
+  `${GROUPING_KEY}_${group.field}_${group.key}`.replace(".", "_");
+
+export const buildGroupFieldNameForMeta = (group: Group) =>
+  `${buildGroupFieldName(group)}_meta`;
+
+export const buildGroupFieldId = (group: Group, value: string) =>
+  `${buildGroupFieldName(group)}:${value}`;
 
 export const buildMoreRowId = (id: string) => {
   return `${MORE_ROW_PREFIX}${id}`;
@@ -224,6 +231,14 @@ export const buildMoreRowId = (id: string) => {
 
 export const checkIsMoreRowId = (id: string) => {
   return id.startsWith(MORE_ROW_PREFIX);
+};
+
+export const buildPendingRowId = (id: string) => {
+  return `${PENDING_ROW_PREFIX}${id}`;
+};
+
+export const checkIsPendingRowId = (id: string) => {
+  return id.startsWith(PENDING_ROW_PREFIX);
 };
 
 export const getRowId = <TData extends { id: string }>(row: TData) => row.id;
@@ -246,7 +261,11 @@ export const getSharedShiftCheckboxClickHandler = () => {
 export const getIsGroupRow = <TData extends { id: string }>(
   row: Row<TData>,
 ) => {
-  return checkIsMoreRowId(row?.original?.id || "") || row.getIsGrouped();
+  return (
+    checkIsMoreRowId(row?.original?.id || "") ||
+    checkIsPendingRowId(row?.original?.id || "") ||
+    row.getIsGrouped()
+  );
 };
 
 export const renderCustomRow = <TData extends { dataset_id: string }>(
@@ -289,7 +308,7 @@ export const renderCustomRow = <TData extends { dataset_id: string }>(
         <TableCell colSpan={cells.length - 2} />
       </TableRow>
     );
-  } else {
+  } else if (checkIsMoreRowId(row.id ?? "")) {
     return (
       <tr key={row.id} className="border-b">
         <td colSpan={row.getAllCells().length}>
@@ -309,6 +328,14 @@ export const renderCustomRow = <TData extends { dataset_id: string }>(
           >
             Load {DEFAULT_ITEMS_PER_GROUP} more items
           </Button>
+        </td>
+      </tr>
+    );
+  } else if (checkIsPendingRowId(row.id ?? "")) {
+    return (
+      <tr key={row.id} className="border-b">
+        <td colSpan={row.getAllCells().length}>
+          <Loader className="h-11" message="" />
         </td>
       </tr>
     );
@@ -385,6 +412,7 @@ export const generateGroupedCellDef = <TData, TValue>(
   ) => void,
 ) => {
   const columDataFields = mapColumnDataFields(columnData);
+  const { label } = columnData;
   return {
     ...columDataFields,
     header: () => "",
@@ -395,7 +423,7 @@ export const generateGroupedCellDef = <TData, TValue>(
           <div className="flex shrink-0 items-center pl-5">
             <Checkbox
               style={{
-                marginLeft: `${context.row.depth * 28}px`,
+                marginLeft: `${context.row.depth * 20}px`,
               }}
               checked={
                 row.getIsAllSubRowsSelected() ||
@@ -419,6 +447,11 @@ export const generateGroupedCellDef = <TData, TValue>(
                 <ChevronUp className="mr-1 size-4" />
               ) : (
                 <ChevronDown className="mr-1 size-4" />
+              )}
+              {label && (
+                <TooltipWrapper content={label}>
+                  <span className="max-w-56 truncate">{label}:</span>
+                </TooltipWrapper>
               )}
             </Button>
           </div>

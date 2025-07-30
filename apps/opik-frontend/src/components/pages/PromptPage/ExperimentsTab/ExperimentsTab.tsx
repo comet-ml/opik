@@ -55,6 +55,7 @@ import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceC
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
   checkIsMoreRowId,
+  checkIsPendingRowId,
   generateGroupedCellDef,
   generateGroupedNameColumDef,
   getIsGroupRow,
@@ -230,7 +231,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [data?.sortable_by],
   );
 
-  const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
@@ -303,7 +303,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+      (row) =>
+        rowSelection[row.id] &&
+        !checkIsMoreRowId(row.id) &&
+        !checkIsPendingRowId(row.id),
     );
   }, [rowSelection, experiments]);
 
@@ -371,9 +374,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [columnsWidth, setColumnsWidth],
   );
 
-  const expandingConfig = useExpandingConfig({
-    groupIds,
-  });
+  const expandingConfig = useExpandingConfig({});
 
   const renderCustomRowCallback = useCallback(
     (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {

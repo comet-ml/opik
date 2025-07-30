@@ -10,6 +10,8 @@ import { Groups } from "@/types/groups";
 import { processFilters } from "@/lib/filters";
 import { processGroups } from "@/lib/groups";
 import { UseExperimentsListResponse } from "./useExperimentsList";
+import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import get from "lodash/get";
 
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
@@ -32,16 +34,11 @@ const getFieldValue = (
   key?: string,
 ): string => {
   // Handle nested field access (e.g., "metadata.key")
-  const fieldParts = field.split(".");
-  let value: unknown = experiment;
-
-  for (const part of fieldParts) {
-    value = (value as Record<string, unknown>)?.[part];
-  }
+  let value: unknown = get(experiment, field, undefined);
 
   // If this is a dictionary type and key is provided, get the specific key
   if (key && typeof value === "object" && value !== null) {
-    value = (value as Record<string, unknown>)[key];
+    value = get(value, key, undefined);
   }
 
   // Convert to string for grouping
@@ -98,7 +95,7 @@ const buildExperimentsGroups = (
         const isLastGroup = groupIndex === groups.length - 1;
         const label =
           currentGroup.field === "dataset_id"
-            ? experimentsInGroup[0].dataset_name
+            ? experimentsInGroup[0].dataset_name ?? DELETED_DATASET_LABEL
             : undefined;
 
         if (isLastGroup) {
@@ -136,18 +133,24 @@ export const getExperimentsGroups = async (
     workspaceName,
     promptId,
     types = DEFAULT_EXPERIMENTS_TYPES,
-    filters,
+    filters: externalFilters,
     groups,
     search,
   }: UseExperimentsGroupsParams,
 ) => {
+  // TODO lala temporary fix for dataset_id filter
+  const datasetFilter = externalFilters?.find((f) => f.field === "dataset_id");
+  const datasetId = datasetFilter?.value;
+  const filters =
+    externalFilters?.filter((f) => f.field !== "dataset_id") || [];
+
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
     signal,
     params: {
       ...(workspaceName && { workspace_name: workspaceName }),
       ...processFilters(filters),
-      ...processGroups(groups),
       ...(search && { name: search }),
+      ...(datasetId && { datasetId }),
       ...(promptId && { prompt_id: promptId }),
       ...(types && { types: JSON.stringify(types) }),
       size: 100500,

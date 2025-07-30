@@ -1,6 +1,7 @@
 import React from "react";
 import { COLUMN_TYPE } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
+import { Filters } from "@/types/filters";
 
 export interface Group {
   id: string;
@@ -20,3 +21,11 @@ export type GroupRowConfig = {
 };
 
 export type Groups = Group[];
+
+export type FlattenGroup = {
+  id: string;
+  rowGroupData: Record<string, unknown>;
+  filters: Filters;
+  metadataPath: string[];
+  level: number;
+};

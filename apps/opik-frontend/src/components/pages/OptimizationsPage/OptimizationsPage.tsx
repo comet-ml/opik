@@ -55,6 +55,7 @@ import useGroupedOptimizationsList, {
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   checkIsMoreRowId,
+  checkIsPendingRowId,
   generateActionsColumDef,
   generateGroupedCellDef,
   generateGroupedNameColumDef,
@@ -251,7 +252,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const selectedRows: Array<GroupedOptimization> = useMemo(() => {
     return optimizations.filter(
-      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+      (row) =>
+        rowSelection[row.id] &&
+        !checkIsMoreRowId(row.id) &&
+        !checkIsPendingRowId(row.id),
     );
   }, [rowSelection, optimizations]);
 

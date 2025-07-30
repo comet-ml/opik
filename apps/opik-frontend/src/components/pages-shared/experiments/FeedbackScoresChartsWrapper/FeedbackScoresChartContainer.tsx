@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import FeedbackScoresChartContent, {
   ChartData,
 } from "./FeedbackScoresChartContent";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type FeedbackScoresChartContainerProps = {
   className: string;
@@ -69,7 +70,11 @@ const FeedbackScoresChartContainer: React.FC<
   return (
     <Card className={cn("min-w-[400px]", className)} ref={ref}>
       <CardHeader className="space-y-0.5 px-4 pt-3">
-        <CardTitle className="comet-body-s-accented">{chartName}</CardTitle>
+        <CardTitle className="comet-body-s-accented">
+          <TooltipWrapper content={chartName ?? ""}>
+            <span>{chartName}</span>
+          </TooltipWrapper>
+        </CardTitle>
         {subtitle && (
           <CardDescription className="comet-body-xs text-xs">
             {subtitle}
