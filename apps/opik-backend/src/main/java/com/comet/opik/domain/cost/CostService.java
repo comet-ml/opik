@@ -26,11 +26,15 @@ public class CostService {
             "vertex_ai-language-models", "google_vertexai",
             "gemini", "google_ai",
             "anthropic", "anthropic",
-            "vertex_ai-anthropic_models", "anthropic_vertexai");
+            "vertex_ai-anthropic_models", "anthropic_vertexai",
+            "bedrock", "bedrock",
+            "bedrock_converse", "bedrock_converse");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
-                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI);
+                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "bedrock", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
+                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
 
     static {
         try {
@@ -116,7 +120,24 @@ public class CostService {
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
+    private static String normalizeModelName(String modelName, String provider) {
+        // For Bedrock models, handle both formats (with and without anthropic. prefix)
+        if ("bedrock".equals(provider) || "bedrock_converse".equals(provider)) {
+            // If the model name doesn't start with "anthropic." but should, add it
+            if (!modelName.startsWith("anthropic.") && 
+                (modelName.contains("claude") || modelName.contains("sonnet") || modelName.contains("opus"))) {
+                return "anthropic." + modelName;
+            }
+            // If the model name starts with "anthropic." but shouldn't for matching, remove it
+            if (modelName.startsWith("anthropic.")) {
+                return modelName.substring("anthropic.".length());
+            }
+        }
+        return modelName;
+    }
+
     private static String createModelProviderKey(String modelName, String provider) {
-        return modelName + MODEL_PROVIDER_SEPARATOR + provider;
+        String normalizedModelName = normalizeModelName(modelName, provider);
+        return normalizedModelName + MODEL_PROVIDER_SEPARATOR + provider;
     }
 }
