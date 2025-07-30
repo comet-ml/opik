@@ -1,22 +1,22 @@
+import React, { useState, useRef, useCallback } from "react";
+import { Database, Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
-import { Database, Tag, Trash } from "lucide-react";
-import React, { useCallback, useRef, useState } from "react";
 import slugify from "slugify";
 
-import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
-import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import { Button } from "@/components/ui/button";
+import { Span, Trace } from "@/types/traces";
+import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/components/ui/button";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
-import { Span, Trace } from "@/types/traces";
+import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 
-import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 import { PencilLine } from "lucide-react";
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -75,8 +75,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const generateFileName = useCallback(
     (extension = "csv") => {
-      return `${slugify(projectName, { lower: true })}-${type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
-        }.${extension}`;
+      return `${slugify(projectName, { lower: true })}-${
+        type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
+      }.${extension}`;
     },
     [projectName, type],
   );
