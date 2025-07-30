@@ -1,7 +1,9 @@
 from opik import opik_context
 from opik.decorator import tracker
+import opik
 
 from ...testlib import patch_environ
+import pytest
 
 
 def test_track_disabled_mode__nothing_logged__happyflow(fake_backend):
