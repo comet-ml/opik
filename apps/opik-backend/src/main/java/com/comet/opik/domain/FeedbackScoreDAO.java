@@ -168,14 +168,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
-            ;
+            """;
 
+    private static final String DELETE_AUTHORED_FEEDBACK_SCORE = """
             DELETE FROM authored_feedback_scores
             WHERE entity_id = :entity_id
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
-            ;
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
@@ -551,14 +551,23 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name) {
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(DELETE_FEEDBACK_SCORE);
-
-            statement
+            // Delete from feedback_scores table
+            var statement1 = connection.createStatement(DELETE_FEEDBACK_SCORE);
+            statement1
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
                     .bind("name", name);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            // Delete from authored_feedback_scores table
+            var statement2 = connection.createStatement(DELETE_AUTHORED_FEEDBACK_SCORE);
+            statement2
+                    .bind("entity_id", id)
+                    .bind("entity_type", entityType.getType())
+                    .bind("name", name);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
                     .then();
         });
