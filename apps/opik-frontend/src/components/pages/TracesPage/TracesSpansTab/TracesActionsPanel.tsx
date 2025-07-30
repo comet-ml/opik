@@ -1,13 +1,12 @@
 import first from "lodash/first";
 import get from "lodash/get";
-import { Database, PencilLine, Tag, Trash } from "lucide-react";
+import { Database, Tag, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import slugify from "slugify";
 
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
-import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -15,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
+
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
+import { PencilLine } from "lucide-react";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -44,13 +46,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       projectId,
       ids: rows.map((row) => row.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, rows]);
 
   const mapRowData = useCallback(() => {
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse feedback_scores into correct structure
         const keys = column.split(".");
         const keyPrefix = first(keys) as string;
 
