@@ -1,7 +1,7 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from opik.types import LLMProvider
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ def is_anthropic_run(run: "Run") -> bool:
 
 def _get_provider_and_model(
     run_dict: Dict[str, Any],
-) -> Tuple[Optional[Union[Literal[LLMProvider.ANTHROPIC], str]], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
     """

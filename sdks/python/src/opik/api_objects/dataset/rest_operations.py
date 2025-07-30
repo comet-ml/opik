@@ -1,6 +1,6 @@
 from typing import List
 from opik.rest_api import OpikApi
-from opik import exceptions
+import opik.exceptions as exceptions
 from . import dataset
 from .. import experiment
 from ...rest_api.core.api_error import ApiError
