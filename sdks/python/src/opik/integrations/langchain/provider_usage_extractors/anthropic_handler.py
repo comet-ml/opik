@@ -87,8 +87,10 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
         except KeyError:
             continue
 
-    LOGGER.error(
-        "Failed to extract model name from presumably Anthropic LLM langchain Run object: %s",
-        run_dict,
-    )
-    return None
+    if model is None:
+        LOGGER.error(
+            "Failed to extract model name from presumably Anthropic LLM langchain Run object: %s",
+            run_dict,
+        )
+
+    return model

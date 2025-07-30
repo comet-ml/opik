@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, Optional
 
+import opik
 from opik import llm_usage, logging_messages
 from . import langchain_run_helpers
 from . import usage_extractor_protocol
@@ -11,6 +12,8 @@ LOGGER = logging.getLogger(__name__)
 class GoogleGenerativeAIUsageExtractor(
     usage_extractor_protocol.ProviderUsageExtractorProtocol
 ):
+    PROVIDER = opik.LLMProvider.GOOGLE_AI
+
     def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
         try:
             if run_dict.get("serialized") is None:

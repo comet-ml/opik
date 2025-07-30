@@ -38,7 +38,7 @@ class VertexAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProt
 
     def get_llm_usage_info(
         self,
-        run_dict: Optional[Dict[str, Any]] = None,
+        run_dict: Dict[str, Any],
     ) -> llm_usage.LLMUsageInfo:
         usage_dict = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
