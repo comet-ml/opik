@@ -191,8 +191,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS allow_nondeterministic_mutations = 1
-            ;
+            """;
 
+    private static final String DELETE_SPANS_CASCADE_AUTHORED_FEEDBACK_SCORE = """
             DELETE FROM authored_feedback_scores
             WHERE entity_type = 'span'
             AND entity_id IN (
@@ -205,7 +206,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS allow_nondeterministic_mutations = 1
-            ;
             """;
 
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
@@ -216,8 +216,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
-            ;
+            """;
 
+    private static final String DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS = """
             DELETE FROM authored_feedback_scores
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
@@ -225,7 +226,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
-            ;
             """;
 
     private static final String SELECT_TRACE_FEEDBACK_SCORE_NAMES = """
@@ -605,15 +605,27 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-            template.add("names", names);
+            // Delete from feedback_scores table
+            ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template1.add("names", names);
 
-            var statement = connection.createStatement(template.render())
+            var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
                     .bind("names", names);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            // Delete from authored_feedback_scores table
+            ST template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template2.add("names", names);
+
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", Set.of(entityId))
+                    .bind("entity_type", entityType.getType())
+                    .bind("names", names);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
@@ -707,18 +719,31 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
 
-            var template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            // Delete from feedback_scores table
+            var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template1.add("project_id", projectId);
+            template1.add("sources", sources);
 
-            template.add("project_id", projectId);
-            template.add("sources", sources);
-
-            var statement = connection.createStatement(template.render())
+            var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
                     .bind("sources", sources)
                     .bind("project_id", projectId);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            // Delete from authored_feedback_scores table
+            var template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template2.add("project_id", projectId);
+            template2.add("sources", sources);
+
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", threadModelIds)
+                    .bind("entity_type", EntityType.THREAD.getType())
+                    .bind("sources", sources)
+                    .bind("project_id", projectId);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
@@ -807,37 +832,67 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {
         log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
 
-        var template = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
+        // Delete from feedback_scores table
+        var template1 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
-                .ifPresent(id -> template.add("project_id", id));
+                .ifPresent(id -> template1.add("project_id", id));
 
-        var statement = connection.createStatement(template.render())
+        var statement1 = connection.createStatement(template1.render())
                 .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
         if (projectId != null) {
-            statement.bind("project_id", projectId);
+            statement1.bind("project_id", projectId);
         }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+        // Delete from authored_feedback_scores table
+        var template2 = new ST(DELETE_SPANS_CASCADE_AUTHORED_FEEDBACK_SCORE);
+        Optional.ofNullable(projectId)
+                .ifPresent(id -> template2.add("project_id", id));
+
+        var statement2 = connection.createStatement(template2.render())
+                .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+        if (projectId != null) {
+            statement2.bind("project_id", projectId);
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)));
     }
 
     private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId,
             Connection connection) {
         log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
 
-        var template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        // Delete from feedback_scores table
+        var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
-                .ifPresent(id -> template.add("project_id", id));
+                .ifPresent(id -> template1.add("project_id", id));
 
-        var statement = connection.createStatement(template.render())
+        var statement1 = connection.createStatement(template1.render())
                 .bind("entity_ids", entityIds.toArray(UUID[]::new))
                 .bind("entity_type", entityType.getType());
 
         if (projectId != null) {
-            statement.bind("project_id", projectId);
+            statement1.bind("project_id", projectId);
         }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+        // Delete from authored_feedback_scores table
+        var template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        Optional.ofNullable(projectId)
+                .ifPresent(id -> template2.add("project_id", id));
+
+        var statement2 = connection.createStatement(template2.render())
+                .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                .bind("entity_type", entityType.getType());
+
+        if (projectId != null) {
+            statement2.bind("project_id", projectId);
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 }
