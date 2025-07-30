@@ -6,13 +6,14 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Union,
 )
 from typing_extensions import override
 
 import openai
 
-from opik import LLMProvider, dict_utils, llm_usage
+from opik.types import LLMProvider
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from openai.types import responses as openai_responses
@@ -49,8 +50,8 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
@@ -127,16 +128,8 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
-            Callable[
-                [List[openai_responses.ResponseStreamEvent]], openai_responses.Response
-            ]
-        ],
-    ) -> Union[
-        None,
-        openai.Stream,
-        openai.AsyncStream,
-    ]:
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
+    ) -> Optional[Any]:
         assert (
             generations_aggregator is not None
         ), "OpenAI decorator will always get aggregator function as input"

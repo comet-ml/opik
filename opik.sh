@@ -40,12 +40,41 @@ generate_uuid() {
   fi
 }
 
+debugLog() {
+  [[ "$DEBUG_MODE" == true ]] && echo "$@"
+}
+
 get_docker_compose_cmd() {
   local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
   echo "$cmd"
+}
+
+get_ui_url() {
+  local frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
+  echo "http://localhost:${frontend_port:-5173}"
+}
+
+create_opik_config_if_missing() {
+  local config_file="$HOME/.opik.config"
+  
+  if [[ -f "$config_file" ]]; then
+    debugLog "[DEBUG] .opik.config file already exists, skipping creation"
+    return
+  fi
+  
+  debugLog "[DEBUG] Creating .opik.config file at $config_file"
+  
+  local ui_url=$(get_ui_url)
+  
+  cat > "$config_file" << EOF
+[opik]
+url_override = ${ui_url}/api/
+workspace = default
+EOF
+  debugLog "[DEBUG] .opik.config file created successfully with URL: ${ui_url}/api/"
 }
 
 print_usage() {
@@ -105,7 +134,7 @@ start_missing_containers() {
   start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   send_install_report "$uuid" "false" "$start_time"
 
-  [[ "$DEBUG_MODE" == true ]] && echo "🔍 Checking required containers..."
+  debugLog "🔍 Checking required containers..."
   all_running=true
 
   local containers=("${CONTAINERS[@]}")
@@ -113,10 +142,10 @@ start_missing_containers() {
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
 
     if [[ "$status" != "running" ]]; then
-      [[ "$DEBUG_MODE" == true ]] && echo "🔴 $container is not running (status: ${status:-not found})"
+      debugLog "🔴 $container is not running (status: ${status:-not found})"
       all_running=false
     else
-      [[ "$DEBUG_MODE" == true ]] && echo "✅ $container is already running"
+      debugLog "✅ $container is already running"
     fi
   done
 
@@ -145,7 +174,7 @@ start_missing_containers() {
 
   for container in "${containers[@]}"; do
     retries=0
-    [[ "$DEBUG_MODE" == true ]] && echo "⏳ Waiting for $container..."
+    debugLog "⏳ Waiting for $container..."
 
     while true; do
       status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
@@ -157,10 +186,10 @@ start_missing_containers() {
       fi
 
       if [[ "$health" == "healthy" ]]; then
-        [[ "$DEBUG_MODE" == true ]] && echo "✅ $container is now running and healthy!"
+        debugLog "✅ $container is now running and healthy!"
         break
       elif [[ "$health" == "starting" ]]; then
-        [[ "$DEBUG_MODE" == true ]] && echo "⏳ $container is starting... retrying (${retries}s)"
+        debugLog "⏳ $container is starting... retrying (${retries}s)"
         sleep "$interval"
         retries=$((retries + 1))
         if [[ $retries -ge $max_retries ]]; then
@@ -178,6 +207,7 @@ start_missing_containers() {
 
   if $all_running; then
     send_install_report "$uuid" "true" "$start_time"
+    create_opik_config_if_missing
   fi
 }
 
@@ -195,8 +225,7 @@ stop_containers() {
 
 print_banner() {
   check_docker_status
-  frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
-  ui_url="http://localhost:${frontend_port:-5173}"
+  ui_url=$(get_ui_url)
 
   echo ""
   echo "╔═════════════════════════════════════════════════════════════════╗"
@@ -210,10 +239,9 @@ print_banner() {
   echo "║  📊 Access the UI:                                              ║"
   echo "║     $ui_url                                       ║"
   echo "║                                                                 ║"
-  echo "║  🛠️  Configure the Python SDK:                                   ║"
+  echo "║  🛠️  Install the Python SDK:                                     ║"
   echo "║     \$ python --version                                          ║"
   echo "║     \$ pip install opik                                          ║"
-  echo "║     \$ opik configure                                            ║"
   echo "║                                                                 ║"
   echo "║  📚 Documentation: https://www.comet.com/docs/opik/             ║"
   echo "║                                                                 ║"
@@ -229,14 +257,14 @@ send_install_report() {
   start_time="$3"  # Optional: start time in ISO 8601 format
 
   if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
-    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Usage reporting is disabled. Skipping install report."
+    debugLog "[DEBUG] Usage reporting is disabled. Skipping install report."
     return
   fi
 
   INSTALL_MARKER_FILE="$script_dir/.opik_install_reported"
 
   if [ -f "$INSTALL_MARKER_FILE" ]; then
-    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Install report already sent; skipping."
+    debugLog "[DEBUG] Install report already sent; skipping."
     return
   fi
 
@@ -246,7 +274,7 @@ send_install_report() {
   elif command -v wget >/dev/null 2>&1; then
     HTTP_TOOL="wget"
   else
-    [[ "$DEBUG_MODE" == true ]] && echo "[WARN] Neither curl nor wget is available; skipping usage report."
+    debugLog "[WARN] Neither curl nor wget is available; skipping usage report."
     return
   fi
 
@@ -296,9 +324,9 @@ EOF
 
   if [ $event_type = "opik_os_install_completed" ]; then
     touch "$INSTALL_MARKER_FILE"
-    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Post-install report sent successfully."
+    debugLog "[DEBUG] Post-install report sent successfully."
   else
-    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Install started report sent successfully."
+    debugLog "[DEBUG] Install started report sent successfully."
   fi
 }
 

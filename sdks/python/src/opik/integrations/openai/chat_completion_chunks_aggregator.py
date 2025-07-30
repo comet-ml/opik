@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from openai.types.chat import chat_completion_chunk
 
-from opik import logging_messages
+import opik.logging_messages as logging_messages
 
 LOGGER = logging.getLogger(__name__)
 

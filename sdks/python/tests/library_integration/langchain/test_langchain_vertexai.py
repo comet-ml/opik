@@ -2,8 +2,8 @@ import langchain_google_vertexai
 import pytest
 from langchain.prompts import PromptTemplate
 
-from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
+from . import google_helpers
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -11,24 +11,10 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     assert_equal,
-    assert_dict_has_keys,
 )
 
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
-
-
-def _assert_usage_validity(usage: Dict[str, Any]):
-    REQUIRED_USAGE_KEYS = [
-        "completion_tokens",
-        "prompt_tokens",
-        "total_tokens",
-        "original_usage.total_token_count",
-        "original_usage.candidates_token_count",
-        "original_usage.prompt_token_count",
-    ]
-
-    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
 
 
 @pytest.mark.parametrize(
@@ -45,9 +31,7 @@ def _assert_usage_validity(usage: Dict[str, Any]):
     ],
 )
 def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend,
-    llm_model,
-    expected_input_prompt,
+    fake_backend, llm_model, expected_input_prompt
 ):
     llm = llm_model(
         max_tokens=10,
@@ -98,6 +82,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -144,7 +129,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         usage=ANY_DICT,
                         spans=[],
                         provider="google_vertexai",
-                        model=ANY_STRING(startswith="gemini-2.0-flash"),
+                        model=ANY_STRING.starting_with("gemini-2.0-flash"),
                     ),
                 ],
             )
@@ -155,5 +140,5 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
     assert len(callback.created_traces()) == 1
     llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
 
-    _assert_usage_validity(llm_call_span.usage)
+    google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

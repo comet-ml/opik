@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -129,7 +128,7 @@ class ExperimentDAO {
     private static final String FIND = """
             WITH experiments_final AS (
                 SELECT
-                    *
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -157,7 +156,10 @@ class ExperimentDAO {
             ), experiment_durations AS (
                 SELECT
                     experiment_id,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                    ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
@@ -292,7 +294,7 @@ class ExperimentDAO {
             SELECT count(id) as count
             FROM
             (
-                SELECT id
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -524,13 +526,12 @@ class ExperimentDAO {
     }
 
     private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", List.class))
-                .filter(value -> !value.isEmpty()
-                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+        return Optional.ofNullable(row.get("duration", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        getP(durations, 0),
-                        getP(durations, 1),
-                        getP(durations, 2)))
+                        (BigDecimal) durations.get("p50"),
+                        (BigDecimal) durations.get("p90"),
+                        (BigDecimal) durations.get("p99")))
                 .orElse(null);
     }
 

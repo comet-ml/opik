@@ -1,50 +1,51 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Dict, List, Any, Optional, Union, Literal
+from typing import Any, Dict, List, Optional
+
 import pydantic
-from opik.evaluation.metrics import BaseMetric
-from pydantic import BaseModel, Field
-from .base_optimizer import OptimizationRound  # Adjust import as necessary
 import rich
 
-class OptimizationStep(BaseModel):
-    """Represents a single step or trial in an optimization process."""
-    step: int
-    score: Optional[float] = None
-    prompt: Optional[Union[str, List[Dict[str, str]]]] = None
-    parameters: Optional[Dict[str, Any]] = None
-    timestamp: Optional[str] = None
-    # Add other relevant details per step if needed
+from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
 
 
 class OptimizationResult(pydantic.BaseModel):
-    """Result of an optimization run."""
+    """Result oan optimization run."""
 
-    prompt: Union[str, List[Dict[Literal["role", "content"], str]]]
+    optimizer: str = "Optimizer"
+
+    prompt: List[Dict[str, str]]
     score: float
     metric_name: str
-    metadata: Dict[str, Any] = pydantic.Field(
-        default_factory=dict
-    )  # Default empty dict
-    details: Dict[str, Any] = pydantic.Field(default_factory=dict)  # Default empty dict
-    best_prompt: Optional[str] = None
-    best_score: Optional[float] = None
-    best_metric_name: Optional[str] = None
-    best_details: Optional[Dict[str, Any]] = None
-    all_results: Optional[List[Dict[str, Any]]] = None
+
+    optimization_id: Optional[str] = None
+    dataset_id: Optional[str] = None
+
+    # Initial score
+    initial_prompt: Optional[List[Dict[str, str]]] = None
+    initial_score: Optional[float] = None
+
+    details: Dict[str, Any] = pydantic.Field(default_factory=dict)
     history: List[Dict[str, Any]] = []
-    metric: Optional[BaseMetric] = None
-    demonstrations: Optional[List[Dict[str, Any]]] = None
-    optimizer: str = "Optimizer"
-    tool_prompts: Optional[Dict[str, str]] = None
-    opik_metadata: Optional[Dict[str, Any]] = None
     llm_calls: Optional[int] = None
+
+    # MIPRO specific
+    demonstrations: Optional[List[Dict[str, Any]]] = None
+    mipro_prompt: Optional[str] = None
+    tool_prompts: Optional[Dict[str, str]] = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
+    def get_run_link(self) -> str:
+        return get_optimization_run_url_by_id(
+            optimization_id=self.optimization_id, dataset_id=self.dataset_id
+        )
+
+    def model_dump(self, *kargs: Any, **kwargs: Any) -> Dict[str, Any]:
+        return super().model_dump(*kargs, **kwargs)
+
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
-        initial_s = self.details.get("initial_score")
+        initial_s = self.initial_score
         final_s = self.score
 
         # Check if initial score exists and is a number
@@ -71,7 +72,7 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
         rounds_ran = len(self.details.get("rounds", []))
-        initial_score = self.details.get("initial_score")
+        initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
         )
@@ -85,30 +86,24 @@ class OptimizationResult(pydantic.BaseModel):
             .replace("[dim]", "")
             .replace("[/dim]", "")
         )
-        stopped_early = self.details.get("stopped_early", "N/A")
 
         model_name = self.details.get("model", "N/A")
         temp = self.details.get("temperature")
         temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
-        final_prompt_display = self.prompt
-        if self.details.get("prompt_type") == "chat" and self.details.get(
-            "chat_messages"
-        ):
-            try:
-                chat_display = "\n".join(
-                    [
-                        f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..."
-                        for msg in self.details["chat_messages"]
-                    ]
-                )
-                final_prompt_display = f"Instruction:\n  {self.prompt}\nFew-Shot Examples (Chat Structure):\n{chat_display}"
-            except Exception:
-                pass
+        try:
+            final_prompt_display = "\n".join(
+                [
+                    f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..."
+                    for msg in self.prompt
+                ]
+            )
+        except Exception:
+            final_prompt_display = str(self.prompt)
 
         output = [
             f"\n{separator}",
-            f"OPTIMIZATION COMPLETE",
+            "OPTIMIZATION COMPLETE",
             f"{separator}",
             f"Optimizer:        {self.optimizer}",
             f"Model Used:       {model_name} (Temp: {temp_str})",
@@ -117,11 +112,10 @@ class OptimizationResult(pydantic.BaseModel):
             f"Final Best Score: {final_score_str}",
             f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
             f"Rounds Completed: {rounds_ran}",
-            f"Stopped Early:    {stopped_early}",
-            f"\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
-            f"--------------------------------------------------------------------------------",
+            "\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
+            "--------------------------------------------------------------------------------",
             f"{final_prompt_display}",
-            f"--------------------------------------------------------------------------------",
+            "--------------------------------------------------------------------------------",
             f"{separator}",
         ]
         return "\n".join(output)
@@ -130,18 +124,15 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
         rounds_ran = len(self.details.get("rounds", []))
-        initial_score = self.details.get("initial_score")
+        initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}"
             if isinstance(initial_score, (int, float))
             else "[dim]N/A[/dim]"
         )
         final_score_str = f"{self.score:.4f}"
-        stopped_early = self.details.get("stopped_early", "N/A")
 
         model_name = self.details.get("model", "[dim]N/A[/dim]")
-        temp = self.details.get("temperature")
-        temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "[dim]N/A[/dim]"
 
         table = rich.table.Table.grid(padding=(0, 1))
         table.add_column(style="dim")
@@ -151,52 +142,48 @@ class OptimizationResult(pydantic.BaseModel):
             "Optimizer:",
             f"[bold]{self.optimizer}[/bold]",
         )
-        table.add_row("Model Used:", f"{model_name} ([dim]Temp:[/dim] {temp_str})")
+        table.add_row("Model Used:", f"{model_name}")
         table.add_row("Metric Evaluated:", f"[bold]{self.metric_name}[/bold]")
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
         table.add_row("Rounds Completed:", str(rounds_ran))
-        table.add_row("Stopped Early:", str(stopped_early))
+        table.add_row(
+            "Optimization run link:",
+            get_link_text(
+                pre_text="",
+                link_text="Open in Opik Dashboard",
+                dataset_id=self.dataset_id,
+                optimization_id=self.optimization_id,
+            ),
+        )
 
         # Display Chat Structure if available
-        prompt_renderable: Any = rich.text.Text(
-            self.prompt or "", overflow="fold"
-        )  # Default to text
-        panel_title = "[bold]Final Optimized Prompt (Instruction)[/bold]"
-
-        if self.details.get("prompt_type") == "chat" and self.details.get(
-            "chat_messages"
-        ):
-            panel_title = "[bold]Final Optimized Prompt (Chat Structure)[/bold]"
-            try:
-                chat_group_items = [
-                    f"[dim]Instruction:[/dim] [i]{self.prompt}[/i]\n---"
-                ]
-                for msg in self.details["chat_messages"]:
-                    role = msg.get("role", "unknown")
-                    content = str(msg.get("content", ""))
-                    role_style = (
-                        "bold green"
-                        if role == "user"
-                        else (
-                            "bold blue"
-                            if role == "assistant"
-                            else ("bold magenta" if role == "system" else "")
-                        )
+        panel_title = "[bold]Final Optimized Prompt[/bold]"
+        try:
+            chat_group_items = []
+            for msg in self.prompt:
+                role = msg.get("role", "unknown")
+                content = str(msg.get("content", ""))
+                role_style = (
+                    "bold green"
+                    if role == "user"
+                    else (
+                        "bold blue"
+                        if role == "assistant"
+                        else ("bold magenta" if role == "system" else "")
                     )
-                    chat_group_items.append(
-                        f"[{role_style}]{role.capitalize()}:[/] {content}"
-                    )
-                    chat_group_items.append("---")  # Separator
-                prompt_renderable = rich.console.Group(*chat_group_items)
-
-            except Exception:
-                # Fallback to simple text prompt
-                prompt_renderable = rich.text.Text(self.prompt or "", overflow="fold")
-                panel_title = (
-                    "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
                 )
+                chat_group_items.append(
+                    f"[{role_style}]{role.capitalize()}:[/] {content}"
+                )
+                chat_group_items.append("---")  # Separator
+            prompt_renderable = rich.console.Group(*chat_group_items)
+
+        except Exception:
+            # Fallback to simple text prompt
+            prompt_renderable = rich.text.Text(str(self.prompt or ""), overflow="fold")
+            panel_title = "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
 
         prompt_panel = rich.panel.Panel(
             prompt_renderable, title=panel_title, border_style="blue", padding=(1, 2)
@@ -212,11 +199,10 @@ class OptimizationResult(pydantic.BaseModel):
             padding=1,
         )
 
-    def model_dump(self) -> Dict[str, Any]:
-        return super().model_dump()
-
     def display(self) -> None:
         """
         Displays the OptimizationResult using rich formatting
         """
-        rich.print(self)
+        console = get_console()
+        console.print(self)
+        print("Optimization run link:", self.get_run_link())

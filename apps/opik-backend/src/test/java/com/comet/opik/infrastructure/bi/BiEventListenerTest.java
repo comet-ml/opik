@@ -8,6 +8,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -34,12 +35,10 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
-import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.infrastructure.bi.DailyUsageReportJobTest.SUCCESS_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -73,23 +72,13 @@ class BiEventListenerTest {
     {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
-        try {
-            MigrationUtils.runDbMigration(MYSQL.createConnection(""), MySQLContainerUtils.migrationParameters());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
         wireMock = WireMockUtils.startWireMock();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
         mockBiEventResponse(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT, wireMock.server());
 
@@ -113,8 +102,7 @@ class BiEventListenerTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);

@@ -1,28 +1,32 @@
-from typing import Optional, Union, List, Dict, Any, Tuple
-import opik
-import logging
-import random
 import json
-from string import Template
+import logging
 import os
-import time
-import Levenshtein
-import numpy as np
+import random
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast, Type
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
-from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
-from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config import mappers
-from opik.api_objects import opik_client
-from opik.environment import get_tqdm_for_current_environment
-from opik_optimizer import _throttle
+import rapidfuzz.distance.Indel
 import litellm
-from litellm.caching import Cache
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+import numpy as np
+import opik
 
 # DEAP imports
-from deap import base, creator, tools, algorithms
+from deap import base, tools
+from deap import creator as _creator
+from litellm import exceptions as litellm_exceptions
+from litellm.caching import Cache
+from litellm.types.caching import LiteLLMCacheType
+from opik.api_objects import opik_client, optimization
+from opik.environment import get_tqdm_for_current_environment
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+
+from opik_optimizer import _throttle, task_evaluator
+from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.optimization_config import chat_prompt, mappers
+from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.optimizable_agent import OptimizableAgent
+
+from .. import utils
+from . import reporting
 
 logger = logging.getLogger(__name__)
 tqdm = get_tqdm_for_current_environment()
@@ -30,13 +34,26 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
+litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
+
+creator = cast(Any, _creator)  # type: ignore[assignment]
+
 
 class EvolutionaryOptimizer(BaseOptimizer):
     """
-    Optimizes prompts using a genetic algorithm approach.
-    Focuses on evolving the prompt text itself.
-    Can operate in single-objective or multi-objective mode.
+    The Evolutionary Optimizer can be used to optimize prompts using a 4 stage genetic algorithm
+    approach:
+
+    1. Generate a set of candidate prompts based on variations of the best prompts (exploitation) as
+    well as completely new prompts (exploration)
+    2. Evaluate the candidate prompts
+    3. Select the best prompts
+    4. Repeat until convergence
+
+    This algorithm is best used if you have a first draft prompt and would like to find a better
+    prompt.
+
+    Note: This algorithm is time consuming and can be expensive to run.
     """
 
     DEFAULT_POPULATION_SIZE = 30
@@ -50,15 +67,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_MIN_MUTATION_RATE = 0.1
     DEFAULT_MAX_MUTATION_RATE = 0.4
     DEFAULT_ADAPTIVE_MUTATION = True
-    DEFAULT_DIVERSITY_THRESHOLD = 0.7 
-    DEFAULT_RESTART_THRESHOLD = 0.01 
-    DEFAULT_RESTART_GENERATIONS = 3 
-    DEFAULT_CACHE_SIZE = 1000 
+    DEFAULT_DIVERSITY_THRESHOLD = 0.7
+    DEFAULT_RESTART_THRESHOLD = 0.01
+    DEFAULT_RESTART_GENERATIONS = 3
+    DEFAULT_CACHE_SIZE = 1000
     DEFAULT_EARLY_STOPPING_GENERATIONS = 5
-    DEFAULT_ENABLE_MOO = True 
-    DEFAULT_ENABLE_LLM_CROSSOVER = True 
+    DEFAULT_ENABLE_MOO = True
+    DEFAULT_ENABLE_LLM_CROSSOVER = True
     DEFAULT_SEED = 42
-    DEFAULT_OUTPUT_STYLE_GUIDANCE = "Produce clear, effective, and high-quality responses suitable for the task."
+    DEFAULT_OUTPUT_STYLE_GUIDANCE = (
+        "Produce clear, effective, and high-quality responses suitable for the task."
+    )
     DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
 
     _INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
@@ -70,7 +89,7 @@ Focus on characteristics like:
 - **Content Details**: (e.g., includes only the answer, includes reasoning, provides examples, avoids pleasantries)
 - **Keywords/Phrasing**: Any recurring keywords or phrasing patterns in the outputs.
 
-Provide a single string that summarizes this style. This summary should be directly usable as an instruction for another LLM. 
+Provide a single string that summarizes this style. This summary should be directly usable as an instruction for another LLM.
 For example: 'Outputs should be a single, concise proper noun.' OR 'Outputs should be a short paragraph explaining the reasoning, followed by a direct answer, avoiding conversational pleasantries.' OR 'Outputs are typically 1-2 sentences, providing a direct factual answer.'
 Return ONLY this descriptive string, with no preamble or extra formatting.
 """
@@ -78,13 +97,12 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = None,
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
         crossover_rate: float = DEFAULT_CROSSOVER_RATE,
         tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        num_threads: int = DEFAULT_NUM_THREADS,
+        num_threads: Optional[int] = None,
         elitism_size: int = DEFAULT_ELITISM_SIZE,
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
@@ -93,72 +111,114 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         output_style_guidance: Optional[str] = None,
         infer_output_style: bool = False,
         verbose: int = 1,
-        **model_kwargs,
-    ):
-        # FIXME: Hack for verbose till its merged
-        self.verbose = 1
-
+        n_threads: int = DEFAULT_NUM_THREADS,
+        **model_kwargs: Any,
+    ) -> None:
+        """
+        Args:
+            model: The model to use for evaluation
+            population_size: Number of prompts in the population
+            num_generations: Number of generations to run
+            mutation_rate: Mutation rate for genetic operations
+            crossover_rate: Crossover rate for genetic operations
+            tournament_size: Tournament size for selection
+            n_threads: Number of threads for parallel evaluation
+            elitism_size: Number of elitism prompts
+            adaptive_mutation: Whether to use adaptive mutation
+            enable_moo: Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt
+            enable_llm_crossover: Whether to enable LLM crossover
+            seed: Random seed for reproducibility
+            output_style_guidance: Output style guidance for prompts
+            infer_output_style: Whether to infer output style
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+            **model_kwargs: Additional model parameters
+        """
         # Initialize base class first
-        super().__init__(model=model, project_name=project_name, **model_kwargs)
+        if "project_name" in model_kwargs:
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            )
+            del model_kwargs["project_name"]
+
+        super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
-        self.num_threads = num_threads
+        if num_threads is not None:
+            print("num_threads is deprecated; use n_threads instead")
+            n_threads = num_threads
+        self.num_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
         self.seed = seed
-        self.output_style_guidance = output_style_guidance if output_style_guidance is not None else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
+        self.output_style_guidance = (
+            output_style_guidance
+            if output_style_guidance is not None
+            else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
+        )
         self.infer_output_style = infer_output_style
         self.llm_call_counter = 0
         self._opik_client = opik_client.get_client_cached()
-        self._current_optimization_id = None
+        self._current_optimization_id: Optional[str] = None
         self._current_generation = 0
-        self._best_fitness_history = []
+        self._best_fitness_history: List[float] = []
         self._generations_without_improvement = 0
-        self._llm_cache = {}
-        self._current_population = []
+        self._current_population: List[Any] = []
         self._generations_without_overall_improvement = 0
+        self._best_primary_score_history: List[float] = []
+        self._gens_since_pop_improvement: int = 0
 
         if self.seed is not None:
             random.seed(self.seed)
             np.random.seed(self.seed)
             logger.info(f"Global random seed set to: {self.seed}")
-            # Note: DEAP tools generally respect random.seed(). 
+            # Note: DEAP tools generally respect random.seed().
             # TODO investigate if specific DEAP components require separate seeding
 
         if self.enable_moo:
             if not hasattr(creator, "FitnessMulti"):
-                creator.create("FitnessMulti", base.Fitness, weights=self.DEFAULT_MOO_WEIGHTS)
+                creator.create(
+                    "FitnessMulti", base.Fitness, weights=self.DEFAULT_MOO_WEIGHTS
+                )
             fitness_attr = creator.FitnessMulti
         else:
             if not hasattr(creator, "FitnessMax"):
                 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
             fitness_attr = creator.FitnessMax
-        
-        if not hasattr(creator, "Individual") or getattr(creator.Individual, "fitness") != fitness_attr:
+
+        if (
+            not hasattr(creator, "Individual")
+            or getattr(creator.Individual, "fitness") != fitness_attr
+        ):
             if hasattr(creator, "Individual"):
                 del creator.Individual
-            creator.create("Individual", str, fitness=fitness_attr)
+            creator.create("Individual", list, fitness=fitness_attr)
 
         self.toolbox = base.Toolbox()
-        self.toolbox.register("default_individual", lambda: creator.Individual("placeholder"))
-        self.toolbox.register("population", tools.initRepeat, list, self.toolbox.default_individual)
-        
+        self.toolbox.register(
+            "default_individual", lambda: creator.Individual("placeholder")
+        )
+        self.toolbox.register(
+            "population", tools.initRepeat, list, self.toolbox.default_individual
+        )
+
         if self.enable_llm_crossover:
             self.toolbox.register("mate", self._llm_deap_crossover)
         else:
             self.toolbox.register("mate", self._deap_crossover)
-        
+
         self.toolbox.register("mutate", self._deap_mutation)
-        
+
         if self.enable_moo:
             self.toolbox.register("select", tools.selNSGA2)
         else:
-            self.toolbox.register("select", tools.selTournament, tournsize=self.tournament_size)
+            self.toolbox.register(
+                "select", tools.selTournament, tournsize=self.tournament_size
+            )
 
         logger.debug(
             f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
@@ -174,22 +234,27 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             return self.mutation_rate
 
         # Calculate improvement rate
-        recent_improvement = (self._best_fitness_history[-1] - self._best_fitness_history[-2]) / abs(self._best_fitness_history[-2])
-        
+        recent_improvement = (
+            self._best_fitness_history[-1] - self._best_fitness_history[-2]
+        ) / abs(self._best_fitness_history[-2])
+
         # Calculate population diversity
         current_diversity = self._calculate_population_diversity()
-        
+
         # Check for stagnation
         if recent_improvement < self.DEFAULT_RESTART_THRESHOLD:
             self._generations_without_improvement += 1
         else:
             self._generations_without_improvement = 0
-        
+
         # Adjust mutation rate based on both improvement and diversity
         if self._generations_without_improvement >= self.DEFAULT_RESTART_GENERATIONS:
             # Significant stagnation - increase mutation significantly
             return min(self.mutation_rate * 2.5, self.DEFAULT_MAX_MUTATION_RATE)
-        elif recent_improvement < 0.01 and current_diversity < self.DEFAULT_DIVERSITY_THRESHOLD:
+        elif (
+            recent_improvement < 0.01
+            and current_diversity < self.DEFAULT_DIVERSITY_THRESHOLD
+        ):
             # Both stagnating and low diversity - increase mutation significantly
             return min(self.mutation_rate * 2.0, self.DEFAULT_MAX_MUTATION_RATE)
         elif recent_improvement < 0.01:
@@ -202,37 +267,34 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
 
     def _calculate_population_diversity(self) -> float:
         """Calculate the diversity of the current population."""
-        if not hasattr(self, '_current_population') or not self._current_population:
+        if not hasattr(self, "_current_population") or not self._current_population:
             return 0.0
-        
-        # Calculate average Levenshtein distance between all pairs
-        total_distance = 0
+
+        # Calculate average Levenshtein using rapidfuzz distance between all pairs
+        total_distance = 0.0
         count = 0
         for i in range(len(self._current_population)):
             for j in range(i + 1, len(self._current_population)):
                 str1 = str(self._current_population[i])
                 str2 = str(self._current_population[j])
-                distance = Levenshtein.distance(str1, str2)
+                distance = rapidfuzz.distance.Indel.normalized_similarity(str1, str2)
                 max_len = max(len(str1), len(str2))
                 if max_len > 0:
                     normalized_distance = distance / max_len
                     total_distance += normalized_distance
                     count += 1
-        
+
         return total_distance / count if count > 0 else 0.0
 
-    def _deap_crossover(
-            self,
-            ind1: "creator.Individual",
-            ind2: "creator.Individual"
-        ) -> Tuple["creator.Individual", "creator.Individual"]:
-        """Enhanced crossover operation that preserves semantic meaning.
-        Attempts chunk-level crossover first, then falls back to word-level.
-        """
-        str1_orig, str2_orig = str(ind1), str(ind2)
-
-        chunks1 = [chunk.strip() for chunk in str1_orig.split('.') if chunk.strip()]
-        chunks2 = [chunk.strip() for chunk in str2_orig.split('.') if chunk.strip()]
+    def _deap_crossover_chunking_strategy(
+        self, messages_1_str: str, messages_2_str: str
+    ) -> Tuple[str, str]:
+        chunks1 = [
+            chunk.strip() for chunk in messages_1_str.split(".") if chunk.strip()
+        ]
+        chunks2 = [
+            chunk.strip() for chunk in messages_2_str.split(".") if chunk.strip()
+        ]
 
         # Try chunk-level crossover if both parents have at least 2 chunks
         if len(chunks1) >= 2 and len(chunks2) >= 2:
@@ -240,43 +302,86 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             # Crossover point is between 1 and min_num_chunks - 1
             # This requires min_num_chunks >= 2, which is already checked.
             point = random.randint(1, min_num_chunks - 1)
-            
+
             child1_chunks = chunks1[:point] + chunks2[point:]
             child2_chunks = chunks2[:point] + chunks1[point:]
-            
-            child1_str = '. '.join(child1_chunks) + ('.' if child1_chunks else '')
-            child2_str = '. '.join(child2_chunks) + ('.' if child2_chunks else '')
-            
-            return creator.Individual(child1_str), creator.Individual(child2_str)
 
-        # Fallback to word-level crossover if chunk-level is not suitable
-        words1 = str1_orig.split()
-        words2 = str2_orig.split()
+            child1_str = ". ".join(child1_chunks) + ("." if child1_chunks else "")
+            child2_str = ". ".join(child2_chunks) + ("." if child2_chunks else "")
+
+            return child1_str, child2_str
+        else:
+            raise ValueError(
+                "Not enough chunks in either prompt for chunk-level crossover"
+            )
+
+    def _deap_crossover_word_level(
+        self, messages_1_str: str, messages_2_str: str
+    ) -> Tuple[str, str]:
+        words1 = messages_1_str.split()
+        words2 = messages_2_str.split()
 
         # If either prompt is empty (no words), return parents
         if not words1 or not words2:
-            return ind1, ind2
+            return messages_1_str, messages_2_str
 
         min_word_len = min(len(words1), len(words2))
         # Need at least 2 words in the shorter prompt for a valid crossover point
         if min_word_len < 2:
-            return ind1, ind2
+            return messages_1_str, messages_2_str
 
         # Crossover point for words: 1 to min_word_len - 1
         point = random.randint(1, min_word_len - 1)
         child1_words = words1[:point] + words2[point:]
         child2_words = words2[:point] + words1[point:]
-        
-        return creator.Individual(' '.join(child1_words)), creator.Individual(' '.join(child2_words))
+
+        return " ".join(child1_words), " ".join(child2_words)
+
+    def _deap_crossover(self, ind1: Any, ind2: Any) -> Tuple[Any, Any]:
+        """Enhanced crossover operation that preserves semantic meaning.
+        Attempts chunk-level crossover first, then falls back to word-level.
+        """
+        reporting.display_message(
+            "      Recombining prompts by mixing and matching words and sentences.",
+            verbose=self.verbose,
+        )
+        messages_1_orig: List[Dict[str, str]] = ind1
+        messages_2_orig: List[Dict[str, str]] = ind2
+
+        for i, message_1 in enumerate(messages_1_orig):
+            role: str = message_1["role"]
+            message_1_str: str = message_1["content"]
+
+            # We check that the second message has enough AI messages and the correct role
+            if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
+                message_2 = messages_2_orig[i]
+                message_2_str: str = message_2["content"]
+
+                try:
+                    child1_str, child2_str = self._deap_crossover_chunking_strategy(
+                        message_1_str, message_2_str
+                    )
+                except ValueError:
+                    child1_str, child2_str = self._deap_crossover_word_level(
+                        message_1_str, message_2_str
+                    )
+
+                # Update the message content
+                messages_1_orig[i]["content"] = child1_str
+                messages_2_orig[i]["content"] = child2_str
+            else:
+                # We don't perform any crossover if there are not enough messages or the roles
+                # don't match
+                pass
+
+        return creator.Individual(messages_1_orig), creator.Individual(messages_2_orig)
 
     def _deap_mutation(
-            self,
-            individual: "creator.Individual",
-            task_config: TaskConfig
-        ) -> Tuple["creator.Individual",]:
-        """Enhanced mutation operation with multiple strategies. Requires task_config for some mutations."""
-        prompt = str(individual)
-        
+        self, individual: Any, initial_prompt: chat_prompt.ChatPrompt
+    ) -> Any:
+        """Enhanced mutation operation with multiple strategies."""
+        prompt = chat_prompt.ChatPrompt(messages=individual)
+
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
 
@@ -284,109 +389,173 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         if diversity < self.DEFAULT_DIVERSITY_THRESHOLD:
             # Low diversity - use more aggressive mutations (higher chance for semantic)
             semantic_threshold = 0.5
-            structural_threshold = 0.8 # semantic_threshold + 0.3
+            structural_threshold = 0.8  # semantic_threshold + 0.3
         else:
             # Good diversity - use more conservative mutations (higher chance for word_level)
             semantic_threshold = 0.4
-            structural_threshold = 0.7 # semantic_threshold + 0.3
+            structural_threshold = 0.7  # semantic_threshold + 0.3
 
         mutation_choice = random.random()
 
         if mutation_choice > structural_threshold:
             # This corresponds to the original 'else' (word_level_mutation)
-            return self._word_level_mutation(prompt)
+            mutated_prompt = self._word_level_mutation_prompt(prompt)
+            reporting.display_success(
+                "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
+                verbose=self.verbose,
+            )
+            return creator.Individual(mutated_prompt.get_messages())
         elif mutation_choice > semantic_threshold:
             # This corresponds to the original 'elif' (structural_mutation)
-            return self._structural_mutation(prompt)
+            mutated_prompt = self._structural_mutation(prompt)
+            reporting.display_success(
+                "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
+                verbose=self.verbose,
+            )
+            return creator.Individual(mutated_prompt.get_messages())
         else:
             # This corresponds to the original 'if' (semantic_mutation)
-            return self._semantic_mutation(prompt, task_config)
+            mutated_prompt = self._semantic_mutation(prompt, initial_prompt)
+            reporting.display_success(
+                "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",
+                verbose=self.verbose,
+            )
+            return creator.Individual(mutated_prompt.get_messages())
 
     def _semantic_mutation(
-            self,
-            prompt: str,
-            task_config: TaskConfig
-        ) -> Tuple["creator.Individual",]:
+        self, prompt: chat_prompt.ChatPrompt, initial_prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
         """Enhanced semantic mutation with multiple strategies."""
         current_output_style_guidance = self.output_style_guidance
-        if random.random() < 0.1: 
-            return self._radical_innovation_mutation(prompt, task_config)
-        
+        if random.random() < 0.1:
+            return self._radical_innovation_mutation(prompt, initial_prompt)
+
         try:
-            strategy = random.choice([
-                "rephrase", "simplify", "elaborate", "restructure", "focus", "increase_complexity_and_detail"
-            ])
-            
+            strategy = random.choice(
+                [
+                    "rephrase",
+                    "simplify",
+                    "elaborate",
+                    "restructure",
+                    "focus",
+                    "increase_complexity_and_detail",
+                ]
+            )
+
             strategy_prompts = {
                 "rephrase": f"Create a different way to express the same instruction, possibly with a different length or structure, ensuring it still aims for an answer from the target LLM in the style of: '{current_output_style_guidance}'.",
                 "simplify": f"Simplify the instruction while maintaining its core meaning, potentially making it more concise, to elicit an answer in the style of: '{current_output_style_guidance}'.",
                 "elaborate": f"Add more relevant detail and specificity to the instruction, potentially increasing its length, but only if it helps achieve a more accurate answer from the target LLM in the style of: '{current_output_style_guidance}'.",
                 "restructure": f"Change the structure of the instruction (e.g., reorder sentences, combine/split ideas) while keeping its intent, ensuring the new structure strongly guides towards an output in the style of: '{current_output_style_guidance}'.",
                 "focus": f"Emphasize the key aspects of the instruction, perhaps by rephrasing or adding clarifying statements, to better elicit an answer in the style of: '{current_output_style_guidance}'.",
-                "increase_complexity_and_detail": f"Significantly elaborate on this instruction. Add more details, examples, context, or constraints to make it more comprehensive. The goal of this elaboration is to make the prompt itself more detailed, so that it VERY CLEARLY guides the target LLM to produce a highly accurate final answer in the style of: '{current_output_style_guidance}'. The prompt can be long if needed to achieve this output style."
+                "increase_complexity_and_detail": f"Significantly elaborate on this instruction. Add more details, examples, context, or constraints to make it more comprehensive. The goal of this elaboration is to make the prompt itself more detailed, so that it VERY CLEARLY guides the target LLM to produce a highly accurate final answer in the style of: '{current_output_style_guidance}'. The prompt can be long if needed to achieve this output style.",
             }
-            
+
             user_prompt_for_semantic_mutation = f"""Given this prompt: '{prompt}'
-Task context: {self._get_task_description_for_llm(task_config)}
+Task context: {self._get_task_description_for_llm(initial_prompt)}
 Desired output style from target LLM: '{current_output_style_guidance}'
 Instruction for this modification: {strategy_prompts[strategy]}.
-Return only the modified prompt string, nothing else.
+Return only the modified prompt message list, nothing else. Make sure to return a valid JSON object.
 """
             response = self._call_model(
-                prompt=user_prompt_for_semantic_mutation, 
-                system_prompt=f"You are a prompt engineering expert. Your goal is to modify prompts to improve their effectiveness in eliciting specific types of answers, particularly matching the style: '{current_output_style_guidance}'. Follow the specific modification instruction provided.",
-                is_reasoning=True
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are a prompt engineering expert. Your goal is to modify prompts to improve their effectiveness in eliciting specific types of answers, particularly matching the style: '{current_output_style_guidance}'. Follow the specific modification instruction provided.",
+                    },
+                    {"role": "user", "content": user_prompt_for_semantic_mutation},
+                ],
+                is_reasoning=True,
             )
-            return creator.Individual(response.strip()),
+
+            return chat_prompt.ChatPrompt(messages=utils.json_to_dict(response.strip()))
         except Exception as e:
-            logger.warning(f"Error in semantic mutation for prompt '{prompt[:50]}...': {e}")
-            return creator.Individual(prompt),
+            reporting.display_error(
+                f"      Error in semantic mutation, this is usually a parsing error: {e}",
+                verbose=self.verbose,
+            )
+            return prompt
 
     def _structural_mutation(
-            self,
-            prompt: str
-        ) -> Tuple["creator.Individual",]:
+        self, prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
         """Perform structural mutation (reordering, combining, splitting)."""
-        sentences = [s.strip() for s in prompt.split('.') if s.strip()]
-        if len(sentences) <= 1:
-            return self._word_level_mutation(prompt)
-        
+        mutated_messages: List[Dict[str, str]] = []
+
+        for message in prompt.get_messages():
+            content = message["content"]
+            role = message["role"]
+
+            sentences = [s.strip() for s in content.split(".") if s.strip()]
+            if len(sentences) <= 1:
+                mutated_messages.append(
+                    {"role": role, "content": self._word_level_mutation(content)}
+                )
+                continue
+
+            mutation_type = random.random()
+            if mutation_type < 0.3:
+                # Reorder sentences
+                random.shuffle(sentences)
+                mutated_messages.append(
+                    {"role": role, "content": ". ".join(sentences) + "."}
+                )
+                continue
+            elif mutation_type < 0.6:
+                # Combine adjacent sentences
+                if len(sentences) >= 2:
+                    idx = random.randint(0, len(sentences) - 2)
+                    combined = sentences[idx] + " and " + sentences[idx + 1]
+                    sentences[idx : idx + 2] = [combined]
+                    mutated_messages.append(
+                        {"role": role, "content": ". ".join(sentences) + "."}
+                    )
+                    continue
+            else:
+                # Split a sentence
+                idx = random.randint(0, len(sentences) - 1)
+                words = sentences[idx].split()
+                if len(words) > 3:
+                    split_point = random.randint(2, len(words) - 2)
+                    sentences[idx : idx + 1] = [
+                        " ".join(words[:split_point]),
+                        " ".join(words[split_point:]),
+                    ]
+                    mutated_messages.append(
+                        {"role": role, "content": ". ".join(sentences) + "."}
+                    )
+                    continue
+                else:
+                    mutated_messages.append({"role": role, "content": content})
+
+        return chat_prompt.ChatPrompt(messages=mutated_messages)
+
+    def _word_level_mutation_prompt(
+        self, prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
+        mutated_messages: List[Dict[str, str]] = []
+        for message in prompt.get_messages():
+            mutated_messages.append(
+                {
+                    "role": message["role"],
+                    "content": self._word_level_mutation(message["content"]),
+                }
+            )
+        return chat_prompt.ChatPrompt(messages=mutated_messages)
+
+    def _word_level_mutation(self, msg_content: str) -> str:
+        """Perform word-level mutation."""
+        words = msg_content.split()
+        if len(words) <= 1:
+            return msg_content
+
         mutation_type = random.random()
         if mutation_type < 0.3:
-            # Reorder sentences
-            random.shuffle(sentences)
-            return creator.Individual('. '.join(sentences) + '.'),
-        elif mutation_type < 0.6:
-            # Combine adjacent sentences
-            if len(sentences) >= 2:
-                idx = random.randint(0, len(sentences) - 2)
-                combined = sentences[idx] + ' and ' + sentences[idx + 1]
-                sentences[idx:idx+2] = [combined]
-                return creator.Individual('. '.join(sentences) + '.'),
-        else:
-            # Split a sentence
-            idx = random.randint(0, len(sentences) - 1)
-            words = sentences[idx].split()
-            if len(words) > 3:
-                split_point = random.randint(2, len(words) - 2)
-                sentences[idx:idx+1] = [' '.join(words[:split_point]), ' '.join(words[split_point:])]
-                return creator.Individual('. '.join(sentences) + '.'),
-        
-        return creator.Individual(prompt),
-
-    def _word_level_mutation(self, prompt: str) -> Tuple["creator.Individual",]:
-        """Perform word-level mutation."""
-        words = prompt.split()
-        if len(words) <= 1:
-            return creator.Individual(prompt),
-        
-        mutation_type = random.random()
-        if mutation_type < 0.3: 
             # Word replacement
             idx = random.randint(0, len(words) - 1)
             words[idx] = self._get_synonym(words[idx])
         elif mutation_type < 0.6:
-             # Word reordering
+            # Word reordering
             if len(words) > 2:
                 i, j = random.sample(range(len(words)), 2)
                 words[i], words[j] = words[j], words[i]
@@ -394,35 +563,45 @@ Return only the modified prompt string, nothing else.
             # Phrase modification
             idx = random.randint(0, len(words) - 1)
             words[idx] = self._modify_phrase(words[idx])
-        
-        return creator.Individual(' '.join(words)),
 
-    def _get_synonym(
-            self,
-            word: str
-        ) -> str:
+        return " ".join(words)
+
+    def _get_synonym(self, word: str) -> str:
         """Get a synonym for a word using LLM."""
         try:
             response = self._call_model(
-                prompt=f"Give me a single synonym for the word '{word}'. Return only the synonym, nothing else.",
-                system_prompt="You are a helpful assistant that provides synonyms. Return only the synonym word, no explanation or additional text.",
-                is_reasoning=True
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that provides synonyms. Return only the synonym word, no explanation or additional text.",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Give me a single synonym for the word '{word}'. Return only the synonym, nothing else.",
+                    },
+                ],
+                is_reasoning=True,
             )
             return response.strip()
         except Exception as e:
             logger.warning(f"Error getting synonym for '{word}': {e}")
             return word
 
-    def _modify_phrase(
-            self,
-            phrase: str
-        ) -> str:
+    def _modify_phrase(self, phrase: str) -> str:
         """Modify a phrase while preserving meaning using LLM."""
         try:
             response = self._call_model(
-                prompt=f"Modify this phrase while keeping the same meaning: '{phrase}'. Return only the modified phrase, nothing else.",
-                system_prompt="You are a helpful assistant that rephrases text. Return only the modified phrase, no explanation or additional text.",
-                is_reasoning=True
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that rephrases text. Return only the modified phrase, no explanation or additional text.",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Modify this phrase while keeping the same meaning: '{phrase}'. Return only the modified phrase, nothing else.",
+                    },
+                ],
+                is_reasoning=True,
             )
             return response.strip()
         except Exception as e:
@@ -430,630 +609,835 @@ Return only the modified prompt string, nothing else.
             return phrase
 
     def _radical_innovation_mutation(
-            self,
-            prompt_str: str,
-            task_config: TaskConfig
-        ) -> Tuple["creator.Individual",]:
+        self, prompt: chat_prompt.ChatPrompt, initial_prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
         """Attempts to generate a significantly improved and potentially very different prompt using an LLM."""
-        logger.debug(f"Attempting radical innovation for prompt: {prompt_str[:70]}...")
-        task_desc_for_llm = self._get_task_description_for_llm(task_config)
+        logger.debug(
+            f"Attempting radical innovation for prompt: {json.dumps(prompt.get_messages())[:70]}..."
+        )
+        task_desc_for_llm = self._get_task_description_for_llm(initial_prompt)
         current_output_style_guidance = self.output_style_guidance
-        
+
         user_prompt_for_radical_innovation = f"""Task Context:
 {task_desc_for_llm}
 Desired output style from target LLM: '{current_output_style_guidance}'
 
 Existing Prompt (which may be underperforming):
-'''{prompt_str}'''
+'''{prompt.get_messages()}'''
 
-Please generate a new, significantly improved, and potentially very different prompt for this task. 
+Please generate a new, significantly improved, and potentially very different prompt for this task.
 Focus on alternative approaches, better clarity, or more effective guidance for the language model, aiming for the desired output style.
-Return only the new prompt string.
+Return only the new prompt list object.
 """
         try:
             new_prompt_str = self._call_model(
-                prompt=user_prompt_for_radical_innovation,
-                system_prompt=self.get_radical_innovation_system_prompt(),
-                is_reasoning=True
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self._get_radical_innovation_system_prompt(),
+                    },
+                    {"role": "user", "content": user_prompt_for_radical_innovation},
+                ],
+                is_reasoning=True,
             )
-            logger.info(f"Radical innovation generated: {new_prompt_str[:70]}... from: {prompt_str[:70]}...")
-            return creator.Individual(new_prompt_str.strip()),
+            logger.info(
+                f"Radical innovation generated: {new_prompt_str[:70]}... from: {json.dumps(prompt.get_messages())[:70]}..."
+            )
+            return chat_prompt.ChatPrompt(messages=json.loads(new_prompt_str))
         except Exception as e:
-            logger.warning(f"Radical innovation mutation failed for prompt '{prompt_str[:50]}...': {e}. Returning original.")
-            return creator.Individual(prompt_str),
+            logger.warning(
+                f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."
+            )
+            return prompt
 
     def _initialize_population(
-        self,
-        initial_prompt: str,
-        task_config: TaskConfig,
-    ) -> List[str]:
-        """Initialize the population with diverse variations of the initial prompt, 
-           including some 'fresh start' prompts based purely on task description.
-           All generated prompts should aim to elicit answers matching self.output_style_guidance.
+        self, prompt: chat_prompt.ChatPrompt
+    ) -> List[chat_prompt.ChatPrompt]:
+        """Initialize the population with diverse variations of the initial prompt,
+        including some 'fresh start' prompts based purely on task description.
+        All generated prompts should aim to elicit answers matching self.output_style_guidance.
         """
-        population = [initial_prompt]
-        if self.population_size <= 1:
-            return population
+        with reporting.initializing_population(verbose=self.verbose) as init_pop_report:
+            init_pop_report.start(self.population_size)
 
-        num_to_generate_total = self.population_size - 1
-        num_fresh_starts = max(1, int(num_to_generate_total * 0.2))
-        num_variations_on_initial = num_to_generate_total - num_fresh_starts
+            population = [prompt]
+            if self.population_size <= 1:
+                return population
 
-        task_desc_for_llm = self._get_task_description_for_llm(task_config)
-        current_output_style_guidance = self.output_style_guidance
+            num_to_generate_total = self.population_size - 1
+            num_fresh_starts = max(1, int(num_to_generate_total * 0.2))
+            num_variations_on_initial = num_to_generate_total - num_fresh_starts
 
-        # Generate "fresh start" prompts if the initial prompt is not performing well
-        # Cold start prompts are generated from the task description
-        if num_fresh_starts > 0:
-            logger.info(f"Generating {num_fresh_starts} 'fresh start' prompts based on task description (aiming for style: '{current_output_style_guidance[:30]}...')...")
-            fresh_start_user_prompt = f"""Here is a description of a task:
-{task_desc_for_llm}
+            task_desc_for_llm = self._get_task_description_for_llm(prompt)
+            current_output_style_guidance = self.output_style_guidance
 
-The goal is to generate prompts that will make a target LLM produce responses in the following style: '{current_output_style_guidance}'.
+            # Generate "fresh start" prompts if the initial prompt is not performing well
+            # Cold start prompts are generated from the task description
+            if num_fresh_starts > 0:
+                init_pop_report.start_fresh_prompts(num_fresh_starts)
+                fresh_start_user_prompt = f"""Here is a description of a task:
+    {task_desc_for_llm}
 
-Please generate {num_fresh_starts} diverse and effective prompt(s) for a language model to accomplish this task, ensuring they guide towards this specific output style.
-Focus on clarity, completeness, and guiding the model effectively towards the desired style. Explore different structural approaches.
-Your response MUST be a valid JSON list of strings. Do NOT include any other text, explanations, or Markdown formatting like ```json ... ``` around the list.
-Example of valid response: ["Prompt targeting specified style.", "Another prompt designed for the output style."]
-"""
-            try:
-                response_content = self._call_model(
-                    prompt=fresh_start_user_prompt,
-                    system_prompt=f"You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch based on a task description, specifically aiming for prompts that elicit answers in the style: '{current_output_style_guidance}'. Output ONLY a raw JSON list of strings.",
-                    is_reasoning=True
-                )
-                logger.debug(f"Raw LLM response for fresh start prompts: {response_content}")
-                
-                cleaned_response_content = response_content.strip()
-                if cleaned_response_content.startswith("```json"):
-                    cleaned_response_content = cleaned_response_content[7:] 
-                    if cleaned_response_content.endswith("```"):
-                        cleaned_response_content = cleaned_response_content[:-3]
-                elif cleaned_response_content.startswith("```"):
-                    cleaned_response_content = cleaned_response_content[3:]
-                    if cleaned_response_content.endswith("```"):
-                        cleaned_response_content = cleaned_response_content[:-3]
-                cleaned_response_content = cleaned_response_content.strip() 
+    The goal is to generate prompts that will make a target LLM produce responses in the following style: '{current_output_style_guidance}'.
 
-                fresh_prompts = json.loads(cleaned_response_content) 
-                if isinstance(fresh_prompts, list) and all(isinstance(p, str) for p in fresh_prompts) and fresh_prompts:
-                    population.extend(fresh_prompts[:num_fresh_starts])
-                    logger.info(f"Generated {len(fresh_prompts[:num_fresh_starts])} fresh prompts from LLM.")
-                else:
-                    logger.warning(f"LLM response for fresh starts was not a valid list of strings or was empty: {cleaned_response_content}. Using fallbacks for fresh starts.")
-                    population.extend(self._generate_fallback_variations(f"Fresh start targeting style: {current_output_style_guidance[:20]}", num_fresh_starts))
-            except json.JSONDecodeError as e_json:
-                logger.warning(f"JSONDecodeError generating fresh start prompts: {e_json}. LLM response (after cleaning): '{cleaned_response_content if 'cleaned_response_content' in locals() else response_content}'. Using fallbacks for fresh starts.")
-                population.extend(self._generate_fallback_variations(f"Fresh start targeting style: {current_output_style_guidance[:20]}", num_fresh_starts))
-            except Exception as e:
-                logger.warning(f"Error generating fresh start prompts: {e}. Using fallbacks for fresh starts.")
-                population.extend(self._generate_fallback_variations(f"Fresh start targeting style: {current_output_style_guidance[:20]}", num_fresh_starts))
+    Please generate {num_fresh_starts} diverse and effective prompt(s) for a language model to accomplish this task, ensuring they guide towards this specific output style.
+    Focus on clarity, completeness, and guiding the model effectively towards the desired style. Explore different structural approaches.
 
-        # Generate variations on the initial prompt for the remaining slots
-        # TODO: Could add variations with hyper-parameters from the task config like temperature, etc.
-        if num_variations_on_initial > 0:
-            logger.info(f"Generating {num_variations_on_initial} variations of the initial prompt (aiming for style: '{current_output_style_guidance[:30]}...')...")
-            user_prompt_for_variation = f"""Initial prompt:
-'''{initial_prompt}'''
-
-Task context:
-{task_desc_for_llm}
-Desired output style from target LLM: '{current_output_style_guidance}'
-
-Generate {num_variations_on_initial} diverse alternative prompts based on the initial prompt above, keeping the task context and desired output style in mind.
-All generated prompt variations should strongly aim to elicit answers from the target LLM matching the style: '{current_output_style_guidance}'.
-For each variation, consider how to best achieve this style, e.g., by adjusting specificity, structure, phrasing, constraints, or by explicitly requesting it.
-
-Return a JSON array of prompts with the following structure:
-{{
-    "prompts": [
-        {{
-            "prompt": "alternative prompt 1 designed for the specified output style",
-            "strategy": "brief description of the variation strategy used, e.g., 'direct instruction for target style'"
-        }}
-        // ... more prompts if num_variations_on_initial > 1
+    Example of valid response: [
+        ["role": "<role>", "content": "<Prompt targeting specified style.>"],
+        ["role": "<role>", "content": "<Another prompt designed for the output style.>"]
     ]
-}}
-Ensure a good mix of variations, all targeting the specified output style from the end LLM.
-"""
-            try:
-                response_content_variations = self._call_model(
-                    prompt=user_prompt_for_variation,
-                    system_prompt=self.get_reasoning_system_prompt_for_variation(), 
-                    is_reasoning=True
-                )
-                logger.debug(f"Raw response for population variations: {response_content_variations}")
-                json_response_variations = json.loads(response_content_variations)
-                generated_prompts_variations = [p["prompt"] for p in json_response_variations.get("prompts", []) if isinstance(p, dict) and "prompt" in p]
-                if generated_prompts_variations:
-                    population.extend(generated_prompts_variations[:num_variations_on_initial])
-                    logger.info(f"Successfully parsed {len(generated_prompts_variations[:num_variations_on_initial])} variations from LLM response.")
-                else:
-                    logger.warning("Could not parse 'prompts' list for variations. Using fallback for remaining.")
-                    population.extend(self._generate_fallback_variations(initial_prompt, num_variations_on_initial))
-            except Exception as e:
-                logger.error(f"Error calling LLM for initial population variations: {e}. Using fallback for remaining.")
-                population.extend(self._generate_fallback_variations(initial_prompt, num_variations_on_initial))
 
-        # Ensure population is of the required size using unique prompts
-        # TODO Test with levenshtein distance
-        final_population_set = set()
-        final_population_list = []
-        for p in population:
-            if p not in final_population_set:
-                final_population_set.add(p)
-                final_population_list.append(p)
-        
-        # If not enough unique prompts, fill with fallbacks (could be more sophisticated)
-        while len(final_population_list) < self.population_size and len(final_population_list) < num_to_generate_total +1:
-            fallback_prompt = initial_prompt + f" #fallback{len(final_population_list)}"
-            if fallback_prompt not in final_population_set:
-                 final_population_list.append(fallback_prompt)
-                 final_population_set.add(fallback_prompt)
+    Your response MUST be a valid JSON list of AI messages. Do NOT include any other text, explanations, or Markdown formatting like ```json ... ``` around the list.
+
+    """
+                try:
+                    response_content = self._call_model(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": f"You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch based on a task description, specifically aiming for prompts that elicit answers in the style: '{current_output_style_guidance}'. Output ONLY a raw JSON list of strings.",
+                            },
+                            {"role": "user", "content": fresh_start_user_prompt},
+                        ],
+                        is_reasoning=True,
+                    )
+
+                    logger.debug(
+                        f"Raw LLM response for fresh start prompts: {response_content}"
+                    )
+
+                    fresh_prompts = utils.json_to_dict(response_content)
+                    if isinstance(fresh_prompts, list):
+                        if all(isinstance(p, dict) for p in fresh_prompts) and all(
+                            p.get("role") is not None for p in fresh_prompts
+                        ):
+                            population.append(
+                                chat_prompt.ChatPrompt(messages=fresh_prompts)
+                            )
+                            init_pop_report.success_fresh_prompts(1)
+                        elif all(isinstance(p, list) for p in fresh_prompts):
+                            population.extend(
+                                [
+                                    chat_prompt.ChatPrompt(messages=p)
+                                    for p in fresh_prompts[:num_fresh_starts]
+                                ]
+                            )
+                            init_pop_report.success_fresh_prompts(
+                                len(fresh_prompts[:num_fresh_starts])
+                            )
+                        else:
+                            init_pop_report.failed_fresh_prompts(
+                                num_fresh_starts,
+                                f"LLM response for fresh starts was not a valid list of strings or was empty: {response_content}. Skipping fresh start prompts.",
+                            )
+                except json.JSONDecodeError as e_json:
+                    init_pop_report.failed_fresh_prompts(
+                        num_fresh_starts,
+                        f"JSONDecodeError generating fresh start prompts: {e_json}. LLM response: '{response_content}'. Skipping fresh start prompts.",
+                    )
+                except Exception as e:
+                    init_pop_report.failed_fresh_prompts(
+                        num_fresh_starts,
+                        f"Error generating fresh start prompts: {e}. Skipping fresh start prompts.",
+                    )
+
+            # Generate variations on the initial prompt for the remaining slots
+            # TODO: Could add variations with hyper-parameters from the task config like temperature, etc.
+            if num_variations_on_initial > 0:
+                init_pop_report.start_variations(num_variations_on_initial)
+
+                # TODO: We need to split this into batches as the model will not return enough tokens
+                # to generate all the candidates
+                user_prompt_for_variation = f"""Initial prompt:
+    '''{prompt.get_messages()}'''
+
+    Task context:
+    {task_desc_for_llm}
+    Desired output style from target LLM: '{current_output_style_guidance}'
+
+    Generate {num_variations_on_initial} diverse alternative prompts based on the initial prompt above, keeping the task context and desired output style in mind.
+    All generated prompt variations should strongly aim to elicit answers from the target LLM matching the style: '{current_output_style_guidance}'.
+    For each variation, consider how to best achieve this style, e.g., by adjusting specificity, structure, phrasing, constraints, or by explicitly requesting it.
+
+    Return a JSON array of prompts with the following structure:
+    {{
+        "prompts": [
+            {{
+                "prompt": [{{"role": "<role>", "content": "<content>"}}],
+                "strategy": "brief description of the variation strategy used, e.g., 'direct instruction for target style'"
+            }}
+            // ... more prompts if num_variations_on_initial > 1
+        ]
+    }}
+    Ensure a good mix of variations, all targeting the specified output style from the end LLM.
+
+    Return a valid JSON object that is correctly escaped. Return nothing else, d`o not include any additional text or Markdown formatting.
+    """
+                try:
+                    response_content_variations = self._call_model(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": self._get_reasoning_system_prompt_for_variation(),
+                            },
+                            {"role": "user", "content": user_prompt_for_variation},
+                        ],
+                        is_reasoning=True,
+                    )
+                    logger.debug(
+                        f"Raw response for population variations: {response_content_variations}"
+                    )
+                    json_response_variations = json.loads(response_content_variations)
+                    generated_prompts_variations = [
+                        p["prompt"]
+                        for p in json_response_variations.get("prompts", [])
+                        if isinstance(p, dict) and "prompt" in p
+                    ]
+
+                    if generated_prompts_variations:
+                        init_pop_report.success_variations(
+                            len(
+                                generated_prompts_variations[:num_variations_on_initial]
+                            )
+                        )
+                        population.extend(
+                            [
+                                chat_prompt.ChatPrompt(messages=p)
+                                for p in generated_prompts_variations[
+                                    :num_variations_on_initial
+                                ]
+                            ]
+                        )
+                    else:
+                        init_pop_report.failed_variations(
+                            num_variations_on_initial,
+                            "Could not parse 'prompts' list for variations. Skipping variations.",
+                        )
+                except Exception as e:
+                    init_pop_report.failed_variations(
+                        num_variations_on_initial,
+                        f"Error calling LLM for initial population variations: {e}",
+                    )
+
+            # Ensure population is of the required size using unique prompts
+            # TODO Test with levenshtein distance
+            final_population_set: Set[str] = set()
+            final_population_list: List[chat_prompt.ChatPrompt] = []
+            for p in population:
+                if json.dumps(p.get_messages()) not in final_population_set:
+                    final_population_set.add(json.dumps(p.get_messages()))
+                    final_population_list.append(p)
+
+            init_pop_report.end(final_population_list)
+            # Return exactly population_size prompts if possible, or fewer if generation failed badly.
+            return final_population_list[: self.population_size]
+
+    def _should_restart_population(self, curr_best: float) -> bool:
+        """
+        Update internal counters and decide if we should trigger
+        a population restart based on lack of improvement.
+        """
+        if self._best_primary_score_history:
+            threshold = self._best_primary_score_history[-1] * (
+                1 + self.DEFAULT_RESTART_THRESHOLD
+            )
+            if curr_best < threshold:
+                self._gens_since_pop_improvement += 1
             else:
-                # Safeguard if initial_prompt itself is causing issues with uniqueness
-                fallback_prompt = f"Fallback prompt variation {random.randint(1000,9999)}"
-                if fallback_prompt not in final_population_set:
-                    final_population_list.append(fallback_prompt)
-                    final_population_set.add(fallback_prompt)
-                # Avoid infinite loop in extreme edge case
-                else: break
+                self._gens_since_pop_improvement = 0
+        self._best_primary_score_history.append(curr_best)
+        return self._gens_since_pop_improvement >= self.DEFAULT_RESTART_GENERATIONS
 
-        logger.info(f"Initialized population with {len(final_population_list)} prompts.")
-        # Return exactly population_size prompts if possible, or fewer if generation failed badly.
-        return final_population_list[:self.population_size] 
+    def _restart_population(
+        self,
+        hof: tools.HallOfFame,
+        population: List[Any],
+        best_prompt_so_far: chat_prompt.ChatPrompt,
+    ) -> List[Any]:
+        """Return a fresh, evaluated population seeded by elites."""
+        if self.enable_moo:
+            elites = list(hof)
+        else:
+            elites = tools.selBest(population, self.elitism_size)
 
-    def _generate_diverse_variation(
-            self,
-            base_prompt: str,
-            seen_prompts: set
-        ) -> str:
-        """Generate a new variation that's different from existing ones."""
-        max_attempts = 5
-        for _ in range(max_attempts):
-            # Try different mutation strategies
-            mutation_choice = random.random()
-            if mutation_choice < 0.3:
-                new_prompt = self._semantic_mutation(base_prompt)[0]
-            elif mutation_choice < 0.6:
-                new_prompt = self._structural_mutation(base_prompt)[0]
+        seed_prompt = (
+            chat_prompt.ChatPrompt(
+                messages=max(elites, key=lambda x: x.fitness.values[0])
+            )
+            if elites
+            else best_prompt_so_far
+        )
+
+        prompt_variants = self._initialize_population(seed_prompt)
+        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
+
+        for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
+            ind.fitness.values = fit
+
+        self._gens_since_pop_improvement = 0
+        return new_pop
+
+    def _run_generation(
+        self,
+        generation_idx: int,
+        population: List[Any],
+        prompt: chat_prompt.ChatPrompt,
+        hof: tools.HallOfFame,
+        report: Any,
+        best_primary_score_overall: float,
+    ) -> tuple[List[Any], int]:
+        """Execute mating, mutation, evaluation and HoF update."""
+        best_gen_score = 0.0
+
+        # --- selection -------------------------------------------------
+        if self.enable_moo:
+            offspring = self.toolbox.select(population, self.population_size)
+        else:
+            elites = tools.selBest(population, self.elitism_size)
+            rest = self.toolbox.select(population, len(population) - self.elitism_size)
+            offspring = elites + rest
+
+        # --- crossover -------------------------------------------------
+        report.performing_crossover()
+        offspring = list(map(self.toolbox.clone, offspring))
+        for i in range(0, len(offspring), 2):
+            if i + 1 < len(offspring):
+                c1, c2 = offspring[i], offspring[i + 1]
+                if random.random() < self.crossover_rate:
+                    c1_new, c2_new = self.toolbox.mate(c1, c2)
+                    offspring[i], offspring[i + 1] = c1_new, c2_new
+                    del offspring[i].fitness.values, offspring[i + 1].fitness.values
+        reporting.display_success(
+            "      Crossover successful, prompts have been combined and edited.\n│",
+            verbose=self.verbose,
+        )
+
+        # --- mutation --------------------------------------------------
+        report.performing_mutation()
+        mut_rate = self._get_adaptive_mutation_rate()
+        n_mutations = 0
+        for i, ind in enumerate(offspring):
+            if random.random() < mut_rate:
+                new_ind = self.toolbox.mutate(ind, initial_prompt=prompt)
+                offspring[i] = new_ind
+                del offspring[i].fitness.values
+                n_mutations += 1
+        reporting.display_success(
+            f"      Mutation successful, {n_mutations} prompts have been edited.\n│",
+            verbose=self.verbose,
+        )
+
+        # --- evaluation ------------------------------------------------
+        invalid = [ind for ind in offspring if not ind.fitness.valid]
+        report.performing_evaluation(len(invalid))
+        for ind_idx, ind in enumerate(invalid):
+            fit = self.toolbox.evaluate(ind)
+            if self.enable_moo:
+                ind.fitness.values = fit
             else:
-                new_prompt = self._word_level_mutation(base_prompt)[0]
-            
-            # Check if this variation is sufficiently different
-            is_diverse = True
-            for existing in seen_prompts:
-                if Levenshtein.distance(str(new_prompt), existing) / max(len(str(new_prompt)), len(existing)) < 0.3:
-                    is_diverse = False
-                    break
-            if is_diverse:
-                return str(new_prompt)
-        
-        # If we couldn't generate a diverse variation, create a simple one
-        return base_prompt + f" #v{len(seen_prompts)}"
+                ind.fitness.values = tuple([fit[0]])
+            best_gen_score = max(best_gen_score, fit[0])
 
-    def _generate_fallback_variations(
-            self,
-            initial_prompt: str,
-              num_variations: int
-        ) -> List[str]:
-        """Generate fallback variations when LLM generation fails."""
-        variations = []
-        words = initial_prompt.split()
-        
-        for i in range(num_variations):
-            if len(words) > 3:
-                # Shuffle words
-                shuffled = words.copy()
-                random.shuffle(shuffled)
-                variations.append(' '.join(shuffled))
-            else:
-                # Add simple variations
-                variations.append(initial_prompt + f" #v{i}")
-        
-        return variations
+            report.performed_evaluation(ind_idx, ind.fitness.values[0])
+
+        # --- update HoF & reporter ------------------------------------
+        hof.update(offspring)
+        reporting.end_gen(
+            generation_idx,
+            best_gen_score,
+            best_primary_score_overall,
+            verbose=self.verbose,
+        )
+
+        return offspring, len(invalid)
+
+    def _population_best_score(self, population: List[Any]) -> float:
+        """Return highest primary-objective score among *valid* individuals."""
+        valid_scores = [
+            ind.fitness.values[0] for ind in population if ind.fitness.valid
+        ]
+        return max(valid_scores, default=0.0)
 
     def optimize_prompt(
         self,
-        dataset: Union[str, opik.Dataset],
-        metric_config: MetricConfig,
-        task_config: TaskConfig,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: Callable,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         auto_continue: bool = False,
-        **kwargs,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
+        **kwargs: Any,
     ) -> OptimizationResult:
+        """
+        Args:
+            prompt: The prompt to optimize
+            dataset: The dataset to use for evaluation
+            metric: Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
+            experiment_config: Optional experiment configuration
+            n_samples: Optional number of samples to use
+            auto_continue: Whether to automatically continue optimization
+            **kwargs: Additional keyword arguments
+        """
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+
+        if not isinstance(dataset, opik.Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+
+        if not callable(metric):
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
+
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        if agent_class is None:
+            self.agent_class = utils.create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
+
+        self.project_name = self.agent_class.project_name
+
+        # Step 0. Start Opik optimization run
+        opik_optimization_run: Optional[optimization.Optimization] = None
+        try:
+            opik_optimization_run = self._opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=metric.__name__,
+                metadata={"optimizer": self.__class__.__name__},
+            )
+            self._current_optimization_id = opik_optimization_run.id
+        except Exception as e:
+            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
+            self._current_optimization_id = None
+
+        reporting.display_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=self._current_optimization_id,
+            dataset_id=dataset.id,
+            verbose=self.verbose,
+        )
+
+        reporting.display_configuration(
+            prompt.get_messages(),
+            {
+                "optimizer": f"{ 'DEAP MOO' if self.enable_moo else 'DEAP SO' } Evolutionary Optimization",
+                "population_size": self.population_size,
+                "generations": self.num_generations,
+                "mutation_rate": self.mutation_rate,
+                "crossover_rate": self.crossover_rate,
+            },
+            verbose=self.verbose,
+        )
+
+        # Step 1. Step variables and define fitness function
         self.llm_call_counter = 0
-        self._history = []
-        self._current_optimization_id = None
+        self._history: List[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
         self._generations_without_improvement = 0
-        self._llm_cache.clear()
         self._current_population = []
         self._generations_without_overall_improvement = 0
 
-        # Determine final output_style_guidance
+        if self.enable_moo:
+
+            def _deap_evaluate_individual_fitness(
+                messages: List[Dict[str, str]],
+            ) -> Tuple[float, float]:
+                primary_fitness_score: float = self._evaluate_prompt(
+                    prompt,
+                    messages,  # type: ignore
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    experiment_config=(experiment_config or {}).copy(),
+                    optimization_id=self._current_optimization_id,
+                    verbose=0,
+                )
+                prompt_length = float(len(str(json.dumps(messages))))
+                return (primary_fitness_score, prompt_length)
+
+        else:
+            # Single-objective
+            def _deap_evaluate_individual_fitness(
+                messages: List[Dict[str, str]],
+            ) -> Tuple[float, float]:
+                fitness_score: float = self._evaluate_prompt(
+                    prompt,
+                    messages,  # type: ignore
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    experiment_config=(experiment_config or {}).copy(),
+                    optimization_id=self._current_optimization_id,
+                    verbose=0,
+                )
+                return (fitness_score, 0.0)
+
+        self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
+
+        # Step 2. Compute the initial performance of the prompt
+        with reporting.baseline_performance(
+            verbose=self.verbose
+        ) as report_baseline_performance:
+            initial_eval_result = _deap_evaluate_individual_fitness(
+                prompt.get_messages()
+            )  # type: ignore
+            initial_primary_score = initial_eval_result[0]
+            initial_length = (
+                initial_eval_result[1]
+                if self.enable_moo
+                else float(len(json.dumps(prompt.get_messages())))
+            )
+
+            best_primary_score_overall = initial_primary_score
+            best_prompt_overall = prompt
+            report_baseline_performance.set_score(initial_primary_score)
+
+        # Step 3. Define the output style guide
         effective_output_style_guidance = self.output_style_guidance
-        if self.infer_output_style and \
-           (self.output_style_guidance is None or self.output_style_guidance == self.DEFAULT_OUTPUT_STYLE_GUIDANCE):
+        if self.infer_output_style and (
+            self.output_style_guidance is None
+            or self.output_style_guidance == self.DEFAULT_OUTPUT_STYLE_GUIDANCE
+        ):
             # If user wants inference AND hasn't provided a specific custom guidance
-            inferred_style = self._infer_output_style_from_dataset(dataset, task_config)
+            inferred_style = self._infer_output_style_from_dataset(dataset, prompt)
             if inferred_style:
                 effective_output_style_guidance = inferred_style
                 # Update self.output_style_guidance for this run so dynamic prompt methods use it
-                self.output_style_guidance = inferred_style 
+                self.output_style_guidance = inferred_style
             else:
-                logger.warning("Failed to infer output style, using default or user-provided guidance.")
-        
+                logger.warning(
+                    "Failed to infer output style, using default or user-provided guidance."
+                )
+
         # Ensure self.output_style_guidance is set to the effective one for the rest of the methods for this run
         # (It might have been None if user passed None and infer_output_style was False)
         if self.output_style_guidance is None:
             # Fallback if still None
             self.output_style_guidance = self.DEFAULT_OUTPUT_STYLE_GUIDANCE
-        
-        # The methods like get_reasoning_system_prompt_for_variation will now use the potentially updated self.output_style_guidance
-        log_prefix = "DEAP MOO" if self.enable_moo else "DEAP SO"
-        logger.info(f"Starting {log_prefix} Evolutionary Optimization for prompt: {task_config.instruction_prompt[:100]}...")
-        logger.info(f"Population: {self.population_size}, Generations: {self.num_generations}, Mutation: {self.mutation_rate}, Crossover: {self.crossover_rate}")
 
-        opik_dataset_obj: opik.Dataset
-        if isinstance(dataset, str):
-            opik_dataset_obj = self._opik_client.get_dataset(dataset)
-        else:
-            opik_dataset_obj = dataset
-
-        opik_optimization_run = None
-        try:
-            opik_optimization_run = self._opik_client.create_optimization(
-                dataset_name=opik_dataset_obj.name,
-                objective_name=metric_config.metric.name,
-                metadata={"optimizer": self.__class__.__name__},
-            )
-            self._current_optimization_id = opik_optimization_run.id
-            logger.info(f"Created Opik Optimization run with ID: {self._current_optimization_id}")
-        except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-
-        # Use of multi-objective fitness function or single-objective fitness function
-        if self.enable_moo:
-            def _deap_evaluate_individual_fitness(
-                    individual_prompt_str: str
-                ) -> Tuple[float, float]:
-                primary_fitness_score = self.evaluate_prompt(
-                    dataset=opik_dataset_obj, metric_config=metric_config, task_config=task_config,
-                    prompt=str(individual_prompt_str), n_samples=n_samples,
-                    experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id, verbose=0
-                )
-                prompt_length = float(len(str(individual_prompt_str)))
-                logger.debug(f"Evaluated MOO individual '{str(individual_prompt_str)[:50]}...' -> Primary Score: {primary_fitness_score:.4f}, Length: {prompt_length}")
-                return (primary_fitness_score, prompt_length)
-        else:
-            # Single-objective
-            def _deap_evaluate_individual_fitness(
-                    individual_prompt_str: str
-                ) -> Tuple[float,]:
-                fitness_score = self.evaluate_prompt(
-                    dataset=opik_dataset_obj, metric_config=metric_config, task_config=task_config,
-                    prompt=str(individual_prompt_str), n_samples=n_samples,
-                    experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id, verbose=0
-                )
-                logger.debug(f"Evaluated SO individual '{str(individual_prompt_str)[:50]}...' -> Score: {fitness_score:.4f}")
-                return (fitness_score,)
-
-        # Register the fitness function with DEAP
-        self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
-
-        initial_prompt_strings = self._initialize_population(
-            initial_prompt=task_config.instruction_prompt, task_config=task_config
+        # Step 4. Initialize population
+        initial_prompts: List[chat_prompt.ChatPrompt] = self._initialize_population(
+            prompt=prompt
         )
-        deap_population = [creator.Individual(p_str) for p_str in initial_prompt_strings]
-        deap_population = deap_population[:self.population_size]
 
-        initial_eval_result = _deap_evaluate_individual_fitness(task_config.instruction_prompt)
-        initial_primary_score = initial_eval_result[0]
-        initial_length = initial_eval_result[1] if self.enable_moo else float(len(task_config.instruction_prompt))
-        
-        best_primary_score_overall = initial_primary_score
-        best_prompt_overall = task_config.instruction_prompt
-        if self.enable_moo:
-            logger.info(f"Initial prompt '{task_config.instruction_prompt[:100]}...' -> Primary Score: {initial_primary_score:.4f}, Length: {initial_length}")
-        else:
-            logger.info(f"Initial prompt '{task_config.instruction_prompt[:100]}...' score: {initial_primary_score:.4f}")
+        deap_population = [
+            creator.Individual(p.get_messages()) for p in initial_prompts
+        ]
+        deap_population = deap_population[: self.population_size]
 
-        # Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
+        # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
         if self.enable_moo:
             hof = tools.ParetoFront()
-            stats_primary = tools.Statistics(lambda ind: ind.fitness.values[0])
-            stats_length = tools.Statistics(lambda ind: ind.fitness.values[1])
-            stats_primary.register("avg_score", lambda x: sum(x) / len(x) if len(x) > 0 else 0)
-            stats_primary.register("max_score", max)
-            stats_length.register("avg_len", lambda x: sum(x) / len(x) if len(x) > 0 else 0)
-            stats_length.register("min_len", min)
-            mstats = tools.MultiStatistics(score=stats_primary, length=stats_length)
-            logbook_header_stats = mstats.fields
         else:
             # Single-objective
             hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
-            stats = tools.Statistics(lambda ind: ind.fitness.values[0])
-            stats.register("avg", lambda x: sum(x) / len(x) if len(x) > 0 else 0)
-            stats.register("std", lambda x: (sum((xi - (sum(x) / len(x) if len(x) > 0 else 0))**2 for xi in x) / len(x))**0.5 if len(x) > 1 else 0)
-            stats.register("min", min)
-            stats.register("max", max)
-            logbook_header_stats = stats.fields
-        
-        logbook = tools.Logbook()
-        logbook.header = ["gen", "evals"] + logbook_header_stats
 
-        # Evaluate the initial population
-        fitnesses = list(map(self.toolbox.evaluate, deap_population))
-        for ind, fit in zip(deap_population, fitnesses):
-            ind.fitness.values = fit
-        
+        # Step 6. Evaluate the initial population
+        with reporting.evaluate_initial_population(
+            verbose=self.verbose
+        ) as report_initial_population:
+            fitnesses: List[Any] = list(map(self.toolbox.evaluate, deap_population))
+            _best_score = max(
+                best_primary_score_overall, max([x[0] for x in fitnesses])
+            )
+
+            for i, ind, fit in zip(
+                range(len(deap_population)), deap_population, fitnesses
+            ):
+                if self.enable_moo:
+                    ind.fitness.values = fit
+                else:
+                    ind.fitness.values = tuple([fit[0]])
+                report_initial_population.set_score(i, fit[0], _best_score)
+
         hof.update(deap_population)
-        record_stats = mstats if self.enable_moo else stats
-        record = record_stats.compile(deap_population) if record_stats else {}
-        logbook.record(gen=0, evals=len(deap_population), **record)
-        if self.verbose >= 1:
-            print(logbook.stream)
 
         if hof and len(hof) > 0:
             if self.enable_moo:
-                current_best_for_primary = max(hof, key=lambda ind: ind.fitness.values[0])
+                current_best_for_primary: Any = max(
+                    hof, key=lambda ind: ind.fitness.values[0]
+                )
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
-                best_prompt_overall = str(current_best_for_primary)
+                best_prompt_overall = chat_prompt.ChatPrompt(
+                    messages=current_best_for_primary
+                )
             else:
                 # Single-objective
                 current_best_on_front = hof[0]
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
-            
+                best_prompt_overall = chat_prompt.ChatPrompt(
+                    messages=current_best_on_front
+                )
+
             if self.enable_moo:
-                logger.info(f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {best_prompt_overall[:100]}...")
+                logger.info(
+                    f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {json.dumps(best_prompt_overall.get_messages())[:100]}..."
+                )
             else:
-                logger.info(f"Gen {0}: New best score: {best_primary_score_overall:.4f}")
+                logger.info(
+                    f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
+                )
 
             # Simplified history logging for this transition
             initial_round_data = OptimizationRound(
                 round_number=0,
-                current_prompt=best_prompt_overall, # Representative best
+                current_prompt=best_prompt_overall,  # Representative best
                 current_score=best_primary_score_overall,
-                generated_prompts=[{"prompt": best_prompt_overall, "score": best_primary_score_overall, "trial_scores": [best_primary_score_overall]}],
+                generated_prompts=[
+                    {
+                        "prompt": best_prompt_overall,
+                        "score": best_primary_score_overall,
+                        "trial_scores": [best_primary_score_overall],
+                    }
+                ],
                 best_prompt=best_prompt_overall,
                 best_score=best_primary_score_overall,
-                improvement=0.0
-            ).dict()
+                improvement=0.0,
+            )
             self._add_to_history(initial_round_data)
 
-        pbar_desc = f"{log_prefix} Evolutionary Optimization"
-        pbar_postfix_key = "best_primary_score" if self.enable_moo else "best_score"
-        pbar = tqdm(
-            total=self.num_generations,
-            desc=pbar_desc,
-            unit="gen",
-            disable=self.verbose < 1,
-            postfix={pbar_postfix_key: f"{best_primary_score_overall:.4f}", "llm_calls": self.llm_call_counter}
+        with reporting.start_evolutionary_algo(
+            verbose=self.verbose
+        ) as report_evolutionary_algo:
+            for generation_idx in range(1, self.num_generations + 1):
+                report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
+
+                curr_best_score = self._population_best_score(deap_population)
+
+                # ---------- restart logic -------------------------------------
+                if self._should_restart_population(curr_best_score):
+                    report_evolutionary_algo.restart_population(
+                        self.DEFAULT_RESTART_GENERATIONS
+                    )
+                    deap_population = self._restart_population(
+                        hof, deap_population, best_prompt_overall
+                    )
+
+                # ---------- run one generation --------------------------------
+                deap_population, invalid_count = self._run_generation(
+                    generation_idx,
+                    deap_population,
+                    prompt,
+                    hof,
+                    report_evolutionary_algo,
+                    best_primary_score_overall,
+                )
+
+                # -------- update best-prompt bookkeeping -------------------------
+                previous_best_primary_score_for_gen = best_primary_score_overall
+                if hof:
+                    if self.enable_moo:
+                        current_best_ind = max(
+                            hof, key=lambda ind: ind.fitness.values[0]
+                        )
+                    else:
+                        current_best_ind = hof[0]
+
+                    updated_best_primary_score = current_best_ind.fitness.values[0]
+                    if updated_best_primary_score > best_primary_score_overall:
+                        best_primary_score_overall = updated_best_primary_score
+                        self._generations_without_overall_improvement = 0
+                    elif (
+                        updated_best_primary_score
+                        == previous_best_primary_score_for_gen
+                    ):
+                        self._generations_without_overall_improvement += 1
+                    else:
+                        self._generations_without_overall_improvement += 1
+                else:
+                    self._generations_without_overall_improvement += 1
+
+                # ---------- early-stopping check ------------------------------
+                if (
+                    self._generations_without_overall_improvement
+                    >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+                ):
+                    logger.info(
+                        "No overall improvement for %d generations – early stopping at gen %d.",
+                        self.DEFAULT_EARLY_STOPPING_GENERATIONS,
+                        generation_idx,
+                    )
+                    break
+
+                # History logging for this transition
+                # FIXME: Use model.dump() instead of dict()
+                gen_round_data = OptimizationRound(
+                    round_number=generation_idx,
+                    current_prompt=best_prompt_overall,  # Representative best
+                    current_score=best_primary_score_overall,
+                    generated_prompts=[
+                        {"prompt": str(ind), "score": ind.fitness.values[0]}
+                        for ind in deap_population
+                        if ind.fitness.valid
+                    ],
+                    best_prompt=best_prompt_overall,
+                    best_score=best_primary_score_overall,
+                    improvement=(
+                        (best_primary_score_overall - initial_primary_score)
+                        / abs(initial_primary_score)
+                        if initial_primary_score and initial_primary_score != 0
+                        else (1.0 if best_primary_score_overall > 0 else 0.0)
+                    ),
+                )
+                self._add_to_history(gen_round_data)
+
+        stopped_early_flag = (
+            self._generations_without_overall_improvement
+            >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
         )
-
-        gen = 0
-        for gen_idx in range(1, self.num_generations + 1):
-            gen = gen_idx
-            self._current_generation = gen
-            pbar.set_postfix({pbar_postfix_key: f"{best_primary_score_overall:.4f}", "llm_calls": self.llm_call_counter})
-            previous_best_primary_score_for_gen = best_primary_score_overall
-
-            # Population restart logic
-            current_pop_best_primary = 0.0
-            if deap_population and deap_population[0].fitness.valid:
-                current_pop_best_primary = max(ind.fitness.values[0] for ind in deap_population if ind.fitness.valid)
-            
-            if self._best_fitness_history and current_pop_best_primary < self._best_fitness_history[-1] * (1 + self.DEFAULT_RESTART_THRESHOLD):
-                 self._generations_without_improvement += 1
-            else:
-                 self._generations_without_improvement = 0
-            self._best_fitness_history.append(current_pop_best_primary)
-
-            if self._generations_without_improvement >= self.DEFAULT_RESTART_GENERATIONS:
-                logger.info(f"Detected stagnation in primary objective at gen {gen}. Restarting population...")
-                elites_for_restart = list(hof) if self.enable_moo else list(tools.selBest(deap_population, self.elitism_size))
-                seed_prompt_for_restart = str(max(elites_for_restart, key=lambda ind: ind.fitness.values[0])) if elites_for_restart else best_prompt_overall
-                
-                new_population_strings = self._initialize_population(initial_prompt=seed_prompt_for_restart, task_config=task_config)
-                deap_population = [creator.Individual(p_str) for p_str in new_population_strings]
-                self._generations_without_improvement = 0
-                fitnesses_new = list(map(self.toolbox.evaluate, deap_population))
-                for ind, fit in zip(deap_population, fitnesses_new):
-                    ind.fitness.values = fit
-                # Offspring will be selected from this new population in the next step
-
-            # Standard DEAP evolutionary algorithm steps
-            if self.enable_moo:
-                # NSGA-II is used for MOO
-                offspring = self.toolbox.select(deap_population, self.population_size)
-            else:
-                # Single-objective: Elitism + Selection
-                elites = tools.selBest(deap_population, self.elitism_size)
-                selected_offspring = self.toolbox.select(deap_population, len(deap_population) - self.elitism_size)
-                offspring = elites + selected_offspring
-            
-            # Set up the offspring for the next generation
-            offspring = list(map(self.toolbox.clone, offspring))
-            for child1, child2 in zip(offspring[::2], offspring[1::2]):
-                if random.random() < self.crossover_rate:
-                    self.toolbox.mate(child1, child2)
-                    del child1.fitness.values
-                    del child2.fitness.values
-
-            # Mutate the offspring
-            current_mutation_rate = self._get_adaptive_mutation_rate()
-            for mutant in offspring:
-                if random.random() < current_mutation_rate:
-                    self.toolbox.mutate(mutant, task_config=task_config)
-                    del mutant.fitness.values
-            
-            # Evaluate the offspring
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses_eval = map(self.toolbox.evaluate, invalid_ind)
-            for ind, fit in zip(invalid_ind, fitnesses_eval):
-                ind.fitness.values = fit
-            
-            # Update the hall of fame
-            hof.update(offspring)
-            deap_population[:] = offspring # Replace population
-
-            # Update overall best score and prompt (based on primary objective for consistency)
-            if hof and len(hof) > 0:
-                if self.enable_moo:
-                    current_best_on_front = max(hof, key=lambda ind: ind.fitness.values[0])
-                    updated_best_primary_score = current_best_on_front.fitness.values[0]
-                else:
-                    # Single-objective
-                    current_best_on_front = hof[0]
-                    updated_best_primary_score = current_best_on_front.fitness.values[0]
-                
-                if updated_best_primary_score > best_primary_score_overall:
-                    best_primary_score_overall = updated_best_primary_score
-                    best_prompt_overall = str(current_best_on_front)
-                    logger.info(f"Gen {gen}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {best_prompt_overall[:100]}...")
-                    self._generations_without_overall_improvement = 0
-                elif updated_best_primary_score == previous_best_primary_score_for_gen:
-                    # Check against score at start of this gen's logic
-                    self._generations_without_overall_improvement += 1
-                else:
-                    # Score might have decreased or HOF is empty (less likely for SO HOF with size > 0)
-                    self._generations_without_overall_improvement += 1
-            else:
-                # Score might have decreased or HOF is empty (less likely for SO HOF with size > 0)
-                self._generations_without_overall_improvement += 1
-            
-            record = record_stats.compile(deap_population) if record_stats else {}
-            logbook.record(gen=gen, evals=len(invalid_ind), **record)
-            if self.verbose >= 1:
-                print(logbook.stream)
-
-            # History logging for this transition
-            # FIXME: Use model.dump() instead of dict()
-            gen_round_data = OptimizationRound(
-                round_number=gen,
-                current_prompt=best_prompt_overall, # Representative best
-                current_score=best_primary_score_overall,
-                generated_prompts=[{"prompt": str(ind), "score": ind.fitness.values[0]} for ind in deap_population if ind.fitness.valid],
-                best_prompt=best_prompt_overall,
-                best_score=best_primary_score_overall,
-                improvement=(best_primary_score_overall - initial_primary_score) / abs(initial_primary_score) if initial_primary_score and initial_primary_score != 0 else (1.0 if best_primary_score_overall > 0 else 0.0)
-            ).dict()
-            self._add_to_history(gen_round_data)
-            pbar.update(1)
-
-            if self._generations_without_overall_improvement >= self.DEFAULT_EARLY_STOPPING_GENERATIONS:
-                logger.info(f"Overall best score has not improved for {self.DEFAULT_EARLY_STOPPING_GENERATIONS} generations. Stopping early at gen {gen}.")
-                break
-
-        pbar.close()
-        logger.info(f"\n{log_prefix} Evolutionary Optimization finished after {gen} generations.")
-        stopped_early_flag = self._generations_without_overall_improvement >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
         final_details = {}
         initial_score_for_display = initial_primary_score
 
         if self.enable_moo:
             final_results_log = "Pareto Front Solutions:\n"
             if hof and len(hof) > 0:
-                sorted_hof = sorted(hof, key=lambda ind: ind.fitness.values[0], reverse=True)
+                sorted_hof = sorted(
+                    hof, key=lambda ind: ind.fitness.values[0], reverse=True
+                )
                 for i, sol in enumerate(sorted_hof):
                     final_results_log += f"  Solution {i+1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompt='{str(sol)[:100]}...'\n"
                 best_overall_solution = sorted_hof[0]
-                final_best_prompt = str(best_overall_solution)
+                final_best_prompt = chat_prompt.ChatPrompt(
+                    messages=best_overall_solution
+                )
                 final_primary_score = best_overall_solution.fitness.values[0]
                 final_length = best_overall_solution.fitness.values[1]
                 logger.info(final_results_log)
-                logger.info(f"Representative best prompt (highest primary score from Pareto front): '{final_best_prompt}'")
-                logger.info(f"  Primary Score ({metric_config.metric.name}): {final_primary_score:.4f}")
+                logger.info(
+                    f"Representative best prompt (highest primary score from Pareto front): '{final_best_prompt}'"
+                )
+                logger.info(
+                    f"  Primary Score ({metric.__name__}): {final_primary_score:.4f}"
+                )
                 logger.info(f"  Length: {final_length:.0f}")
-                final_details.update({
-                    "initial_primary_score": initial_primary_score,
-                    "initial_length": initial_length,
-                    "final_prompt_representative": final_best_prompt,
-                    "final_primary_score_representative": final_primary_score,
-                    "final_length_representative": final_length,
-                    "pareto_front_solutions": [
-                        {"prompt": str(ind), "score": ind.fitness.values[0], "length": ind.fitness.values[1]}
-                        for ind in hof
-                    ] if hof else []
-                })
+                final_details.update(
+                    {
+                        "initial_primary_score": initial_primary_score,
+                        "initial_length": initial_length,
+                        "final_prompt_representative": final_best_prompt,
+                        "final_primary_score_representative": final_primary_score,
+                        "final_length_representative": final_length,
+                        "pareto_front_solutions": (
+                            [
+                                {
+                                    "prompt": str(ind),
+                                    "score": ind.fitness.values[0],
+                                    "length": ind.fitness.values[1],
+                                }
+                                for ind in hof
+                            ]
+                            if hof
+                            else []
+                        ),
+                    }
+                )
             else:
                 # MOO: ParetoFront is empty. Reporting last known best and fallback values
                 logger.warning("MOO: ParetoFront is empty. Reporting last known best.")
                 final_best_prompt = best_prompt_overall
                 final_primary_score = best_primary_score_overall
-                final_length = float(len(final_best_prompt))
-                final_details.update({"initial_primary_score": initial_primary_score, "initial_length": initial_length, 
-                                      "final_prompt_representative": final_best_prompt, "final_primary_score_representative": final_primary_score, 
-                                      "final_length_representative": final_length, "pareto_front_solutions": []})
+                final_length = float(len(json.dumps(final_best_prompt.get_messages())))
+                final_details.update(
+                    {
+                        "initial_primary_score": initial_primary_score,
+                        "initial_length": initial_length,
+                        "final_prompt_representative": final_best_prompt,
+                        "final_primary_score_representative": final_primary_score,
+                        "final_length_representative": final_length,
+                        "pareto_front_solutions": [],
+                    }
+                )
         else:
             # Single-objective
             final_best_prompt = best_prompt_overall
             final_primary_score = best_primary_score_overall
             logger.info(f"Final best prompt from Hall of Fame: '{final_best_prompt}'")
-            logger.info(f"Final best score ({metric_config.metric.name}): {final_primary_score:.4f}")
-            final_details.update({
-                "initial_prompt": task_config.instruction_prompt,
-                "initial_score": initial_primary_score,
-                "initial_score_for_display": initial_primary_score,
-                "final_prompt": final_best_prompt,
-                "final_score": final_primary_score,
-            })
-        
+            logger.info(
+                f"Final best score ({metric.__name__}): {final_primary_score:.4f}"
+            )
+            final_details.update(
+                {
+                    "initial_prompt": prompt.get_messages(),
+                    "initial_score": initial_primary_score,
+                    "initial_score_for_display": initial_primary_score,
+                    "final_prompt": final_best_prompt,
+                    "final_score": final_primary_score,
+                }
+            )
+
         logger.info(f"Total LLM calls during optimization: {self.llm_call_counter}")
         if opik_optimization_run:
             try:
                 opik_optimization_run.update(status="completed")
-                logger.info(f"Opik Optimization run {self._current_optimization_id} status updated to completed.")
+                logger.info(
+                    f"Opik Optimization run {self._current_optimization_id} status updated to completed."
+                )
             except Exception as e:
                 logger.warning(f"Failed to update Opik Optimization run status: {e}")
 
         # Add final details
-        final_details.update({
-            "total_generations_run": gen,
-            "population_size": self.population_size,
-            "mutation_probability": self.mutation_rate,
-            "crossover_probability": self.crossover_rate,
-            "elitism_size": self.elitism_size if not self.enable_moo else "N/A (MOO uses NSGA-II)",
-            "adaptive_mutation": self.adaptive_mutation,
-            "deap_logbook": logbook.stream if logbook else "Not available",
-            "task_config": task_config.dict(),
-            "metric_config": metric_config.dict(),
-            "model": self.model,
-            "moo_enabled": self.enable_moo,
-            "llm_crossover_enabled": self.enable_llm_crossover,
-            "seed": self.seed,
-            "prompt_type": "single_string_ga",
-            "initial_score_for_display": initial_score_for_display,
-            "temperature": self.model_kwargs.get("temperature"),
-            "stopped_early": stopped_early_flag,
-            "rounds": self.get_history(),
-            "user_output_style_guidance": self.output_style_guidance,
-            "infer_output_style_requested": self.infer_output_style,
-            "final_effective_output_style_guidance": effective_output_style_guidance,
-            "infer_output_style": self.infer_output_style,
-        })
+        final_details.update(
+            {
+                "total_generations_run": generation_idx + 1,
+                "num_generations": self.num_generations,
+                "population_size": self.population_size,
+                "mutation_probability": self.mutation_rate,
+                "crossover_probability": self.crossover_rate,
+                "elitism_size": (
+                    self.elitism_size
+                    if not self.enable_moo
+                    else "N/A (MOO uses NSGA-II)"
+                ),
+                "adaptive_mutation": self.adaptive_mutation,
+                "metric_name": metric.__name__,
+                "model": self.model,
+                "moo_enabled": self.enable_moo,
+                "llm_crossover_enabled": self.enable_llm_crossover,
+                "seed": self.seed,
+                "prompt_type": "single_string_ga",
+                "initial_score_for_display": initial_score_for_display,
+                "temperature": self.model_kwargs.get("temperature"),
+                "stopped_early": stopped_early_flag,
+                "rounds": self.get_history(),
+                "user_output_style_guidance": self.output_style_guidance,
+                "infer_output_style_requested": self.infer_output_style,
+                "final_effective_output_style_guidance": effective_output_style_guidance,
+                "infer_output_style": self.infer_output_style,
+            }
+        )
 
         # Return the OptimizationResult
+        reporting.display_result(
+            initial_score=initial_score_for_display,
+            best_score=final_primary_score,
+            best_prompt=final_best_prompt.get_messages(),
+            verbose=self.verbose,
+        )
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=final_best_prompt, 
-            score=final_primary_score, 
-            metric_name=metric_config.metric.name,
+            prompt=final_best_prompt.get_messages(),
+            score=final_primary_score,
+            initial_prompt=prompt.get_messages(),
+            initial_score=initial_primary_score,
+            metric_name=metric.__name__,
             details=final_details,
-            history=self.get_history(),
-            llm_calls=self.llm_call_counter
+            history=[x.model_dump() for x in self.get_history()],
+            llm_calls=self.llm_call_counter,
+            dataset_id=dataset.id,
+            optimization_id=self._current_optimization_id,
         )
 
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
-        prompt: str,
-        system_prompt: Optional[str] = None,
+        messages: List[Dict[str, str]],
         is_reasoning: bool = False,
         optimization_id: Optional[str] = None,
     ) -> str:
@@ -1069,7 +1453,7 @@ Ensure a good mix of variations, all targeting the specified output style from t
             }
 
             # Prepare metadata for opik
-            metadata_for_opik = {}
+            metadata_for_opik: Dict[str, Any] = {}
             if self.project_name:
                 metadata_for_opik["project_name"] = self.project_name
                 metadata_for_opik["opik"] = {"project_name": self.project_name}
@@ -1079,15 +1463,12 @@ Ensure a good mix of variations, all targeting the specified output style from t
                     metadata_for_opik["opik"]["optimization_id"] = optimization_id
 
             metadata_for_opik["optimizer_name"] = self.__class__.__name__
-            metadata_for_opik["opik_call_type"] = "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+            metadata_for_opik["opik_call_type"] = (
+                "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+            )
 
             if metadata_for_opik:
                 llm_config_params["metadata"] = metadata_for_opik
-
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
 
             # Pass llm_config_params to the Opik monitor
             final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
@@ -1102,230 +1483,177 @@ Ensure a good mix of variations, all targeting the specified output style from t
             response = litellm.completion(
                 model=self.model, messages=messages, **final_call_params
             )
+            self.llm_call_counter += 1
+
+            logger.debug(f"Response: {response}")
             return response.choices[0].message.content
-        except litellm.exceptions.RateLimitError as e:
+        except litellm_exceptions.RateLimitError as e:
             logger.error(f"LiteLLM Rate Limit Error: {e}")
             raise
-        except litellm.exceptions.APIConnectionError as e:
+        except litellm_exceptions.APIConnectionError as e:
             logger.error(f"LiteLLM API Connection Error: {e}")
             raise
-        except litellm.exceptions.ContextWindowExceededError as e:
+        except litellm_exceptions.ContextWindowExceededError as e:
             logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error calling model '{self.model}': {type(e).__name__} - {e}")
+            logger.error(
+                f"Error calling model '{self.model}': {type(e).__name__} - {e}"
+            )
             raise
 
-    def evaluate_prompt(
+    def _evaluate_prompt(
         self,
-        dataset: Union[str, opik.Dataset],
-        metric_config: MetricConfig,
-        task_config: TaskConfig,
-        prompt: str,
+        prompt: chat_prompt.ChatPrompt,
+        messages: List[Dict[str, str]],
+        dataset: opik.Dataset,
+        metric: Callable,
         n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         verbose: int = 0,
+        **kwargs: Any,
     ) -> float:
         """
         Evaluate a single prompt (individual) against the dataset.
-        Adapted from MetaPromptOptimizer._evaluate_prompt.
+
+        Args:
+            prompt:
+            dataset: The dataset to use for evaluation
+            metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
+            n_samples: Optional number of samples to use
+            dataset_item_ids: Optional list of dataset item IDs to use
+            experiment_config: Optional experiment configuration
+            optimization_id: Optional optimization ID
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+
+        Returns:
+            float: The metric value
         """
-        effective_verbose = self.verbose if verbose == 0 else verbose
+        total_items = len(dataset.get_items())
 
-        if isinstance(dataset, str):
-            # This should ideally be done once in optimize_prompt if dataset is a string
-            # but if called standalone, we need to handle it.
-            # TODO Move to base class
-            opik_eval_dataset = self._opik_client.get_dataset(dataset)
-        else:
-            opik_eval_dataset = dataset
+        new_prompt = prompt.copy()
+        new_prompt.set_messages(messages)
 
-        total_items = len(opik_eval_dataset.get_items())
-        
-        # Determine subset_size for this evaluation run
-        # TODO Move to dataset utils
-        if dataset_item_ids:
-            subset_size = len(dataset_item_ids)
-            logger.debug(f"Using provided {subset_size} dataset_item_ids for evaluation.")
-        elif n_samples is not None:
-            if n_samples > total_items:
-                logger.warning(
-                    f"Requested n_samples ({n_samples}) for individual evaluation is larger than dataset size ({total_items}). Using full dataset."
-                )
-                subset_size = None
-            elif n_samples <= 0:
-                logger.warning(
-                    f"Requested n_samples ({n_samples}) is <=0. Using full dataset for this evaluation."
-                )
-                subset_size = None
-            else:
-                subset_size = n_samples
-                logger.debug(f"Using specified n_samples: {subset_size} items for this evaluation run.")
-        else:
-            # Default behavior if no n_samples and no dataset_item_ids are given for this specific call
-            # This case should be rare if n_samples is passed down from optimize_prompt
-            subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
-            logger.debug(
-                f"Using automatic subset size for this evaluation: {subset_size} items (20% of {total_items} total items)"
-            )
-
-        current_experiment_config = experiment_config or {}
-        current_experiment_config = {
-            **current_experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
-                "dataset": opik_eval_dataset.name,
-                "configuration": {
-                    "prompt_evaluated": prompt,
-                    "n_samples_for_eval": subset_size if dataset_item_ids is None else len(dataset_item_ids),
-                    "total_dataset_items": total_items,
-                },
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = self.agent_class.project_name
+        experiment_config = {
+            **experiment_config,
+            "optimizer": self.__class__.__name__,
+            "agent_class": self.agent_class.__name__,
+            "agent_config": new_prompt.to_dict(),
+            "metric": metric.__name__,
+            "dataset": dataset.name,
+            "configuration": {
+                "prompt": new_prompt.get_messages(),
+                "n_samples_for_eval": (
+                    len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                ),
+                "total_dataset_items": total_items,
             },
         }
+        try:
+            agent = self.agent_class(new_prompt)
+        except Exception:
+            return 0.0
 
-        def llm_task(
-                dataset_item: Dict[str, Any]
-            ) -> Dict[str, str]:
-            if hasattr(dataset_item, "to_dict"):
-                dataset_item = dataset_item.to_dict()
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            # print("MESSAGES:", new_prompt.messages)
+            messages = new_prompt.get_messages(dataset_item)
+            model_output = agent.invoke(messages)
+            # print("OUTPUT:", model_output)
+            return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
 
-            for input_key in task_config.input_dataset_fields:
-                if input_key not in dataset_item:
-                    raise ValueError(f"Input field '{input_key}' not found in dataset sample: {dataset_item}")
-            if task_config.output_dataset_field not in dataset_item:
-                raise ValueError(f"Output field '{task_config.output_dataset_field}' not found in dataset sample: {dataset_item}")
-
-            prompt_for_llm: str
-            field_mapping = {
-                field: dataset_item[field]
-                for field in task_config.input_dataset_fields
-                if field in dataset_item
-            }
-
-            if getattr(task_config, "use_chat_prompt", False):
-                candidate_template = Template(prompt)
-                user_content_parts = []
-                for field_name in task_config.input_dataset_fields:
-                    if field_name in dataset_item:
-                        user_content_parts.append(f"{field_name.capitalize()}: {dataset_item[field_name]}")
-                user_content = "\n".join(user_content_parts)
-                
-                raw_model_output = self._call_model(
-                    prompt=user_content,
-                    system_prompt=prompt,
-                    is_reasoning=False
-                )
-
-            else:
-                input_clauses = []
-                for field_name in task_config.input_dataset_fields:
-                    if field_name in dataset_item:
-                        input_clauses.append(
-                            f"{field_name.capitalize()}: {dataset_item[field_name]}"
-                        )
-                item_specific_inputs_str = "\n".join(input_clauses)
-                prompt_for_llm = f"{prompt}\n\n{item_specific_inputs_str}"
-                
-                raw_model_output = self._call_model(
-                    prompt=prompt_for_llm,
-                    system_prompt=None,
-                    is_reasoning=False
-                )
-            
-            cleaned_model_output = raw_model_output.strip()
-            output_field = task_config.output_dataset_field
-            prefixes_to_strip = [f"{output_field.capitalize()}:", f"{output_field}:", "Answer:"]
-            for prefix in prefixes_to_strip:
-                if cleaned_model_output.lower().startswith(prefix.lower()):
-                    cleaned_model_output = cleaned_model_output[len(prefix):].strip()
-                    break
-            
-            return {mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output}
-
-        logger.debug(
-            f"Starting evaluation for a prompt with {subset_size if subset_size else 'all'} samples (or specific IDs) for metric: {metric_config.metric.name}"
-        )
-        
         # Evaluate the prompt
         score = task_evaluator.evaluate(
-            dataset=opik_eval_dataset,
+            dataset=dataset,
             dataset_item_ids=dataset_item_ids,
-            metric_config=metric_config,
+            metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
-            project_name=self.project_name,
-            n_samples=subset_size if dataset_item_ids is None else None,
-            experiment_config=current_experiment_config,
+            project_name=experiment_config["project_name"],
+            n_samples=n_samples if dataset_item_ids is None else None,
+            experiment_config=experiment_config,
             optimization_id=optimization_id,
-            # FIXME: Hack for verbose till its merged
-            #verbose=effective_verbose,
+            verbose=verbose,
         )
-        logger.debug(f"Evaluation score for prompt: {score:.4f}")
         return score
 
-    def _llm_deap_crossover(
-            self,
-            ind1: "creator.Individual",
-            ind2: "creator.Individual"
-        ) -> Tuple["creator.Individual", "creator.Individual"]:
+    def _llm_deap_crossover(self, ind1: Any, ind2: Any) -> Tuple[Any, Any]:
         """Perform crossover by asking an LLM to blend two parent prompts."""
-        parent1_str = str(ind1)
-        parent2_str = str(ind2)
+        reporting.display_message(
+            "      Recombining prompts using an LLM.", verbose=self.verbose
+        )
+
+        parent1_messages: List[Dict[str, str]] = ind1
+        parent2_messages: List[Dict[str, str]] = ind2
         current_output_style_guidance = self.output_style_guidance
 
         user_prompt_for_llm_crossover = f"""Parent Prompt 1:
-'''{parent1_str}'''
+'''{parent1_messages}'''
 
 Parent Prompt 2:
-'''{parent2_str}'''
+'''{parent2_messages}'''
 
 Desired output style from target LLM for children prompts: '{current_output_style_guidance}'
 
-Please generate one or two child prompts by intelligently blending the ideas, styles, or structures from these two parents, ensuring the children aim to elicit the desired output style.
-Follow the instructions provided in the system prompt regarding the JSON output format ({{"children_prompts": ["child1", ... ]}}).
+Please generate TWO child prompts by intelligently blending the ideas, styles, or structures from these two parents, ensuring the children aim to elicit the desired output style.
+Follow the instructions provided in the system prompt regarding the JSON output format:
+[
+    [{{"role": "<role>", "content": "<content>"}}, {{"role": "<role>", "content": "<content>"}}], #child_1
+    [{{"role": "<role>", "content": "<content>"}}, {{"role": "<role>", "content": "<content>"}}], #child_2
+]
 """
         try:
-            logger.debug(f"Attempting LLM-driven crossover between: '{parent1_str[:50]}...' and '{parent2_str[:50]}...' aiming for style: '{current_output_style_guidance[:30]}...'")
+            logger.debug(
+                f"Attempting LLM-driven crossover between: '{parent1_messages[:50]}...' and '{parent2_messages[:50]}...' aiming for style: '{current_output_style_guidance[:30]}...'"
+            )
             response_content = self._call_model(
-                prompt=user_prompt_for_llm_crossover,
-                system_prompt=self.get_llm_crossover_system_prompt(), 
-                is_reasoning=True 
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self.get_llm_crossover_system_prompt(),
+                    },
+                    {"role": "user", "content": user_prompt_for_llm_crossover},
+                ],
+                is_reasoning=True,
             )
             logger.debug(f"Raw LLM response for crossover: {response_content}")
 
-            json_response = json.loads(response_content)
-            children_strings = json_response.get("children_prompts", [])
-
-            if not children_strings or not isinstance(children_strings, list) or not all(isinstance(cs, str) for cs in children_strings):
-                logger.warning("LLM Crossover: Malformed or empty children_prompts list. Falling back.")
+            json_response = utils.json_to_dict(response_content)
+            if (
+                not isinstance(json_response, list)
+                or len(json_response) != 2
+                or not all(isinstance(cs, list) for cs in json_response)
+            ):
+                logger.warning(
+                    "LLM Crossover: Malformed or empty children_prompts list. Falling back."
+                )
                 raise ValueError("Malformed LLM crossover response")
 
-            child1_str = children_strings[0]
-            child2_str = children_strings[1] if len(children_strings) > 1 else self._deap_mutation(creator.Individual(parent2_str), task_config=None)[0] # task_config might not be available or needed here for simple mutation
-            
-            logger.debug(f"LLM Crossover generated child1: {child1_str[:50]}... Child2: {child2_str[:50]}...")
-            return creator.Individual(child1_str), creator.Individual(str(child2_str)) 
+            child1: List[Dict[str, str]] = json_response[0]
+            child2: List[Dict[str, str]] = json_response[1]
+
+            logger.debug(
+                f"LLM Crossover generated child1: {json.dumps(child1)[:50]}... Child2: {json.dumps(child2)[:50]}..."
+            )
+            return creator.Individual(child1), creator.Individual(child2)
 
         except Exception as e:
-            logger.warning(f"LLM-driven crossover failed: {e}. Falling back to standard crossover.")
+            logger.warning(
+                f"LLM-driven crossover failed: {e}. Falling back to standard crossover."
+            )
             return self._deap_crossover(ind1, ind2)
 
-    def _get_task_description_for_llm(
-            self,
-            task_config: TaskConfig
-        ) -> str:
+    def _get_task_description_for_llm(self, prompt: chat_prompt.ChatPrompt) -> str:
         """Generates a concise task description for use in LLM prompts for fresh generation or radical innovation."""
-        input_fields_str = ", ".join(task_config.input_dataset_fields)
-        output_field_str = task_config.output_dataset_field
-        description = f"Task: Given input(s) from field(s) '{input_fields_str}', generate a response for the field '{output_field_str}'. "
-        description += f"The original high-level instruction being optimized is: '{task_config.instruction_prompt}'. "
+        description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "
+        description += f"The original high-level instruction being optimized is: '{prompt.get_messages()}'. "
         description += "The goal is to create an effective prompt that guides a language model to perform this task well."
         return description
 
-    def get_reasoning_system_prompt_for_variation(self) -> str:
+    def _get_reasoning_system_prompt_for_variation(self) -> str:
         return f"""You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
 
 For each prompt variation, consider:
@@ -1357,8 +1685,8 @@ Each prompt variation should aim to get the target LLM to produce answers matchi
 """
 
     def get_llm_crossover_system_prompt(self) -> str:
-        return f"""You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones. 
-Given two parent prompts, your task is to generate one or two new child prompts that effectively combine the strengths, styles, or core ideas of both parents. 
+        return f"""You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
+Given two parent prompts, your task is to generate one or two new child prompts that effectively combine the strengths, styles, or core ideas of both parents.
 The children should be coherent and aim to explore a potentially more effective region of the prompt design space, with a key goal of eliciting responses from the target language model in the following style: '{self.output_style_guidance}'.
 
 Consider the following when generating children:
@@ -1367,83 +1695,92 @@ Consider the following when generating children:
 - You can create a child that is a direct blend, or one that takes a primary structure from one parent and incorporates specific elements from the other, always optimizing for clear instruction towards the desired output style.
 - If generating two children, try to make them distinct from each other and from the parents, perhaps by emphasizing different aspects of the parental combination that could lead to the desired output style.
 
-Return a JSON object with a single key "children_prompts", which is a list of strings. Each string is a child prompt.
-Example for one child: {{"children_prompts": ["child prompt 1 designed for specified style"]}}
-Example for two children: {{"children_prompts": ["child prompt 1 for target style", "child prompt 2 also for target style"]}}
-Generate at least one child, and at most two. All generated prompts must aim for eliciting answers in the style: '{self.output_style_guidance}'.
+All generated prompts must aim for eliciting answers in the style: '{self.output_style_guidance}'.
+
+Return a JSON object that is a list of both child prompts. Each child prompt is a list of LLM messages. Example:
+[
+    [{{"role": "<role>", "content": "<content>"}},{{"role": "<role>", "content": "<content>"}}],
+    [{{"role": "<role>", "content": "<content>"}},{{"role": "<role>", "content": "<content>"}}]
+]
+
+
 """
 
-    def get_radical_innovation_system_prompt(self) -> str:
-        return f"""You are an expert prompt engineer and a creative problem solver. 
-Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt. 
-Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance. 
+    def _get_radical_innovation_system_prompt(self) -> str:
+        return f"""You are an expert prompt engineer and a creative problem solver.
+Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt.
+Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance.
 Consider clarity, specificity, constraints, and how to best guide the language model for the described task TO PRODUCE OUTPUTS IN THE FOLLOWING STYLE: '{self.output_style_guidance}'.
 Return only the new prompt string, with no preamble or explanation.
 """
 
     def _infer_output_style_from_dataset(
-            self,
-            dataset: opik.Dataset,
-            task_config: TaskConfig,
-            n_examples: int = 5
-        ) -> Optional[str]:
+        self, dataset: opik.Dataset, prompt: chat_prompt.ChatPrompt, n_examples: int = 5
+    ) -> Optional[str]:
         """Analyzes dataset examples to infer the desired output style."""
-        logger.info(f"Attempting to infer output style from up to {n_examples} dataset examples...")
-        try:
-            all_items = dataset.get_items()
-        except Exception as e:
-            logger.error(f"Failed to get items from dataset '{dataset.name}': {e}")
-            return None
+        with reporting.infer_output_style(
+            verbose=self.verbose
+        ) as report_infer_output_style:
+            report_infer_output_style.start_style_inference()
 
-        if not all_items:
-            logger.warning(f"Dataset '{dataset.name}' is empty. Cannot infer output style.")
-            return None
-
-        # Take the first n_examples
-        items_to_process = all_items[:n_examples]
-
-        # Need at least a couple of examples for meaningful inference
-        if len(items_to_process) < min(n_examples, 2):
-            logger.warning(f"Not enough dataset items (found {len(items_to_process)}) to reliably infer output style. Need at least {min(n_examples,2)}.")
-            return None
-
-        examples_str = ""
-        for i, item_obj in enumerate(items_to_process):
-            item_content = item_obj.content if hasattr(item_obj, 'content') else item_obj
-            if not isinstance(item_content, dict):
-                logger.warning(f"Dataset item {i} does not have a .content dictionary or is not a dict itself. Skipping item: {item_obj}")
-                continue
-
-            input_parts = []
-            for field in task_config.input_dataset_fields:
-                if field in item_content:
-                    input_parts.append(f"{field.capitalize()}: {item_content[field]}")
-            input_str = "\n".join(input_parts)
-            output_str = item_content.get(task_config.output_dataset_field, "[NO OUTPUT FIELD FOUND]")
-            examples_str += f"Example {i+1}:\nInput(s):\n{input_str}\nOutput: {output_str}\n---\n"
-
-        user_prompt_for_style_inference = f"""Please analyze the following input-output examples from a dataset and provide a concise, actionable description of the REQUIRED output style for the target LLM. This description will be used to guide other LLMs in generating and refining prompts.
-
-{examples_str}
-
-Based on these examples, what is the desired output style description? 
-Remember to focus on aspects like length, tone, structure, content details, and any recurring keywords or phrasing patterns in the outputs. 
-The description should be a single string that can be directly used as an instruction for another LLM.
-Return ONLY this descriptive string.
-"""
-        try:
-            inferred_style = self._call_model(
-                prompt=user_prompt_for_style_inference,
-                system_prompt=self._INFER_STYLE_SYSTEM_PROMPT,
-                is_reasoning=True
-            )
-            inferred_style = inferred_style.strip()
-            if inferred_style:
-                logger.info(f"Inferred output style: '{inferred_style}'")
-                return inferred_style
-            else:
-                logger.warning("LLM returned empty string for inferred output style.")
+            try:
+                items_to_process = dataset.get_items(n_examples)
+            except Exception as e:
+                report_infer_output_style.error(
+                    f"Failed to get items from dataset '{dataset.name}': {e}"
+                )
                 return None
-        except Exception as e:
-            logger.error(f"Error during output style inference: {e}")
-            return None
+
+            if not items_to_process:
+                report_infer_output_style.error(
+                    f"Dataset '{dataset.name}' is empty. Cannot infer output style."
+                )
+                return None
+
+            # Need at least a couple of examples for meaningful inference
+            if len(items_to_process) < min(n_examples, 2):
+                report_infer_output_style.error(
+                    f"Not enough dataset items (found {len(items_to_process)}) to reliably infer output style. Need at least {min(n_examples,2)}."
+                )
+                return None
+
+            examples_str = ""
+            for i, item_content in enumerate(items_to_process):
+                filtered_content = {x: y for x, y in item_content.items() if x != "id"}
+                examples_str += (
+                    f"Example {i+1}:\nDataset Item:\n{filtered_content}\n---\n"
+                )
+
+            user_prompt_for_style_inference = f"""Please analyze the following examples from a dataset and provide a concise, actionable description of the REQUIRED output style for the target LLM. Before describing the output style, make sure to understand the dataset content and structure as it can include input, output and metadata fields. This description will be used to guide other LLMs in generating and refining prompts.
+
+    {examples_str}
+
+    Based on these examples, what is the desired output style description?
+    Remember to focus on aspects like length, tone, structure, content details, and any recurring keywords or phrasing patterns in the outputs.
+    The description should be a single string that can be directly used as an instruction for another LLM.
+    Return ONLY this descriptive string.
+    """
+            # report_infer_output_style.display_style_inference_prompt(user_prompt_for_style_inference)
+
+            try:
+                inferred_style = self._call_model(
+                    messages=[
+                        {"role": "system", "content": self._INFER_STYLE_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt_for_style_inference},
+                    ],
+                    is_reasoning=True,
+                )
+                inferred_style = inferred_style.strip()
+                if inferred_style:
+                    report_infer_output_style.success(inferred_style)
+                    return inferred_style
+                else:
+                    report_infer_output_style.error(
+                        "LLM returned empty string for inferred output style."
+                    )
+                    return None
+            except Exception as e:
+                report_infer_output_style.error(
+                    f"Error during output style inference: {e}"
+                )
+                return None

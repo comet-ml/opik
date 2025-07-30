@@ -5,7 +5,6 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
@@ -16,6 +15,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.ProjectCriteria;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -57,6 +57,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.api.Project.ProjectPage;
+import static com.comet.opik.api.Project.View;
 import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -73,14 +75,14 @@ public class ProjectsResource {
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull SortingFactoryProjects sortingFactory;
-    private final @NonNull ProjectMetricsService metricsService;
+    private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
-            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.ProjectPage.class)))
+            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = ProjectPage.class)))
     })
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
@@ -106,7 +108,7 @@ public class ProjectsResource {
     @Path("{id}")
     @Operation(operationId = "getProjectById", summary = "Get project by id", description = "Get project by id", responses = {
             @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.class)))})
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
     public Response getById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -129,7 +131,7 @@ public class ProjectsResource {
     })
     @RateLimited
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Project.class))) @JsonView(Project.View.Write.class) @Valid Project project,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Project.class))) @JsonView(View.Write.class) @Valid Project project,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -190,7 +192,7 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @JsonView({Project.View.Detailed.class})
+    @JsonView({View.Detailed.class})
     public Response retrieveProject(
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectRetrieve.class))) @Valid ProjectRetrieve retrieve) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -222,7 +224,7 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
     public Response getProjectMetrics(
             @PathParam("id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
@@ -231,7 +233,7 @@ public class ProjectsResource {
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, request)
+        ProjectMetricResponse<? extends Number> response = projectMetricsService.getProjectMetrics(projectId, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,

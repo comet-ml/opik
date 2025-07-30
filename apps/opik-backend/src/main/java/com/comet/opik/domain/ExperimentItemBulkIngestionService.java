@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -18,7 +17,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.jetbrains.annotations.NotNull;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 
@@ -28,6 +26,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 @ImplementedBy(ExperimentItemBulkIngestionServiceImpl.class)
 public interface ExperimentItemBulkIngestionService {
@@ -101,7 +101,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private @NotNull Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
+    private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
             List<Span> spans, List<FeedbackScoreBatchItem> feedbackScores) {
         return Mono.defer(() -> Mono.zip(
                 saveTraces(traces),
@@ -109,19 +109,19 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 saveFeedBackScores(feedbackScores)));
     }
 
-    private @NotNull Mono<Long> saveTraces(List<Trace> traces) {
+    private Mono<Long> saveTraces(List<Trace> traces) {
         return traceService.create(new TraceBatch(traces))
                 .retryWhen(AsyncUtils.handleConnectionError());
     }
 
-    private @NotNull Mono<? extends Number> saveSpans(List<Span> spans) {
+    private Mono<? extends Number> saveSpans(List<Span> spans) {
         return spans.isEmpty()
                 ? Mono.just(0)
                 : spanService.create(new SpanBatch(spans))
                         .retryWhen(AsyncUtils.handleConnectionError());
     }
 
-    private @NotNull Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
+    private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
         return feedbackScores.isEmpty()
                 ? Mono.just(0)
                 : feedbackScoreService.scoreBatchOfTraces(feedbackScores)

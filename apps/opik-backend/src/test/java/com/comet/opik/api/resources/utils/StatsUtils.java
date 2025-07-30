@@ -1,7 +1,8 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
@@ -33,6 +34,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
@@ -74,7 +76,9 @@ public class StatsUtils {
                 Trace::startTime,
                 Trace::endTime,
                 Trace::totalEstimatedCost,
+                Trace::llmSpanCount,
                 Trace::guardrailsValidations,
+                Trace::errorInfo,
                 "trace_count");
     }
 
@@ -116,6 +120,8 @@ public class StatsUtils {
                     return BigDecimal.ZERO;
                 },
                 null,
+                null,
+                Span::errorInfo,
                 "span_count");
     }
 
@@ -130,7 +136,9 @@ public class StatsUtils {
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
+            Function<T, Integer> llmSpanCountProvider,
             Function<T, List<GuardrailsValidation>> guardrailsProvider,
+            Function<T, ErrorInfo> errorProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -145,12 +153,18 @@ public class StatsUtils {
         double tags = 0;
         BigDecimal totalEstimatedCost = BigDecimal.ZERO;
         int countEstimatedCost = 0;
+        int llmSpanCount = 0;
+        long errorCount = 0;
 
         for (T entity : expectedEntities) {
             input += inputProvider.apply(entity) != null ? 1 : 0;
             output += outputProvider.apply(entity) != null ? 1 : 0;
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
+            errorCount += errorProvider.apply(entity) != null ? 1 : 0;
+
+            llmSpanCount += llmSpanCountProvider != null &&
+                    llmSpanCountProvider.apply(entity) != null ? llmSpanCountProvider.apply(entity) : 0;
 
             BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
                     ? totalEstimatedCostProvider.apply(entity)
@@ -203,6 +217,12 @@ public class StatsUtils {
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
+
+        if (llmSpanCountProvider != null) {
+            var avgLlmSpanCount = llmSpanCount == 0 ? 0 : (double) llmSpanCount / expectedEntities.size();
+            stats.add(new AvgValueStat(StatsMapper.LLM_SPAN_COUNT, avgLlmSpanCount));
+        }
+
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST_SUM, totalEstimatedCost.doubleValue()));
 
@@ -221,6 +241,8 @@ public class StatsUtils {
 
         Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
                 .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));
+
+        stats.add(new CountValueStat(StatsMapper.ERROR_COUNT, errorCount));
 
         return stats;
     }
@@ -419,8 +441,8 @@ public class StatsUtils {
                 .stream()
                 .filter(Objects::nonNull)
                 .collect(groupingBy(
-                        FeedbackScoreBatchItem::name,
-                        mapping(FeedbackScoreBatchItem::value, toList())))
+                        FeedbackScoreItem::name,
+                        mapping(FeedbackScoreItem::value, toList())))
                 .entrySet()
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))

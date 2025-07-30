@@ -7,7 +7,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
@@ -16,26 +15,24 @@ interface WorkspaceMetadataDAO {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
     private static final String GET_WORKSPACE_METADATA = """
             WITH
                 query_result AS (
-                    SELECT
-                        AVG(
-                            OCTET_LENGTH(input) +
-                            OCTET_LENGTH(output) +
-                            OCTET_LENGTH(metadata) +
-                            OCTET_LENGTH(error_info) +
-                            (OCTET_LENGTH(tags) * 10) +
-                            OCTET_LENGTH(toJSONString(usage))
-                        ) AS query_size
+                    SELECT AVG(query_size) AS query_size
                     FROM (
-                		SELECT * FROM spans
-            			WHERE workspace_id = :workspace_id
-            			LIMIT 1000
-            		)
+                        SELECT input_length +
+                                output_length +
+                                metadata_length +
+                                OCTET_LENGTH(error_info) +
+                                (OCTET_LENGTH(tags) * 10) +
+                                OCTET_LENGTH(toJSONString(usage)) as query_size
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC
+                        LIMIT 1000
+                    )
                 ),
             	total_spans AS (
             			SELECT count(distinct id) as total_count FROM spans
@@ -59,9 +56,19 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             FROM query_result, table_size, total_spans;
             """;
 
-    private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull @Named("Database Analytics Database Name") String databaseName;
-    private final @NonNull WorkspaceSettings workspaceSettings;
+    private final ConnectionFactory connectionFactory;
+    private final String databaseName;
+    private final WorkspaceSettings workspaceSettings;
+
+    @Inject
+    public WorkspaceMetadataDAOImpl(
+            @NonNull ConnectionFactory connectionFactory,
+            @NonNull @Named("Database Analytics Database Name") String databaseName,
+            @NonNull WorkspaceSettings workspaceSettings) {
+        this.connectionFactory = connectionFactory;
+        this.databaseName = databaseName;
+        this.workspaceSettings = workspaceSettings;
+    }
 
     public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
         return Mono.from(connectionFactory.create())

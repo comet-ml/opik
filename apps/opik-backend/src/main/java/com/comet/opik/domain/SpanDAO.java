@@ -1,10 +1,10 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.sorting.SortableFields;
@@ -553,6 +553,22 @@ class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_ONLY_SPAN_BY_ID = """
+            SELECT
+                *,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                        NULL) AS duration
+            FROM spans
+            WHERE id = :id
+            AND project_id = :project_id
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1
+            ;
+            """;
+
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
                 start_time
@@ -763,7 +779,11 @@ class SpanDAO {
             """;
 
     private static final String DELETE_BY_TRACE_IDS = """
-            DELETE FROM spans WHERE trace_id IN :trace_ids AND workspace_id = :workspace_id;
+            DELETE FROM spans
+            WHERE trace_id IN :trace_ids
+            AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
+            ;
             """;
 
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
@@ -826,7 +846,8 @@ class SpanDAO {
                      if(metadata_length > 0, 1, 0) as metadata_count,
                      length(tags) as tags_count,
                      usage,
-                     total_estimated_cost
+                     total_estimated_cost,
+                     error_info
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -870,7 +891,8 @@ class SpanDAO {
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                countIf(error_info, error_info != '') AS error_count
             FROM spans_final s
             LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id
@@ -892,6 +914,17 @@ class SpanDAO {
                  FROM spans
                  WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
                  GROUP BY workspace_id
+            ;
+            """;
+
+    private static final String SPAN_DAILY_BI_INFORMATION = """
+                SELECT
+                     workspace_id,
+                     created_by AS user,
+                     COUNT(DISTINCT id) AS span_count
+                FROM spans
+                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -1222,6 +1255,24 @@ class SpanDAO {
                 .singleOrEmpty();
     }
 
+    @WithSpan
+    public Mono<Span> getOnlySpanDataById(@NonNull UUID id, @NonNull UUID projectId) {
+        log.info("Getting span by id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_ONLY_SPAN_BY_ID)
+                            .bind("id", id)
+                            .bind("project_id", projectId);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "select_only_span_by_id");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto)
+                .singleOrEmpty();
+    }
+
     private Publisher<? extends Result> getById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_BY_ID)
                 .bind("id", id);
@@ -1249,7 +1300,7 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
+    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
         log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
@@ -1257,8 +1308,16 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
-                            .bind("trace_ids", traceIds);
+                    var template = new ST(DELETE_BY_TRACE_IDS);
+                    Optional.ofNullable(projectId)
+                            .ifPresent(id -> template.add("project_id", id));
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId);
+                    }
 
                     return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                 })
@@ -1272,7 +1331,11 @@ class SpanDAO {
     }
 
     private <T> T getValue(Set<SpanField> exclude, SpanField field, Row row, String fieldName, Class<T> clazz) {
-        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+        if (exclude.contains(field) || !row.getMetadata().contains(fieldName)) {
+            return null;
+        }
+
+        return row.get(fieldName, clazz);
     }
 
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
@@ -1650,6 +1713,21 @@ class SpanDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .spanCount(row.get("span_count", Integer.class))
+                        .build()));
+    }
+
+    @WithSpan
+    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation() {
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SPAN_DAILY_BI_INFORMATION);
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("span_count", Long.class))
                         .build()));
     }
 

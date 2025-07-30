@@ -12,6 +12,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -24,6 +25,7 @@ public record Dataset(
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
+        @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Set<String> tags,
         @JsonView({Dataset.View.Public.class,
                 Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -60,10 +62,11 @@ public record Dataset(
                     Dataset.View.Public.class}) List<Dataset> content,
             @JsonView({Dataset.View.Public.class}) int page,
             @JsonView({Dataset.View.Public.class}) int size,
-            @JsonView({Dataset.View.Public.class}) long total) implements Page<Dataset>{
+            @JsonView({Dataset.View.Public.class}) long total,
+            @JsonView({Dataset.View.Public.class}) List<String> sortableBy) implements Page<Dataset>{
 
-        public static DatasetPage empty(int page) {
-            return new DatasetPage(List.of(), page, 0, 0);
+        public static DatasetPage empty(int page, List<String> sortableBy) {
+            return new DatasetPage(List.of(), page, 0, 0, sortableBy);
         }
     }
 }

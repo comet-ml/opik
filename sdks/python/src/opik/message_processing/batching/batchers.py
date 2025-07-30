@@ -3,7 +3,8 @@ from typing import Union, cast, List
 from . import base_batcher, sequence_splitter
 from .. import messages
 from opik.rest_api.types import span_write, trace_write
-from opik import jsonable_encoder, dict_utils
+import opik.jsonable_encoder as jsonable_encoder
+import opik.dict_utils as dict_utils
 
 
 class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
@@ -75,6 +76,7 @@ class BaseAddFeedbackScoresBatchMessageBatcher(base_batcher.BaseBatcher):
         Union[
             messages.AddSpanFeedbackScoresBatchMessage,
             messages.AddTraceFeedbackScoresBatchMessage,
+            messages.AddThreadsFeedbackScoresBatchMessage,
         ]
     ]:
         return super()._create_batches_from_accumulated_messages()  # type: ignore
@@ -84,6 +86,7 @@ class BaseAddFeedbackScoresBatchMessageBatcher(base_batcher.BaseBatcher):
         message: Union[
             messages.AddSpanFeedbackScoresBatchMessage,
             messages.AddTraceFeedbackScoresBatchMessage,
+            messages.AddThreadsFeedbackScoresBatchMessage,
         ],
     ) -> None:
         with self._lock:
@@ -130,6 +133,20 @@ class AddTraceFeedbackScoresBatchMessageBatcher(
     ) -> List[messages.AddTraceFeedbackScoresBatchMessage]:
         return [
             messages.AddTraceFeedbackScoresBatchMessage(
+                batch=self._accumulated_messages,  # type: ignore
+                supports_batching=False,
+            )
+        ]
+
+
+class AddThreadsFeedbackScoresBatchMessageBatcher(
+    BaseAddFeedbackScoresBatchMessageBatcher
+):
+    def _create_batches_from_accumulated_messages(  # type: ignore
+        self,
+    ) -> List[messages.AddThreadsFeedbackScoresBatchMessage]:
+        return [
+            messages.AddThreadsFeedbackScoresBatchMessage(
                 batch=self._accumulated_messages,  # type: ignore
                 supports_batching=False,
             )

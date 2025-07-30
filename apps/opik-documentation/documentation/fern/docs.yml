@@ -21,6 +21,10 @@ js:
     strategy: lazyOnload
 css: ./styles.css
 
+analytics:
+  segment:
+    write-key: ${SEGMENT_WRITE_KEY}
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -103,6 +107,9 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
+          - page: Debug Mode & Environment Variables
+            path: docs/tracing/debug_mode.mdx
+            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
@@ -256,6 +263,9 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
+          - page: Evaluate threads
+            path: docs/evaluation/evaluate_threads.mdx
+            slug: evaluate_threads
           - page: Log experiments with REST API
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -295,6 +305,9 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
+              - page: Conversational metrics
+                path: docs/evaluation/metrics/conversation_threads_metrics.mdx
+                slug: conversation_threads_metrics
               - page: Custom model
                 path: docs/evaluation/metrics/custom_model.mdx
                 slug: custom_model
@@ -334,6 +347,15 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+      - section: Configuration
+        slug: /configuration
+        contents:
+          - page: Feedback definitions
+            path: docs/configuration/feedback_definitions.mdx
+            slug: /configuration/feedback_definitions
+          - page: AI Providers
+            path: docs/configuration/ai_providers.mdx
+            slug: ai_providers
   - tab: agent-optimization
     layout:
       - page: Opik Agent Optimizer
@@ -355,10 +377,10 @@ navigation:
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: LiteLLM Model Support
+          - page: Models for Optimization
             icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
-            slug: litellm_support
+            path: docs/agent_optimization/opik_optimizer/models.mdx
+            slug: models
           - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
@@ -447,6 +469,9 @@ navigation:
           - page: OpenAI
             path: docs/cookbook/openai.mdx
             slug: openai
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: LiteLLM
             path: docs/cookbook/litellm.mdx
             slug: litellm
@@ -492,6 +517,9 @@ navigation:
           - page: Ollama
             path: docs/cookbook/ollama.mdx
             slug: ollama
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
@@ -526,6 +554,9 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - page: REST API Client
+            path: docs/reference/python-sdk/rest-api.mdx
+            slug: rest-api
       - section: Typescript SDK
         slug: typescript-sdk
         contents:
@@ -547,6 +578,31 @@ navigation:
               - page: OpenAI
                 path: docs/reference/typescript-sdk/integrations/openai.mdx
                 slug: openai
+              - page: Cloudflare Workers AI
+                path: docs/reference/typescript-sdk/integrations/workers-ai.mdx
+                slug: workers-ai
+          - section: Evaluation
+            slug: evaluation
+            contents:
+              - page: Overview
+                path: docs/reference/typescript-sdk/evaluation/overview.mdx
+                slug: overview
+              - page: Quick Start
+                path: docs/reference/typescript-sdk/evaluation/quick-start.mdx
+                slug: quick-start
+              - page: Datasets
+                path: docs/reference/typescript-sdk/evaluation/datasets.mdx
+                slug: datasets
+              - page: Evaluate Function
+                path: docs/reference/typescript-sdk/evaluation/evaluate.mdx
+                slug: evaluate_function
+              - page: Metrics
+                path: docs/reference/typescript-sdk/evaluation/metrics.mdx
+                slug: metrics
+              - page: Experiments
+                path: docs/reference/typescript-sdk/evaluation/experiments.mdx
+                slug: experiments
+
       - section: Rest API
         slug: rest-api
         contents:
@@ -635,4 +691,7 @@ redirects:
     permanent: true
   - source: "docs/agent_optimization/best-practices/prompt_engineering"
     destination: "/docs/agent_optimization/best_practices/prompt_engineering"
+    permanent: true
+  - source: "docs/agent_optimization/opik_optimizer/litellm_support"
+    destination: "/docs/agent_optimization/opik_optimizer/models"
     permanent: true

@@ -30,7 +30,8 @@ public interface CommentDAO {
     @RequiredArgsConstructor
     enum EntityType {
         TRACE("trace", "traces"),
-        SPAN("span", "spans");
+        SPAN("span", "spans"),
+        THREAD("thread", "trace_threads");
 
         private final String type;
         private final String tableName;
@@ -184,7 +185,7 @@ class CommentDAOImpl implements CommentDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(DELETE_COMMENT_BY_ID)
-                    .bind("ids", commentIds);
+                    .bind("ids", commentIds.toArray(UUID[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)

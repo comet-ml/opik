@@ -15,30 +15,10 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-
-EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens": ANY_BUT_NONE,
-    "original_usage.total_tokens": ANY_BUT_NONE,
-}
-
-EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens": ANY_BUT_NONE,
-    "original_usage.total_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
-    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
-    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
-}
+from .constants import (
+    EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
+    EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
+)
 
 
 @pytest.mark.parametrize(
@@ -121,6 +101,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         metadata={"a": "b", "created_from": "langchain"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -155,7 +136,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         usage=expected_usage,
                         spans=[],
                         provider="openai",
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     ),
                 ],
             )
@@ -229,6 +210,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -264,7 +246,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 end_time=ANY_BUT_NONE,
                 spans=[],
                 type="llm",
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
                 usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
             )
@@ -330,6 +312,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -389,7 +372,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         type="llm",
-                        model=ANY_STRING(startswith="gpt-4o"),
+                        model=ANY_STRING.starting_with("gpt-4o"),
                         provider="openai",
                         usage=None,
                         spans=[],
@@ -454,6 +437,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -513,7 +497,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         type="llm",
-                        model=ANY_STRING(startswith="gpt-4o"),
+                        model=ANY_STRING.starting_with("gpt-4o"),
                         provider="openai",
                         usage=None,
                         spans=[],
@@ -560,9 +544,10 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
-            "exception_type": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -578,8 +563,8 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 spans=[
                     SpanModel(
@@ -610,8 +595,8 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                         end_time=ANY_BUT_NONE,
                         usage=None,
                         error_info={
-                            "exception_type": ANY_STRING(),
-                            "traceback": ANY_STRING(),
+                            "exception_type": ANY_STRING,
+                            "traceback": ANY_STRING,
                         },
                         spans=[],
                     ),

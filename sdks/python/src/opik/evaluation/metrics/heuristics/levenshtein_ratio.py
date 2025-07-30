@@ -1,7 +1,6 @@
 from typing import Any, Optional
 
-import Levenshtein
-
+import rapidfuzz.distance.Indel
 from .. import base_metric, score_result
 
 
@@ -64,6 +63,5 @@ class LevenshteinRatio(base_metric.BaseMetric):
         value = output if self._case_sensitive else output.lower()
         reference = reference if self._case_sensitive else reference.lower()
 
-        score = Levenshtein.ratio(value, reference)
-
+        score = rapidfuzz.distance.Indel.normalized_similarity(value, reference)
         return score_result.ScoreResult(value=score, name=self.name)

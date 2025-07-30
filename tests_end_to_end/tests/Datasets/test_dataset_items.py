@@ -2,7 +2,7 @@ import pytest
 from playwright.sync_api import Page, expect
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.DatasetItemsPage import DatasetItemsPage
-from Datasets.datasets_utils import (
+from .datasets_utils import (
     TEST_ITEMS,
     TEST_ITEMS_UPDATE,
     compare_item_lists,
@@ -30,7 +30,9 @@ class TestDatasetItemsCrud:
         ["create_dataset_sdk", "create_dataset_ui"],
     )
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @pytest.mark.regression
     @pytest.mark.sanity
+    @pytest.mark.datasets
     @allure.title(
         "Dataset item insertion - {dataset_creation_fixture} and {dataset_insert}"
     )
@@ -134,6 +136,8 @@ class TestDatasetItemsCrud:
         logger.info("Successfully verified items via UI")
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @pytest.mark.regression
+    @pytest.mark.datasets
     @allure.title("Dataset item update")
     def test_dataset_item_update(
         self,
@@ -206,6 +210,8 @@ class TestDatasetItemsCrud:
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
     @pytest.mark.parametrize("item_deletion", ["delete_via_ui", "delete_via_sdk"])
+    @pytest.mark.datasets
+    @pytest.mark.regression
     @allure.title("Dataset item deletion - {item_deletion}")
     def test_dataset_item_deletion(
         self,
@@ -327,6 +333,8 @@ class TestDatasetItemsCrud:
         logger.info("Successfully verified deletion in UI view")
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @pytest.mark.regression
+    @pytest.mark.datasets
     @allure.title("Dataset clear")
     def test_dataset_clear(
         self,

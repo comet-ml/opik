@@ -3,9 +3,12 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from opik import dict_utils, Attachment
+import opik.dict_utils as dict_utils
+import opik.api_objects.attachment as attachment
 from .. import span
-from opik import datetime_helpers, id_helpers, llm_usage
+import opik.datetime_helpers as datetime_helpers
+import opik.id_helpers as id_helpers
+import opik.llm_usage as llm_usage
 from opik.types import (
     CreatedByType,
     ErrorInfoDict,
@@ -45,7 +48,7 @@ class TraceData:
     created_by: Optional[CreatedByType] = None
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
-    attachments: Optional[List[Attachment]] = None
+    attachments: Optional[List[attachment.Attachment]] = None
 
     def create_child_span_data(
         self,
@@ -63,7 +66,7 @@ class TraceData:
         provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        attachments: Optional[List[attachment.Attachment]] = None,
     ) -> span.SpanData:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
@@ -140,8 +143,46 @@ class TraceData:
         self.end_time = datetime_helpers.local_timestamp()
         return self
 
-    def _update_attachments(self, attachments: List[Attachment]) -> None:
+    def _update_attachments(self, attachments: List[attachment.Attachment]) -> None:
         if self.attachments is None:
             self.attachments = attachments
         else:
             self.attachments.extend(attachments)
+
+    @property
+    def as_start_parameters(self) -> Dict[str, Any]:
+        """Returns parameters of this trace to be sent to the server when starting a new trace."""
+        start_parameters: Dict[str, Any] = {
+            "id": self.id,
+            "start_time": self.start_time,
+            "project_name": self.project_name,
+        }
+        if self.name is not None:
+            start_parameters["name"] = self.name
+        if self.input is not None:
+            start_parameters["input"] = self.input
+        if self.metadata is not None:
+            start_parameters["metadata"] = self.metadata
+        if self.tags is not None:
+            start_parameters["tags"] = self.tags
+
+        return start_parameters
+
+    @property
+    def as_parameters(self) -> Dict[str, Any]:
+        """Returns all parameters of this trace to be sent to the server."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "metadata": self.metadata,
+            "input": self.input,
+            "output": self.output,
+            "tags": self.tags,
+            "feedback_scores": self.feedback_scores,
+            "project_name": self.project_name,
+            "error_info": self.error_info,
+            "thread_id": self.thread_id,
+            "attachments": self.attachments,
+        }

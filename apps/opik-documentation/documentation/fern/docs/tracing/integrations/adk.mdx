@@ -1,6 +1,6 @@
 [Agent Development Kit (ADK)](https://google.github.io/adk-docs/) is a flexible and modular framework for developing and deploying AI agents. ADK can be used with popular LLMs and open-source generative AI tools and is designed with a focus on tight integration with the Google ecosystem and Gemini models. ADK makes it easy to get started with simple agents powered by Gemini models and Google AI tools while providing the control and structure needed for more complex agent architectures and orchestration.
 
-Opik integrates with ADK to log traces for all ADK agent execution.
+Opik integrates with ADK to log traces for all ADK agent executions.
 
 ## Getting started
 
@@ -10,15 +10,15 @@ First, ensure you have both `opik` and `google-adk` installed:
 pip install opik google-adk
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+You can also set up Opik by using the opik configure command. This will ask you to enter either your local server address or your API key if you're using the Cloud version:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 opik configure
 ```
 
 ## Logging ADK agent executions
 
-To log a ADK agent run, you can use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html). This connector will log the agent run to the Opik platform:
+To track your ADK agent's activity, use [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html). This tracker records everything your agent does and saves it to Opik:
 
 ```python
 import datetime
@@ -76,8 +76,57 @@ root_agent = Agent(
 )
 ```
 
-Each agent execution will now be logged to the Opik platform:
+Each agent execution will now be automatically logged to the Opik platform:
 
 <Frame>
   <img src="/img/cookbook/adk_trace_cookbook.png" />
 </Frame>
+
+## Troubleshooting: Missing Trace
+
+When using `Runner.run_async`, make sure to process all events completely, even after finding the final response (when `event.is_final_response()` is `True`). If you exit the loop too early, OpikTracer won't log the final response and your trace will be incomplete. Don't use code that stops processing events prematurely:
+
+```python
+async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
+    if event.is_final_response():
+        ...
+        break  # Stop processing events once the final response is found
+```
+
+There is an upstream discussion about how to best solve this source of confusion: https://github.com/google/adk-python/issues/1695.
+
+## Multi-agent instrumentation
+
+Adding OpikTracer callbacks to a multi-agent system can be time-consuming. To make this simpler, we've created an experimental feature that lets you add OpikTracer callbacks to all agents at once [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html):
+
+```python
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
+opik_tracer = OpikTracer()
+
+translator_to_english = adk_agents.Agent(
+    name="Translator",
+    model=MODEL_NAME,
+    description="Translates text to English.",
+)
+summarizer = adk_agents.Agent(
+    name="Summarizer",
+    model=MODEL_NAME,
+    description="Summarizes text to 1 sentence.",
+)
+root_agent = adk_agents.SequentialAgent(
+    name="TextProcessingAssistant",
+    sub_agents=[translator_to_english, summarizer],
+    description="Runs translator to english then summarizer, in order.",
+)
+
+track_adk_agent_recursive(root_agent, opik_tracer)
+```
+
+<Warning>`opik.integrations.adk.track_adk_agent_recursive` is an experimental feature. If you find any problems while using it, please [report them](https://github.com/comet-ml/opik/issues) so they can be fixed. </Warning>
+
+## Logging threads
+
+The Opik integration automatically retrieves key information from [ADK Session](https://google.github.io/adk-docs/sessions/session/):
+
+- It uses the session ID as Opik Thread ID, allowing you to easily group and review traces from the same thread
+- It logs the app_name and userId as metadata

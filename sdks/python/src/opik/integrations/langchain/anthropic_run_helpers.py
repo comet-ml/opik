@@ -1,7 +1,7 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from opik.types import LLMProvider
 
 if TYPE_CHECKING:
@@ -72,17 +72,34 @@ def is_anthropic_run(run: "Run") -> bool:
 
 def _get_provider_and_model(
     run_dict: Dict[str, Any],
-) -> Tuple[Optional[Union[Literal[LLMProvider.ANTHROPIC], str]], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
     """
     provider = LLMProvider.ANTHROPIC
-    if run_dict["outputs"]["llm_output"] is not None:
-        model = run_dict["outputs"]["llm_output"]["model_name"]
-    else:
-        # Handle the streaming mode
-        model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
-            "response_metadata"
-        ]["model_name"]
+    model = None
+
+    POSSIBLE_MODEL_NAME_KEYS = [
+        "model",  # detected in langchain-anthropic 0.3.5
+        "model_name",  # detected in langchain-anthropic 0.3.17
+    ]
+
+    for model_name_key in POSSIBLE_MODEL_NAME_KEYS:
+        try:
+            if run_dict["outputs"]["llm_output"] is not None:
+                model = run_dict["outputs"]["llm_output"][model_name_key]
+            else:
+                # Handle the streaming mode
+                model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
+                    "response_metadata"
+                ][model_name_key]
+        except KeyError:
+            continue
+
+    if model is None:
+        LOGGER.error(
+            "Failed to extract model name from presumably Anthropic LLM langchain Run object: %s",
+            run_dict,
+        )
 
     return provider, model

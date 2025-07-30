@@ -1,5 +1,9 @@
-import pytest
+import sys
 import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
 import opik
 import tempfile
 import time
@@ -23,7 +27,7 @@ from tests.sdk_helpers import (
     find_project_by_name_sdk,
     wait_for_project_to_not_be_visible,
 )
-from utils import TEST_ITEMS
+from tests.utils import TEST_ITEMS
 import re
 import json
 import allure
@@ -84,16 +88,21 @@ def browser(playwright: Playwright, request) -> Browser:
 
 @pytest.fixture(scope="session")
 def video_dir():
-    """Create a temporary directory for videos"""
+    """Create a temporary directory for videos and traces"""
     # Create a temp directory for videos
     video_path = tempfile.mkdtemp(prefix="playwright_videos_")
     logging.info(f"Created video directory: {video_path}")
+
+    # Create a traces subdirectory
+    traces_path = os.path.join(video_path, "traces")
+    os.makedirs(traces_path, exist_ok=True)
+    logging.info(f"Created traces directory: {traces_path}")
 
     # Dictionary to track test status and video paths
     video_info = {}
 
     # Store the video path and info dictionary in a container that can be accessed by other fixtures
-    container = {"path": video_path, "info": video_info}
+    container = {"path": video_path, "traces_path": traces_path, "info": video_info}
 
     yield container
 
@@ -132,6 +141,8 @@ def browser_context(browser: Browser, env_config, video_dir):
 
     # Store the video info container for access by other fixtures
     context._video_info = video_dir["info"]
+
+    # Tracing will be started per test in the page fixture
 
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
@@ -250,6 +261,12 @@ def page(browser_context, request):
     if hasattr(browser_context, "_video_info"):
         browser_context._video_info[test_id] = {"failed": False, "video_path": None}
 
+    # Start tracing for this specific test
+    try:
+        browser_context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    except Exception as e:
+        logging.warning(f"Failed to start tracing for test {test_name}: {str(e)}")
+
     yield page
 
     failed = False
@@ -267,6 +284,12 @@ def page(browser_context, request):
             video_path = page.video.path()
         except Exception as e:
             logging.error(f"Failed to get video path: {str(e)}")
+
+    # Stop tracing for this test (cleanup)
+    try:
+        browser_context.tracing.stop()
+    except Exception as e:
+        logging.warning(f"Failed to stop tracing for test {test_name}: {str(e)}")
 
     page.close()
 
@@ -416,7 +439,7 @@ def log_traces_with_spans_low_level(client: opik.Opik):
         "metadata": {"d-md1": "val1", "d-md2": "val2"},
         "feedback_scores": [
             {"name": "s-score1", "value": 0.93},
-            {"name": "s-score2", "value": 2},
+            {"name": "s-score2", "value": 5},
         ],
     }
 
@@ -473,7 +496,7 @@ def log_traces_with_spans_decorator():
         "metadata": {"d-md1": "val1", "d-md2": "val2"},
         "feedback_scores": [
             {"name": "s-score1", "value": 0.93},
-            {"name": "s-score2", "value": 2},
+            {"name": "s-score2", "value": 5},
         ],
     }
 
@@ -762,7 +785,7 @@ def create_moderation_rule_fixture(
     sampling_value.fill("1")
 
     traces_page.page.get_by_role("combobox").filter(
-        has_text="Select a LLM model"
+        has_text="Select an LLM model"
     ).click()
     traces_page.page.get_by_text("OpenAI").hover()
     traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
@@ -790,7 +813,7 @@ def create_moderation_rule_fixture(
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """
-    Capture screenshots and videos when tests fail and attach them to Allure reports.
+    Capture screenshots, videos, and traces when tests fail and attach them to Allure reports.
     This hook runs around each test phase (setup, call, teardown).
     """
     outcome = yield
@@ -824,6 +847,59 @@ def pytest_runtest_makereport(item, call):
                         os.remove(screenshot_path)
                 except Exception as e:
                     logging.error(f"Failed to capture screenshot: {str(e)}")
+
+                # Capture Playwright trace
+                try:
+                    context = page.context
+                    trace_name = f"failure_{item.name}_{int(time.time())}.zip"
+                    trace_path = os.path.join(os.getcwd(), trace_name)
+
+                    # Stop tracing and save the trace file
+                    context.tracing.stop(path=trace_path)
+
+                    if os.path.exists(trace_path):
+                        max_retries = 10
+                        retry_count = 0
+
+                        while retry_count < max_retries:
+                            try:
+                                with open(trace_path, "rb") as f:
+                                    trace_content = f.read()
+
+                                allure.attach(
+                                    trace_content,
+                                    name=f"Playwright Trace - {item.name}",
+                                    attachment_type="application/zip",
+                                    extension=".zip",
+                                )
+                                logging.info(
+                                    f"Playwright trace captured and attached for test: {item.name}"
+                                )
+                                break
+                            except Exception as e:
+                                logging.error(
+                                    f"Failed to read trace file content: {str(e)}"
+                                )
+                                break
+
+                            retry_count += 1
+                            time.sleep(0.5)
+
+                        if retry_count >= max_retries:
+                            logging.warning(
+                                f"Trace file not accessible after waiting: {trace_path}"
+                            )
+
+                        # Clean up the file after attaching
+                        try:
+                            os.remove(trace_path)
+                        except Exception as e:
+                            logging.warning(f"Failed to remove trace file: {str(e)}")
+
+                    # Tracing will be restarted by the next test's page fixture
+
+                except Exception as e:
+                    logging.error(f"Failed to capture Playwright trace: {str(e)}")
 
                 # Capture HTML source
                 try:

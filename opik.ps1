@@ -35,6 +35,14 @@ function Get-Containers {
     return $containers
 }
 
+function Write-DebugLog {
+    param([string]$Message)
+    $DebugMode = $DEBUG_MODE -eq "true"
+    if ($DebugMode) { 
+        Write-Host $Message 
+    }
+}
+
 function Show-Usage {
     Write-Host 'Usage: opik.ps1 [OPTIONS]'
     Write-Host ''
@@ -101,18 +109,17 @@ function Send-InstallReport {
         [string]$StartTime = $null         # Optional ISO 8601 format
     )
 
-    $DebugMode = $DEBUG_MODE -eq "true"
     $OpikUsageEnabled = $env:OPIK_USAGE_REPORT_ENABLED
 
     if ($OpikUsageEnabled -ne "true" -and $null -ne $OpikUsageEnabled) {
-        if ($DebugMode) { Write-Host "[DEBUG] Usage reporting is disabled. Skipping install report." }
+        Write-DebugLog "[DEBUG] Usage reporting is disabled. Skipping install report."
         return
     }
 
     $InstallMarkerFile = Join-Path $scriptDir ".opik_install_reported"
 
     if (Test-Path $InstallMarkerFile) {
-        if ($DebugMode) { Write-Host "[DEBUG] Install report already sent; skipping." }
+        Write-DebugLog "[DEBUG] Install report already sent; skipping."
         return
     }
 
@@ -157,9 +164,9 @@ function Send-InstallReport {
 
     if ($EventType -eq "opik_os_install_completed") {
         New-Item -ItemType File -Path $InstallMarkerFile -Force | Out-Null
-        if ($DebugMode) { Write-Host "[DEBUG] Post-install report sent successfully." }
+        Write-DebugLog "[DEBUG] Post-install report sent successfully."
     } else {
-        if ($DebugMode) { Write-Host "[DEBUG] Install started report sent successfully." }
+        Write-DebugLog "[DEBUG] Install started report sent successfully."
     }
 }
 
@@ -171,7 +178,7 @@ function Start-MissingContainers {
 
     Send-InstallReport -Uuid $uuid -EventCompleted "false" -StartTime $startTime
 
-    if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
+    Write-DebugLog '[DEBUG] Checking required containers...'
     $allRunning = $true
 
     $containers = Get-Containers
@@ -181,10 +188,10 @@ function Start-MissingContainers {
         $resolvedStatus = if ($status) { $status } else { 'not found' }
 
         if ($status -ne 'running') {
-            if ($DEBUG_MODE) { Write-Host "[WARN] $container is not running (status: $resolvedStatus)" }
+            Write-DebugLog "[WARN] $container is not running (status: $resolvedStatus)"
             $allRunning = $false
-        } elseif ($DEBUG_MODE) {
-            Write-Host "[OK] $container is already running"
+        } else {
+            Write-DebugLog "[OK] $container is already running"
         }
     }
 
@@ -215,7 +222,7 @@ function Start-MissingContainers {
 
     foreach ($container in $containers) {
         $retries = 0
-        if ($DEBUG_MODE) { Write-Host "[DEBUG] Waiting for $container..." }
+        Write-DebugLog "[DEBUG] Waiting for $container..."
 
         while ($true) {
             $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -231,10 +238,10 @@ function Start-MissingContainers {
             }
 
             if ($health -eq 'healthy') {
-                if ($DEBUG_MODE) { Write-Host "[OK] $container is now running and healthy!" }
+                Write-DebugLog "[OK] $container is now running and healthy!"
                 break
             } elseif ($health -eq 'starting') {
-                if ($DEBUG_MODE) { Write-Host "[INFO] $container is starting... retrying (${retries}s)" }
+                Write-DebugLog "[INFO] $container is starting... retrying (${retries}s)"
                 Start-Sleep -Seconds $interval
                 $retries++
                 if ($retries -ge $maxRetries) {
@@ -252,6 +259,7 @@ function Start-MissingContainers {
 
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
+        New-OpikConfigIfMissing
     }
 }
 
@@ -274,11 +282,37 @@ function Stop-Containers {
     Write-Host '[OK] All containers stopped and cleaned up!'
 }
 
-function Show-Banner {
-    Test-DockerStatus
+function Get-UIUrl {
     $frontendPort = docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
     if (-not $frontendPort) { $frontendPort = 5173 }
-    $uiUrl = "http://localhost:$frontendPort"
+    return "http://localhost:$frontendPort"
+}
+
+function New-OpikConfigIfMissing {
+    $configFile = Join-Path $env:USERPROFILE ".opik.config"
+    
+    if (Test-Path $configFile) {
+        Write-DebugLog "[DEBUG] .opik.config file already exists, skipping creation"
+        return
+    }
+    
+    Write-DebugLog "[DEBUG] Creating .opik.config file at $configFile"
+    
+    $uiUrl = Get-UIUrl
+    
+    $configContent = @"
+[opik]
+url_override = $uiUrl/api/
+workspace = default
+"@
+    
+    $configContent | Out-File -FilePath $configFile -Encoding UTF8
+    Write-DebugLog "[DEBUG] .opik.config file created successfully with URL: $uiUrl/api/"
+}
+
+function Show-Banner {
+    Test-DockerStatus
+    $uiUrl = Get-UIUrl
 
     Write-Host ''
     Write-Host '╔═════════════════════════════════════════════════════════════════╗'
@@ -292,10 +326,9 @@ function Show-Banner {
     Write-Host '║  📊 Access the UI:                                              ║'
     Write-Host "║     $uiUrl                                       ║"
     Write-Host '║                                                                 ║'
-    Write-Host '║  🛠️  Configure the Python SDK:                                  ║'
+    Write-Host '║  🛠️  Install the Python SDK:                                     ║'
     Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
     Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
-    Write-Host '║    - `opik configure`                                           ║'
     Write-Host '║                                                                 ║'
     Write-Host '║  📚 Documentation: https://www.comet.com/docs/opik/             ║'
     Write-Host '║                                                                 ║'
@@ -337,7 +370,7 @@ if ($options -contains '--build') {
 
 if ($options -contains '--debug') {
     $DEBUG_MODE = $true
-    Write-Host '[DEBUG] Debug mode enabled.'
+    Write-DebugLog '[DEBUG] Debug mode enabled.'
     $options = $options | Where-Object { $_ -ne '--debug' }
 }
 
@@ -381,10 +414,10 @@ switch ($option) {
         exit 0
     }
     '' {
-        Write-Host '[DEBUG] Checking container status and starting missing ones...'
+        Write-DebugLog '[DEBUG] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
-        Write-Host '[DEBUG] Re-checking container status...'
+        Write-DebugLog '[DEBUG] Re-checking container status...'
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {

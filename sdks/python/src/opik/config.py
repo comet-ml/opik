@@ -1,10 +1,13 @@
+from __future__ import annotations
 import configparser
 import logging
 import os
+import sys
 import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
@@ -167,6 +170,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     """
     If set to True, then `@track` decorator and `track_LIBRARY(...)` integrations do not log any data.
     Any other API will continue working.
+
+    This setting can be overridden at runtime using:
+    - opik.set_tracing_active(False)  # Disable tracing
+    - opik.set_tracing_active(True)   # Enable tracing
+    - opik.is_tracing_active()        # Check current state
+    - opik.reset_tracing_to_config_default()  # Reset to this config value
+
+    Runtime overrides take precedence over this static configuration.
+
     We do not recommend disable tracking unless you only use tracking functionalities in your project because
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
@@ -176,7 +188,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, Opik will send the information about the errors to Sentry.
     """
 
-    sentry_dsn: str = "https://ceea3c150b0c2968e5913e9e9e919d5b@o168229.ingest.us.sentry.io/4508620148441088"  # 14.05.2025
+    sentry_dsn: str = "https://34bd6f9621ca2783be63f320e35de0dc@o168229.ingest.us.sentry.io/4508620148441088"  # 24.07.2025
     """
     Sentry project DSN which is used as a destination for sentry events.
     In case there is a need to update reporting rules and stop receiving events from existing users,
@@ -210,6 +222,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Defines the factor applied to the `maximal_queue_size` to reduce the maximal message queue size when batching is enabled.
     """
 
+    log_start_trace_span: bool = False
+    """
+    If set to True, both the start and end of the trace and span will be logged. This is useful for traces and spans that span long durations.
+    For shorter traces/spans, it is recommended to keep this setting disabled to minimize data logging overhead.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -238,6 +256,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
     @property
     def guardrails_backend_host(self) -> str:
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
+
+    @property
+    def runtime(self) -> tracing_runtime_config.TracingRuntimeConfig:
+        return tracing_runtime_config.runtime_cfg
 
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> "OpikConfig":
@@ -307,6 +329,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
         show_misconfiguration_message : A flag indicating whether to display detailed error messages if the configuration
             is determined to be misconfigured. Defaults to False.
         """
+        if "pytest" in sys.modules:
+            return False
 
         is_misconfigured_flag, error_message = (
             self.get_misconfiguration_detection_results()

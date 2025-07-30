@@ -38,6 +38,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -83,6 +84,7 @@ def test_track__one_function_without_nesting__inputs_and_outputs_not_captured__i
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -118,6 +120,7 @@ def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -161,6 +164,7 @@ def test_track__two_nested_functions__happyflow(fake_backend):
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -226,6 +230,7 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -285,6 +290,7 @@ def test_track__two_traces__happyflow(fake_backend):
             output={"output": "f1-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -304,6 +310,7 @@ def test_track__two_traces__happyflow(fake_backend):
             output={"output": "f2-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -343,10 +350,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -359,7 +367,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -396,6 +404,7 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -415,7 +424,7 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
                         error_info={
                             "exception_type": "Exception",
                             "message": "error message",
-                            "traceback": ANY_STRING(),
+                            "traceback": ANY_STRING,
                         },
                         spans=[],
                     )
@@ -449,10 +458,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -465,7 +475,7 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -515,6 +525,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "outer-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_outer-span-id"],
@@ -534,6 +545,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "inner-output-from-thread-1"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_inner-span-id-thread-1"],
@@ -553,6 +565,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "inner-output-from-thread-2"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_inner-span-id-thread-2"],
@@ -614,6 +627,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -655,10 +669,11 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -671,7 +686,7 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -715,6 +730,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -790,6 +806,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -859,6 +876,7 @@ def test_track__single_async_function_tracked__happyflow(
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -901,6 +919,7 @@ def test_track__nested_async_function_tracked__happyflow(
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -955,6 +974,7 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1003,6 +1023,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1058,6 +1079,7 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
         output={"output": "generator-user-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1118,6 +1140,7 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
         output={"output": "generator-user-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1189,6 +1212,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1253,6 +1277,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
         output={"output": "output-of-manually-created-trace"},
         start_time=mock.ANY,  # not ANY_BUT_NONE because we created span manually in the test
         end_time=mock.ANY,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1300,6 +1325,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         thread_id="some-thread-id",
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1346,6 +1372,7 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
         output={"output": "f-output", "trace-output-key": "trace-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1390,6 +1417,7 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
         output={"output": "f-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         feedback_scores=[
             FeedbackScoreModel(id=ANY_BUT_NONE, name="trace-score-name", value=0.75)
         ],
@@ -1431,6 +1459,7 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1465,6 +1494,7 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1501,10 +1531,11 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "TypeError",
-            "traceback": ANY_STRING(),
-            "message": ANY_STRING(),
+            "traceback": ANY_STRING,
+            "message": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -1516,8 +1547,8 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
                 end_time=ANY_BUT_NONE,
                 error_info={
                     "exception_type": "TypeError",
-                    "traceback": ANY_STRING(),
-                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING,
+                    "message": ANY_STRING,
                 },
                 spans=[],
             )
@@ -1553,6 +1584,7 @@ def test_track__span_usage_updated__openai_format(fake_backend):
         output={"output": "f-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1613,6 +1645,7 @@ def test_track__function_called_with_mutable_input_which_changed_afterward__chec
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1673,6 +1706,7 @@ def test_track__using_distributed_headers__spans_are_created_correctly(fake_back
         input={"x": "do_distributed_trace-input"},
         output={"output": "do_distributed_trace-output"},
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1749,6 +1783,7 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
         input={"x": "do_distributed_trace-input"},
         output={"output": "do_distributed_trace-output"},
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

@@ -4,6 +4,7 @@ from unittest import mock
 import logging
 import deepdiff
 
+from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,9 +27,18 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
                 or "AnyButNone to NoneType" in diff_report_line
                 or "AnyButNone" not in diff_report_line
             )
-            and ("dict to AnyDict" not in diff_report_line)
-            and ("list to AnyList" not in diff_report_line)
-            and ("str to AnyStr" not in diff_report_line)
+            and (
+                "changed from AnyDict to dict and value changed from <ANY_DICT>"
+                not in diff_report_line
+            )
+            and (
+                "changed from AnyList to list and value changed from <ANY_LIST>"
+                not in diff_report_line
+            )
+            and (
+                "changed from AnyString to str and value changed from <ANY_STRING>"
+                not in diff_report_line
+            )
         ]
         diff_report_clean = "\n".join(diff_report_cleaned_lines)
 
@@ -72,5 +82,37 @@ def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
         return
 
     raise AssertionError(
-        f"Dict does't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}"
+        f"Dict doesn't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}"
     )
+
+
+def assert_dict_keys_in_list(dic: Dict[str, Any], keys: List[str]) -> None:
+    """
+    Asserts that all keys in the dictionary are present in the given list.
+
+    Args:
+        dic: The dictionary whose keys need to be checked
+        keys: The list of allowed keys
+
+    Raises:
+        AssertionError: If any key in the dictionary is not in the provided list
+    """
+    invalid_keys = [key for key in dic.keys() if key not in keys]
+
+    if len(invalid_keys) == 0:
+        return
+
+    raise AssertionError(
+        f"Dict contains keys that are not in the allowed list. Invalid keys: {invalid_keys}, allowed keys: {keys}"
+    )
+
+
+def assert_score_result(
+    result: score_result.ScoreResult, include_reason: bool = True
+) -> None:
+    assert result.scoring_failed is False
+    assert isinstance(result.value, float)
+    assert 0.0 <= result.value <= 1.0
+    if include_reason:
+        assert isinstance(result.reason, str)
+        assert len(result.reason) > 0

@@ -27,6 +27,7 @@ so you can more easily keep track of your progress.
         prompt = opik.Prompt(
             name="prompt-summary",
             prompt=PROMPT_TEXT,
+            metadata={"environment": "production"}
         )
 
         # Print the prompt text
@@ -93,7 +94,7 @@ You can create a new prompt in the library using both the SDK and the UI:
         client = opik.Opik()
 
         # Create a new prompt
-        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}")
+        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}", metadata={"environment": "development"})
         ```
     </Tab>
     <Tab value="Using the UI" title="Using the UI">

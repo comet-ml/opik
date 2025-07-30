@@ -1,0 +1,11 @@
+---
+description: Architecture guidelines
+globs:
+alwaysApply: true
+---
+- Applications must be reactive, non-blocking, and horizontally scalable
+- Ensure separation of concerns between architectural layers
+- Resources → API layer
+- Services → Business logic
+- Dao → Persistence layer
+- Use a modular architecture to enable independent development and testing

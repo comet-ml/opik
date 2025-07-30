@@ -26,7 +26,7 @@ class AIProvidersConfigPage(BasePage):
 
         self.page.get_by_label("API key").fill(api_key)
 
-        self.page.get_by_role("button", name="Save configuration").click()
+        self.page.get_by_role("button", name="Add configuration").click()
 
     def edit_provider(self, name: str, api_key: Optional[str] = None):
         """Edit an existing AI provider configuration"""
@@ -47,11 +47,18 @@ class AIProvidersConfigPage(BasePage):
 
         self.page.get_by_role("button", name="Delete configuration").click()
 
-    def check_provider_exists(self, provider_name: str):
+    def check_provider_exists(self, provider_name: str) -> bool:
         """Check if a provider exists by name"""
         self.search_provider_by_name(provider_name)
-        expect(self.page.get_by_text(provider_name).first).to_be_visible()
-        self.search_bar.fill("")
+        try:
+            # Check if provider exists in the table
+            provider_row = self.page.get_by_role("row").filter(has_text=provider_name)
+            exists = provider_row.count() > 0
+            self.search_bar.fill("")  # Clear search
+            return exists
+        except Exception:
+            self.search_bar.fill("")  # Clear search
+            return False
 
     def check_provider_not_exists(self, provider_name: str):
         """Check if a provider does not exist by name"""

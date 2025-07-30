@@ -23,7 +23,7 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_COMMENTS_ID,
-  COLUMN_CREATED_AT_ID,
+  COLUMN_DURATION_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -57,7 +57,6 @@ import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { formatDate } from "@/lib/date";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -80,6 +79,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -309,6 +309,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicOutputColumns.map((c) => c.id),
       ...dynamicScoresColumns.map((c) => c.id),
       COLUMN_COMMENTS_ID,
+      COLUMN_DURATION_ID,
     ],
     [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
@@ -321,13 +322,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const datasetColumnsData = useMemo(() => {
     return [
-      {
-        id: COLUMN_CREATED_AT_ID,
-        label: "Created",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      },
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
@@ -363,6 +357,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
           }) as ColumnData<ExperimentsCompare>,
       ),
+      {
+        id: COLUMN_DURATION_ID,
+        label: "Duration",
+        type: COLUMN_TYPE.duration,
+        cell: DurationCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+        },
+      },
       {
         id: COLUMN_COMMENTS_ID,
         label: "Comments",

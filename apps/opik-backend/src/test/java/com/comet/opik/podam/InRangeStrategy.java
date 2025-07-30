@@ -1,6 +1,6 @@
 package com.comet.opik.podam;
 
-import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validation.InRange;
 import org.apache.commons.lang3.RandomUtils;
 import uk.co.jemos.podam.common.AttributeStrategy;
 import uk.co.jemos.podam.common.BeanValidationStrategy;
