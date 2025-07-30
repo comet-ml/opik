@@ -125,7 +125,9 @@ spec:
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
+      {{- with .Values.clickhouse.extraPodTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     serviceTemplates:
       - name: clickhouse-cluster-svc-lb-template
         metadata:
@@ -185,6 +187,9 @@ spec:
               name: ch-monitoring-svc
           {{- end }}
           type: ClusterIP
+      {{- with .Values.clickhouse.extraServiceTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     volumeClaimTemplates:
       - name: storage-vc-template
         {{- if .Values.clickhouse.volumeAnnotations }}
@@ -202,5 +207,8 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: {{ .Values.clickhouse.storage }}    
+              storage: {{ .Values.clickhouse.storage }}
+      {{- with .Values.clickhouse.extraVolumeClaimTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
 {{- end }}
