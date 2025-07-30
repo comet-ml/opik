@@ -40,7 +40,7 @@ const useTracesBatchFeedbackScoresMutation = () => {
         }: UseTracesBatchFeedbackScoresParams) => {
             const body = {
                 scores: traceIds.map((id) => ({
-                    trace_id: id,
+                    id,
                     project_id: projectId,
                     name,
                     value,
