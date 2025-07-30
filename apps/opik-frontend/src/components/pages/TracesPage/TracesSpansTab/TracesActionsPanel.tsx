@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Brain, PencilLine, Tag, Trash } from "lucide-react";
+import { Brain, MessageSquarePlus, PencilLine, Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -16,6 +16,7 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
+import BatchCommentDialog from "@/components/pages-shared/traces/BatchCommentDialog/BatchCommentDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -93,6 +94,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           projectId={projectId}
         />
       )}
+      <BatchCommentDialog
+        key={`comment-${resetKeyRef.current}`}
+        rows={selectedRows}
+        type={type}
+        projectId={projectId}
+        open={open === 5}
+        setOpen={setOpen}
+      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}
@@ -140,6 +149,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           >
             <PencilLine className="mr-2 size-4" />
             Annotate
+          </Button>
+        </TooltipWrapper>
+      )}
+      {type === TRACE_DATA_TYPE.traces && (
+        <TooltipWrapper content="Comment">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <MessageSquarePlus className="mr-2 size-4" />
+            Comment
           </Button>
         </TooltipWrapper>
       )}
