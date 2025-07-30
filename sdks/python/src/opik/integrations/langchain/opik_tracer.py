@@ -13,6 +13,7 @@ from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
     opik_encoder_extension,
+    provider_usage_extractors,
 )
 
 from ...api_objects import helpers, opik_client
@@ -368,20 +369,10 @@ class OpikTracer(BaseTracer):
         try:
             run_dict: Dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
-            usage_info = llm_usage.LLMUsageInfo()
 
-            if openai_run_helpers.is_openai_run(run):
-                usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
-            elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
-                usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif vertexai_run_helpers.is_vertexai_run(run_dict):
-                usage_info = vertexai_run_helpers.get_llm_usage_info(run_dict)
-            elif google_generative_ai_helpers.is_google_generative_ai_run(run_dict):
-                usage_info = google_generative_ai_helpers.get_llm_usage_info(run_dict)
-            elif anthropic_run_helpers.is_anthropic_run(run):
-                usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
-            elif groq_run_helpers.is_groq_run(run):
-                usage_info = groq_run_helpers.get_llm_usage_info(run_dict)
+            usage_info = provider_usage_extractors.try_extract_provider_usage_data(run_dict)
+            if usage_info is None:
+                usage_info = llm_usage.LLMUsageInfo()
 
             # workaround for `.astream()` method usage
             if span_data.input == {"input": ""}:
@@ -389,9 +380,11 @@ class OpikTracer(BaseTracer):
 
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
-                usage=usage_info.usage.provider_usage.model_dump()
-                if isinstance(usage_info.usage, llm_usage.OpikUsage)
-                else usage_info.usage,
+                usage=(
+                    usage_info.usage.provider_usage.model_dump()
+                    if isinstance(usage_info.usage, llm_usage.OpikUsage)
+                    else usage_info.usage
+                ),
                 provider=usage_info.provider,
                 model=usage_info.model,
             )
