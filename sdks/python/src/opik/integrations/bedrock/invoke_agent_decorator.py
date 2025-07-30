@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from typing_extensions import override
 
-from opik import dict_utils
+import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 

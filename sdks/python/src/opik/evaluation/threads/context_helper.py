@@ -1,7 +1,7 @@
 import contextlib
 from typing import Iterator, Optional
 
-from opik import context_storage
+import opik.context_storage as context_storage
 from opik.api_objects import trace, opik_client
 from opik.decorator import error_info_collector
 from opik.types import ErrorInfoDict
