@@ -51,7 +51,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
     const rows = await getDataForExport();
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse feedback_scores into correct structure
         const keys = column.split(".");
         const keyPrefix = first(keys) as string;
 
