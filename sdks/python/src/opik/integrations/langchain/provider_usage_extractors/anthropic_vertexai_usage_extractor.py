@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import opik
 from opik import llm_usage
-from . import usage_extractor_protocol
+from . import provider_usage_extractor_protocol
+from . import langchain_run_helpers
 
 if TYPE_CHECKING:
     pass
@@ -12,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class AnthropicVertexAIUsageExtractor(
-    usage_extractor_protocol.ProviderUsageExtractorProtocol
+    provider_usage_extractor_protocol.ProviderUsageExtractorProtocol
 ):
     PROVIDER = opik.LLMProvider.ANTHROPIC_VERTEXAI
 
@@ -47,34 +48,10 @@ class AnthropicVertexAIUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        if run_dict["outputs"]["llm_output"] is not None:
-            usage_dict = run_dict["outputs"]["llm_output"]["usage"]
-        else:
-            # Handle the streaming mode
-            usage_dict = run_dict["outputs"]["generations"][-1][-1]["message"][
-                "kwargs"
-            ]["usage_metadata"]
+        langchain_usage = langchain_run_helpers.try_get_token_usage(run_dict)
+        anthropic_usage_dict = langchain_usage.map_to_anthropic_usage()
 
-            # Support streaming mode
-            if "input_token_details" in usage_dict:
-                cache_creation_input_tokens = usage_dict["input_token_details"][
-                    "cache_creation"
-                ]
-                cache_read_input_tokens = usage_dict["input_token_details"][
-                    "cache_read"
-                ]
-            else:
-                cache_creation_input_tokens = None
-                cache_read_input_tokens = None
-
-            usage_dict = {
-                "input_tokens": usage_dict["input_tokens"],
-                "output_tokens": usage_dict["output_tokens"],
-                "cache_creation_input_tokens": cache_creation_input_tokens,
-                "cache_read_input_tokens": cache_read_input_tokens,
-            }
-
-        opik_usage = llm_usage.OpikUsage.from_anthropic_dict(usage_dict)
+        opik_usage = llm_usage.OpikUsage.from_anthropic_dict(anthropic_usage_dict)
         return opik_usage
     except Exception:
         LOGGER.warning(

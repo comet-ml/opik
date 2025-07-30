@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
-from . import usage_extractor_protocol
+from . import provider_usage_extractor_protocol
 
 if TYPE_CHECKING:
     pass
@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class GroqUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
+class GroqUsageExtractor(
+    provider_usage_extractor_protocol.ProviderUsageExtractorProtocol
+):
     PROVIDER = opik.LLMProvider.GROQ
 
     def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:

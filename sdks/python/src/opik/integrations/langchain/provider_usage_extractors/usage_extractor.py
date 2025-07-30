@@ -3,24 +3,26 @@ from typing import Any, Dict, List, Optional
 
 from opik import llm_usage
 from . import (
-    openai_handler,
-    anthropic_handler,
-    google_generative_ai_handler,
-    vertexai_handler,
-    groq_handler,
-    anthropic_vertexai_handler,
+    openai_usage_extractor,
+    anthropic_usage_extractor,
+    google_generative_ai_usage_extractor,
+    vertexai_usage_extractor,
+    groq_usage_extractor,
+    anthropic_vertexai_usage_extractor,
 )
-from .usage_extractor_protocol import ProviderUsageExtractorProtocol
+from . import provider_usage_extractor_protocol
 
 LOGGER = logging.getLogger(__name__)
 
-_REGISTERED_PROVIDER_USAGE_EXTRACTORS: List[ProviderUsageExtractorProtocol] = [
-    openai_handler.OpenAIUsageExtractor(),
-    anthropic_handler.AnthropicUsageExtractor(),
-    google_generative_ai_handler.GoogleGenerativeAIUsageExtractor(),
-    vertexai_handler.VertexAIUsageExtractor(),
-    groq_handler.GroqUsageExtractor(),
-    anthropic_vertexai_handler.AnthropicVertexAIUsageExtractor(),
+_REGISTERED_PROVIDER_USAGE_EXTRACTORS: List[
+    provider_usage_extractor_protocol.ProviderUsageExtractorProtocol
+] = [
+    openai_usage_extractor.OpenAIUsageExtractor(),
+    anthropic_usage_extractor.AnthropicUsageExtractor(),
+    google_generative_ai_usage_extractor.GoogleGenerativeAIUsageExtractor(),
+    vertexai_usage_extractor.VertexAIUsageExtractor(),
+    groq_usage_extractor.GroqUsageExtractor(),
+    anthropic_vertexai_usage_extractor.AnthropicVertexAIUsageExtractor(),
 ]
 
 

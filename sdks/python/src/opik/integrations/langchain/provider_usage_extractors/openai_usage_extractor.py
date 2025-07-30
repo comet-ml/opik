@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
-from . import usage_extractor_protocol
+from . import provider_usage_extractor_protocol, langchain_run_helpers
 
 if TYPE_CHECKING:
     pass
@@ -12,7 +12,9 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class OpenAIUsageExtractor(usage_extractor_protocol.ProviderUsageExtractorProtocol):
+class OpenAIUsageExtractor(
+    provider_usage_extractor_protocol.ProviderUsageExtractorProtocol
+):
     PROVIDER = opik.LLMProvider.OPENAI
 
     def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
@@ -66,24 +68,11 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
             if not isinstance(token_usage_dict, dict):
                 return None
             return llm_usage.OpikUsage.from_openai_completions_dict(token_usage_dict)
-
-        # streaming mode handling
-        # token usage data MAY be available at the end of streaming
-        # in async mode may not provide token usage info
-        elif token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
-            "kwargs"
-        ].get("usage_metadata"):
-            # TODO: provide better support for langchain usage. We probably need to convert it
-            # to the full openai usage dict (with details) or find a way to access raw data
-            openai_formatted_dict = {
-                "completion_tokens": token_usage_dict["output_tokens"],
-                "prompt_tokens": token_usage_dict["input_tokens"],
-                "total_tokens": token_usage_dict["total_tokens"],
-            }
-            opik_usage = llm_usage.OpikUsage.from_openai_completions_dict(
-                openai_formatted_dict
-            )
-            return opik_usage
+        elif langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(
+            run_dict
+        ):
+            openai_usage_dict = langchain_usage.map_to_openai_completions_usage()
+            return llm_usage.OpikUsage.from_openai_completions_dict(openai_usage_dict)
         else:
             opik_logging.log_once_at_level(
                 logging_level=logging.WARNING,
