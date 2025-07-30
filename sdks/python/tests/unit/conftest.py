@@ -1,6 +1,5 @@
 import pytest
 import logging
-import opik
 
 
 @pytest.fixture
