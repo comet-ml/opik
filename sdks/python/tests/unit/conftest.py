@@ -2,6 +2,7 @@ import pytest
 import logging
 import opik
 
+
 @pytest.fixture
 def capture_log(caplog):
     logger = logging.getLogger("opik")
@@ -23,9 +24,9 @@ def capture_log_debug(caplog):
 
     logger.propagate = False
 
+
 @pytest.fixture(autouse=True)
 def reset_tracing_to_config_default():
     opik.reset_tracing_to_config_default()
     yield
     opik.reset_tracing_to_config_default()
-
