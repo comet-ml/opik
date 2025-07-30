@@ -8,7 +8,6 @@ class TracingRuntimeConfig:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._tracing_active: Optional[bool] = None
-        self._cached_config_enabled: Optional[bool] = None
 
     def set_tracing_active(self, active: bool) -> None:
         with self._lock:
@@ -27,6 +26,8 @@ class TracingRuntimeConfig:
             from .. import config as _config_module
 
             enabled = not _config_module.OpikConfig().track_disable
+            self._tracing_active = enabled
+
         except Exception:
             return True
 
