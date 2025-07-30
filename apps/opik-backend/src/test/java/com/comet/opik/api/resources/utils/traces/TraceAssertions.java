@@ -112,9 +112,13 @@ public class TraceAssertions {
         config.ignoreFields(IGNORED_FIELDS_SCORES);
         config.registerComparatorForType(BigDecimal::compareTo, BigDecimal.class);
 
-        assertThat(actualTrace.feedbackScores())
-                .usingRecursiveFieldByFieldElementComparator(config)
-                .containsExactlyInAnyOrderElementsOf(expectedTrace.feedbackScores());
+        if (expectedTrace.feedbackScores() == null) {
+            assertThat(actualTrace.feedbackScores()).isNull();
+        } else {
+            assertThat(actualTrace.feedbackScores())
+                    .usingRecursiveFieldByFieldElementComparator(config)
+                    .containsExactlyInAnyOrderElementsOf(expectedTrace.feedbackScores());
+        }
 
         if (expectedTrace.feedbackScores() != null) {
             Instant lastUpdatedAt = expectedTrace.lastUpdatedAt();
