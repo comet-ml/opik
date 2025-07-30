@@ -252,6 +252,7 @@ function Start-MissingContainers {
 
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
+        New-OpikConfigIfMissing
     }
 }
 
@@ -302,6 +303,30 @@ function Show-Banner {
     Write-Host '║  💬 Need help? Join our community: https://chat.comet.com       ║'
     Write-Host '║                                                                 ║'
     Write-Host '╚═════════════════════════════════════════════════════════════════╝'
+}
+
+function New-OpikConfigIfMissing {
+    $configFile = Join-Path $env:USERPROFILE ".opik.config"
+
+    if (-not (Test-Path $configFile)) {
+        if ($DEBUG_MODE) { Write-Host "[DEBUG] Creating .opik.config file at $configFile" }
+
+        # Get the actual frontend port (same logic as Show-Banner)
+        $frontendPort = docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
+        if (-not $frontendPort) { $frontendPort = 5173 }
+        $uiUrl = "http://localhost:$frontendPort"
+
+        $configContent = @"
+[opik]
+url_override = $uiUrl/api/
+workspace = default
+"@
+
+        $configContent | Out-File -FilePath $configFile -Encoding UTF8
+        if ($DEBUG_MODE) { Write-Host "[DEBUG] .opik.config file created successfully with URL: $uiUrl/api/" }
+    } else {
+        if ($DEBUG_MODE) { Write-Host "[DEBUG] .opik.config file already exists, skipping creation" }
+    }
 }
 
 function Get-VerifyCommand {
