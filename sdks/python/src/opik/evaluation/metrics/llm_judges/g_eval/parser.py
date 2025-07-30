@@ -2,7 +2,7 @@ import logging
 import json
 import math
 from typing import TYPE_CHECKING
-from opik import exceptions
+import opik.exceptions as exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.logging_messages import GEVAL_SCORE_CALC_FAILED

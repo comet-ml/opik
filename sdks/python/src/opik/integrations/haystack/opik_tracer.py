@@ -8,9 +8,10 @@ from haystack import logging, tracing
 from haystack.tracing import utils as tracing_utils
 
 import opik
-from opik import url_helpers
+import opik.url_helpers as url_helpers
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 from . import converters
 
@@ -174,19 +175,27 @@ class OpikTracer(tracing.Tracer):
             # Create a new trace if no parent span is provided
             context = tracing_context_var.get({})
 
-            trace = self._opik_client.trace(
-                id=context.get("trace_id"),
-                name=self._name,
-                tags=context.get("tags"),
-            )
+            trace = None
+            if tracing_runtime_config.is_tracing_active():
+                trace = self._opik_client.trace(
+                    id=context.get("trace_id"),
+                    name=self._name,
+                    tags=context.get("tags"),
+                )
             assert trace is not None
             span = OpikSpanBridge(trace)
         elif tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS:
             span = OpikSpanBridge(
                 parent_span.raw_span().span(name=span_name, type="llm")
+                if tracing_runtime_config.is_tracing_active()
+                else parent_span.raw_span()
             )
         else:
-            span = OpikSpanBridge(parent_span.raw_span().span(name=span_name))
+            span = (
+                OpikSpanBridge(parent_span.raw_span().span(name=span_name))
+                if tracing_runtime_config.is_tracing_active()
+                else parent_span
+            )
 
         self._context.append(span)
         span.set_tags(tags)
