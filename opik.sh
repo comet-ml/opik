@@ -48,6 +48,27 @@ get_docker_compose_cmd() {
   echo "$cmd"
 }
 
+create_opik_config_if_missing() {
+  local config_file="$HOME/.opik.config"
+
+  if [[ ! -f "$config_file" ]]; then
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Creating .opik.config file at $config_file"
+
+    # Get the actual frontend port (same logic as print_banner)
+    local frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
+    local ui_url="http://localhost:${frontend_port:-5173}"
+
+    cat > "$config_file" << EOF
+[opik]
+url_override = ${ui_url}/api/
+workspace = default
+EOF
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] .opik.config file created successfully with URL: ${ui_url}/api/"
+  else
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] .opik.config file already exists, skipping creation"
+  fi
+}
+
 print_usage() {
   echo "Usage: opik.sh [OPTIONS]"
   echo ""
@@ -178,6 +199,7 @@ start_missing_containers() {
 
   if $all_running; then
     send_install_report "$uuid" "true" "$start_time"
+    create_opik_config_if_missing
   fi
 }
 
