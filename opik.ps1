@@ -326,7 +326,7 @@ function Show-Banner {
     Write-Host '║  📊 Access the UI:                                              ║'
     Write-Host "║     $uiUrl                                       ║"
     Write-Host '║                                                                 ║'
-    Write-Host '║  🛠️  Configure the Python SDK:                                   ║'
+    Write-Host '║  🛠️  Install the Python SDK:                                     ║'
     Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
     Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
     Write-Host '║                                                                 ║'

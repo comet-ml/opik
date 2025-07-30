@@ -232,7 +232,7 @@ print_banner() {
   echo "║  📊 Access the UI:                                              ║"
   echo "║     $ui_url                                       ║"
   echo "║                                                                 ║"
-  echo "║  🛠️  Configure the Python SDK:                                   ║"
+  echo "║  🛠️  Install the Python SDK:                                     ║"
   echo "║     \$ python --version                                          ║"
   echo "║     \$ pip install opik                                          ║"
   echo "║     \$ opik configure --use-local                                ║"
