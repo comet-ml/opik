@@ -1,10 +1,10 @@
 import React from "react";
 
-import ProjectSelector from "@/components/pages/HomePage/ProjectSelector";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Project } from "@/types/projects";
-import { DropdownOption } from "@/types/shared";
+import ProjectSelector from "@/components/pages/HomePage/ProjectSelector";
 
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { DropdownOption } from "@/types/shared";
 export enum PERIOD_OPTION_TYPE {
   THREE_DAYS = "3",
   SEVEN_DAYS = "7",

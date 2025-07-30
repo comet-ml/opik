@@ -1,9 +1,16 @@
+import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useMemo } from "react";
 
-import useProjectsList from "@/api/projects/useProjectsList";
-import CostOverview from "@/components/pages/HomePage/CostOverview";
+import { LOADED_PROJECTS_COUNT } from "@/components/pages/HomePage/ProjectSelector";
+import OverallPerformanceActionsPanel from "@/components/pages/HomePage/OverallPerformanceActionsPanel";
 import MetricsOverview from "@/components/pages/HomePage/MetricsOverview";
+import CostOverview from "@/components/pages/HomePage/CostOverview";
+import useLocalStorageState from "use-local-storage-state";
+import useProjectsList from "@/api/projects/useProjectsList";
+import useAppStore from "@/store/AppStore";
+import {
+
+import { useMemo } from "react";
 import OverallPerformanceActionsPanel, {
   PERIOD_OPTION_TYPE,
 } from "@/components/pages/HomePage/OverallPerformanceActionsPanel";
