@@ -1,7 +1,7 @@
 import asyncio
 
 from opik.evaluation.metrics import base_metric, score_result
-from opik import exceptions
+import opik.exceptions as exceptions
 
 from typing import Dict, Any, Optional, TYPE_CHECKING
 

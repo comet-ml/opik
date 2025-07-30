@@ -6,9 +6,10 @@ import json
 from opik.api_objects import opik_client
 from opik.api_objects.experiment import experiment_item
 from opik.api_objects.dataset import dataset_item
-from opik import id_helpers
+import opik.id_helpers as id_helpers
 
-from opik import datetime_helpers, dict_utils
+import opik.datetime_helpers as datetime_helpers
+import opik.dict_utils as dict_utils
 from . import test_runs_storage, test_run_content
 
 

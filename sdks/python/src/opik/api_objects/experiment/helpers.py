@@ -1,5 +1,5 @@
 import logging
-from opik import jsonable_encoder
+import opik.jsonable_encoder as jsonable_encoder
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 import copy
 from .. import prompt

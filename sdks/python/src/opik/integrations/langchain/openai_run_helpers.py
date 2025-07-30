@@ -1,8 +1,9 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, Literal
 
-from opik import _logging as opik_logging
-from opik import llm_usage, logging_messages
+import opik._logging as opik_logging
+import opik.llm_usage as llm_usage
+import opik.logging_messages as logging_messages
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run

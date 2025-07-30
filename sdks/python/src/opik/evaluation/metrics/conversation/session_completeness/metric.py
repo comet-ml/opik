@@ -3,7 +3,7 @@ import logging
 from typing import Optional, Any, Union, List
 import pydantic
 
-from opik import exceptions
+import opik.exceptions as exceptions
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
 from .. import conversation_thread_metric, types as conversation_types

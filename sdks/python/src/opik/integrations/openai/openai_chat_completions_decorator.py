@@ -1,23 +1,21 @@
 import logging
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterator,
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 import openai
 import openai.lib.streaming.chat
 from openai import _types as _openai_types
-from openai.types.chat import chat_completion, chat_completion_chunk
+from openai.types.chat import chat_completion
 from typing_extensions import override
 
-from opik import dict_utils, llm_usage
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.integrations.openai import chat_completion_chunks_aggregator
@@ -50,8 +48,8 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
@@ -136,17 +134,8 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
-            Callable[
-                [List[chat_completion_chunk.ChatCompletionChunk]],
-                chat_completion_chunks_aggregator.ChatCompletionChunksAggregated,
-            ]
-        ],
-    ) -> Union[
-        None,
-        Iterator[chat_completion_chunk.ChatCompletionChunk],
-        AsyncIterator[chat_completion_chunk.ChatCompletionChunk],
-    ]:
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
+    ) -> Optional[Any]:
         assert (
             generations_aggregator is not None
         ), "OpenAI decorator will always get aggregator function as input"

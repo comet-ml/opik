@@ -4,7 +4,9 @@ from typing import Final, List, Optional
 import httpx
 
 from opik.exceptions import ConfigurationError
-from opik import url_helpers, config, httpx_client
+import opik.url_helpers as url_helpers
+import opik.config as config
+import opik.httpx_client as httpx_client
 
 LOGGER = logging.getLogger(__name__)
 

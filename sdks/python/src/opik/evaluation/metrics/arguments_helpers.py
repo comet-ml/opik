@@ -2,7 +2,7 @@ import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from opik import exceptions
+import opik.exceptions as exceptions
 from .. import types as evaluation_types
 
 LOGGER = logging.getLogger(__name__)

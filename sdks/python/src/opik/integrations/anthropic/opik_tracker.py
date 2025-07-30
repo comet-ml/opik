@@ -47,7 +47,6 @@ def track_anthropic(
     Returns:
         Anthropic client with integrated Opik tracking logic.
     """
-
     if hasattr(anthropic_client, "opik_tracked"):
         return anthropic_client
 

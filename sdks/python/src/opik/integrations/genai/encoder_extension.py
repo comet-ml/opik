@@ -2,7 +2,7 @@ import base64
 from typing import Any, Dict, Union
 
 from google.genai import types as genai_types
-from opik import jsonable_encoder
+import opik.jsonable_encoder as jsonable_encoder
 
 
 def register() -> None:

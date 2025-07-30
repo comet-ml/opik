@@ -7,7 +7,7 @@ from importlib import metadata
 import click
 from rich.console import Console
 
-from opik import healthcheck as opik_healthcheck
+import opik.healthcheck as opik_healthcheck
 from opik.configurator import configure as opik_configure, interactive_helpers
 
 console = Console()

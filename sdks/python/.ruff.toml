@@ -26,6 +26,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "src/opik/rest_api",
 ]
 
 # Same as Black.

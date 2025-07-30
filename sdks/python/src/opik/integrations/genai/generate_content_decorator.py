@@ -14,7 +14,8 @@ from typing_extensions import override
 
 from google.genai import types as genai_types
 
-from opik import dict_utils, llm_usage
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
@@ -47,8 +48,8 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
@@ -128,12 +129,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
-            Callable[
-                [List[genai_types.GenerateContentResponse]],
-                genai_types.GenerateContentResponse,
-            ]
-        ],
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
         None,
         Iterator[genai_types.GenerateContentResponse],

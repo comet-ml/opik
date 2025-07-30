@@ -13,7 +13,7 @@ from opik.config import (
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
-from opik import url_helpers
+import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
 
 

@@ -1,10 +1,10 @@
 from . import _logging, environment, error_tracking, package_version
+from .api_objects.attachment import Attachment
 from .api_objects.dataset import Dataset
 from .api_objects.experiment.experiment_item import (
     ExperimentItemContent,
     ExperimentItemReferences,
 )
-from .api_objects.attachment import Attachment
 from .api_objects.opik_client import Opik
 from .api_objects.prompt import Prompt
 from .api_objects.prompt.types import PromptType
@@ -17,6 +17,12 @@ from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
 from . import opik_context
+from .decorator.tracing_runtime_config import (
+    is_tracing_active,
+    reset_tracing_to_config_default,
+    set_tracing_active,
+)
+
 
 _logging.setup()
 
@@ -41,6 +47,9 @@ __all__ = [
     "Prompt",
     "PromptType",
     "LLMProvider",
+    "reset_tracing_to_config_default",
+    "set_tracing_active",
+    "is_tracing_active",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

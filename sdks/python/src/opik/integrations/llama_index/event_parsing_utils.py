@@ -5,7 +5,7 @@ from llama_index.core import Settings
 from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from opik.types import LLMProvider, ErrorInfoDict
 from opik.decorator import error_info_collector
 

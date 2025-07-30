@@ -2,7 +2,7 @@ import re
 from typing import Any, Set
 import jinja2
 
-from opik import exceptions
+import opik.exceptions as exceptions
 from .types import PromptType
 
 

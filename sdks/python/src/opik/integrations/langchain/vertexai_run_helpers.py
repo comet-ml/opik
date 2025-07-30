@@ -1,7 +1,8 @@
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from opik import llm_usage, logging_messages
+import opik.llm_usage as llm_usage
+import opik.logging_messages as logging_messages
 from opik.integrations.langchain import langchain_run_helpers
 from opik.types import LLMProvider
 

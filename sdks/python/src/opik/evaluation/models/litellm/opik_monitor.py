@@ -1,7 +1,8 @@
 import functools
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from opik import config, opik_context
+import opik.config as config
+import opik.opik_context as opik_context
 
 if TYPE_CHECKING:
     import litellm

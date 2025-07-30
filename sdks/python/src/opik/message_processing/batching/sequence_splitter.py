@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional, TypeVar, Sequence, Any
-from opik import jsonable_encoder
+import opik.jsonable_encoder as jsonable_encoder
 
 T = TypeVar("T")
 

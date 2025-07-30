@@ -5,7 +5,7 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 
 from . import templates, parser
-from opik import exceptions
+import opik.exceptions as exceptions
 
 
 class AnswerRelevanceResponseFormat(pydantic.BaseModel):

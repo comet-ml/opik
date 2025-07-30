@@ -3,7 +3,8 @@ from typing import Union, cast, List
 from . import base_batcher, sequence_splitter
 from .. import messages
 from opik.rest_api.types import span_write, trace_write
-from opik import jsonable_encoder, dict_utils
+import opik.jsonable_encoder as jsonable_encoder
+import opik.dict_utils as dict_utils
 
 
 class CreateSpanMessageBatcher(base_batcher.BaseBatcher):

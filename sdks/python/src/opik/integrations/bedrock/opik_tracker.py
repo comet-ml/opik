@@ -22,6 +22,7 @@ def track_bedrock(
     Returns:
         The modified bedrock client with Opik tracking enabled.
     """
+
     decorator_for_converse = converse_decorator.BedrockConverseDecorator()
     decorator_for_invoke_agent = invoke_agent_decorator.BedrockInvokeAgentDecorator()
 

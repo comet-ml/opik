@@ -2,7 +2,9 @@ import functools
 import logging
 from typing import Optional, List, Callable, Dict, Literal
 
-from opik import exceptions, track, opik_context
+import opik
+import opik.exceptions as exceptions
+import opik.opik_context as opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
 
@@ -144,7 +146,7 @@ class ThreadsEvaluationEngine:
             scores=results,
         )
 
-    @track(name="metrics_calculation")
+    @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _evaluate_conversation(
         self,
         conversation: List[Dict[Literal["role", "content"], str]],

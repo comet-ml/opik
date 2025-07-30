@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from typing_extensions import override
 
-from opik import dict_utils
+import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
@@ -28,8 +28,8 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None

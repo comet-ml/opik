@@ -3,10 +3,10 @@ import os
 import functools
 import logging
 import opik
-from opik import opik_context
+import opik.opik_context as opik_context
 from . import test_runs_storage, test_run_content
 from opik.decorator import inspect_helpers
-from opik import config
+import opik.config as config
 
 LOGGER = logging.getLogger(__name__)
 

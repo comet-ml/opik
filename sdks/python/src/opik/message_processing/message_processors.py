@@ -4,7 +4,8 @@ from typing import Any, Callable, Dict, Type
 import pydantic
 import tenacity
 
-from opik import logging_messages, exceptions
+import opik.logging_messages as logging_messages
+import opik.exceptions as exceptions
 from . import messages
 from ..jsonable_encoder import encode
 from .. import dict_utils

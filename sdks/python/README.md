@@ -53,6 +53,35 @@ opik.configure(
 ```
 Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
 
+### Dynamic Tracing Control
+
+Control tracing behavior at runtime without code changes:
+
+```python
+import opik
+
+# Disable tracing globally
+opik.set_tracing_active(False)
+
+# Check current state
+print(opik.is_tracing_active())  # False
+
+# Re-enable tracing
+opik.set_tracing_active(True)
+
+# Reset to configuration default
+opik.reset_tracing_to_config_default()
+```
+
+This is useful for:
+- Performance optimization in high-throughput systems
+- Conditional tracing based on user type or request parameters
+- Debugging and troubleshooting without redeployment
+- Implementing sampling strategies
+- Calls already in progress when you disable tracing still finish logging.
+
+See `examples/dynamic_tracing_cookbook.py` for comprehensive usage patterns.
+
 ## Basic Usage: Tracing
 
 The easiest way to log traces is to use the `@opik.track` decorator:

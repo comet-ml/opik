@@ -1,6 +1,6 @@
 from typing import Any
 import json
-from opik import exceptions
+import opik.exceptions as exceptions
 
 
 def extract_json_content_or_raise(content: str) -> Any:

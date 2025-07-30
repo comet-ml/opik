@@ -5,7 +5,8 @@ import logging
 from agents import tracing
 
 from opik.types import SpanType, LLMProvider
-from opik import dict_utils, llm_usage
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 
 LOGGER = logging.getLogger(__name__)
 

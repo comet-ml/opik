@@ -11,7 +11,8 @@ from typing import (
     Generic,
 )
 
-from opik import context_storage, logging_messages
+import opik.context_storage as context_storage
+import opik.logging_messages as logging_messages
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 

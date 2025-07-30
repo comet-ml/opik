@@ -1,5 +1,6 @@
 import opik
-from opik import config, environment
+import opik.config as config
+import opik.environment as environment
 from opik.healthcheck import checks, rich_representation
 
 
