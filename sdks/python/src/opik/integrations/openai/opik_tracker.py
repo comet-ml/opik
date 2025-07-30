@@ -9,7 +9,8 @@ from . import (
 
 from . import openai_speech_decorator
 from . import speech_stream_events_aggregator
-from opik import semantic_version
+import opik.semantic_version as semantic_version
+
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -18,7 +19,12 @@ def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
 ) -> OpenAIClient:
-    """Adds Opik tracking to an OpenAI client.
+    """Adds Opik tracking wrappers to an OpenAI client.
+
+    The client is always patched; however every wrapped call checks
+    `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
+    any telemetry. If tracing is disabled at call time, the wrapped function
+    executes normally but no span/trace is sent.
 
     Tracks calls to:
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
@@ -90,11 +96,6 @@ def _patch_openai_chat_completions(
             openai_client.beta.chat.completions.parse
         )
     else:
-        # OpenAI reworked beta API.
-        # * chat.completion.stream calls chat.completion.create under the hood, so
-        #   it doesn't need to be decorated again.
-        # * But beta.chat.completion.stream does not call chat.completion.create, so
-        #   it needs to be decorated!
         openai_client.beta.chat.completions.stream = completions_stream_decorator(
             openai_client.beta.chat.completions.stream
         )

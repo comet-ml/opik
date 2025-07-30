@@ -15,7 +15,9 @@ from typing_extensions import override
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import SpanType, LLMProvider
 from opik.api_objects import span
-from opik import jsonable_encoder, llm_usage, dict_utils
+import opik.jsonable_encoder as jsonable_encoder
+import opik.llm_usage as llm_usage
+import opik.dict_utils as dict_utils
 
 LOGGER = logging.getLogger(__name__)
 

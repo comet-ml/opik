@@ -1,5 +1,5 @@
 import logging
-from opik import _logging
+import opik._logging as _logging
 from typing import List, Any, Generator, TYPE_CHECKING
 from opik.types import FeedbackScoreDict
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import configparser
 import logging
 import os
@@ -6,6 +7,7 @@ import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
@@ -168,6 +170,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     """
     If set to True, then `@track` decorator and `track_LIBRARY(...)` integrations do not log any data.
     Any other API will continue working.
+
+    This setting can be overridden at runtime using:
+    - opik.set_tracing_active(False)  # Disable tracing
+    - opik.set_tracing_active(True)   # Enable tracing
+    - opik.is_tracing_active()        # Check current state
+    - opik.reset_tracing_to_config_default()  # Reset to this config value
+
+    Runtime overrides take precedence over this static configuration.
+
     We do not recommend disable tracking unless you only use tracking functionalities in your project because
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
@@ -245,6 +256,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
     @property
     def guardrails_backend_host(self) -> str:
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
+
+    @property
+    def runtime(self) -> tracing_runtime_config.TracingRuntimeConfig:
+        return tracing_runtime_config.runtime_cfg
 
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> "OpikConfig":

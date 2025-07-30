@@ -6,7 +6,8 @@ from opik.api_objects import rest_stream_parser
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item_write as rest_dataset_item
 from opik.message_processing.batching import sequence_splitter
-from opik import exceptions, config
+import opik.exceptions as exceptions
+import opik.config as config
 from opik.rest_client_configurator import retry_decorator
 from .. import constants
 from . import dataset_item, converters
