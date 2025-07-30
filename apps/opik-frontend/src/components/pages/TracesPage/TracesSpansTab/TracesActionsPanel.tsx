@@ -16,7 +16,9 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 
 import { PencilLine } from "lucide-react";
+import { MessageSquarePlus } from "lucide-react";
 import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
+import BatchCommentDialog from "@/components/pages-shared/traces/BatchCommentDialog/BatchCommentDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -117,6 +119,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         projectId={projectId}
         onSuccess={onClearSelection}
       />
+      <BatchCommentDialog
+        key={`comment-${resetKeyRef.current}`}
+        rows={rows}
+        type={type}
+        projectId={projectId}
+        open={open === 5}
+        setOpen={setOpen}
+        onSuccess={onClearSelection}
+      />
       <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
@@ -157,6 +168,21 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         >
           <PencilLine className="mr-2 size-4" />
           Annotate
+        </Button>
+      </TooltipWrapper>
+
+      <TooltipWrapper content="Comment">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <MessageSquarePlus className="mr-2 size-4" />
+          Comment
         </Button>
       </TooltipWrapper>
       <ExportToButton
