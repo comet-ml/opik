@@ -21,7 +21,9 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -110,8 +112,6 @@ interface TraceDAO {
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
     Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
-
-    Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -285,6 +285,7 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
+            <settings_clause>
             ;
             """;
 
@@ -316,6 +317,7 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            <settings_clause>
             ;
             """;
 
@@ -867,6 +869,7 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
+            <settings_clause>
             ;
             """;
 
@@ -1424,13 +1427,6 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String DELETE_THREADS_BY_PROJECT_ID = """
-            DELETE FROM traces
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND thread_id IN :thread_ids
-            """;
-
     private static final String SELECT_TRACE_IDS_BY_THREAD_IDS = """
             SELECT DISTINCT id
             FROM traces
@@ -1598,6 +1594,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -1656,6 +1653,10 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
 
         return template;
     }
@@ -1719,6 +1720,10 @@ class TraceDAOImpl implements TraceDAO {
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2486,24 +2491,6 @@ class TraceDAOImpl implements TraceDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
-        });
-    }
-
-    @Override
-    public Mono<Long> deleteThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
-        Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(DELETE_THREADS_BY_PROJECT_ID)
-                    .bind("project_id", projectId)
-                    .bind("thread_ids", threadIds.toArray(String[]::new));
-
-            Segment segment = startSegment("traces", "Clickhouse", "deleteThreads");
-
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMapMany(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum);
         });
     }
 

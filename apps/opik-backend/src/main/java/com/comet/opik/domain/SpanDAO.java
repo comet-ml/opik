@@ -15,6 +15,8 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -274,6 +276,7 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
+            <settings_clause>
             ;
             """;
 
@@ -333,6 +336,7 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            <settings_clause>
             ;
             """;
 
@@ -483,6 +487,7 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
+            <settings_clause>
             ;
             """;
 
@@ -936,6 +941,7 @@ class SpanDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1095,6 +1101,11 @@ class SpanDAO {
         var template = new ST(INSERT);
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
+
         return template;
     }
 
@@ -1210,6 +1221,10 @@ class SpanDAO {
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
 
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
