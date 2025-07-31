@@ -27,3 +27,11 @@ EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
+
+EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.inputTokens": ANY_BUT_NONE,
+    "original_usage.outputTokens": ANY_BUT_NONE,
+}

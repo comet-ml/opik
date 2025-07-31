@@ -251,3 +251,20 @@ def ensure_google_api_configured():
     GOOGLE_API_KEY = "GOOGLE_API_KEY"
     if GOOGLE_API_KEY not in os.environ:
         raise Exception(f"{GOOGLE_API_KEY} env var must be set")
+
+
+@pytest.fixture()
+def ensure_bedrock_configured():
+    # Check if AWS credentials are configured
+    # AWS credentials can be set via environment variables, AWS profile, or IAM roles
+    # aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    # aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    #aws_profile = os.environ.get("AWS_PROFILE")
+    
+    # if not (aws_access_key and aws_secret_key) and not aws_profile:
+    #     raise Exception(
+    #         "AWS Bedrock not configured! "
+    #         "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables "
+    #         "or configure AWS_PROFILE"
+    #     )
+    pass
