@@ -6,7 +6,7 @@ from opik.api_objects.experiment import experiment_item
 from opik.decorator import error_info_collector
 from opik.types import ErrorInfoDict
 
-from opik import context_storage
+import opik.context_storage as context_storage
 
 
 @contextlib.contextmanager

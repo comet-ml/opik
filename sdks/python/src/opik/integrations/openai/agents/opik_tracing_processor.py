@@ -7,7 +7,8 @@ from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
 from opik.api_objects import opik_client
 from opik.decorator import span_creation_handler, arguments_helpers
-from opik import context_storage
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
+import opik.context_storage as context_storage
 
 from . import span_data_parsers
 
@@ -70,7 +71,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 )
                 self._opik_context_storage.set_trace_data(current_trace)
                 self._created_opik_traces_data_map[trace.trace_id] = current_trace
-                if self._opik_client.config.log_start_trace_span:
+                if (
+                    self._opik_client.config.log_start_trace_span
+                    and tracing_runtime_config.is_tracing_active()
+                ):
                     self._opik_client.trace(**current_trace.as_start_parameters)
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
@@ -92,7 +96,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                     trace.trace_id
                 ] = opik_span_data.parent_span_id
 
-                if self._opik_client.config.log_start_trace_span:
+                if (
+                    self._opik_client.config.log_start_trace_span
+                    and tracing_runtime_config.is_tracing_active()
+                ):
                     self._opik_client.span(**opik_span_data.as_start_parameters)
 
         except Exception:
@@ -113,9 +120,11 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 trace.trace_id, opik_trace_or_span_data
             )
             if isinstance(opik_trace_or_span_data, trace_data.TraceData):
-                self._opik_client.trace(**opik_trace_or_span_data.as_parameters)
+                if tracing_runtime_config.is_tracing_active():
+                    self._opik_client.trace(**opik_trace_or_span_data.as_parameters)
             else:
-                self._opik_client.span(**opik_trace_or_span_data.as_parameters)
+                if tracing_runtime_config.is_tracing_active():
+                    self._opik_client.span(**opik_trace_or_span_data.as_parameters)
         except Exception:
             LOGGER.error("on_trace_end failed", exc_info=True)
         finally:
@@ -145,7 +154,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             self._opik_context_storage.add_span_data(opik_span_data)
             self._opik_spans_data_map[span.span_id] = opik_span_data
 
-            if self._opik_client.config.log_start_trace_span:
+            if (
+                self._opik_client.config.log_start_trace_span
+                and tracing_runtime_config.is_tracing_active()
+            ):
                 self._opik_client.span(**opik_span_data.as_start_parameters)
 
         except Exception:
@@ -158,7 +170,8 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_span_data = self._opik_spans_data_map[span.span_id]
             opik_span_data.init_end_time().update(**parsed_span_data.__dict__)
 
-            self._opik_client.span(**opik_span_data.as_parameters)
+            if tracing_runtime_config.is_tracing_active():
+                self._opik_client.span(**opik_span_data.as_parameters)
 
             if (
                 span.span_data.type

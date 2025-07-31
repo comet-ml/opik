@@ -352,6 +352,9 @@ clickhouse:
     replicaServiceTemplate: clickhouse-replica-svc-template
     serviceTemplate: clickhouse-cluster-svc-template
     volumeClaimTemplate: storage-vc-template
+  extraServiceTemplates: []
+  extraPodTemplates: []
+  extraVolumeClaimTemplates: []
   adminUser:
     useSecret:
       enabled: false

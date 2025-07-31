@@ -6,7 +6,8 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
-from opik import dict_utils, llm_usage
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
@@ -17,7 +18,8 @@ from . import (
 )
 
 from ...api_objects import helpers, opik_client
-from opik import context_storage
+import opik.context_storage as context_storage
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -328,11 +330,17 @@ class OpikTracer(BaseTracer):
             new_trace_data, new_span_data = self._track_root_run(run_dict)
             if new_trace_data is not None:
                 self._opik_context_storage.set_trace_data(new_trace_data)
-                if self._opik_client.config.log_start_trace_span:
+                if (
+                    self._opik_client.config.log_start_trace_span
+                    and tracing_runtime_config.is_tracing_active()
+                ):
                     self._opik_client.trace(**new_trace_data.as_start_parameters)
 
             self._opik_context_storage.add_span_data(new_span_data)
-            if self._opik_client.config.log_start_trace_span:
+            if (
+                self._opik_client.config.log_start_trace_span
+                and tracing_runtime_config.is_tracing_active()
+            ):
                 self._opik_client.span(**new_span_data.as_start_parameters)
             return
 
@@ -362,7 +370,10 @@ class OpikTracer(BaseTracer):
             ]
 
         self._opik_context_storage.add_span_data(new_span_data)
-        if self._opik_client.config.log_start_trace_span:
+        if (
+            self._opik_client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        ):
             self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:
@@ -391,7 +402,8 @@ class OpikTracer(BaseTracer):
                 model=usage_info.model,
             )
 
-            self._opik_client.span(**span_data.as_parameters)
+            if tracing_runtime_config.is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
@@ -413,7 +425,8 @@ class OpikTracer(BaseTracer):
                 output=None,
                 error_info=error_info,
             )
-            self._opik_client.span(**span_data.as_parameters)
+            if tracing_runtime_config.is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
@@ -446,8 +459,7 @@ class OpikTracer(BaseTracer):
         return self._created_traces
 
     def _skip_tracking(self) -> bool:
-        config = self._opik_client.config
-        if config.track_disable:
+        if not tracing_runtime_config.is_tracing_active():
             return True
 
         return False
