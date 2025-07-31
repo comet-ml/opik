@@ -10,7 +10,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Input } from "@/components/ui/input";
+import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Popover,
@@ -57,19 +57,17 @@ const AutoComplete = <T extends string>({
       <Popover open={open} onOpenChange={setOpen} modal>
         <Command shouldFilter={false}>
           <PopoverAnchor asChild>
-            <CommandPrimitive.Input
-              asChild
-              value={localValue}
-              onValueChange={(v) => {
-                setLocalValue(v as T);
-                handleDebouncedValueChange(v as T);
-              }}
-              onKeyDown={(e) => setOpen(e.key !== "Escape")}
-              onFocus={() => setOpen(true)}
-            >
-              <Input
+            <CommandPrimitive.Input asChild>
+              <DebounceInput
                 className={cn({ "border-destructive": hasError })}
                 placeholder={placeholder}
+                value={localValue}
+                onValueChange={(v) => {
+                  setLocalValue(v as T);
+                  handleDebouncedValueChange(v as T);
+                }}
+                onKeyDown={(e) => setOpen(e.key !== "Escape")}
+                onFocus={() => setOpen(true)}
               />
             </CommandPrimitive.Input>
           </PopoverAnchor>
