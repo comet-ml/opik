@@ -88,6 +88,15 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
     }
 
+    public Response callCreateSpan(Span span, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(span));
+    }
+
     public void updateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
         try (var response = updateSpan(spanId, spanUpdate, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT)) {
             assertThat(response.hasEntity()).isFalse();

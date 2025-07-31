@@ -370,9 +370,22 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(1, projectName, apiKey, workspaceName);
+        // Use batch endpoint to consume 1 permit from the general rate limit
+        List<Trace> initialTrace = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .projectId(null)
+                .build());
 
-        assertEquals(1, responseMap.get(HttpStatus.SC_CREATED));
+        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                .path("batch")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new TraceBatch(initialTrace)))) {
+
+            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+        }
 
         List<Trace> traces = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -803,8 +816,7 @@ class RateLimitE2ETest {
                             .projectName(projectName)
                             .build();
 
-                    try (Response data = spanResourceClient.callBatchCreateSpans(List.of(span), apiKey,
-                            workspaceName)) {
+                    try (Response data = spanResourceClient.callCreateSpan(span, apiKey, workspaceName)) {
                         return Flux.just(data);
                     }
                 }, 5)
@@ -820,8 +832,7 @@ class RateLimitE2ETest {
                             .projectName(projectName)
                             .build();
 
-                    try (Response data = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey,
-                            workspaceName)) {
+                    try (Response data = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
                         return Flux.just(data);
                     }
                 }, 5)
@@ -845,7 +856,7 @@ class RateLimitE2ETest {
                 apiKey, workspaceName);
 
         assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_CREATED));
     }
 
     @Test
@@ -864,7 +875,7 @@ class RateLimitE2ETest {
                 apiKey, workspaceName);
 
         assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_CREATED));
     }
 
     @Test
@@ -921,6 +932,7 @@ class RateLimitE2ETest {
                 .build();
 
         // Test rate limiting on span updates by making direct HTTP calls
+        // Note: span creation already consumed 1 slot, so only 2 updates can succeed
         Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
                 .flatMap(i -> {
                     try (Response data = client.target("%s/v1/private/spans".formatted(baseURI))
@@ -935,8 +947,8 @@ class RateLimitE2ETest {
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE + 1, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)); // 4 failures
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE - 1, responseMap.get(HttpStatus.SC_NO_CONTENT)); // 2 successes
     }
 
     @Test
@@ -966,6 +978,7 @@ class RateLimitE2ETest {
                 .build();
 
         // Test rate limiting on trace updates by making direct HTTP calls
+        // Note: trace creation already consumed 1 slot, so only 2 updates can succeed
         Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
                 .flatMap(i -> {
                     try (Response data = client.target("%s/v1/private/traces".formatted(baseURI))
@@ -980,8 +993,8 @@ class RateLimitE2ETest {
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE + 1, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)); // 4 failures
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE - 1, responseMap.get(HttpStatus.SC_NO_CONTENT)); // 2 successes
     }
 
 }
