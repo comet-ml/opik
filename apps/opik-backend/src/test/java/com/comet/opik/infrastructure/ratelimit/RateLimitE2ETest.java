@@ -910,7 +910,14 @@ class RateLimitE2ETest {
                 .build();
         spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-        SpanUpdate spanUpdate = factory.manufacturePojo(SpanUpdate.class);
+        // Create a simple span update with required fields from original span
+        SpanUpdate fullUpdate = factory.manufacturePojo(SpanUpdate.class);
+        SpanUpdate spanUpdate = SpanUpdate.builder()
+                .traceId(span.traceId()) // Required field - use original span's traceId
+                .projectName(span.projectName()) // Required field - use original span's project
+                .name(fullUpdate.name())
+                .endTime(fullUpdate.endTime())
+                .build();
 
         // Test rate limiting on span updates by making direct HTTP calls
         Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
@@ -949,7 +956,13 @@ class RateLimitE2ETest {
                 .build();
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
-        TraceUpdate traceUpdate = factory.manufacturePojo(TraceUpdate.class);
+        // Create a simple trace update with required fields from original trace
+        TraceUpdate fullUpdate = factory.manufacturePojo(TraceUpdate.class);
+        TraceUpdate traceUpdate = TraceUpdate.builder()
+                .projectName(trace.projectName()) // Required field - use original trace's project
+                .name(fullUpdate.name())
+                .endTime(fullUpdate.endTime())
+                .build();
 
         // Test rate limiting on trace updates by making direct HTTP calls
         Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
