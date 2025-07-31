@@ -36,7 +36,7 @@ public class FilterQueryBuilder {
 
     private static final String ANALYTICS_DB_AND_OPERATOR = "AND";
 
-    static final String JSONPATH_ROOT = "$";
+    public static final String JSONPATH_ROOT = "$";
 
     private static final String ID_DB = "id";
     private static final String NAME_DB = "name";

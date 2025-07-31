@@ -77,7 +77,7 @@ public class FiltersFactory {
                         return false;
                     })
                     .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
-                            StringUtils.isNotBlank(filter.key()))
+                            filter.key() != null)
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
                     .build());
 
