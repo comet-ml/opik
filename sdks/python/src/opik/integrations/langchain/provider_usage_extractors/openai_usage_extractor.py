@@ -69,10 +69,12 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
                 return None
             return llm_usage.OpikUsage.from_openai_completions_dict(token_usage_dict)
 
-        if langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(run_dict):
+        if langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(
+            run_dict
+        ):
             openai_usage_dict = langchain_usage.map_to_openai_completions_usage()
             return llm_usage.OpikUsage.from_openai_completions_dict(openai_usage_dict)
-        
+
         opik_logging.log_once_at_level(
             logging_level=logging.WARNING,
             message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
