@@ -11,6 +11,7 @@ public @interface RateLimited {
 
     String GENERAL_EVENTS = "general_events"; // User limit
     String WORKSPACE_EVENTS = "workspace_events"; // Workspace limit
+    String SINGLE_TRACING_OPS = "singleTracingOps"; // Single tracing operations limit
 
     /**
      * Define the custom bucket name for the rate limit.
