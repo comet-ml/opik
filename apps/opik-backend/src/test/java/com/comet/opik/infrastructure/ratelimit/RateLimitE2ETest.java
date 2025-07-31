@@ -6,8 +6,10 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -91,9 +93,12 @@ class RateLimitE2ETest {
     private static final String BASE_RESOURCE_URI = "%s/v1/private/traces";
     private static final String CUSTOM_LIMIT = "customLimit";
     private static final String GET_SPAN_ID_LIMIT = "getSpanById";
+    private static final String SINGLE_TRACING_OPS_LIMIT = "singleTracingOps";
     private static final long LIMIT = 4L;
     private static final long WORKSPACE_LIMIT = 6L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
+    private static final long SINGLE_TRACING_OPS_LIMIT_VALUE = 3L;
+    private static final long SINGLE_TRACING_OPS_DURATION_IN_SECONDS = 1L;
     public static final String TOO_MANY_REQUESTS_MESSAGEE = "Too Many Requests: %s";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -107,6 +112,7 @@ class RateLimitE2ETest {
 
     private LimitConfig customLimit;
     private LimitConfig getSpanIdLimit;
+    private LimitConfig singleTracingOpsLimit;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -140,6 +146,10 @@ class RateLimitE2ETest {
 
         getSpanIdLimit = new LimitConfig("Get-Span-Id", GET_SPAN_ID_LIMIT, 3, 1, "get span id");
 
+        singleTracingOpsLimit = new LimitConfig("Single-Tracing-Op", SINGLE_TRACING_OPS_LIMIT,
+                SINGLE_TRACING_OPS_LIMIT_VALUE, SINGLE_TRACING_OPS_DURATION_IN_SECONDS,
+                "You have exceeded the rate limit for single tracing operations. Please try again later.");
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -150,7 +160,8 @@ class RateLimitE2ETest {
                         .limit(LIMIT)
                         .workspaceLimit(WORKSPACE_LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
-                        .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit))
+                        .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit,
+                                SINGLE_TRACING_OPS_LIMIT, singleTracingOpsLimit))
                         .build());
     }
 
@@ -782,6 +793,181 @@ class RateLimitE2ETest {
                 }, 5)
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    private Map<Integer, Long> triggerCreateSpansCalls(long limit, String projectName, String apiKey,
+            String workspaceName) {
+        return Flux.range(0, ((int) limit))
+                .flatMap(i -> {
+                    Span span = factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .build();
+
+                    try (Response data = spanResourceClient.callBatchCreateSpans(List.of(span), apiKey,
+                            workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    private Map<Integer, Long> triggerCreateTracesCalls(long limit, String projectName, String apiKey,
+            String workspaceName) {
+        return Flux.range(0, ((int) limit))
+                .flatMap(i -> {
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .build();
+
+                    try (Response data = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey,
+                            workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps limit is exceeded on createSpans, Then block remaining calls")
+    void rateLimit__whenSingleTracingOpsLimitIsExceededOnCreateSpans__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        Map<Integer, Long> responseMap = triggerCreateSpansCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
+                apiKey, workspaceName);
+
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps limit is exceeded on createTraces, Then block remaining calls")
+    void rateLimit__whenSingleTracingOpsLimitIsExceededOnCreateTraces__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        Map<Integer, Long> responseMap = triggerCreateTracesCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
+                apiKey, workspaceName);
+
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps rate limit is applied, Then it doesn't affect workspace limits")
+    void rateLimit__whenSingleTracingOpsRateLimitIsApplied__thenItDoesNotAffectWorkspaceLimits() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // Exhaust singleTracingOps limit with createSpans
+        triggerCreateSpansCalls(SINGLE_TRACING_OPS_LIMIT_VALUE, projectName, apiKey, workspaceName);
+
+        // Verify that regular trace creation (which uses workspace limit) still works
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+
+        try (var response = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
+            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+        }
+    }
+
+    @Test
+    @DisplayName("Rate limit: When updateSpan is called and singleTracingOps limit is exceeded, Then block remaining calls")
+    void rateLimit__whenUpdateSpanCalledAndSingleTracingOpsLimitExceeded__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // First create a span to update
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+        SpanUpdate spanUpdate = factory.manufacturePojo(SpanUpdate.class);
+
+        // Test rate limiting on span updates by making direct HTTP calls
+        Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
+                .flatMap(i -> {
+                    try (Response data = client.target("%s/v1/private/spans".formatted(baseURI))
+                            .path(span.id().toString())
+                            .request()
+                            .header(HttpHeaders.AUTHORIZATION, apiKey)
+                            .header(WORKSPACE_HEADER, workspaceName)
+                            .method(HttpMethod.PATCH, Entity.json(spanUpdate))) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
+    }
+
+    @Test
+    @DisplayName("Rate limit: When updateTrace is called and singleTracingOps limit is exceeded, Then block remaining calls")
+    void rateLimit__whenUpdateTraceCalledAndSingleTracingOpsLimitExceeded__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // First create a trace to update
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        TraceUpdate traceUpdate = factory.manufacturePojo(TraceUpdate.class);
+
+        // Test rate limiting on trace updates by making direct HTTP calls
+        Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
+                .flatMap(i -> {
+                    try (Response data = client.target("%s/v1/private/traces".formatted(baseURI))
+                            .path(trace.id().toString())
+                            .request()
+                            .header(HttpHeaders.AUTHORIZATION, apiKey)
+                            .header(WORKSPACE_HEADER, workspaceName)
+                            .method(HttpMethod.PATCH, Entity.json(traceUpdate))) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
+        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_NO_CONTENT));
     }
 
 }

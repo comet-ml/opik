@@ -270,7 +270,7 @@ public class TracesResource {
     @Path("/batch")
     @Operation(operationId = "createTraces", summary = "Create traces", description = "Create traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
+    @RateLimited(value = "singleTracingOps:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
@@ -287,7 +287,7 @@ public class TracesResource {
     @Path("{id}")
     @Operation(operationId = "updateTrace", summary = "Update trace by id", description = "Update trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
+    @RateLimited(value = "singleTracingOps:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceUpdate.class))) @Valid @NonNull TraceUpdate trace) {
 

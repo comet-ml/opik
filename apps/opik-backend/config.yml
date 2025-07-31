@@ -215,7 +215,20 @@ rateLimit:
       # Description: User facing bucket name
       userFacingBucketName: get_span_by_id
       # Description: Rate limit error message
-      errorMessage: "You have exceeded the rate limit for this operation Please try again later."
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    singleTracingOps:
+        # Default: 600
+        # Description: how many events are allowed in the specified time bucket
+        limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-600}
+        # Default: 60
+        # Description: Time bucket size in seconds
+        durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+        # Description: Header name to use for rate limiting
+        headerName: Single-Tracing-Op
+        # Description: User facing bucket name
+        userFacingBucketName: single_tracing_ops
+        # Description: Rate limit error message
+        errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
