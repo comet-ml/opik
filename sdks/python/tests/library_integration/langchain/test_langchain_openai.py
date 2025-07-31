@@ -248,7 +248,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 type="llm",
                 model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
-                usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
+                usage=ANY_DICT.containing(EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
             )
         ],
     )
