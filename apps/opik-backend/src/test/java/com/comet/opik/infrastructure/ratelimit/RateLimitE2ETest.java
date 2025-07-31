@@ -93,7 +93,7 @@ class RateLimitE2ETest {
     private static final String BASE_RESOURCE_URI = "%s/v1/private/traces";
     private static final String CUSTOM_LIMIT = "customLimit";
     private static final String GET_SPAN_ID_LIMIT = "getSpanById";
-    private static final String SINGLE_TRACING_OPS_LIMIT = "singleTracingOps";
+    private static final String SINGLE_TRACING_OPS_LIMIT = RateLimited.SINGLE_TRACING_OPS;
     private static final long LIMIT = 4L;
     private static final long WORKSPACE_LIMIT = 6L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
