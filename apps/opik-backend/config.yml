@@ -224,7 +224,7 @@ rateLimit:
         # Description: Time bucket size in seconds
         durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
         # Description: Header name to use for rate limiting
-        headerName: Single-Tracing-Op
+        headerName: Single-Tracing-Ops
         # Description: User facing bucket name
         userFacingBucketName: single_tracing_ops
         # Description: Rate limit error message

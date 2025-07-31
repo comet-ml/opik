@@ -83,7 +83,6 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static java.util.stream.Collectors.counting;
 import static java.util.stream.Collectors.groupingBy;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Rate limit Resource Test")
@@ -146,7 +145,7 @@ class RateLimitE2ETest {
 
         getSpanIdLimit = new LimitConfig("Get-Span-Id", GET_SPAN_ID_LIMIT, 3, 1, "get span id");
 
-        singleTracingOpsLimit = new LimitConfig("Single-Tracing-Op", SINGLE_TRACING_OPS_LIMIT,
+        singleTracingOpsLimit = new LimitConfig("Single-Tracing-Ops", SINGLE_TRACING_OPS_LIMIT,
                 SINGLE_TRACING_OPS_LIMIT_VALUE, SINGLE_TRACING_OPS_DURATION_IN_SECONDS,
                 "You have exceeded the rate limit for single tracing operations. Please try again later.");
 
@@ -211,16 +210,16 @@ class RateLimitE2ETest {
 
         Map<Integer, Long> responseMap = triggerBatchCallsWithApiKey(LIMIT * 2, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(LIMIT);
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         // Verify that traces created are equal to the limit
         TracePage page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
                 List.of(), List.of(), (int) (LIMIT * 2), Map.of());
 
-        assertEquals(LIMIT, page.content().size());
-        assertEquals(LIMIT, page.total());
-        assertEquals(LIMIT, page.size());
+        assertThat(page.content().size()).isEqualTo(LIMIT);
+        assertThat(page.total()).isEqualTo(LIMIT);
+        assertThat(page.size()).isEqualTo(LIMIT);
 
     }
 
@@ -239,20 +238,20 @@ class RateLimitE2ETest {
 
         Map<Integer, Long> responseMap = triggerBatchCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         SingleDelay.timer(LIMIT_DURATION_IN_SECONDS, TimeUnit.SECONDS).blockingGet();
 
         responseMap = triggerBatchCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         TracePage page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
                 List.of(), List.of(), (int) (LIMIT * 2), Map.of());
 
-        assertEquals(LIMIT * 2, page.content().size());
-        assertEquals(LIMIT * 2, page.total());
-        assertEquals(LIMIT * 2, page.size());
+        assertThat(page.content().size()).isEqualTo(LIMIT * 2);
+        assertThat(page.total()).isEqualTo(LIMIT * 2);
+        assertThat(page.size()).isEqualTo(LIMIT * 2);
 
     }
 
@@ -272,8 +271,8 @@ class RateLimitE2ETest {
         Map<Integer, Long> responseMap = triggerBatchCallsWithCookie(LIMIT * 2, projectName, sessionToken,
                 workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(LIMIT);
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .queryParam("project_name", projectName)
@@ -284,12 +283,12 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             TracePage page = response.readEntity(TracePage.class);
 
-            assertEquals(LIMIT, page.content().size());
-            assertEquals(LIMIT, page.total());
-            assertEquals(LIMIT, page.size());
+            assertThat(page.content().size()).isEqualTo(LIMIT);
+            assertThat(page.total()).isEqualTo(LIMIT);
+            assertThat(page.size()).isEqualTo(LIMIT);
         }
 
     }
@@ -309,13 +308,13 @@ class RateLimitE2ETest {
 
         Map<Integer, Long> responseMap = triggerBatchCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         SingleDelay.timer(LIMIT_DURATION_IN_SECONDS, TimeUnit.SECONDS).blockingGet();
 
         responseMap = triggerBatchCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_NO_CONTENT));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .queryParam("project_name", projectName)
@@ -327,12 +326,12 @@ class RateLimitE2ETest {
                 .get()) {
 
             // Verify that traces created are equal to the limit
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             TracePage page = response.readEntity(TracePage.class);
 
-            assertEquals(LIMIT * 2, page.content().size());
-            assertEquals(LIMIT * 2, page.total());
-            assertEquals(LIMIT * 2, page.size());
+            assertThat(page.content().size()).isEqualTo(LIMIT * 2);
+            assertThat(page.total()).isEqualTo(LIMIT * 2);
+            assertThat(page.size()).isEqualTo(LIMIT * 2);
         }
 
     }
@@ -358,7 +357,7 @@ class RateLimitE2ETest {
                 .build());
 
         try (var response = traceResourceClient.callBatchCreateTraces(initialTrace, apiKey, workspaceName)) {
-            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
 
         List<Trace> traces = IntStream.range(0, (int) LIMIT)
@@ -440,7 +439,7 @@ class RateLimitE2ETest {
 
         try (var response = request.method(method, Entity.json(batch))) {
 
-            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
 
         try (var response = request.method(method, Entity.json(batch2))) {
@@ -472,7 +471,7 @@ class RateLimitE2ETest {
             try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey, workspaceName)) {
 
                 if (i < LIMIT) {
-                    assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
                     assertLimitHeaders(response, LIMIT - i - 1, RateLimited.GENERAL_EVENTS,
                             (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getGeneralLimit());
@@ -484,7 +483,7 @@ class RateLimitE2ETest {
     }
 
     private void assertLimitExceeded(Response response, @Valid LimitConfig limitConfig) {
-        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_TOO_MANY_REQUESTS);
         assertRateLimitResetHeader(response, limitConfig);
         ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
         assertThat(errorMessage.getMessage())
@@ -508,7 +507,7 @@ class RateLimitE2ETest {
 
                     long expectedTTLInSec = Math.max(Duration.ofMillis(Long.parseLong(limitInMillis)).getSeconds(), 1);
 
-                    assertEquals(expectedTTLInSec, rateLimitResetValue);
+                    assertThat(rateLimitResetValue).isEqualTo(expectedTTLInSec);
                 });
 
     }
@@ -544,7 +543,7 @@ class RateLimitE2ETest {
                     workspaceName)) {
 
                 if (i < WORKSPACE_LIMIT) {
-                    assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
                     assertLimitHeaders(response, WORKSPACE_LIMIT - i - 1, RateLimited.WORKSPACE_EVENTS,
                             (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getWorkspaceLimit());
@@ -634,7 +633,7 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""))) {
 
-            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1, customLimit);
         }
@@ -669,7 +668,7 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""))) {
 
-            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1, customLimit);
         }
@@ -687,7 +686,7 @@ class RateLimitE2ETest {
                 .availableEvents(apiKey, new LimitConfig(generalLimit, generalLimit, limit, 1, "general limit"))
                 .block();
 
-        assertEquals(limit, availableEvents);
+        assertThat(availableEvents).isEqualTo(limit);
     }
 
     @Test
@@ -728,31 +727,9 @@ class RateLimitE2ETest {
         String remainingTtl = response
                 .getHeaderString(RequestContext.LIMIT_REMAINING_TTL.formatted(limitConfig.headerName()));
 
-        assertEquals(expected, Long.parseLong(remainingLimit));
-        assertEquals(limitBucket, userLimit);
+        assertThat(Long.parseLong(remainingLimit)).isEqualTo(expected);
+        assertThat(userLimit).isEqualTo(limitBucket);
         assertThat(Long.parseLong(remainingTtl)).isBetween(0L, Duration.ofSeconds(limitDuration).toMillis());
-    }
-
-    private Map<Integer, Long> triggerCallsWithCookie(long limit, String projectName, String sessionToken,
-            String workspaceName) {
-        return Flux.range(0, ((int) limit))
-                .flatMap(i -> {
-                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .build();
-
-                    try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON_TYPE)
-                            .cookie(RequestContext.SESSION_COOKIE, sessionToken)
-                            .header(WORKSPACE_HEADER, workspaceName)
-                            .post(Entity.json(trace))) {
-
-                        return Flux.just(response);
-                    }
-                }, 5)
-                .toStream()
-                .collect(groupingBy(Response::getStatus, counting()));
     }
 
     private Map<Integer, Long> triggerBatchCallsWithCookie(long limit, String projectName, String sessionToken,
@@ -763,32 +740,9 @@ class RateLimitE2ETest {
                             .projectName(projectName)
                             .projectId(null)
                             .build();
-
-                    try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                            .path("batch")
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON_TYPE)
-                            .cookie(RequestContext.SESSION_COOKIE, sessionToken)
-                            .header(WORKSPACE_HEADER, workspaceName)
-                            .post(Entity.json(new TraceBatch(List.of(trace))))) {
-
+                    try (var response = traceResourceClient.callBatchCreateTracesWithCookie(List.of(trace),
+                            sessionToken, workspaceName)) {
                         return Flux.just(response);
-                    }
-                }, 5)
-                .toStream()
-                .collect(groupingBy(Response::getStatus, counting()));
-    }
-
-    private Map<Integer, Long> triggerCallsWithApiKey(long limit, String projectName, String apiKey,
-            String workspaceName) {
-        return Flux.range(0, ((int) limit))
-                .flatMap(i -> {
-                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .build();
-
-                    try (Response data = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
-                        return Flux.just(data);
                     }
                 }, 5)
                 .toStream()
@@ -860,8 +814,8 @@ class RateLimitE2ETest {
         Map<Integer, Long> responseMap = triggerCreateSpansCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
                 apiKey, workspaceName);
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+        assertThat(responseMap.get(HttpStatus.SC_CREATED)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
     }
 
     @Test
@@ -879,8 +833,8 @@ class RateLimitE2ETest {
         Map<Integer, Long> responseMap = triggerCreateTracesCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
                 apiKey, workspaceName);
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+        assertThat(responseMap.get(HttpStatus.SC_CREATED)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
     }
 
     @Test
@@ -906,7 +860,7 @@ class RateLimitE2ETest {
                 .build();
 
         try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey, workspaceName)) {
-            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
@@ -950,8 +904,8 @@ class RateLimitE2ETest {
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE + 1, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)); // 4 failures
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE - 1, responseMap.get(HttpStatus.SC_NO_CONTENT)); // 2 successes
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE + 1); // 4 failures
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE - 1); // 2 successes
     }
 
     @Test
@@ -992,8 +946,8 @@ class RateLimitE2ETest {
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
 
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE + 1, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)); // 4 failures
-        assertEquals(SINGLE_TRACING_OPS_LIMIT_VALUE - 1, responseMap.get(HttpStatus.SC_NO_CONTENT)); // 2 successes
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE + 1); // 4 failures
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE - 1); // 2 successes
     }
 
 }

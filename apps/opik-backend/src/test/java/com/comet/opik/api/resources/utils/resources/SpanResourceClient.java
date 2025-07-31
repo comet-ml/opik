@@ -62,12 +62,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Response createSpan(Span span, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(span));
+        var response = callCreateSpan(span, apiKey, workspaceName);
 
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
@@ -105,12 +100,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Response updateSpan(
             UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(spanId.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(spanUpdate));
+        var response = callUpdateSpan(spanId, spanUpdate, apiKey, workspaceName);
         assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         return response;
     }
