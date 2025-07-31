@@ -61,7 +61,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         # streaming mode handling
         # token usage data MAY be available at the end of streaming
         # in async mode may not provide token usage info
-        elif token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
+        if token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
         ].get("usage_metadata"):
             generic_formatted_dict = {
@@ -73,13 +73,13 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
                 generic_formatted_dict
             )
             return opik_usage
-        else:
-            opik_logging.log_once_at_level(
-                logging_level=logging.WARNING,
-                message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
-                logger=LOGGER,
-            )
-            return None
+
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+            logger=LOGGER,
+        )
+        return None
 
     except Exception:
         LOGGER.warning(
