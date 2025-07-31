@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
-from . import provider_usage_extractor_protocol
+from . import provider_usage_extractor_protocol, langchain_run_helpers
 
 if TYPE_CHECKING:
     pass
@@ -61,17 +61,13 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         # streaming mode handling
         # token usage data MAY be available at the end of streaming
         # in async mode may not provide token usage info
-        if token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
-            "kwargs"
-        ].get("usage_metadata"):
-            generic_formatted_dict = {
-                "completion_tokens": token_usage_dict["output_tokens"],
-                "prompt_tokens": token_usage_dict["input_tokens"],
-                "total_tokens": token_usage_dict["total_tokens"],
-            }
-            opik_usage = llm_usage.OpikUsage.from_groq_completions_dict(
-                generic_formatted_dict
+        if (
+            langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(
+                run_dict
             )
+        ) is not None:
+            groq_usage_dict = langchain_usage.map_to_groq_completions_usage()
+            opik_usage = llm_usage.OpikUsage.from_groq_completions_dict(groq_usage_dict)
             return opik_usage
 
         opik_logging.log_once_at_level(

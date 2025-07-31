@@ -32,7 +32,7 @@ class LangChainUsage(pydantic.BaseModel):
     # https://python.langchain.com/api_reference/core/messages/langchain_core.messages.ai.UsageMetadata.html#usagemetadata
     # """
     model_config = pydantic.ConfigDict(extra="allow")
-    
+
     input_tokens: int
     """Number of tokens in the prompt."""
 
@@ -72,8 +72,8 @@ class LangChainUsage(pydantic.BaseModel):
             output_token_details=output_token_details,
         )
 
-    def map_to_google_gemini_usage(self) -> Dict[str, int]:
-        google_usage: Dict[str, int] = {
+    def map_to_google_gemini_usage(self) -> Dict[str, Any]:
+        google_usage: Dict[str, Any] = {
             "prompt_token_count": self.input_tokens,
             "candidates_token_count": self.output_tokens,
             "total_token_count": self.total_tokens,
@@ -88,8 +88,8 @@ class LangChainUsage(pydantic.BaseModel):
 
         return google_usage
 
-    def map_to_anthropic_usage(self) -> Dict[str, int]:
-        anthropic_usage: Dict[str, int] = {
+    def map_to_anthropic_usage(self) -> Dict[str, Any]:
+        anthropic_usage: Dict[str, Any] = {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "total_tokens": self.total_tokens,
@@ -128,3 +128,12 @@ class LangChainUsage(pydantic.BaseModel):
             }
 
         return openai_usage
+
+    def map_to_groq_completions_usage(self) -> Dict[str, Any]:
+        groq_usage: Dict[str, Any] = {
+            "prompt_tokens": self.input_tokens,
+            "completion_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+        return groq_usage
