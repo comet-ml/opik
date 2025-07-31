@@ -28,31 +28,29 @@ CREATE TABLE alerts (
   created_at           TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   last_updated_at      TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   KEY idx_alerts_workspace_id (workspace_id, id),
-  CONSTRAINT fk_alerts_webhook FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
+  KEY idx_alerts_webhook (webhook_id)
 );
 
 -- 3. Alert Trigger Configurations table
 CREATE TABLE alert_triggers (
-  id                   CHAR(36)      PRIMARY KEY,
-  alert_id             CHAR(36)      NOT NULL,
-  event_type           VARCHAR(100)  NOT NULL,
+  id                   CHAR(36) PRIMARY KEY,
+  alert_id             CHAR(36) NOT NULL,
+  event_type           ENUM('trace:errors', 'trace:feedback_score', 'trace_thread:feedback_score', 'prompt:created', 'prompt:committed', 'span:guardrails_triggered')  NOT NULL,
   created_by           VARCHAR(255)  NOT NULL DEFAULT 'admin',
   created_at           TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  CONSTRAINT fk_alert_triggers_alert FOREIGN KEY (alert_id) REFERENCES alerts(id),
   KEY idx_alert_triggers_alert_event_type (alert_id, event_type)
 );
 
 -- 4. Alert Trigger Configurations table
 CREATE TABLE alert_trigger_configs (
-  id                   CHAR(36)      PRIMARY KEY,
-  alert_trigger_id     CHAR(36)      NOT NULL,
-  config_type          VARCHAR(100)  NOT NULL,
-  config_value         JSON          NOT NULL,
-  created_by           VARCHAR(255)  NOT NULL DEFAULT 'admin',
-  last_updated_by      VARCHAR(255)  NOT NULL DEFAULT 'admin',
-  created_at           TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  last_updated_at      TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  CONSTRAINT fk_alert_trigger_configs_alert_trigger FOREIGN KEY (alert_trigger_id) REFERENCES alert_triggers(id),
+  id                   CHAR(36)                                           PRIMARY KEY,
+  alert_trigger_id     CHAR(36)                                           NOT NULL,
+  config_type          ENUM('scope:project', 'threshold:feedback_score')  NOT NULL,
+  config_value         JSON                                               NULL,
+  created_by           VARCHAR(255)                                       NOT NULL DEFAULT 'admin',
+  last_updated_by      VARCHAR(255)                                       NOT NULL DEFAULT 'admin',
+  created_at           TIMESTAMP(6)                                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  last_updated_at      TIMESTAMP(6)                                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   KEY idx_alert_trigger_configs_alert_trigger_id (alert_trigger_id, config_type)
 );
 
