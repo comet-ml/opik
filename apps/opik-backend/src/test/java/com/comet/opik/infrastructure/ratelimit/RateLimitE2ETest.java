@@ -915,6 +915,7 @@ class RateLimitE2ETest {
         SpanUpdate spanUpdate = SpanUpdate.builder()
                 .traceId(span.traceId()) // Required field - use original span's traceId
                 .projectName(span.projectName()) // Required field - use original span's project
+                .parentSpanId(span.parentSpanId()) // Required field - use original span's parentSpanId
                 .name(fullUpdate.name())
                 .endTime(fullUpdate.endTime())
                 .build();
