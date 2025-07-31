@@ -115,6 +115,15 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return response;
     }
 
+    public Response callUpdateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(spanUpdate));
+    }
+
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))

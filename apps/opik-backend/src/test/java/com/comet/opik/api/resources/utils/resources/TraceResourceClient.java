@@ -222,6 +222,15 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return actualResponse;
     }
 
+    public Response callUpdateTrace(UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(traceUpdate));
+    }
+
     public List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
             Project project, String apiKey, String workspaceName) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
