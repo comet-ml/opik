@@ -36,6 +36,8 @@ class PlaygroundPage(BasePage):
             "failed",
             "Invalid",
             "unauthorized",
+            "model: not found",
+            "model: ",
         ]
 
     def select_model(self, provider_name: str, model_name: str):
