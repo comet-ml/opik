@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, List
 
 import opik
 from opik import llm_usage
@@ -22,18 +22,12 @@ class BedrockUsageExtractor(
             if run_dict.get("serialized") is None:
                 return False
 
-            invocation_params = run_dict.get("extra", {}).get("invocation_params", {})
-            provider_class = run_dict.get("serialized", {}).get("id", [])
+            class_id: List[str] = run_dict.get("serialized", {}).get("id", [])
+            if len(class_id) == 0:
+                return False
 
-            is_bedrock = (
-                "bedrock" in str(provider_class).lower()
-                or "ChatBedrock" in str(provider_class)
-                or any(
-                    "bedrock" in str(param).lower()
-                    for param in invocation_params.values()
-                    if isinstance(param, str)
-                )
-            )
+            class_name = class_id[-1]
+            is_bedrock = "ChatBedrock" in class_name
 
             return is_bedrock
 
@@ -71,11 +65,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     MODEL_NAME_KEY = "model_id"
 
-    model = None
-
-    invocation_params = run_dict.get("extra", {}).get("invocation_params", {})
-    if MODEL_NAME_KEY in invocation_params:
-        model = invocation_params[MODEL_NAME_KEY]
+    model = run_dict.get("serialized", {}).get("kwargs", {}).get(MODEL_NAME_KEY, None)
 
     if model is None:
         LOGGER.error(

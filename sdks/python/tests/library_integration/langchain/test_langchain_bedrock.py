@@ -16,21 +16,54 @@ import langchain_aws
 
 pytestmark = pytest.mark.usefixtures("ensure_aws_bedrock_configured")
 
+SOME_BEDROCK_CHAT_MODEL_NAME = "custom-bedrock-llm-name"
 
+parametrize_chat_model = pytest.mark.parametrize(
+    "chat_model",
+    [
+        langchain_aws.ChatBedrock(
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            model_kwargs={
+                "max_tokens": 10,
+            },
+        ),
+        langchain_aws.ChatBedrockConverse(
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            max_tokens=10,
+        ),
+    ],
+    ids=["ChatBedrock", "ChatBedrockConverse"],
+)
+
+parametrize_streaming_chat_model = pytest.mark.parametrize(
+    "chat_model",
+    [
+        langchain_aws.ChatBedrock(
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            model_kwargs={
+                "max_tokens": 10,
+            },
+            streaming=True,
+        ),
+        langchain_aws.ChatBedrockConverse(  # doesn't have streaming parameter
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            max_tokens=10,
+        ),
+    ],
+    ids=["ChatBedrock", "ChatBedrockConverse"],
+)
+
+@parametrize_chat_model
 def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__happyflow(
-    fake_backend,
+    fake_backend, chat_model,
 ):
-    llm = langchain_aws.ChatBedrock(
-        model_id=BEDROCK_MODEL_FOR_TESTS,
-        name="custom-bedrock-llm-name",
-        model_kwargs={
-            "max_tokens": 10,
-        },
-    )
-
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
-    synopsis_chain = prompt_template | llm
+    synopsis_chain = prompt_template | chat_model
     test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
@@ -97,23 +130,13 @@ def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__ha
     assert_equal(fake_backend.trace_trees[0], EXPECTED_TRACE_TREE)
 
 
+@parametrize_streaming_chat_model
 def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provider_are_logged(
-    fake_backend,
+    fake_backend, chat_model,
 ):
-    llm = langchain_aws.ChatBedrock(
-        model_id=BEDROCK_MODEL_FOR_TESTS,
-        region_name="us-east-1",
-        model_kwargs={
-            "temperature": 0.7,
-            "max_tokens": 10,
-        },
-        name="custom-bedrock-llm-name",
-        streaming=True,
-    )
-
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
-    synopsis_chain = prompt_template | llm
+    synopsis_chain = prompt_template | chat_model
     test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
@@ -186,21 +209,14 @@ def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provid
 
 
 @pytest.mark.asyncio
+@parametrize_chat_model
 async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_provider_are_logged(
-    fake_backend,
+    fake_backend, chat_model,
 ):
     """Test async ainvoke with Bedrock"""
-    llm = langchain_aws.ChatBedrock(
-        model_id=BEDROCK_MODEL_FOR_TESTS,
-        name="custom-bedrock-llm-name",
-        model_kwargs={
-            "max_tokens": 10,
-        },
-    )
-
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
-    synopsis_chain = prompt_template | llm
+    synopsis_chain = prompt_template | chat_model
     test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
@@ -272,21 +288,13 @@ async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_p
 
 
 @pytest.mark.asyncio
+@parametrize_streaming_chat_model
 async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_and_provider_are_logged(
-    fake_backend,
+    fake_backend, chat_model,
 ):
-    llm = langchain_aws.ChatBedrock(
-        model_id=BEDROCK_MODEL_FOR_TESTS,
-        name="custom-bedrock-llm-name",
-        model_kwargs={
-            "max_tokens": 10,
-        },
-        streaming=True,
-    )
-
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
-    synopsis_chain = prompt_template | llm
+    synopsis_chain = prompt_template | chat_model
     test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
