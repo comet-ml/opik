@@ -33,6 +33,7 @@ def patch_sync_stream(
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
+    chunk_processor: Optional[Callable[[StreamItem], None]] = None,
 ) -> openai.Stream:
     """
     Used in the following cases
@@ -54,6 +55,13 @@ def patch_sync_stream(
                 error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
                     accumulated_items.append(item)
+                    if chunk_processor is not None:
+                        try:
+                            chunk_processor(item)
+                        except Exception:
+                            LOGGER.debug(
+                                "chunk_processor raised exception", exc_info=True
+                            )
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -98,6 +106,7 @@ def patch_async_stream(
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
+    chunk_processor: Optional[Callable[[StreamItem], None]] = None,
 ) -> openai.Stream:
     """
     Used in the following cases
@@ -119,6 +128,13 @@ def patch_async_stream(
 
                 async for item in dunder_aiter_func(self):
                     accumulated_items.append(item)
+                    if chunk_processor is not None:
+                        try:
+                            chunk_processor(item)
+                        except Exception:
+                            LOGGER.debug(
+                                "chunk_processor raised exception", exc_info=True
+                            )
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -194,6 +210,7 @@ def patch_sync_chat_completion_stream_manager(
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
                 finally_callback=finally_callback,
+                chunk_processor=None,
             )
 
             return chat_completion_stream
@@ -246,6 +263,7 @@ def patch_async_chat_completion_stream_manager(
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
                 finally_callback=finally_callback,
+                chunk_processor=None,
             )
 
             return async_chat_completion_stream
