@@ -4,6 +4,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
     ExperimentItemBulkRecordExperimentItemBulkWriteView,
@@ -312,6 +313,47 @@ class ExperimentsClient:
         """
         _response = self._raw_client.find_feedback_score_names(
             experiment_ids=experiment_ids, request_options=request_options
+        )
+        return _response.data
+
+    def find_experiment_groups(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupResponse:
+        """
+        Find experiments grouped by specified fields
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupResponse
+            Experiment groups
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.find_experiment_groups()
+        """
+        _response = self._raw_client.find_experiment_groups(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -755,6 +797,50 @@ class AsyncExperimentsClient:
         """
         _response = await self._raw_client.find_feedback_score_names(
             experiment_ids=experiment_ids, request_options=request_options
+        )
+        return _response.data
+
+    async def find_experiment_groups(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupResponse:
+        """
+        Find experiments grouped by specified fields
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupResponse
+            Experiment groups
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.find_experiment_groups()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_experiment_groups(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
         )
         return _response.data
 
