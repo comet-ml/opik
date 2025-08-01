@@ -1,5 +1,6 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure.db;
 
+import com.comet.opik.domain.IdGenerator;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 

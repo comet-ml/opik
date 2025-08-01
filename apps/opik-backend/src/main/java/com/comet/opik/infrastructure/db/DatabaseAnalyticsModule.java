@@ -28,7 +28,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
         // Initialize the UserFacingRuleLollingFactory
         UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
-                clickHouseLogAppenderConfig.getFlushIntervalDuration());
+                clickHouseLogAppenderConfig.getFlushIntervalDuration(), configuration(OpikConfiguration.class));
     }
 
     @Provides
