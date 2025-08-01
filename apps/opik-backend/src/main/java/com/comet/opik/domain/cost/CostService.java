@@ -26,7 +26,9 @@ public class CostService {
             "vertex_ai-language-models", "google_vertexai",
             "gemini", "google_ai",
             "anthropic", "anthropic",
-            "vertex_ai-anthropic_models", "anthropic_vertexai");
+            "vertex_ai-anthropic_models", "anthropic_vertexai",
+            "_bedrock", "bedrock",
+            "bedrock_converse", "bedrock");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
@@ -81,14 +83,18 @@ public class CostService {
             String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
             if (PROVIDERS_MAPPING.containsKey(provider)) {
 
-                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal cacheCreationInputTokenPrice = Optional.ofNullable(modelCost.cacheCreationInputTokenCost())
+                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
+                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal cacheCreationInputTokenPrice = Optional
+                        .ofNullable(modelCost.cacheCreationInputTokenCost())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal cacheReadInputTokenPrice = Optional
+                        .ofNullable(modelCost.cacheReadInputTokenCost())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
 
@@ -97,12 +103,15 @@ public class CostService {
                         || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
                     calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
                             SpanCostCalculator::textGenerationCost);
-                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::textGenerationCost;
-                }
+                } else
+                    if (inputPrice.compareTo(BigDecimal.ZERO) > 0
+                            || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                calculator = SpanCostCalculator::textGenerationCost;
+                            }
 
                 parsedModelPrices.put(
-                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
+                        createModelProviderKey(parseModelName(modelName),
+                                PROVIDERS_MAPPING.get(provider)),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }

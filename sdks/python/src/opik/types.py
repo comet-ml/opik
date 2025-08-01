@@ -31,6 +31,7 @@ class LLMProvider(str, enum.Enum):
     ANTHROPIC_VERTEXAI = "anthropic_vertexai"
     """Used for Anthropic models hosted by VertexAI. https://cloud.google.com/vertex-ai"""
 
+    BEDROCK = "_bedrock"
     GROQ = "groq"
     """Used for models hosted by Groq. https://groq.com"""
 
