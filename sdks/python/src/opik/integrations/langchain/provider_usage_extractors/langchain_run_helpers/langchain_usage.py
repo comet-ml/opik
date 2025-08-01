@@ -108,6 +108,13 @@ class LangChainUsage(pydantic.BaseModel):
 
         return anthropic_usage
 
+    def map_to_bedrock_usage(self) -> Dict[str, Any]:
+        bedrock_usage: Dict[str, Any] = {
+            "inputTokens": self.input_tokens,
+            "outputTokens": self.output_tokens,
+        }
+        return bedrock_usage
+
     def map_to_openai_completions_usage(self) -> Dict[str, Any]:
         openai_usage: Dict[str, Any] = {
             "prompt_tokens": self.input_tokens,

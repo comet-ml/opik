@@ -34,6 +34,9 @@ class LLMProvider(str, enum.Enum):
     GROQ = "groq"
     """Used for models hosted by Groq. https://groq.com"""
 
+    BEDROCK = "bedrock"
+    """Used for models hosted by AWS Bedrock. https://aws.amazon.com/bedrock"""
+
     @classmethod
     def has_value(cls, value: str) -> bool:
         return value in [enum_item.value for enum_item in cls]
