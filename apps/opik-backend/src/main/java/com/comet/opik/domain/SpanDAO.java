@@ -15,6 +15,8 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -132,7 +134,7 @@ class SpanDAO {
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
     private static final String INSERT = """
-            INSERT INTO spans(
+            INSERT INTO spans (
                 id,
                 project_id,
                 workspace_id,
@@ -155,7 +157,7 @@ class SpanDAO {
                 created_at,
                 created_by,
                 last_updated_by
-            )
+            ) <settings_clause>
             SELECT
                 new_span.id as id,
                 multiIf(
@@ -305,7 +307,8 @@ class SpanDAO {
             	created_at,
             	created_by,
             	last_updated_by
-            ) SELECT
+            ) <settings_clause>
+            SELECT
             	id,
             	project_id,
             	workspace_id,
@@ -347,11 +350,11 @@ class SpanDAO {
      */
     //TODO: refactor to implement proper conflict resolution
     private static final String PARTIAL_INSERT = """
-            INSERT INTO spans(
+            INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
                 created_by, last_updated_by
-            )
+            ) <settings_clause>
             SELECT
                 new_span.id as id,
                 multiIf(
@@ -936,6 +939,7 @@ class SpanDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1095,6 +1099,11 @@ class SpanDAO {
         var template = new ST(INSERT);
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
+
         return template;
     }
 
@@ -1210,6 +1219,10 @@ class SpanDAO {
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
+
+        if (opikConfiguration.getAsyncInsert().enabled()) {
+            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+        }
 
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
