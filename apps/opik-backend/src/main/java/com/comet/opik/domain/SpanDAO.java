@@ -134,7 +134,7 @@ class SpanDAO {
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
     private static final String INSERT = """
-            INSERT INTO spans(
+            INSERT INTO spans (
                 id,
                 project_id,
                 workspace_id,
@@ -307,7 +307,7 @@ class SpanDAO {
             	created_at,
             	created_by,
             	last_updated_by
-            ) <settings_clause> 
+            ) <settings_clause>
             SELECT
             	id,
             	project_id,

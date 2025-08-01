@@ -181,7 +181,7 @@ class TraceDAOImpl implements TraceDAO {
      **/
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT = """
-            INSERT INTO traces(
+            INSERT INTO traces (
                 id,
                 project_id,
                 workspace_id,
