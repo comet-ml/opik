@@ -16,7 +16,8 @@ public enum FieldType {
     DICTIONARY("dictionary"),
     LIST("list"),
     ENUM("enum"),
-    ERROR_CONTAINER("error_container");
+    ERROR_CONTAINER("error_container"),
+    CUSTOM("custom");
 
     @JsonValue
     private final String queryParamType;

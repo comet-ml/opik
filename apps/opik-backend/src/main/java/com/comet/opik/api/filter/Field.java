@@ -43,6 +43,7 @@ public interface Field {
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
+    String CUSTOM_QUERY_PARAM = "custom";
 
     @JsonValue
     String getQueryParamField();

@@ -27,6 +27,7 @@ public enum TraceField implements Field {
     GUARDRAILS(GUARDRAILS_QUERY_PARAM, FieldType.STRING),
     VISIBILITY_MODE(VISIBILITY_MODE_QUERY_PARAM, FieldType.ENUM),
     ERROR_INFO(ERROR_INFO_QUERY_PARAM, FieldType.ERROR_CONTAINER),
+    CUSTOM(CUSTOM_QUERY_PARAM, FieldType.CUSTOM),
     ;
 
     private final String queryParamField;

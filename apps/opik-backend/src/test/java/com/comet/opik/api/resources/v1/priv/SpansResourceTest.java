@@ -19,6 +19,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
@@ -1190,7 +1191,7 @@ class SpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY, ENUM, ERROR_CONTAINER, STRING_STATE_DB ->
+                case STRING, LIST, DICTIONARY, ENUM, ERROR_CONTAINER, STRING_STATE_DB, CUSTOM ->
                     RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
@@ -1201,13 +1202,14 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
                     null;
-                case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case FEEDBACK_SCORES_NUMBER, DICTIONARY, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB -> " ";
+                case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
+                    " ";
                 case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
@@ -4186,12 +4188,15 @@ class SpansResourceTest {
         @MethodSource("getFilterInvalidOperatorForFieldTypeArgs")
         void whenFilterInvalidOperatorForFieldType__thenReturn400(String path, SpanFilter filter) {
             int expectedStatus = HttpStatus.SC_BAD_REQUEST;
+            String errorMessage = filter.field().getType() == FieldType.CUSTOM
+                    ? "Invalid key '%s' for custom filter".formatted(filter.key())
+                    : "Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                    filter.operator().getQueryParamOperator(),
+                    filter.field().getQueryParamField(),
+                    filter.field().getType());
+
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    expectedStatus,
-                    "Invalid operator '%s' for field '%s' of type '%s'".formatted(
-                            filter.operator().getQueryParamOperator(),
-                            filter.field().getQueryParamField(),
-                            filter.field().getType()));
+                    expectedStatus, errorMessage);
             var projectName = generator.generate().toString();
             List<SpanFilter> filters = List.of(filter);
 
