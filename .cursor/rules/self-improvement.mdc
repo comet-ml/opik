@@ -34,17 +34,24 @@ alwaysApply: true
 
 - **Example Pattern Recognition:**
 
-  ```typescript
+  ```java
   // If you see repeated patterns like:
-  const data = await prisma.user.findMany({
-    select: { id: true, email: true },
-    where: { status: 'ACTIVE' }
-  });
+  @POST
+  @Path("/traces")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Consumes(MediaType.APPLICATION_JSON)
+  public Response createTrace(@Valid TraceCreateRequest request) {
+      var trace = traceService.createTrace(request);
+      return Response.status(Response.Status.CREATED)
+          .entity(trace)
+          .build();
+  }
 
-  // Consider adding to [prisma.mdc](mdc:shipixen/.cursor/rules/prisma.mdc):
-  // - Standard select fields
-  // - Common where conditions
-  // - Performance optimization patterns
+  // Consider adding to [api-design.mdc](mdc:apps/opik-backend/.cursor/rules/api_design.mdc):
+  // - Standard REST endpoint patterns
+  // - Common validation annotations
+  // - Service layer delegation patterns
+  // - Response status codes and entity building
   ```
 
 - **Rule Quality Checks:**
