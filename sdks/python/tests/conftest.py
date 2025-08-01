@@ -8,7 +8,6 @@ import numpy as np
 
 from unittest import mock
 import pytest
-import boto3
 
 from opik import context_storage
 from opik.api_objects import opik_client
@@ -256,6 +255,8 @@ def ensure_google_api_configured():
 
 @pytest.fixture(scope="session")
 def ensure_aws_bedrock_configured():
+    import boto3
+
     session = boto3.Session()
 
     bedrock_client = session.client(service_name="bedrock")
