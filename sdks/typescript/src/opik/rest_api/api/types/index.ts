@@ -162,6 +162,8 @@ export * from "./JsonNodePublic";
 export * from "./PercentageValuesPublic";
 export * from "./PromptVersionLinkPublic";
 export * from "./ErrorMessagePublic";
+export * from "./ExperimentGroupResponse";
+export * from "./GroupContent";
 export * from "./ChunkedOutputJsonNodePublicType";
 export * from "./ChunkedOutputJsonNodePublic";
 export * from "./CategoricalFeedbackDefinition";
