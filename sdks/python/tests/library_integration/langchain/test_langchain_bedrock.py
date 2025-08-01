@@ -24,9 +24,7 @@ parametrize_chat_model = pytest.mark.parametrize(
         langchain_aws.ChatBedrock(
             model_id=BEDROCK_MODEL_FOR_TESTS,
             name=SOME_BEDROCK_CHAT_MODEL_NAME,
-            model_kwargs={
-                "max_tokens": 10,
-            },
+            max_tokens=10,
         ),
         langchain_aws.ChatBedrockConverse(
             model_id=BEDROCK_MODEL_FOR_TESTS,
@@ -43,9 +41,7 @@ parametrize_streaming_chat_model = pytest.mark.parametrize(
         langchain_aws.ChatBedrock(
             model_id=BEDROCK_MODEL_FOR_TESTS,
             name=SOME_BEDROCK_CHAT_MODEL_NAME,
-            model_kwargs={
-                "max_tokens": 10,
-            },
+            max_tokens=10,
             streaming=True,
         ),
         langchain_aws.ChatBedrockConverse(  # doesn't have streaming parameter
