@@ -63,6 +63,7 @@ jobs:
           role-to-assume: ${{ vars.BEDROCK_ROLE }}
           aws-region: us-east-1
           role-chaining: true
+          role-skip-session-tagging: true
 
       - name: Run tests
         run: |
