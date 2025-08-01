@@ -75,4 +75,4 @@ alwaysApply: true
 - Maintain links between related rules
 - Document breaking changes
 
-Follow [cursor-rules.mdc](mdc:.cursor/rules/curs or-rules.mdc) for proper rule formatting and structure.
+Follow [cursor-rules.mdc](mdc:.cursor/rules/cursor-rules.mdc) for proper rule formatting and structure.
