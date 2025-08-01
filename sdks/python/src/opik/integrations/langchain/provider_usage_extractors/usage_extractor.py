@@ -9,6 +9,7 @@ from . import (
     vertexai_usage_extractor,
     groq_usage_extractor,
     anthropic_vertexai_usage_extractor,
+    bedrock_usage_extractor,
 )
 from . import provider_usage_extractor_protocol
 
@@ -23,6 +24,7 @@ _REGISTERED_PROVIDER_USAGE_EXTRACTORS: List[
     vertexai_usage_extractor.VertexAIUsageExtractor(),
     groq_usage_extractor.GroqUsageExtractor(),
     anthropic_vertexai_usage_extractor.AnthropicVertexAIUsageExtractor(),
+    bedrock_usage_extractor.BedrockUsageExtractor(),
 ]
 
 
