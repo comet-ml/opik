@@ -157,7 +157,7 @@ class SpanDAO {
                 created_at,
                 created_by,
                 last_updated_by
-            )
+            ) <settings_clause>
             SELECT
                 new_span.id as id,
                 multiIf(
@@ -276,7 +276,6 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
-            <settings_clause>
             ;
             """;
 
@@ -308,7 +307,8 @@ class SpanDAO {
             	created_at,
             	created_by,
             	last_updated_by
-            ) SELECT
+            ) <settings_clause> 
+            SELECT
             	id,
             	project_id,
             	workspace_id,
@@ -336,7 +336,6 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
-            <settings_clause>
             ;
             """;
 
@@ -351,11 +350,11 @@ class SpanDAO {
      */
     //TODO: refactor to implement proper conflict resolution
     private static final String PARTIAL_INSERT = """
-            INSERT INTO spans(
+            INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
                 created_by, last_updated_by
-            )
+            ) <settings_clause>
             SELECT
                 new_span.id as id,
                 multiIf(
@@ -487,7 +486,6 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
-            <settings_clause>
             ;
             """;
 

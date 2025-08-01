@@ -198,7 +198,7 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            )
+            ) <settings_clause>
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -285,7 +285,6 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
-            <settings_clause>
             ;
             """;
 
@@ -295,7 +294,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String UPDATE = """
             INSERT INTO traces (
             	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            ) SELECT
+            )  <settings_clause>
+            SELECT
             	id,
             	project_id,
             	workspace_id,
@@ -317,7 +317,6 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
-            <settings_clause>
             ;
             """;
 
@@ -775,7 +774,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
                 id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            )
+            ) <settings_clause>
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -869,7 +868,6 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
-            <settings_clause>
             ;
             """;
 
