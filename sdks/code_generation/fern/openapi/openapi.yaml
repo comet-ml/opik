@@ -1223,6 +1223,43 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/experiments/groups:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups
+      description: Find experiments grouped by specified fields
+      operationId: findExperimentGroups
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -7001,6 +7038,18 @@ components:
         message:
           type: string
         details:
+          type: string
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContent"
+    GroupContent:
+      type: object
+      properties:
+        label:
           type: string
     ExperimentItemStreamRequest:
       required:
