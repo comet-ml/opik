@@ -143,7 +143,7 @@ const AutoComplete = <T extends string>({
             }}
             className="w-[--radix-popover-trigger-width] p-0"
           >
-            <CommandList>
+            <CommandList onWheel={(e) => e.stopPropagation()}>
               {isLoading && (
                 <CommandPrimitive.Loading>
                   <div className="p-1">
