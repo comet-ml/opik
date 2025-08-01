@@ -117,6 +117,7 @@ public class FilterQueryBuilder {
                             "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)",
                             FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
@@ -131,6 +132,7 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d",
                             FieldType.NUMBER, "%1$s < :filter%2$d",
