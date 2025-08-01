@@ -80,4 +80,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AsyncInsertConfig asyncInsert = new AsyncInsertConfig();
 }
