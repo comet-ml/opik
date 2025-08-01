@@ -8,6 +8,7 @@ import numpy as np
 
 from unittest import mock
 import pytest
+import boto3
 
 from opik import context_storage
 from opik.api_objects import opik_client
@@ -190,14 +191,14 @@ def temp_file_15mb():
         yield f
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
     if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
         raise Exception("OpenAI not configured!")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def ensure_google_project_and_location_configured():
     if not (
         "GOOGLE_CLOUD_PROJECT" in os.environ and "GOOGLE_CLOUD_LOCATION" in os.environ
@@ -207,7 +208,7 @@ def ensure_google_project_and_location_configured():
         )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_anthropic_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
 
@@ -215,7 +216,7 @@ def ensure_anthropic_configured():
         raise Exception("Anthropic not configured!")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def ensure_vertexai_configured(ensure_google_project_and_location_configured):
     GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"
 
@@ -246,25 +247,21 @@ def ensure_vertexai_configured(ensure_google_project_and_location_configured):
             os.remove(GOOGLE_APPLICATION_CREDENTIALS_PATH)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_google_api_configured():
     GOOGLE_API_KEY = "GOOGLE_API_KEY"
     if GOOGLE_API_KEY not in os.environ:
         raise Exception(f"{GOOGLE_API_KEY} env var must be set")
 
 
-@pytest.fixture()
-def ensure_bedrock_configured():
-    # Check if AWS credentials are configured
-    # AWS credentials can be set via environment variables, AWS profile, or IAM roles
-    # aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    # aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    #aws_profile = os.environ.get("AWS_PROFILE")
-    
-    # if not (aws_access_key and aws_secret_key) and not aws_profile:
-    #     raise Exception(
-    #         "AWS Bedrock not configured! "
-    #         "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables "
-    #         "or configure AWS_PROFILE"
-    #     )
-    pass
+@pytest.fixture(scope="session")
+def ensure_aws_bedrock_configured():
+    session = boto3.Session()
+
+    bedrock_client = session.client(service_name="bedrock")
+    try:
+        available_models = bedrock_client.list_foundation_models()["modelSummaries"]
+        if not available_models:
+            raise Exception("AWS Bedrock not configured! No models available")
+    except Exception as e:
+        raise Exception(f"AWS Bedrock not configured! {e}")

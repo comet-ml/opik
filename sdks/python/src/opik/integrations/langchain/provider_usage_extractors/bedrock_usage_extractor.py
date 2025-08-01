@@ -25,12 +25,16 @@ class BedrockUsageExtractor(
             # Check for langchain_aws.ChatBedrock or other bedrock indicators
             invocation_params = run_dict.get("extra", {}).get("invocation_params", {})
             provider_class = run_dict.get("serialized", {}).get("id", [])
-            
+
             # Check if it's a bedrock provider by looking at the class path
             is_bedrock = (
-                "bedrock" in str(provider_class).lower() or
-                "ChatBedrock" in str(provider_class) or
-                any("bedrock" in str(param).lower() for param in invocation_params.values() if isinstance(param, str))
+                "bedrock" in str(provider_class).lower()
+                or "ChatBedrock" in str(provider_class)
+                or any(
+                    "bedrock" in str(param).lower()
+                    for param in invocation_params.values()
+                    if isinstance(param, str)
+                )
             )
 
             return is_bedrock
@@ -68,7 +72,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     MODEL_NAME_KEY = "model_id"
-    
+
     model = None
 
     invocation_params = run_dict.get("extra", {}).get("invocation_params", {})
@@ -81,4 +85,4 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
             run_dict,
         )
 
-    return model 
+    return model

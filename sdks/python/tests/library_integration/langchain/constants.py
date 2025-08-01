@@ -28,6 +28,8 @@ EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
 
+BEDROCK_MODEL_FOR_TESTS = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+
 EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,
     "completion_tokens": ANY_BUT_NONE,
