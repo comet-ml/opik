@@ -108,6 +108,17 @@ const AutoComplete = <T extends string>({
     });
   }, [handleDebouncedValueChange]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      if (e.target && "blur" in e.target) {
+        (e.target as HTMLElement).blur();
+      }
+    } else {
+      setOpen(true);
+    }
+  }, []);
+
   const displayValue = localValue ?? value ?? ("" as T);
 
   return (
@@ -119,7 +130,7 @@ const AutoComplete = <T extends string>({
               asChild
               value={displayValue}
               onValueChange={handleValueChange}
-              onKeyDown={(e) => setOpen(e.key !== "Escape")}
+              onKeyDown={handleKeyDown}
               onFocus={handleFocus}
               onBlur={handleBlur}
             >
