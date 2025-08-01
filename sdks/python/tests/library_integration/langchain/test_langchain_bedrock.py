@@ -97,7 +97,7 @@ def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__ha
     assert_equal(fake_backend.trace_trees[0], EXPECTED_TRACE_TREE)
 
 
-def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_is_logged__happyflow(
+def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provider_are_logged(
     fake_backend,
 ):
     llm = langchain_aws.ChatBedrock(
@@ -186,7 +186,7 @@ def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_is_logged_
 
 
 @pytest.mark.asyncio
-async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_is_logged__happyflow(
+async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_provider_are_logged(
     fake_backend,
 ):
     """Test async ainvoke with Bedrock"""
@@ -272,7 +272,7 @@ async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_is_lo
 
 
 @pytest.mark.asyncio
-async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_is_logged__happyflow(
+async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_and_provider_are_logged(
     fake_backend,
 ):
     llm = langchain_aws.ChatBedrock(
