@@ -19,7 +19,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     LLMProvider.GOOGLE_VERTEXAI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.GOOGLE_AI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.ANTHROPIC: [opik_usage.OpikUsage.from_anthropic_dict],
-    "_bedrock": [opik_usage.OpikUsage.from_bedrock_dict],
+    LLMProvider.BEDROCK: [opik_usage.OpikUsage.from_bedrock_dict],
 }
 
 
