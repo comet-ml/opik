@@ -92,8 +92,8 @@ This document outlines the complete technology stack, dependency versions, and b
 ### Observability & Monitoring
 ```xml
 <!-- OpenTelemetry -->
-<opentelmetry.version>2.18.0</opentelmetry.version>
-<opentelmetry.version>1.31.1</opentelmetry.version> <!-- Python -->
+<opentelemetry.version>2.18.0</opentelemetry.version>
+<opentelemetry.version>1.31.1</opentelemetry.version> <!-- Python -->
 ```
 
 ### Testing Framework
