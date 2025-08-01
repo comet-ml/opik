@@ -22,11 +22,9 @@ class BedrockUsageExtractor(
             if run_dict.get("serialized") is None:
                 return False
 
-            # Check for langchain_aws.ChatBedrock or other bedrock indicators
             invocation_params = run_dict.get("extra", {}).get("invocation_params", {})
             provider_class = run_dict.get("serialized", {}).get("id", [])
 
-            # Check if it's a bedrock provider by looking at the class path
             is_bedrock = (
                 "bedrock" in str(provider_class).lower()
                 or "ChatBedrock" in str(provider_class)
