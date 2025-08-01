@@ -78,6 +78,11 @@ export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
     type: COLUMN_TYPE.number,
   },
   {
+    id: "usage.input_characters",
+    label: "Input characters",
+    type: COLUMN_TYPE.number,
+  },
+  {
     id: "total_estimated_cost",
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,

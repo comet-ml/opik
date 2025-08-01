@@ -27,6 +27,7 @@ describe("helpers.ts", () => {
         total_tokens: 100,
         prompt_tokens: 50,
         completion_tokens: 50,
+        input_characters: 25,
       },
       total_estimated_cost: 0.001,
     };
@@ -708,6 +709,33 @@ describe("helpers.ts", () => {
               {
                 id: "filter-1",
                 field: "usage.completion_tokens",
+                operator,
+                value,
+                type: COLUMN_TYPE.number,
+              },
+            ];
+
+            expect(filterFunction(mockTrace, filter)).toBe(expected);
+          });
+        });
+      });
+
+      // Test usage.input_characters (number) column
+      describe("usage.input_characters column (number)", () => {
+        it("should filter by input_characters with all number operators", () => {
+          const filters = [
+            { operator: "=", value: 25, expected: true },
+            { operator: ">", value: 20, expected: true },
+            { operator: ">=", value: 25, expected: true },
+            { operator: "<", value: 30, expected: true },
+            { operator: "<=", value: 25, expected: true },
+          ] as const;
+
+          filters.forEach(({ operator, value, expected }) => {
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: "usage.input_characters",
                 operator,
                 value,
                 type: COLUMN_TYPE.number,

@@ -152,6 +152,8 @@ export interface UsageData {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  // Support for character-based billing (e.g., TTS models)
+  input_characters?: number;
 }
 
 export interface AggregatedFeedbackScore {

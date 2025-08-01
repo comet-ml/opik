@@ -185,6 +185,15 @@ const ProjectsPage: React.FunctionComponent = () => {
             : "-",
       },
       {
+        id: "usage.input_characters",
+        label: "Input characters (average)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage && isNumber(row.usage.input_characters)
+            ? formatNumericData(row.usage.input_characters)
+            : "-",
+      },
+      {
         id: "feedback_scores",
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,

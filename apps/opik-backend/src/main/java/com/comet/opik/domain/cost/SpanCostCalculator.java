@@ -74,6 +74,13 @@ class SpanCostCalculator {
                         .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheReadInputTokensKey, 0))));
     }
 
+    public static BigDecimal characterBasedCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        // For TTS models using character-based billing (e.g., OpenAI TTS)
+        int inputCharacters = usage.getOrDefault("original_usage.input_characters", 
+                             usage.getOrDefault("input_characters", 0));
+        return modelPrice.inputCharacterPrice().multiply(BigDecimal.valueOf(inputCharacters));
+    }
+
     public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return BigDecimal.ZERO;
     }
