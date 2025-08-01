@@ -57,9 +57,11 @@ parametrize_streaming_chat_model = pytest.mark.parametrize(
     ids=["ChatBedrock", "ChatBedrockConverse"],
 )
 
+
 @parametrize_chat_model
 def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__happyflow(
-    fake_backend, chat_model,
+    fake_backend,
+    chat_model,
 ):
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
@@ -132,7 +134,8 @@ def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__ha
 
 @parametrize_streaming_chat_model
 def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provider_are_logged(
-    fake_backend, chat_model,
+    fake_backend,
+    chat_model,
 ):
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
@@ -211,7 +214,8 @@ def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provid
 @pytest.mark.asyncio
 @parametrize_chat_model
 async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_provider_are_logged(
-    fake_backend, chat_model,
+    fake_backend,
+    chat_model,
 ):
     """Test async ainvoke with Bedrock"""
     template = "Given the title of play, write a synopsys for that. Title: {title}."
@@ -290,7 +294,8 @@ async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_p
 @pytest.mark.asyncio
 @parametrize_streaming_chat_model
 async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_and_provider_are_logged(
-    fake_backend, chat_model,
+    fake_backend,
+    chat_model,
 ):
     template = "Given the title of play, write a synopsys for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
