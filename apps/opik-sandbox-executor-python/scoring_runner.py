@@ -16,7 +16,7 @@ from typing import Type, Union, List
 
 # Add site-packages manually for python -S compatibility
 # More conservative than ultra-optimized approach
-sys.path.insert(0, '/usr/local/lib/python3.12/site-packages')
+sys.path.insert(0, '/usr/local/lib/python3.13/site-packages')
 
 # OPTIMIZATION 1: Lazy import heavy opik modules only when needed
 _opik_imports_loaded = False
