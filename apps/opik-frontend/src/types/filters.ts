@@ -21,6 +21,7 @@ export interface Filter {
   operator: FilterOperator | "";
   key?: string;
   value: string | number;
+  error?: string;
 }
 export type FilterRowConfig = {
   keyComponent: React.FC<unknown> & {
@@ -31,6 +32,7 @@ export type FilterRowConfig = {
   keyComponentProps: unknown;
   defaultOperator?: FilterOperator;
   operators?: DropdownOption<FilterOperator>[];
+  validateFilter?: (filter: Filter) => string | undefined;
 };
 
 export type Filters = Filter[];
