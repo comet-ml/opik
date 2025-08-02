@@ -110,6 +110,7 @@ class DockerExecutor(CodeExecutorBase):
             logger.error(f"Error in pool monitor: {e}")
             return None  # Continue the job despite the error
 
+
     def _run_scheduler(self):
         """Run the scheduler in a background thread."""
         logger.info("Starting scheduler for container pool monitoring")
@@ -206,15 +207,22 @@ class DockerExecutor(CodeExecutorBase):
             start_time = time.time()
 
             # Remove the container
-            container.remove(force=True)
+            try:
+                container.remove(force=True)
+                
+                # Calculate and record the latency
+                latency = self._calculate_latency_ms(start_time)
+                container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+                
+                logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+                
 
-            # Calculate and record the latency
-            latency = self._calculate_latency_ms(start_time)
-            container_stop_histogram.record(latency, attributes={"method": "stop_container"})
-
-            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+            except docker.errors.APIError as e:
+                logger.debug(f"Container {container.id} failed to be removed")
+                    
         except Exception as e:
-            logger.error(f"Failed to stop container: {e}")
+            logger.debug(f"Failed to stop container {container.id}: {e}")
+            # Don't log as error - containers may be removed by other processes
 
     def get_container(self):
         if self.stop_event.is_set():
@@ -236,19 +244,23 @@ class DockerExecutor(CodeExecutorBase):
         start_time = time.time()
         container = self.get_container()
         latency = self._calculate_latency_ms(start_time)
-        logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
+        logger.info(f"Get container latency: {latency:.3f} milliseconds")
         get_container_histogram.record(latency, attributes={"method": "get_container"})
 
         try:
+            cmd = PYTHON_SCORING_COMMAND + [code, json.dumps(data)]
+            if payload_type:
+                cmd.append(payload_type)
+            
             future = self.scoring_executor.submit(
                 container.exec_run,
-                cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
+                cmd=cmd,
                 detach=False,
                 stdin=False,
                 tty=False
             )
-
             result = future.result(timeout=self.exec_timeout)
+
             exec_result = ExecutionResult(
                 exit_code=result.exit_code,
                 output=result.output
