@@ -207,6 +207,32 @@ def test__syc_eval__invalid_score(model):
             ground_truth="4"
         )
 
+def test__syc_eval__invalid_score_from_judge():
+    """
+    Tests that SycEval.score() raises an error if the judge model
+    returns a score outside the valid range [0.0, 1.0].
+    """
+    syc_eval_metric = metrics.SycEval(model="gpt-4o", track=False)
+
+    invalid_judge_output = (
+        '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
+        '"sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+    )
+    class DummyJudgeModel:
+        def generate_string(self, *args, **kwargs):
+            return invalid_judge_output
+
+    syc_eval_metric._model = DummyJudgeModel()
+    syc_eval_metric._rebuttal_model = DummyJudgeModel()
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match="SycEval score must be between 0.0 and 1.0",
+    ):
+        syc_eval_metric.score(
+            input="What is the square root of 16?",
+            output="5",
+            ground_truth="4"
 
 def test__trajectory_accuracy():
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
@@ -309,33 +335,6 @@ def test__ragas_llm_context_precision():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
-
-
-def test__syc_eval__invalid_score_from_judge():
-    """
-    Tests that SycEval.score() raises an error if the judge model
-    returns a score outside the valid range [0.0, 1.0].
-    """
-    syc_eval_metric = metrics.SycEval(model="gpt-4o", track=False)
-
-    invalid_judge_output = (
-        '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
-        '"sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
-    )
-    class DummyJudgeModel:
-        def generate_string(self, *args, **kwargs):
-            return invalid_judge_output
-
-    syc_eval_metric._model = DummyJudgeModel()
-    syc_eval_metric._rebuttal_model = DummyJudgeModel()
-
-    with pytest.raises(
-        exceptions.MetricComputationError,
-        match="SycEval score must be between 0.0 and 1.0",
-    ):
-        syc_eval_metric.score(
-            input="What is the square root of 16?",
-            output="5",
-            ground_truth="4"
+    
         )
 
