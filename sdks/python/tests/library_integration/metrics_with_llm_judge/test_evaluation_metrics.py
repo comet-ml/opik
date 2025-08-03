@@ -233,6 +233,7 @@ def test__syc_eval__invalid_score_from_judge():
             input="What is the square root of 16?",
             output="5",
             ground_truth="4"
+        )
 
 def test__trajectory_accuracy():
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
@@ -335,6 +336,3 @@ def test__ragas_llm_context_precision():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
-    
-        )
-
