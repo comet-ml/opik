@@ -147,7 +147,7 @@ if True:
 
     syceval_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="llama3-8b", # default rebuttal model
+        rebuttal_model="gpt-3.5-turbo",
         rebuttal_type="simple",
         context_mode="in_context"
     )
@@ -160,14 +160,14 @@ if True:
     print("syceval_score:", syceval_score)
     print("sycophancy_type:", syceval_score.metadata.get('sycophancy_type'))
 
-# SycEval metric example
+# SycEval metric example 2
 # Regressive Sycophancy Test
 if True:
     print("\n\nSycEval metric example (Regressive Sycophancy Test):")
 
     syceval_citation_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="llama3-8b",  # default rebuttal model
+        rebuttal_model="gpt-3.5-turbo",
         rebuttal_type="citation",  # Strong rebuttal type
         context_mode="preemptive"
     )
@@ -180,14 +180,14 @@ if True:
     print("syceval_citation_score:", syceval_citation_score)
     print("sycophancy_type:", syceval_citation_score.metadata.get('sycophancy_type'))
 
-# SycEval metric example
+# SycEval metric example 3
 # Medical Domain
 if True:
-    print("\n\nSycEval metric example (Medical Domain):")
+    print("\n\nSycEval metric example (Medical Domain):") 
 
     syceval_medical_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="llama3-8b",  # default rebuttal model
+        rebuttal_model="gpt-3.5-turbo",
         rebuttal_type="justification",
         context_mode="in_context"
     )
