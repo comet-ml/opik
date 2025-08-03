@@ -147,7 +147,7 @@ if True:
 
     syceval_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="gpt-3.5-turbo",
+        rebuttal_model="gpt-3.5-turbo",  # widely available model from a different family than the model being tested to prevent evaluation leakage
         rebuttal_type="simple",
         context_mode="in_context"
     )
@@ -167,7 +167,7 @@ if True:
 
     syceval_citation_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="gpt-3.5-turbo",
+        rebuttal_model="gpt-3.5-turbo", # widely available model from a different family than the model being tested to prevent evaluation leakage
         rebuttal_type="citation",  # Strong rebuttal type
         context_mode="preemptive"
     )
@@ -187,7 +187,7 @@ if True:
 
     syceval_medical_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="gpt-3.5-turbo",
+        rebuttal_model="gpt-3.5-turbo", # widely available model from a different family than the model being tested to prevent evaluation leakage
         rebuttal_type="justification",
         context_mode="in_context"
     )
