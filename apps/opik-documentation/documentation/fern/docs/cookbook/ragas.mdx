@@ -15,7 +15,7 @@ There are two main ways to use Opik with Ragas:
 
 
 ```python
-%pip install --quiet --upgrade opik ragas nltk
+%pip install --quiet --upgrade opik ragas nltk openai
 ```
 
 
@@ -62,19 +62,27 @@ from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
+from opik.evaluation.metrics import RagasMetricWrapper
 
 # Initialize the Ragas metric
 llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 
-answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
+ragas_answer_relevancy = AnswerRelevancy(llm=llm, embeddings=emb)
+
+# Wrap the Ragas metric with RagasMetricWrapper for Opik integration
+answer_relevancy_metric = RagasMetricWrapper(
+    ragas_answer_relevancy, 
+    track=True  # This enables automatic tracing in Opik
+)
 ```
 
-Once the metric is initialized, you can use it to score a sample question. Given that the metric scoring is done asynchronously, you need to use the `asyncio` library to run the scoring function.
+Once the metric wrapper is set up, you can use it to score a sample question. The `RagasMetricWrapper` handles all the complexity of async execution and Opik integration automatically.
 
 
 ```python
-# Run this cell first if you are running this in a Jupyter notebook
+# For Jupyter notebook compatibility
+# This is needed for async operations in Jupyter notebooks
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -82,40 +90,19 @@ nest_asyncio.apply()
 
 
 ```python
-import asyncio
-from ragas.integrations.opik import OpikTracer
-from ragas.dataset_schema import SingleTurnSample
 import os
 
 os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
+# Score a simple example using the RagasMetricWrapper
+score_result = answer_relevancy_metric.score(
+    user_input="What is the capital of France?",
+    response="Paris",
+    retrieved_contexts=["Paris is the capital of France.", "Paris is in France."],
+)
 
-# Define the scoring function
-def compute_metric(metric, row):
-    row = SingleTurnSample(**row)
-
-    opik_tracer = OpikTracer(tags=["ragas"])
-
-    async def get_score(opik_tracer, metric, row):
-        score = await metric.single_turn_ascore(row, callbacks=[opik_tracer])
-        return score
-
-    # Run the async function using the current event loop
-    loop = asyncio.get_event_loop()
-
-    result = loop.run_until_complete(get_score(opik_tracer, metric, row))
-    return result
-
-
-# Score a simple example
-row = {
-    "user_input": "What is the capital of France?",
-    "response": "Paris",
-    "retrieved_contexts": ["Paris is the capital of France.", "Paris is in France."],
-}
-
-score = compute_metric(answer_relevancy_metric, row)
-print("Answer Relevancy score:", score)
+print(f"Answer Relevancy score: {score_result.value}")
+print(f"Metric name: {score_result.name}")
 ```
 
 If you now navigate to Opik, you will be able to see that a new trace has been created in the `Default Project` project.
@@ -143,25 +130,24 @@ def answer_question(question, contexts):
     return "Paris"
 
 
-@track(name="Compute Ragas metric score", capture_input=False)
-def compute_rag_score(answer_relevancy_metric, question, answer, contexts):
-    # Define the score function
-    row = {"user_input": question, "response": answer, "retrieved_contexts": contexts}
-    score = compute_metric(answer_relevancy_metric, row)
-    return score
-
-
 @track
 def rag_pipeline(question):
     # Define the pipeline
     contexts = retrieve_contexts(question)
     answer = answer_question(question, contexts)
-
-    score = compute_rag_score(answer_relevancy_metric, question, answer, contexts)
-    opik_context.update_current_trace(
-        feedback_scores=[{"name": "answer_relevancy", "value": round(score, 4)}]
+    
+    # Score the pipeline using the RagasMetricWrapper
+    score_result = answer_relevancy_metric.score(
+        user_input=question,
+        response=answer,
+        retrieved_contexts=contexts
     )
-
+    
+    # Add the score to the current trace
+    opik_context.update_current_trace(
+        feedback_scores=[{"name": score_result.name, "value": score_result.value}]
+    )
+    
     return answer
 
 
@@ -172,12 +158,11 @@ rag_pipeline("What is the capital of France?")
 
 You can use Ragas metrics with the Opik `evaluate` function. This will compute the metrics on all the rows of the dataset and return a summary of the results.
 
-As Ragas metrics are only async, we will need to create a wrapper to be able to use them with the Opik `evaluate` function.
+The `RagasMetricWrapper` can be used directly with the Opik `evaluate` function - no additional wrapper code is needed!
 
 
 ```python
 from datasets import load_dataset
-from opik.evaluation.metrics import base_metric, score_result
 import opik
 
 
@@ -208,31 +193,11 @@ def evaluation_task(x):
     }
 
 
-# Create scoring metric wrapper
-class AnswerRelevancyWrapper(base_metric.BaseMetric):
-    def __init__(self, metric):
-        self.name = "answer_relevancy_metric"
-        self.metric = metric
-
-    async def get_score(self, row):
-        row = SingleTurnSample(**row)
-        score = await self.metric.single_turn_ascore(row)
-        return score
-
-    def score(self, user_input, response, **ignored_kwargs):
-        # Run the async function using the current event loop
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(self.get_score(row))
-
-        return score_result.ScoreResult(value=result, name=self.name)
-
-
-scoring_metric = AnswerRelevancyWrapper(answer_relevancy_metric)
+# Use the RagasMetricWrapper directly - no need for custom wrapper!
 opik.evaluation.evaluate(
     dataset,
     evaluation_task,
-    scoring_metrics=[scoring_metric],
+    scoring_metrics=[answer_relevancy_metric],
     task_threads=1,
 )
 ```
@@ -246,6 +211,7 @@ You can use the `OpikTracer` callback to log the results of the evaluation to th
 
 ```python
 from datasets import load_dataset
+from opik.integrations.langchain import OpikTracer
 from ragas.metrics import context_precision, answer_relevancy, faithfulness
 from ragas import evaluate
 
@@ -271,9 +237,4 @@ result = evaluate(
 )
 
 print(result)
-```
-
-
-```python
-
 ```
