@@ -369,7 +369,7 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
+    assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
     assert stacktrace in str(response.json["error"])
 
 

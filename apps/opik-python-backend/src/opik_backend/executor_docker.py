@@ -216,13 +216,11 @@ class DockerExecutor(CodeExecutorBase):
                 
                 logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
                 
-
             except docker.errors.APIError as e:
-                logger.debug(f"Container {container.id} failed to be removed")
+                logger.error(f"Container {container.id} failed to be removed")
                     
         except Exception as e:
-            logger.debug(f"Failed to stop container {container.id}: {e}")
-            # Don't log as error - containers may be removed by other processes
+            logger.info(f"Failed to stop container {container.id}: {e}")
 
     def get_container(self):
         if self.stop_event.is_set():

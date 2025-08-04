@@ -16,7 +16,7 @@ from typing import Type, Union, List
 
 # Add site-packages manually for python -S compatibility
 # More conservative than ultra-optimized approach
-sys.path.insert(0, '/usr/local/lib/python3.13/site-packages')
+sys.path.insert(0, '/usr/local/lib/python3.12/site-packages')
 
 # OPTIMIZATION 1: Lazy import heavy opik modules only when needed
 _opik_imports_loaded = False
@@ -54,9 +54,15 @@ def to_scores(score_result) -> List:
     """Convert score result to list of ScoreResult objects."""
     BaseMetric, ScoreResult = load_opik_imports()
     
+    scores = []
     if isinstance(score_result, ScoreResult):
-        return [score_result]
-    return [sr for sr in score_result if isinstance(sr, ScoreResult)]
+        scores = [score_result]
+    elif isinstance(score_result, list):
+        for item in score_result:
+            if isinstance(item, ScoreResult):
+                scores.append(item)
+    # If score_result is None or other type, return empty list
+    return scores
 
 def execute_scoring(code: str, data: dict, payload_type: str = None) -> dict:
     """Execute scoring code with enhanced lazy loading."""
@@ -73,6 +79,7 @@ def execute_scoring(code: str, data: dict, payload_type: str = None) -> dict:
         metric_class = get_metric_class(module)
         if metric_class is None:
             return {
+                "code": 400,
                 "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"
             }
         
@@ -92,16 +99,16 @@ def execute_scoring(code: str, data: dict, payload_type: str = None) -> dict:
         return result
         
     except json.JSONDecodeError as e:
-        return {"error": f"Invalid JSON in data parameter: {str(e)}"}
+        return {"code": 400, "error": f"Invalid JSON in data parameter: {str(e)}"}
     except Exception as e:
         stacktrace = "\n".join(traceback.format_exc().splitlines()[2:])
-        return {"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
+        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
 
 def main():
     """Main execution function with enhanced optimizations."""
     
     if len(sys.argv) < 3:
-        print(json.dumps({"error": "Usage: enhanced_runner.py <code> <data_json> [payload_type]"}), file=sys.stderr)
+        print(json.dumps({"code": 400, "error": "Usage: enhanced_runner.py <code> <data_json> [payload_type]"}), file=sys.stderr)
         sys.exit(1)
         
     try:
@@ -113,10 +120,10 @@ def main():
         print(json.dumps(result))
         
     except json.JSONDecodeError as e:
-        print(json.dumps({"error": f"Invalid JSON in data parameter: {str(e)}"}))
+        print(json.dumps({"code": 400, "error": f"Invalid JSON in data parameter: {str(e)}"}))
         sys.exit(1)
     except Exception as e:
-        print(json.dumps({"error": f"Unexpected error: {str(e)}"}))
+        print(json.dumps({"code": 500, "error": f"Unexpected error: {str(e)}"}))
         sys.exit(1)
 
 if __name__ == "__main__":
