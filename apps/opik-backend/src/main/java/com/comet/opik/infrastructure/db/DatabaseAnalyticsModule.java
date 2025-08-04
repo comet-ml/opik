@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
+import com.comet.opik.infrastructure.AsyncInsertConfig;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -25,10 +26,11 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
+        AsyncInsertConfig configuration = configuration(AsyncInsertConfig.class);
 
         // Initialize the UserFacingRuleLollingFactory
         UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
-                clickHouseLogAppenderConfig.getFlushIntervalDuration(), configuration(OpikConfiguration.class));
+                clickHouseLogAppenderConfig.getFlushIntervalDuration(), configuration);
     }
 
     @Provides

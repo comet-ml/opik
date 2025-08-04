@@ -3,7 +3,7 @@ package com.comet.opik.domain.evaluators;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.LogItem;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.AsyncInsertConfig;
 import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
@@ -35,7 +35,7 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
 
     List<String> CUSTOM_MARKER_KEYS = List.of("trace_id", "thread_model_id");
 
-    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory, OpikConfiguration configuration) {
+    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory, AsyncInsertConfig configuration) {
         return new AutomationRuleEvaluatorLogsDAOImpl(factory, configuration);
     }
 
@@ -75,7 +75,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull OpikConfiguration opikConfiguration;
+    private final @NonNull AsyncInsertConfig asyncInsertConfig;
 
     public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
@@ -139,7 +139,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .flatMapMany(connection -> {
                     var template = new ST(INSERT_STATEMENT);
 
-                    if (opikConfiguration.getAsyncInsert().enabled()) {
+                    if (asyncInsertConfig.enabled()) {
                         template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
                     }
 

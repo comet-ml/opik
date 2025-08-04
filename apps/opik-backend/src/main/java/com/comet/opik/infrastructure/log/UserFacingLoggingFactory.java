@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.log;
 import ch.qos.logback.classic.AsyncAppender;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.AsyncInsertConfig;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.NonNull;
@@ -19,7 +19,7 @@ public class UserFacingLoggingFactory {
     private static AsyncAppender asyncAppender;
 
     public static synchronized void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
-            @NonNull Duration flushIntervalSeconds, @NonNull OpikConfiguration configuration) {
+            @NonNull Duration flushIntervalSeconds, @NonNull AsyncInsertConfig configuration) {
 
         UserLogTableFactory tableFactory = UserLogTableFactory.getInstance(connectionFactory, configuration);
         ClickHouseAppender clickHouseAppender = ClickHouseAppender.init(tableFactory, batchSize, flushIntervalSeconds,
