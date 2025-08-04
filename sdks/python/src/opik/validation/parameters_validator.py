@@ -3,7 +3,7 @@ import numbers
 from collections.abc import Iterable
 from typing import Any, List, Optional
 
-from opik import exceptions
+import opik.exceptions as exceptions
 from . import validator_helpers, parameter, result, validator
 
 

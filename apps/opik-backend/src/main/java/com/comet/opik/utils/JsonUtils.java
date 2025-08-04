@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
 
@@ -31,11 +33,14 @@ public class JsonUtils {
             .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)
             .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+            .configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false)
             .configure(SerializationFeature.INDENT_OUTPUT, false)
+            .configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, false)
             .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
             .registerModule(new JavaTimeModule()
                     .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
-                    .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));
+                    .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
+                    .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
         try {

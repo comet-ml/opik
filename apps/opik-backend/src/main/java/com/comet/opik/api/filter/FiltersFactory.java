@@ -77,7 +77,7 @@ public class FiltersFactory {
                         return false;
                     })
                     .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
-                            StringUtils.isNotBlank(filter.key()))
+                            filter.key() != null)
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
                     .build());
 
@@ -113,8 +113,16 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
-        // Decode the value as first thing prior to any validation
-        filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
+        if (filter.field().getType() != FieldType.STRING) {
+            // don't decode value for string fields as it is already decoded during JSON deserialization
+            try {
+                filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
+            } catch (IllegalArgumentException exception) {
+                log.warn("failed to URL decode filter value '{}'", filter.value(), exception);
+                throw new BadRequestException("Invalid filter '%s'".formatted(filter.value()), exception);
+            }
+        }
+
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
             throw new BadRequestException("Invalid operator '%s' for field '%s' of type '%s'"
                     .formatted(filter.operator().getQueryParamOperator(), filter.field().getQueryParamField(),

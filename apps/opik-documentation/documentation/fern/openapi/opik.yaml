@@ -1223,6 +1223,43 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/experiments/groups:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups
+      description: Find experiments grouped by specified fields
+      operationId: findExperimentGroups
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -3621,6 +3658,71 @@ paths:
                 $ref: "#/components/schemas/Result"
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/configurations:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace configuration
+      description: Get workspace configuration
+      operationId: getWorkspaceConfiguration
+      responses:
+        "200":
+          description: Workspace Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Workspaces
+      summary: Upsert workspace configuration
+      description: Upsert workspace configuration
+      operationId: upsertWorkspaceConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceConfiguration"
+      responses:
+        "200":
+          description: Configuration Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Workspaces
+      summary: Delete workspace configuration
+      description: Delete workspace configuration
+      operationId: deleteWorkspaceConfiguration
+      responses:
+        "204":
+          description: Configuration Deleted
+        "404":
+          description: Configuration Not Found
           content:
             application/json:
               schema:
@@ -6937,6 +7039,18 @@ components:
           type: string
         details:
           type: string
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContent"
+    GroupContent:
+      type: object
+      properties:
+        label:
+          type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -9224,6 +9338,22 @@ components:
           items:
             minLength: 1
             type: string
+    BatchDeleteByProject:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        project_id:
+          type: string
+          format: uuid
     Check_Public:
       type: object
       properties:
@@ -9699,6 +9829,15 @@ components:
           format: date-time
         start_before_end:
           type: boolean
+    WorkspaceConfiguration:
+      type: object
+      properties:
+        timeout_to_mark_thread_as_inactive:
+          type: string
+          description: "Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H\
+            \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
+            \ please use a duration with seconds precision or higher. Also, the max\
+            \ duration allowed is 7 days."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

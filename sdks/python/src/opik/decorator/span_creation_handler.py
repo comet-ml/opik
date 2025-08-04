@@ -3,7 +3,8 @@ from typing import (
     Tuple,
 )
 
-from opik import context_storage, datetime_helpers
+import opik.context_storage as context_storage
+import opik.datetime_helpers as datetime_helpers
 from opik.api_objects import helpers, span, trace
 from opik.types import DistributedTraceHeadersDict
 

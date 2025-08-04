@@ -64,6 +64,10 @@ spec:
             - name: SECRET_KEY
               value: ""
             {{- end }}
+            {{- range $key, $value := .Values.clickhouse.backup.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
           {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}

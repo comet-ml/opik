@@ -1247,6 +1247,7 @@ class SpansResourceTest {
                     .flatMap(filter -> filter.getValue()
                             .stream()
                             .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case STRING -> Stream.empty();
                                 case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
                                         SpanFilter.builder()
                                                 .field(filter.getKey())
@@ -4813,7 +4814,7 @@ class SpansResourceTest {
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-sonnet-20240229", "anthropic",
+                            "claude-3-5-haiku-latest", "anthropic",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),

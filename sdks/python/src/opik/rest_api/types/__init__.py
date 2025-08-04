@@ -79,6 +79,7 @@ from .automation_rule_evaluator_write import (
 )
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
+from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
@@ -148,6 +149,7 @@ from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
+from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -193,6 +195,7 @@ from .feedback_score_source import FeedbackScoreSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
+from .group_content import GroupContent
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -347,6 +350,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -405,6 +409,7 @@ __all__ = [
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
+    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "CategoricalFeedbackDefinition",
@@ -474,6 +479,7 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -523,6 +529,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GroupContent",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
@@ -675,6 +682,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",

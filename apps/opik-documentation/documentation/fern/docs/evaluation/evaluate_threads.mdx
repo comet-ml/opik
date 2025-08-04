@@ -52,7 +52,7 @@ You can combine multiple filter strings using the `AND` operator. For example, i
 that have a specific ID and have a specific status, you can use the following filter string:
 
 ```python
-filter_string='id = "0197ad2a" AND status = "active"'
+filter_string='id = "0197ad2a" AND status = "inactive"'
 ```
 
 **Supported filter fields and operators**
@@ -89,6 +89,13 @@ Once the evaluation is complete, you can access the evaluation results in the Op
 <Frame>
   <img src="/img/evaluation/threads_user_frustration_score.png" />
 </Frame>
+
+<Note>
+  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
+  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
+
+  You can only evaluate/score threads that are inactive.
+</Note>
 
 ## Next steps
 

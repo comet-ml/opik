@@ -6,6 +6,9 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
+import com.comet.opik.api.ExperimentGroupItem;
+import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.ExperimentItemBulkUpload;
@@ -31,7 +34,9 @@ import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -69,6 +74,8 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.eventbus.EventBus;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
@@ -122,11 +129,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -134,6 +143,8 @@ import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
+import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
@@ -144,6 +155,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.domain.ExperimentService.DELETED_DATASET;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -939,7 +951,7 @@ class ExperimentsResourceTest {
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
 
             var pageSize = experiments.size() - 2;
             var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
@@ -1019,6 +1031,68 @@ class ExperimentsResourceTest {
                             Operator.LESS_THAN,
                             "model[0].year",
                             "2031"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("getValidFilters")
+        void findByFiltering(Function<Experiment, ExperimentFilter> getFilter) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var prompt = podamFactory.manufacturePojo(Prompt.class);
+            PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+            PromptVersionLink versionLink = buildVersionLink(promptVersion);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .promptVersion(versionLink)
+                            .promptVersions(List.of(versionLink))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment());
+
+            unexpectedExperiments
+                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var experiment = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey);
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(getFilter.apply(experiment));
+
+            findAndAssert(workspaceName, 1, pageSize, null, null, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, null, null, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
+            return Stream.of(
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build()),
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build()));
         }
 
         @ParameterizedTest
@@ -1329,7 +1403,11 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
+                    .traceIds(Set.of(trace6.id()))
+                    .workspaceId(workspaceId)
+                    .userName(USER)
+                    .build());
 
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
@@ -1943,6 +2021,292 @@ class ExperimentsResourceTest {
             }
         }
 
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GroupExperiments {
+
+        @ParameterizedTest
+        @MethodSource
+        void groupExperiments(List<GroupBy> groups) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Random random = new Random();
+
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .datasetName(dataset.name())
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(
+                                                "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
+                                                        .formatted(random.nextBoolean() ? "2024" : "2025") +
+                                                        "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                return experiments.stream();
+            }).toList();
+
+            var response = experimentResourceClient.findGroups(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 200);
+
+            var expectedResponse = buildExpectedGroupResponse(
+                    groups,
+                    allExperiments);
+            assertThat(response).isEqualTo(expectedResponse);
+        }
+
+        @Test
+        void groupExperimentsWithDeletedDataset() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Random random = new Random();
+
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .datasetName(dataset.name())
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(
+                                                "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
+                                                        .formatted(random.nextBoolean() ? "2024" : "2025") +
+                                                        "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                return experiments.stream();
+            }).toList();
+
+            datasetResourceClient.deleteDataset(datasets.get(0).id(), apiKey, workspaceName);
+
+            var groups = List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                    GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build());
+
+            var response = experimentResourceClient.findGroups(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 200);
+
+            allExperiments = allExperiments.stream()
+                    .map(experiment -> experiment.datasetId() == datasets.get(0).id()
+                            ? experiment.toBuilder().datasetName(null).build()
+                            : experiment)
+                    .toList();
+
+            var expectedResponse = buildExpectedGroupResponse(
+                    groups,
+                    allExperiments);
+            assertThat(response).isEqualTo(expectedResponse);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void groupExperimentsInvalidGroupingsShouldFail(List<GroupBy> groups) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroups(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
+        }
+
+        @Test
+        void groupExperimentsMissingGroupingsShouldFail() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroups(
+                    null,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
+        }
+
+        private Stream<Arguments> groupExperimentsInvalidGroupingsShouldFail() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+        }
+
+        private Stream<Arguments> groupExperiments() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
+        }
+
+        /**
+         * Helper function to build expected ExperimentGroupResponse for testing.
+         * This function groups experiments according to the provided GroupBy criteria and
+         * builds the nested response structure similar to how ExperimentService does it.
+         */
+        private ExperimentGroupResponse buildExpectedGroupResponse(List<GroupBy> groups, List<Experiment> experiments) {
+            // Group experiments by extracting values for each GroupBy criterion
+            Map<List<String>, List<Experiment>> experimentGroups = experiments.stream()
+                    .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
+
+            // Convert to ExperimentGroupItem format (similar to what comes from database)
+            List<ExperimentGroupItem> groupItems = experimentGroups.keySet().stream()
+                    .map(g -> ExperimentGroupItem.builder()
+                            .groupValues(g)
+                            .build())
+                    .toList();
+
+            // Build enrichment info (dataset mapping)
+            Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
+            var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
+                    .datasetMap(datasetMap)
+                    .build();
+
+            // Build the nested response structure
+            return buildGroupResponse(groupItems, enrichInfoHolder, groups);
+        }
+
+        /**
+         * Extract grouping values from an experiment based on GroupBy criteria.
+         */
+        private List<String> extractGroupValues(Experiment experiment, List<GroupBy> groups) {
+            return groups.stream()
+                    .map(group -> extractFieldValue(experiment, group))
+                    .toList();
+        }
+
+        /**
+         * Extract a single field value from an experiment based on a GroupBy criterion.
+         */
+        private String extractFieldValue(Experiment experiment, GroupBy group) {
+            return switch (group.field()) {
+                case DATASET_ID -> experiment.datasetId().toString();
+                case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
+                default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());
+            };
+        }
+
+        /**
+         * Extract value from JSON metadata using JsonPath-like key syntax.
+         */
+        private String extractFromJsonMetadata(JsonNode metadata, String key) {
+            String jsonText = JsonUtils.getStringOrDefault(metadata);
+            try {
+                Object value = JsonPath.read(jsonText, key);
+
+                return String.valueOf(value);
+            } catch (PathNotFoundException e) {
+                return "";
+            }
+        }
+
+        /**
+         * Build dataset mapping from experiments for enrichment.
+         */
+        private Map<UUID, Dataset> getDatasetMapFromExperiments(List<Experiment> experiments) {
+            // Extract unique dataset IDs and create mock datasets
+            return experiments.stream()
+                    .filter(exp -> exp.datasetId() != null)
+                    .collect(Collectors.toMap(
+                            Experiment::datasetId,
+                            exp -> Dataset.builder()
+                                    .id(exp.datasetId())
+                                    .name(exp.datasetName())
+                                    .build(),
+                            (existing, replacement) -> existing // Keep first one in case of duplicates
+                    ));
+        }
+
+        /**
+         * Build the nested ExperimentGroupResponse structure.
+         */
+        private ExperimentGroupResponse buildGroupResponse(List<ExperimentGroupItem> groupItems,
+                ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
+            var contentMap = new HashMap<String, ExperimentGroupResponse.GroupContent>();
+
+            for (ExperimentGroupItem item : groupItems) {
+                buildNestedGroups(contentMap, item.groupValues(), 0, enrichInfoHolder, groups);
+            }
+
+            return ExperimentGroupResponse.builder()
+                    .content(contentMap)
+                    .build();
+        }
+
+        /**
+         * Recursively build nested groups structure.
+         */
+        private void buildNestedGroups(Map<String, ExperimentGroupResponse.GroupContent> parentLevel,
+                List<String> groupValues, int depth, ExperimentGroupEnrichInfoHolder enrichInfoHolder,
+                List<GroupBy> groups) {
+            if (depth >= groupValues.size()) {
+                return;
+            }
+
+            String groupingValue = groupValues.get(depth);
+            if (groupingValue == null) {
+                return;
+            }
+
+            ExperimentGroupResponse.GroupContent currentLevel = parentLevel.computeIfAbsent(
+                    groupingValue,
+                    key -> buildGroupNode(key, enrichInfoHolder, groups.get(depth)));
+
+            // Recursively build nested groups
+            buildNestedGroups(currentLevel.groups(), groupValues, depth + 1, enrichInfoHolder, groups);
+        }
+
+        /**
+         * Build a single group node with appropriate labeling.
+         */
+        private ExperimentGroupResponse.GroupContent buildGroupNode(String groupingValue,
+                ExperimentGroupEnrichInfoHolder enrichInfoHolder, GroupBy group) {
+            return switch (group.field()) {
+                case DATASET_ID -> {
+                    String label = Optional
+                            .ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
+                            .map(Dataset::name)
+                            .orElse(DELETED_DATASET);
+                    yield ExperimentGroupResponse.GroupContent.builder()
+                            .label(label)
+                            .groups(new HashMap<>())
+                            .build();
+                }
+                default -> ExperimentGroupResponse.GroupContent.builder()
+                        .groups(new HashMap<>())
+                        .build();
+            };
+        }
     }
 
     private Experiment generateFullExperiment(
@@ -2853,7 +3217,11 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(new TracesDeleted(Set.of(trace6.id()), workspaceId, USER));
+            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
+                    .traceIds(Set.of(trace6.id()))
+                    .workspaceId(workspaceId)
+                    .userName(USER)
+                    .build());
 
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 
