@@ -138,6 +138,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
+import static com.comet.opik.api.filter.SpanField.CUSTOM;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -1127,6 +1128,57 @@ class SpansResourceTest {
                             spanStreamTestAssertion,
                             "total_tokens",
                             SpanField.USAGE_TOTAL_TOKENS));
+        }
+
+        private Stream<Arguments> getCustomFilterArgs() {
+            return Stream.of(
+                    Arguments.of(
+                            statsTestAssertion,
+                            "input.model[0].year",
+                            "2024",
+                            Operator.EQUAL),
+                    Arguments.of(
+                            statsTestAssertion,
+                            "input.model[0].year",
+                            "2025",
+                            Operator.LESS_THAN),
+                    Arguments.of(
+                            statsTestAssertion,
+                            "input",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS),
+
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.model[0].year",
+                            "2024",
+                            Operator.EQUAL),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.model[0].year",
+                            "2025",
+                            Operator.LESS_THAN),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS),
+
+                    Arguments.of(
+                            spanStreamTestAssertion,
+                            "input.model[0].year",
+                            "2024",
+                            Operator.EQUAL),
+                    Arguments.of(
+                            spanStreamTestAssertion,
+                            "input.model[0].year",
+                            "2025",
+                            Operator.LESS_THAN),
+                    Arguments.of(
+                            spanStreamTestAssertion,
+                            "input",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS));
         }
 
         private Stream<Arguments> getFeedbackScoresArgs() {
@@ -3739,6 +3791,56 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource("getCustomFilterArgs")
+        void whenFilterWithCustomFilter__thenReturnSpansFiltered(SpanPageTestAssertion testAssertion,
+                String key, String value, Operator operator) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+            spans.set(0, spans.getFirst().toBuilder()
+                    .input(JsonUtils
+                            .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(CUSTOM)
+                            .operator(operator)
+                            .key(key)
+                            .value(value)
+                            .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
         @MethodSource("getFeedbackScoresArgs")
         void whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered(String endpoint,
                 Operator operator,
@@ -4191,9 +4293,9 @@ class SpansResourceTest {
             String errorMessage = filter.field().getType() == FieldType.CUSTOM
                     ? "Invalid key '%s' for custom filter".formatted(filter.key())
                     : "Invalid operator '%s' for field '%s' of type '%s'".formatted(
-                    filter.operator().getQueryParamOperator(),
-                    filter.field().getQueryParamField(),
-                    filter.field().getType());
+                            filter.operator().getQueryParamOperator(),
+                            filter.field().getQueryParamField(),
+                            filter.field().getType());
 
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
                     expectedStatus, errorMessage);

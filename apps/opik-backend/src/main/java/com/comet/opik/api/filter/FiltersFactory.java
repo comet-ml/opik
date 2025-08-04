@@ -149,6 +149,8 @@ public class FiltersFactory {
             return filter;
         }
 
+        filter = (T) filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
+
         Pair<String, String> T2 = getFieldAndKey(filter.key());
         String customField = T2.getLeft();
         String customKey = T2.getRight();

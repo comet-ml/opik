@@ -153,6 +153,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
+import static com.comet.opik.api.filter.SpanField.CUSTOM;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -180,6 +181,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static java.util.function.Predicate.not;
+import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -5715,6 +5717,75 @@ class TracesResourceTest {
                         List.of(),
                         traces.size(), Set.of());
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void whenFilterByCustomFilter__thenReturnTracesFiltered(String key, String value, Operator operator) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .comments(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+
+            traces.set(0, traces.getFirst().toBuilder()
+                    .input(JsonUtils
+                            .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            TraceFilter filter = TraceFilter.builder()
+                    .field(CUSTOM)
+                    .operator(operator)
+                    .key(key)
+                    .value(value)
+                    .build();
+
+            getAndAssertPage(
+                    1,
+                    100,
+                    projectName,
+                    null,
+                    List.of(filter),
+                    List.of(traces.getFirst()),
+                    traces.subList(1, traces.size()),
+                    workspaceName,
+                    apiKey,
+                    List.of(),
+                    1, Set.of());
+        }
+
+        private Stream<Arguments> whenFilterByCustomFilter__thenReturnTracesFiltered() {
+            return Stream.of(
+                    Arguments.of(
+                            "input.model[0].year",
+                            "2024",
+                            Operator.EQUAL),
+                    Arguments.of(
+                            "input.model[0].year",
+                            "2025",
+                            Operator.LESS_THAN),
+                    Arguments.of(
+                            "input",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS));
         }
 
         @ParameterizedTest
