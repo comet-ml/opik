@@ -113,6 +113,13 @@ class LangChainUsage(pydantic.BaseModel):
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
         }
+
+        if self.input_token_details is not None:
+            bedrock_usage["cacheReadInputTokens"] = self.input_token_details.cache_read
+            bedrock_usage["cacheWriteInputTokens"] = (
+                self.input_token_details.cache_creation
+            )
+
         return bedrock_usage
 
     def map_to_openai_completions_usage(self) -> Dict[str, Any]:
