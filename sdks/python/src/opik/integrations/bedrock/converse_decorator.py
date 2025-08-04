@@ -62,7 +62,8 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        usage = output["usage"]
+        usage = output.get("usage", {})
+        model_id = output.get("modelId", None)
         usage_in_openai_format = llm_usage.try_build_opik_usage_or_log_error(
             provider=opik.LLMProvider.BEDROCK,
             usage=usage,
@@ -77,6 +78,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
             output=output,
             usage=usage_in_openai_format,
             metadata=metadata,
+            model=model_id,
         )
 
         return result
