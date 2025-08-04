@@ -23,7 +23,7 @@ Examples:
 
 ```bash
 # ✅ DO: Use consistent task branch naming
-andrescrz/OPIK-2180-add-cursor-git-workflow-rule  # For JIRA task
+andrescrz/OPIK-2180-add-cursor-git-workflow-rule  # For Jira task
 someuser/issue-1234-some-task  # For Github issue task
 someotheruser/NA-some-other-task  # For task with no ticket
 
