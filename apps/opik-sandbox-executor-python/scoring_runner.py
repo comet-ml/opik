@@ -42,12 +42,12 @@ try:
     exec(code, module.__dict__)
 except Exception:  
     stacktrace = "\\n".join(traceback.format_exc().splitlines()[2:])  
-    print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
+    print(json.dumps({"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
     sys.exit(1)
 
 metric_class = get_metric_class(module)
 if metric_class is None:
-    print(json.dumps({"error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}))
+    print(json.dumps({"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}))
     sys.exit(1)
 
 score_result : Union[ScoreResult, List[ScoreResult]] = []
@@ -62,7 +62,7 @@ try:
         score_result = metric.score(**data)
 except Exception:
     stacktrace = "\\n".join(traceback.format_exc().splitlines()[2:])
-    print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
+    print(json.dumps({"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
     sys.exit(1)
         
 scores = to_scores(score_result)
