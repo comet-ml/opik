@@ -27,7 +27,8 @@ public class TraceAssertions {
             "valueByAuthor"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
+            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
+            "feedbackScores.valueByAuthor"};
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);

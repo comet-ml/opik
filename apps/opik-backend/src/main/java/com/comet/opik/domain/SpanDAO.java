@@ -496,7 +496,7 @@ class SpanDAO {
                 s.*,
                 s.project_id as project_id,
                 groupArray(tuple(c.*)) AS comments,
-                any(fs.feedback_scores) as feedback_scores_list
+                any(fs.feedback_scores_list) as feedback_scores_list
             FROM (
                 SELECT
                     *,
@@ -544,7 +544,7 @@ class SpanDAO {
                     FROM feedback_scores FINAL
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
-                      AND project_id = :project_id
+                      AND entity_id = :id
                     UNION ALL
                     -- Second part: aggregated authored scores
                     SELECT
@@ -585,7 +585,7 @@ class SpanDAO {
                              FROM authored_feedback_scores FINAL
                              WHERE entity_type = 'span'
                                AND workspace_id = :workspace_id
-                               AND project_id = :project_id
+                               AND entity_id = :id
                              GROUP BY workspace_id, project_id, entity_id, name
                      )
                 )
@@ -673,28 +673,91 @@ class SpanDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), feedback_scores_combined AS (
+                -- First part: direct scores
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+
+                UNION ALL
+
+                -- Second part: aggregated authored scores
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    toDecimal64(arrayAvg(values), 9) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    arrayStringConcat(sources, ', ') AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM (
+                         SELECT
+                             workspace_id,
+                             project_id,
+                             entity_id,
+                             name,
+                             groupArray(value) AS values,
+                             groupArray(reason) AS reasons,
+                             groupArray(category_name) AS categories,
+                             groupArray(author) AS authors,
+                             groupArray(source) AS sources,
+                             groupArray(created_by) AS created_bies,
+                             groupArray(last_updated_by) AS updated_bies,
+                             groupArray(created_at) AS created_ats,
+                             groupArray(last_updated_at) AS last_updated_ats
+                         FROM authored_feedback_scores FINAL
+                         WHERE entity_type = 'span'
+                           AND workspace_id = :workspace_id
+                           AND project_id = :project_id
+                         GROUP BY workspace_id, project_id, entity_id, name
+                 )
             ), feedback_scores_agg AS (
+                -- Final aggregation over the combined view
                 SELECT
                     entity_id,
                     mapFromArrays(
-                        groupArray(name),
-                        groupArray(value)
-                    ) as feedback_scores,
+                            groupArray(name),
+                            groupArray(value)
+                    ) AS feedback_scores,
                     groupArray(tuple(
-                         name,
-                         category_name,
-                         value,
-                         reason,
-                         source,
-                         created_at,
-                         last_updated_at,
-                         created_by,
-                         last_updated_by
-                    )) as feedback_scores_list
-                FROM feedback_scores final
-                WHERE entity_type = 'span'
-                AND workspace_id = :workspace_id
-                AND project_id = :project_id
+                            name,
+                            category_name,
+                            value,
+                            reason,
+                            source,
+                            value_by_author,
+                            created_at,
+                            last_updated_at,
+                            created_by,
+                            last_updated_by
+                               )) AS feedback_scores_list
+                FROM feedback_scores_combined
                 GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
@@ -1543,18 +1606,32 @@ class SpanDAO {
         return Optional.ofNullable(feedbackScores)
                 .orElse(List.of())
                 .stream()
-                .map(feedbackScore -> FeedbackScore.builder()
-                        .name((String) feedbackScore.get(0))
-                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                        .value((BigDecimal) feedbackScore.get(2))
-                        .reason(getIfNotEmpty(feedbackScore.get(3)))
-                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
-                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                        .createdBy((String) feedbackScore.get(8))
-                        .lastUpdatedBy((String) feedbackScore.get(9))
-                        .build())
+                .filter(Objects::nonNull)
+                .map(feedbackScore -> {
+                    // Expected tuple structure: (name, category_name, value, reason, source, value_by_author, created_at, last_updated_at, created_by, last_updated_by)
+                    if (feedbackScore.size() != 10) {
+                        log.warn("Expected feedback score tuple with 10 elements, got {}: {}", feedbackScore.size(),
+                                feedbackScore);
+                        return null;
+                    }
+
+                    // Parse valueByAuthor from ClickHouse map format
+                    Map<String, ValueEntry> valueByAuthor = parseValueByAuthor(feedbackScore.get(5));
+
+                    return FeedbackScore.builder()
+                            .name((String) feedbackScore.get(0))
+                            .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                            .value((BigDecimal) feedbackScore.get(2))
+                            .reason(getIfNotEmpty(feedbackScore.get(3)))
+                            .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                            .valueByAuthor(valueByAuthor)
+                            .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                            .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
+                            .createdBy((String) feedbackScore.get(8))
+                            .lastUpdatedBy((String) feedbackScore.get(9))
+                            .build();
+                })
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -1887,38 +1964,31 @@ class SpanDAO {
     }
 
     private Map<String, ValueEntry> parseValueByAuthor(Object valueByAuthorObj) {
-        try {
-            if (valueByAuthorObj == null) {
-                return Map.of();
-            }
-
-            // ClickHouse returns a LinkedHashMap<String, List<Object>> for the map type
-            @SuppressWarnings("unchecked")
-            Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
-
-            Map<String, ValueEntry> result = new HashMap<>();
-            for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
-                String author = entry.getKey();
-                List<Object> tuple = entry.getValue();
-
-                if (tuple != null && tuple.size() >= 5) {
-                    // tuple contains: (value, reason, category_name, source, last_updated_at)
-                    ValueEntry valueEntry = ValueEntry.builder()
-                            .value((BigDecimal) tuple.get(0))
-                            .reason(getIfNotEmpty(tuple.get(1)))
-                            .categoryName(getIfNotEmpty(tuple.get(2)))
-                            .source(ScoreSource.fromString((String) tuple.get(3)))
-                            .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
-                            .build();
-
-                    result.put(author, valueEntry);
-                }
-            }
-
-            return result;
-        } catch (Exception e) {
-            // If parsing fails, return an empty map to avoid breaking the query
+        if (valueByAuthorObj == null) {
             return Map.of();
         }
+
+        // ClickHouse returns maps as LinkedHashMap<String, List<Object>> where List<Object> represents a tuple
+        @SuppressWarnings("unchecked")
+        Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
+
+        Map<String, ValueEntry> result = new HashMap<>();
+        for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
+            String author = entry.getKey();
+            List<Object> tuple = entry.getValue();
+
+            // tuple contains: (value, reason, category_name, source, last_updated_at)
+            ValueEntry valueEntry = ValueEntry.builder()
+                    .value((BigDecimal) tuple.get(0))
+                    .reason(getIfNotEmpty(tuple.get(1)))
+                    .categoryName(getIfNotEmpty(tuple.get(2)))
+                    .source(ScoreSource.fromString((String) tuple.get(3)))
+                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
+                    .build();
+
+            result.put(author, valueEntry);
+        }
+
+        return result;
     }
 }
