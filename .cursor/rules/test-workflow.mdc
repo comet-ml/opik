@@ -51,7 +51,7 @@ Before implementing the Test workflow, ensure your project has a proper testing 
 2. **Test Isolation**: Each test should be independent
 3. **Mock Dependencies**: Mock external services and databases
 4. **Efficient Setup**: Use fixtures and setup methods appropriately
-5. **Database efficiency**: Avoid unnecessary clean ups
+5. **Database efficiency**: Avoid unnecessary cleanups
 6. **Avoid Sleep**: Use proper waiting mechanisms instead of `Thread.sleep()` etc.
 
 ### **When to Update Tests**
