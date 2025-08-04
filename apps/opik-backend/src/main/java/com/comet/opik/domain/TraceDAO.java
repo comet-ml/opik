@@ -507,8 +507,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH feedback_scores_agg AS (
-                WITH feedback_scores_combined AS (
+            WITH feedback_scores_combined AS (
                     SELECT workspace_id,
                            project_id,
                            entity_id,
@@ -569,133 +568,90 @@ class TraceDAOImpl implements TraceDAO {
                              GROUP BY workspace_id, project_id, entity_id, name
                      )
                 )
-                SELECT
-                    entity_id,
-                    mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
-                    ) AS feedback_scores,
-                    groupArray(tuple(
-                            name,
-                            category_name,
-                            value,
-                            reason,
-                            source,
-                            value_by_author,
+                , feedback_scores_agg AS (
+                    SELECT
+                        entity_id,
+                        mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                        ) AS feedback_scores,
+                        groupArray(tuple(
+                                name,
+                                category_name,
+                                value,
+                                reason,
+                                source,
+                                value_by_author,
+                                created_at,
+                                last_updated_at,
+                                created_by,
+                                last_updated_by
+                                   )) AS feedback_scores_list
+                    FROM feedback_scores_combined
+                    GROUP BY workspace_id, project_id, entity_id
+                ), guardrails_agg AS (
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(
+                             entity_id,
+                             secondary_entity_id,
+                             project_id,
+                             name,
+                             result
+                        )) as guardrails_list,
+                        if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                    FROM (
+                        SELECT
+                            *
+                        FROM guardrails
+                        WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, id
+                    )
+                    GROUP BY workspace_id, project_id, entity_type, entity_id
+                ), spans_agg AS (
+                    SELECT
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost,
+                        COUNT(DISTINCT id) as span_count,
+                        toInt64(countIf(type = 'llm')) as llm_span_count
+                    FROM spans final
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    GROUP BY workspace_id, project_id, trace_id
+                ), comments_agg AS (
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
+                    FROM (
+                        SELECT
+                            id,
+                            text,
                             created_at,
                             last_updated_at,
                             created_by,
-                            last_updated_by
-                               )) AS feedback_scores_list
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id
-            ), guardrails_agg AS (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(
-                         entity_id,
-                         secondary_entity_id,
-                         project_id,
-                         name,
-                         result
-                    )) as guardrails_list,
-                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
-                FROM (
-                    SELECT
-                        *
-                    FROM guardrails
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, id
+                            last_updated_by,
+                            entity_id,
+                            workspace_id,
+                            project_id
+                        FROM comments
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY workspace_id, project_id, entity_id
                 )
-                GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), spans_agg AS (
-                SELECT
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                GROUP BY workspace_id, project_id, trace_id
-            ), comments_agg AS (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
+                <if(feedback_scores_empty_filters)>
+                 , fsc AS (
+                     SELECT
                         entity_id,
-                        workspace_id,
-                        project_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY workspace_id, project_id, entity_id
-            )
-            <if(feedback_scores_empty_filters)>
-             , fsc AS (
-                 SELECT
-                    entity_id,
-                    COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT entity_id
-                    FROM feedback_scores
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                    UNION ALL
-                    SELECT entity_id
-                    FROM authored_feedback_scores
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, author, name
-                 )
-                 GROUP BY entity_id
-                 HAVING <feedback_scores_empty_filters>
-            )
-            <endif>
-            , traces_final AS (
-                SELECT
-                    t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
-                FROM traces t
-                    LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
-                <if(sort_has_feedback_scores)>
-                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
-                <endif>
-                <if(sort_has_span_statistics)>
-                LEFT JOIN spans_agg s ON t.id = s.trace_id
-                <endif>
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                <if(last_received_id)> AND id \\< :last_received_id <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(feedback_scores_filters)>
-                 AND id IN (
-                    SELECT
-                        entity_id
-                    FROM (
-                        SELECT entity_id, name, value
+                        COUNT(entity_id) AS feedback_scores_count
+                     FROM (
+                        SELECT entity_id, name
                         FROM feedback_scores
                         WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
@@ -703,59 +659,103 @@ class TraceDAOImpl implements TraceDAO {
                         ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
                         UNION ALL
-                        SELECT entity_id, name, toDecimal64(avg(value), 9) as value
+                        SELECT entity_id, name
                         FROM authored_feedback_scores
                         WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
                         AND project_id = :project_id
-                        GROUP BY entity_id, name
-                         )
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
-                 )
-                 <endif>
-                 <if(trace_aggregation_filters)>
-                 AND id IN (
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, author, name
+                     )
+                     GROUP BY entity_id
+                     HAVING <feedback_scores_empty_filters>
+                )
+                <endif>
+                , traces_final AS (
                     SELECT
-                        trace_id
-                    FROM spans_agg
-                    WHERE <trace_aggregation_filters>
-                 )
-                 <endif>
-                 <if(feedback_scores_empty_filters)>
-                 AND (
-                    id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
-                        OR
-                    id NOT IN (SELECT entity_id FROM fsc)
-                 )
-                 <endif>
-                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
-                 LIMIT 1 BY id
-                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
-            )
-            SELECT
-                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
-                  <if(!exclude_feedback_scores)>
-                  , fsagg.feedback_scores_list as feedback_scores_list
-                  , fsagg.feedback_scores as feedback_scores
-                  <endif>
-                  <if(!exclude_usage)>, s.usage as usage<endif>
-                  <if(!exclude_total_estimated_cost)>, s.total_estimated_cost as total_estimated_cost<endif>
-                  <if(!exclude_comments)>, c.comments_array as comments <endif>
-                  <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
-                  <if(!exclude_span_count)>, s.span_count AS span_count<endif>
-                  <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
-             FROM traces_final t
-             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
-             LEFT JOIN spans_agg s ON t.id = s.trace_id
-             LEFT JOIN comments_agg c ON t.id = c.entity_id
-             LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
-             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
-            ;
-            """;
+                        t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                             NULL) AS duration
+                    FROM traces t
+                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+                    <if(sort_has_feedback_scores)>
+                    LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
+                    <endif>
+                    <if(sort_has_span_statistics)>
+                    LEFT JOIN spans_agg s ON t.id = s.trace_id
+                    <endif>
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    <if(last_received_id)> AND id \\< :last_received_id <endif>
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                     AND id IN (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT entity_id, name, value
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                            UNION ALL
+                            SELECT entity_id, name, toDecimal64(avg(value), 9) as value
+                            FROM authored_feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            GROUP BY entity_id, name
+                             )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                     )
+                     <endif>
+                     <if(trace_aggregation_filters)>
+                     AND id IN (
+                        SELECT
+                            trace_id
+                        FROM spans_agg
+                        WHERE <trace_aggregation_filters>
+                     )
+                     <endif>
+                     <if(feedback_scores_empty_filters)>
+                     AND (
+                        id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                            OR
+                        id NOT IN (SELECT entity_id FROM fsc)
+                     )
+                     <endif>
+                     ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
+                     LIMIT 1 BY id
+                     LIMIT :limit <if(offset)>OFFSET :offset <endif>
+                )
+                SELECT
+                      t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
+                      <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
+                      <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
+                      <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                      <if(!exclude_feedback_scores)>
+                      , fsagg.feedback_scores_list as feedback_scores_list
+                      , fsagg.feedback_scores as feedback_scores
+                      <endif>
+                      <if(!exclude_usage)>, s.usage as usage<endif>
+                      <if(!exclude_total_estimated_cost)>, s.total_estimated_cost as total_estimated_cost<endif>
+                      <if(!exclude_comments)>, c.comments_array as comments <endif>
+                      <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
+                      <if(!exclude_span_count)>, s.span_count AS span_count<endif>
+                      <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                 FROM traces_final t
+                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
+                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                 LEFT JOIN comments_agg c ON t.id = c.entity_id
+                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
+                ;
+                """;
 
     private static final String TRACE_COUNT_BY_WORKSPACE_ID = """
             SELECT
@@ -1395,7 +1395,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                     AND workspace_id = :workspace_id
-                    AND project_id IN :project_id
+                    AND project_id = :project_id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
@@ -1641,7 +1641,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                     AND workspace_id = :workspace_id
-                    AND project_id IN :project_id
+                    AND project_id=:project_id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )

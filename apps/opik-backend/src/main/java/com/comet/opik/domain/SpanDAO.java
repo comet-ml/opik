@@ -763,8 +763,16 @@ class SpanDAO {
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
-                    SELECT *
+                    SELECT entity_id, name
                     FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                    UNION ALL
+                    SELECT entity_id, name
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -797,8 +805,15 @@ class SpanDAO {
                   SELECT
                       entity_id
                   FROM (
-                      SELECT *
+                      SELECT entity_id, name
                       FROM feedback_scores
+                      WHERE entity_type = 'span'
+                      AND project_id = :project_id
+                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                      LIMIT 1 BY entity_id, name
+                      UNION ALL
+                      SELECT entity_id, name
+                      FROM authored_feedback_scores
                       WHERE entity_type = 'span'
                       AND project_id = :project_id
                       ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
@@ -848,8 +863,16 @@ class SpanDAO {
             <if(feedback_scores_empty_filters)>
              WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
-                    SELECT *
+                    SELECT entity_id, name
                     FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                    UNION ALL
+                    SELECT entity_id, name
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -884,8 +907,15 @@ class SpanDAO {
                     SELECT
                         entity_id
                     FROM (
-                        SELECT *
+                        SELECT entity_id, name
                         FROM feedback_scores
+                        WHERE entity_type = 'span'
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                        UNION ALL
+                        SELECT entity_id, name
+                        FROM authored_feedback_scores
                         WHERE entity_type = 'span'
                         AND project_id = :project_id
                         ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
@@ -1007,8 +1037,16 @@ class SpanDAO {
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
-                    SELECT *
+                    SELECT entity_id, name
                     FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                    UNION ALL
+                    SELECT entity_id, name
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -1049,8 +1087,16 @@ class SpanDAO {
                     SELECT
                         entity_id
                     FROM (
-                        SELECT *
+                        SELECT entity_id, name
                         FROM feedback_scores
+                        WHERE entity_type = 'span'
+                        AND project_id = :project_id
+                        AND workspace_id = :workspace_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                        UNION ALL
+                        SELECT entity_id, name
+                        FROM authored_feedback_scores
                         WHERE entity_type = 'span'
                         AND project_id = :project_id
                         AND workspace_id = :workspace_id
