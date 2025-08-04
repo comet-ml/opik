@@ -42,7 +42,8 @@ public class CostService {
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
+            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
+            SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -51,8 +52,7 @@ public class CostService {
                 .map(modelProviderPrices::get)
                 .orElse(DEFAULT_COST);
 
-        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice,
-                Optional.ofNullable(usage).orElse(Map.of()));
+        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, usage);
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
     }
@@ -81,29 +81,44 @@ public class CostService {
             String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
             if (PROVIDERS_MAPPING.containsKey(provider)) {
 
-                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
-                        .orElse(BigDecimal.ZERO);
-                BigDecimal cacheCreationInputTokenPrice = Optional.ofNullable(modelCost.cacheCreationInputTokenCost())
+                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
+                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal cacheCreationInputTokenPrice = Optional
+                        .ofNullable(modelCost.cacheCreationInputTokenCost())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal cacheReadInputTokenPrice = Optional
+                        .ofNullable(modelCost.cacheReadInputTokenCost())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+
+                BigDecimal inputCharacterPrice = Optional.ofNullable(modelCost.inputCostPerCharacter())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
 
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                            SpanCostCalculator::textGenerationCost);
-                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::textGenerationCost;
-                }
+                if (inputCharacterPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = SpanCostCalculator::speechTtsCost;
+                } else
+                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                                        SpanCostCalculator::textGenerationCost);
+                            } else
+                        if (inputPrice.compareTo(BigDecimal.ZERO) > 0
+                                || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                    calculator = SpanCostCalculator::textGenerationCost;
+                                }
 
                 parsedModelPrices.put(
-                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
-                        new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
+                        createModelProviderKey(parseModelName(modelName),
+                                PROVIDERS_MAPPING.get(provider)),
+                        new ModelPrice(inputPrice, outputPrice, inputCharacterPrice,
+                                cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }
         });
