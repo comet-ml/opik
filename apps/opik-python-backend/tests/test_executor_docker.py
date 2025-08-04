@@ -1,6 +1,16 @@
+import os
+import pytest
 from typing import Any
 from opik_backend.executor_docker import DockerExecutor
 
+# Skip Docker tests if we don't have proper Docker image configured
+skip_docker_tests = pytest.mark.skipif(
+    os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY") == "process" and 
+    os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY") != "localhost",
+    reason="Docker executor tests skipped - using ProcessExecutor in CI"
+)
+
+@skip_docker_tests
 def test_network_access_blocked():
     """Test that network access is blocked in Docker containers."""
     executor = DockerExecutor()

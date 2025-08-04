@@ -61,7 +61,6 @@ def execute_evaluator_python():
     response = get_executor().run_scoring(code, data, payload_type)
 
     if "error" in response:
-        # Handle both old format (no code field) and new format (with code field)
         error_code = response.get("code", 400)  # Default to 400 if code field is missing
         abort(error_code, response["error"])
 
