@@ -142,9 +142,73 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
-    {
+                                                            {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_0324,
+      label: "deepseek/deepseek-chat-v3-0324",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528,
+      label: "deepseek/deepseek-r1-0528",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_4B_IT,
+      label: "google/gemma-3-4b-it",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E2B_IT:FREE,
+      label: "google/gemma-3n-e2b-it:free",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT,
+      label: "google/gemma-3n-e4b-it",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
+      label: "moonshotai/kimi-k2",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_VL_7B_INSTRUCT,
+      label: "qwen/qwen-2.5-vl-7b-instruct",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
+      label: "qwen/qwen3-235b-a22b-2507",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
+      label: "qwen/qwen3-235b-a22b-thinking-2507",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
+      label: "qwen/qwen3-30b-a3b",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
+      label: "qwen/qwen3-30b-a3b-instruct-2507",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_32B,
+      label: "qwen/qwen3-32b",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
+      label: "qwen/qwen3-8b",
+    },
+{
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
+      label: "qwen/qwen3-coder",
+    },
+{
       value: PROVIDER_MODEL_TYPE.AETHERWIING_MN_STARCANNON_12B,
       label: "aetherwiing/mn-starcannon-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5,
+      label: "z-ai/glm-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5_AIR,
+      label: "z-ai/glm-4.5-air",
     },
     {
       value: PROVIDER_MODEL_TYPE.AI21_JAMBA_1_5_LARGE,
