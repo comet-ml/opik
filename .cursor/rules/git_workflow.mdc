@@ -169,7 +169,7 @@ Always follow the template from [pull_request_template.md](/.github/pull_request
 What the change does, why it was made, and any design decisions
 
 ## Issues
-URL of the JIRA ticket (e.g: `https://comet-ml.atlassian.net/browse/OPIK-1234`) 
+URL of the Jira ticket (e.g: `https://comet-ml.atlassian.net/browse/OPIK-1234`) 
 or the GitHub issue this PR fixes (e.g. `https://github.com/org/repo/issues/123`), 
 or `NA` if no ticket, such as hotfixes
 
