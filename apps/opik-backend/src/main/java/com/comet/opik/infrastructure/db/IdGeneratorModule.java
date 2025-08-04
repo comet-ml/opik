@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.IdGeneratorImpl;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;

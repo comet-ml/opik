@@ -3,7 +3,9 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -92,7 +94,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 source,
                 created_by,
                 last_updated_by
-            )
+            ) <settings_clause>
             VALUES
                 <items:{item |
                     (
@@ -253,6 +255,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -337,6 +340,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+
+            if (opikConfiguration.getAsyncInsert().enabled()) {
+                template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
+            }
 
             var statement = connection.createStatement(template.render());
 
