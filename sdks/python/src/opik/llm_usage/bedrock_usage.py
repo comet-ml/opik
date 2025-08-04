@@ -17,7 +17,6 @@ class BedrockUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     cacheWriteInputTokens: Optional[int] = None
     """The number of input tokens which were written to the cache."""
 
-
     def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
         return super().to_backend_compatible_flat_dict(parent_key_prefix)
 
