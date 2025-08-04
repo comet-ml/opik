@@ -77,8 +77,12 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     DEEPSEEK_DEEPSEEK_CHAT("deepseek/deepseek-chat"),
     DEEPSEEK_DEEPSEEK_CHAT_FREE("deepseek/deepseek-chat:free"),
     DEEPSEEK_DEEPSEEK_CHAT_V2_5("deepseek/deepseek-chat-v2.5"),
+
+    DEEPSEEK_DEEPSEEK_CHAT_V3_0324("deepseek/deepseek-chat-v3-0324"),
     DEEPSEEK_DEEPSEEK_CODER("deepseek/deepseek-coder"),
     DEEPSEEK_DEEPSEEK_R1("deepseek/deepseek-r1"),
+
+    DEEPSEEK_DEEPSEEK_R1_0528("deepseek/deepseek-r1-0528"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B("deepseek/deepseek-r1-distill-llama-70b"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE("deepseek/deepseek-r1-distill-llama-70b:free"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_8B("deepseek/deepseek-r1-distill-llama-8b"),
@@ -111,6 +115,12 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GOOGLE_GEMMA_2_27B_IT("google/gemma-2-27b-it"),
     GOOGLE_GEMMA_2_9B_IT("google/gemma-2-9b-it"),
     GOOGLE_GEMMA_2_9B_IT_FREE("google/gemma-2-9b-it:free"),
+
+    GOOGLE_GEMMA_3N_E4B_IT("google/gemma-3n-e4b-it"),
+
+    GOOGLE_GEMMA_3N_E2B_IT_FREE("google/gemma-3n-e2b-it:free"),
+
+    GOOGLE_GEMMA_3_4B_IT("google/gemma-3-4b-it"),
     GOOGLE_GEMMA_7B_IT("google/gemma-7b-it"),
     GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE("google/learnlm-1.5-pro-experimental:free"),
     GOOGLE_PALM_2_CHAT_BISON("google/palm-2-chat-bison"),
@@ -203,6 +213,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MISTRALAI_MIXTRAL_8X7B_INSTRUCT("mistralai/mixtral-8x7b-instruct"),
     MISTRALAI_PIXTRAL_12B("mistralai/pixtral-12b"),
     MISTRALAI_PIXTRAL_LARGE_2411("mistralai/pixtral-large-2411"),
+
+    MOONSHOTAI_KIMI_K2("moonshotai/kimi-k2"),
     NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B("neversleep/llama-3.1-lumimaid-70b"),
     NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B("neversleep/llama-3.1-lumimaid-8b"),
     NEVERSLEEP_LLAMA_3_LUMIMAID_70B("neversleep/llama-3-lumimaid-70b"),
@@ -282,6 +294,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     PHIND_PHIND_CODELLAMA_34B("phind/phind-codellama-34b"),
     PYGMALIONAI_MYTHALION_13B("pygmalionai/mythalion-13b"),
     QWEN_QVQ_72B_PREVIEW("qwen/qvq-72b-preview"),
+
+    QWEN_QWEN_2_5_VL_7B_INSTRUCT("qwen/qwen-2.5-vl-7b-instruct"),
     QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE("qwen/qwen2.5-vl-72b-instruct:free"),
     QWEN_QWEN_110B_CHAT("qwen/qwen-110b-chat"),
     QWEN_QWEN_14B_CHAT("qwen/qwen-14b-chat"),
@@ -300,6 +314,20 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN_PLUS("qwen/qwen-plus"),
     QWEN_QWEN_TURBO("qwen/qwen-turbo"),
     QWEN_QWEN_VL_PLUS_FREE("qwen/qwen-vl-plus:free"),
+
+    QWEN_QWEN3_CODER("qwen/qwen3-coder"),
+
+    QWEN_QWEN3_8B("qwen/qwen3-8b"),
+
+    QWEN_QWEN3_32B("qwen/qwen3-32b"),
+
+    QWEN_QWEN3_30B_A3B_INSTRUCT_2507("qwen/qwen3-30b-a3b-instruct-2507"),
+
+    QWEN_QWEN3_30B_A3B("qwen/qwen3-30b-a3b"),
+
+    QWEN_QWEN3_235B_A22B_THINKING_2507("qwen/qwen3-235b-a22b-thinking-2507"),
+
+    QWEN_QWEN3_235B_A22B_2507("qwen/qwen3-235b-a22b-2507"),
     QWEN_QWQ_32B_PREVIEW("qwen/qwq-32b-preview"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
     RAIFLE_SORCERERLM_8X22B("raifle/sorcererlm-8x22b"),
@@ -332,6 +360,10 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     X_AI_GROK_2_VISION_1212("x-ai/grok-2-vision-1212"),
     X_AI_GROK_BETA("x-ai/grok-beta"),
     X_AI_GROK_VISION_BETA("x-ai/grok-vision-beta"),
+
+    Z_AI_GLM_4_5_AIR("z-ai/glm-4.5-air"),
+
+    Z_AI_GLM_4_5("z-ai/glm-4.5"),
     ZERO_ONE_AI_YI_1_5_34B_CHAT("01-ai/yi-1.5-34b-chat"),
     ZERO_ONE_AI_YI_34B("01-ai/yi-34b"),
     ZERO_ONE_AI_YI_34B_200K("01-ai/yi-34b-200k"),
