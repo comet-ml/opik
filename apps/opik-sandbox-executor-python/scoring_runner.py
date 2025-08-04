@@ -46,14 +46,17 @@ def get_metric_class(module: ModuleType) -> Type:
     BaseMetric, ScoreResult = load_opik_imports()
     
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        if issubclass(cls, BaseMetric):
+        if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
+    return None
 
 def to_scores(score_result) -> List:
     """Convert score result to list of ScoreResult objects."""
     BaseMetric, ScoreResult = load_opik_imports()
     
     scores = []
+    if score_result is None:
+        return scores
     if isinstance(score_result, ScoreResult):
         scores = [score_result]
     elif isinstance(score_result, list):
@@ -63,26 +66,30 @@ def to_scores(score_result) -> List:
     return scores
 
 def execute_scoring(code: str, data: dict, payload_type: str = None) -> dict:
-    """Execute scoring code matching actual production behavior - all errors use evaluation format."""
+    """Execute scoring code matching Docker production behavior exactly."""
 
     module = ModuleType(str(uuid.uuid4()))
     
     try:
         exec(code, module.__dict__)
-        metric_class = get_metric_class(module)
-        if metric_class is None:
-            return {"error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
-        
+    except Exception as e:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+    
+    metric_class = get_metric_class(module)
+    if metric_class is None:
+        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
+    
+    score_result = []
+    try:
         metric = metric_class()
         if payload_type == TRACE_THREAD_METRIC_TYPE:
             score_result = metric.score(data)
         else:
             score_result = metric.score(**data)
-            
     except Exception as e:
-        # Match actual production behavior: ALL errors use the same evaluation format  
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[2:])
-        return {"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
         
     scores = to_scores(score_result)
     result = {"scores": [s.__dict__ for s in scores]}
