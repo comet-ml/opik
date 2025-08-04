@@ -21,7 +21,9 @@ export const isFilterValid = (filter: Filter) => {
       ? filter.key !== ""
       : true;
 
-  return hasValue && hasKey;
+  const hasError = filter.error && filter.error.length > 0;
+
+  return hasValue && hasKey && !hasError;
 };
 
 export const createEmptyFilter = () => {

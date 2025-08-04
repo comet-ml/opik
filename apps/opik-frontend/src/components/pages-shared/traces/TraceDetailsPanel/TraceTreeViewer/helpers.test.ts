@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { filterFunction } from "./helpers";
 import { Span, Trace, TraceFeedbackScore, SPAN_TYPE } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, COLUMN_CUSTOM_ID } from "@/types/shared";
 
 describe("helpers.ts", () => {
   describe("filterFunction", () => {
@@ -835,6 +835,187 @@ describe("helpers.ts", () => {
 
           expect(filterFunction(mockTrace, isEmptyFilter)).toBe(true);
           expect(filterFunction(mockTrace, isNotEmptyFilter)).toBe(true);
+        });
+      });
+
+      // Test custom ID transformation
+      describe("custom ID transformation", () => {
+        it("should transform input. prefix filters to input field with dictionary type", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "test prompt",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.prompt",
+            },
+          ];
+
+          // Should transform to field: "input", key: "prompt"
+          expect(filterFunction(mockSpan, filter)).toBe(true);
+        });
+
+        it("should transform output. prefix filters to output field with dictionary type", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "test response",
+              type: COLUMN_TYPE.dictionary,
+              key: "output.response",
+            },
+          ];
+
+          // Should transform to field: "output", key: "response"
+          expect(filterFunction(mockSpan, filter)).toBe(true);
+        });
+
+        it("should handle nested keys with input. prefix", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "=",
+              value: "test input",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.message",
+            },
+          ];
+
+          // Should transform to field: "input", key: "message"
+          expect(filterFunction(mockTrace, filter)).toBe(true);
+        });
+
+        it("should handle nested keys with output. prefix", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "=",
+              value: "test output",
+              type: COLUMN_TYPE.dictionary,
+              key: "output.result",
+            },
+          ];
+
+          // Should transform to field: "output", key: "result"
+          expect(filterFunction(mockTrace, filter)).toBe(true);
+        });
+
+        it("should not transform custom ID filters without input/output prefix", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "test",
+              type: COLUMN_TYPE.dictionary,
+              key: "metadata.environment",
+            },
+          ];
+
+          // Should not be transformed since it doesn't start with input. or output.
+          // This filter should fail as COLUMN_CUSTOM_ID field doesn't exist on the data
+          expect(filterFunction(mockTrace, filter)).toBe(false);
+        });
+
+        it("should handle deep nested paths with input. prefix", () => {
+          // Create a mock with deeply nested input
+          const mockWithNestedInput: Trace = {
+            ...mockTrace,
+            input: {
+              messages: [
+                {
+                  role: "user",
+                  content: "hello world",
+                },
+              ],
+            },
+          };
+
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "hello",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.messages[0].content",
+            },
+          ];
+
+          // Should transform to field: "input", key: "messages[0].content"
+          expect(filterFunction(mockWithNestedInput, filter)).toBe(true);
+        });
+
+        it("should handle various operators with transformed filters", () => {
+          // Let's test each operator individually to understand the behavior
+          const equalFilter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "=",
+              value: "test prompt",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.prompt",
+            },
+          ];
+
+          const containsFilter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "contains",
+              value: "test",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.prompt",
+            },
+          ];
+
+          const startsWithFilter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "starts_with",
+              value: "test",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.prompt",
+            },
+          ];
+
+          expect(filterFunction(mockSpan, equalFilter)).toBe(true);
+          expect(filterFunction(mockSpan, containsFilter)).toBe(true);
+          // Note: Dictionary filters apply starts_with to the JSON string, not the extracted value
+          expect(filterFunction(mockSpan, startsWithFilter)).toBe(false);
+        });
+
+        it("should handle empty and missing keys correctly", () => {
+          const emptyKeyFilter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "is_empty",
+              value: "",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.nonexistent",
+            },
+          ];
+
+          const notEmptyKeyFilter: Filters = [
+            {
+              id: "filter-1",
+              field: COLUMN_CUSTOM_ID,
+              operator: "is_not_empty",
+              value: "",
+              type: COLUMN_TYPE.dictionary,
+              key: "input.prompt",
+            },
+          ];
+
+          expect(filterFunction(mockSpan, emptyKeyFilter)).toBe(true); // nonexistent key is empty
+          expect(filterFunction(mockSpan, notEmptyKeyFilter)).toBe(true); // prompt exists and is not empty
         });
       });
     });
