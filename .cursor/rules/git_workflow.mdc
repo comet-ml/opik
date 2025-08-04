@@ -163,7 +163,7 @@ Examples:
 ```
 
 ### **PR Description Template**
-Always follow the template from [pull_request_template.md](md:.github/pull_request_template.md) for the PR description template.
+Always follow the template from [pull_request_template.md](.github/pull_request_template.md) for the PR description template.
 ```markdown
 ## Details
 What the change does, why it was made, and any design decisions
