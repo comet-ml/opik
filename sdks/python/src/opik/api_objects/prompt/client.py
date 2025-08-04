@@ -1,4 +1,7 @@
+import logging
 from typing import Any, Dict, List, Optional
+
+import tenacity
 
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
@@ -6,6 +9,9 @@ from opik.rest_api.types import prompt_version_detail, PromptVersionDetailType
 
 from . import prompt as opik_prompt
 from .prompt import PromptType
+
+# Create module-level logger following cursor rules
+LOGGER = logging.getLogger(__name__)
 
 
 class PromptClient:
@@ -25,27 +31,59 @@ class PromptClient:
         Parameters:
         - name: The name of the prompt.
         - prompt: The template content for the prompt.
+        - metadata: Optional metadata for the prompt.
+        - type: The prompt type (defaults to MUSTACHE).
 
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
-        prompt_version = self._get_latest_version(name)
+        try:
+            prompt_version = self._get_latest_version(name)
 
-        if (
-            prompt_version is None
-            or prompt_version.template != prompt
-            or prompt_version.metadata != metadata
-            or prompt_version.type != type.value
-        ):
-            prompt_version = self._create_new_version(
-                name=name, prompt=prompt, type=type, metadata=metadata
+            if (
+                prompt_version is None
+                or prompt_version.template != prompt
+                or prompt_version.metadata != metadata
+                or prompt_version.type != type.value
+            ):
+                prompt_version = self._create_new_version(
+                    name=name, prompt=prompt, type=type, metadata=metadata
+                )
+
+            prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
+                name=name, prompt_version=prompt_version
             )
 
-        prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
-            name=name, prompt_version=prompt_version
-        )
+            return prompt_obj
 
-        return prompt_obj
+        except (rest_api_core.ApiError, tenacity.RetryError) as e:
+            # Graceful error handling when Opik backend is unavailable
+            error_msg = str(e)
+            if isinstance(e, tenacity.RetryError) and e.last_attempt.exception():
+                cause = e.last_attempt.exception()
+                error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to create prompt via API, returning fallback prompt. "
+                "Prompt name: %s, Error: %s",
+                name,
+                error_msg,
+                extra={"prompt_name": name, "error_type": e.__class__.__name__}
+            )
+            
+            # Create a fallback prompt version to enable local operation
+            fallback_version = prompt_version_detail.PromptVersionDetail(
+                id=f"fallback-{name}-version",
+                prompt_id=f"fallback-{name}",
+                template=prompt,
+                type=type.value,
+                metadata=metadata,
+                commit="fallback"
+            )
+            
+            return opik_prompt.Prompt.from_fern_prompt_version(
+                name=name, prompt_version=fallback_version
+            )
 
     def _create_new_version(
         self,
@@ -54,18 +92,34 @@ class PromptClient:
         type: PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
     ) -> prompt_version_detail.PromptVersionDetail:
-        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
-            template=prompt,
-            metadata=metadata,
-            type=type,
-        )
-        new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
-            self._rest_client.prompts.create_prompt_version(
-                name=name,
-                version=new_prompt_version_detail_data,
+        try:
+            new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
+                template=prompt,
+                metadata=metadata,
+                type=type,
             )
-        )
-        return new_prompt_version_detail
+            new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
+                self._rest_client.prompts.create_prompt_version(
+                    name=name,
+                    version=new_prompt_version_detail_data,
+                )
+            )
+            return new_prompt_version_detail
+        except (rest_api_core.ApiError, tenacity.RetryError) as e:
+            # Log the error but re-raise to be handled by the calling method
+            error_msg = str(e)
+            if isinstance(e, tenacity.RetryError) and e.last_attempt.exception():
+                cause = e.last_attempt.exception()
+                error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to create new prompt version via API. "
+                "Prompt name: %s, Error: %s",
+                name,
+                error_msg,
+                extra={"prompt_name": name, "error_type": e.__class__.__name__}
+            )
+            raise
 
     def _get_latest_version(
         self, name: str
@@ -76,9 +130,31 @@ class PromptClient:
             )
             return prompt_latest_version
         except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-            return None
+            if e.status_code == 404:
+                return None
+            # Log non-404 errors and re-raise to be handled by calling method
+            LOGGER.error(
+                "Failed to retrieve latest prompt version via API. "
+                "Prompt name: %s, Status code: %s, Error: %s",
+                name,
+                e.status_code,
+                str(e),
+                extra={"prompt_name": name, "status_code": e.status_code}
+            )
+            raise
+        except tenacity.RetryError as e:
+            # Log retry errors and re-raise to be handled by calling method
+            cause = e.last_attempt.exception()
+            error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to retrieve latest prompt version after retries. "
+                "Prompt name: %s, Error: %s",
+                name,
+                error_msg,
+                extra={"prompt_name": name, "error_type": e.__class__.__name__}
+            )
+            raise
 
     def get_prompt(
         self,
@@ -108,10 +184,35 @@ class PromptClient:
             return prompt_obj
 
         except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-
-        return None
+            if e.status_code == 404:
+                return None
+                
+            # Log non-404 API errors for monitoring
+            LOGGER.error(
+                "Failed to retrieve prompt via API. "
+                "Prompt name: %s, Commit: %s, Status code: %s, Error: %s",
+                name,
+                commit,
+                e.status_code,
+                str(e),
+                extra={"prompt_name": name, "commit": commit, "status_code": e.status_code}
+            )
+            return None
+            
+        except tenacity.RetryError as e:
+            # Log retry errors for monitoring
+            cause = e.last_attempt.exception()
+            error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to retrieve prompt after retries. "
+                "Prompt name: %s, Commit: %s, Error: %s",
+                name,
+                commit,
+                error_msg,
+                extra={"prompt_name": name, "commit": commit, "error_type": e.__class__.__name__}
+            )
+            return None
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
@@ -164,7 +265,38 @@ class PromptClient:
             return prompts
 
         except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-
-        return []
+            if e.status_code == 404:
+                return []
+                
+            # Log non-404 API errors for monitoring
+            LOGGER.error(
+                "Failed to retrieve all prompts via API. "
+                "Prompt name: %s, Status code: %s, Error: %s",
+                name,
+                e.status_code,
+                str(e),
+                extra={"prompt_name": name, "status_code": e.status_code}
+            )
+            return []
+            
+        except tenacity.RetryError as e:
+            # Log retry errors for monitoring
+            cause = e.last_attempt.exception()
+            error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to retrieve all prompts after retries. "
+                "Prompt name: %s, Error: %s",
+                name,
+                error_msg,
+                extra={"prompt_name": name, "error_type": e.__class__.__name__}
+            )
+            return []
+        except ValueError as e:
+            # Log value errors (no prompts found) but return empty list gracefully
+            LOGGER.warning(
+                "No prompts found for name: %s",
+                name,
+                extra={"prompt_name": name}
+            )
+            return []
