@@ -23,8 +23,9 @@ logger.setLevel(logging.INFO)
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:   
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        if issubclass(cls, BaseMetric):
+        if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
+    return None
 
 
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
@@ -48,12 +49,12 @@ def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dic
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[2:])
+        return {"error": f"Field 'code' contains invalid Python code: {stacktrace}"}
 
     metric_class = get_metric_class(module)
     if metric_class is None:
-        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
+        return {"error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
 
     score_result: Union[ScoreResult, List[ScoreResult]] = []
     try:
@@ -66,8 +67,8 @@ def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dic
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[2:])
+        return {"error": f"Field 'code' contains invalid Python code: {stacktrace}"}
             
     scores = to_scores(score_result)
 
