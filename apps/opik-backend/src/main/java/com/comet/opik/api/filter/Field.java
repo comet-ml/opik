@@ -12,6 +12,8 @@ public interface Field {
     String END_TIME_QUERY_PARAM = "end_time";
     String INPUT_QUERY_PARAM = "input";
     String OUTPUT_QUERY_PARAM = "output";
+    String INPUT_JSON_QUERY_PARAM = "input_json";
+    String OUTPUT_JSON_QUERY_PARAM = "output_json";
     String METADATA_QUERY_PARAM = "metadata";
     String MODEL_QUERY_PARAM = "model";
     String PROVIDER_QUERY_PARAM = "provider";
@@ -41,6 +43,7 @@ public interface Field {
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
+    String CUSTOM_QUERY_PARAM = "custom";
 
     @JsonValue
     String getQueryParamField();

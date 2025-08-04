@@ -117,6 +117,7 @@ public class FilterQueryBuilder {
                             "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)",
                             FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
@@ -131,6 +132,7 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d",
                             FieldType.NUMBER, "%1$s < :filter%2$d",
@@ -164,6 +166,8 @@ public class FilterQueryBuilder {
                     .put(TraceField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceField.INPUT, INPUT_ANALYTICS_DB)
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(TraceField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(TraceField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
                     .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
@@ -201,6 +205,8 @@ public class FilterQueryBuilder {
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(SpanField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(SpanField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
                     .put(SpanField.MODEL, MODEL_ANALYTICS_DB)
                     .put(SpanField.PROVIDER, PROVIDER_ANALYTICS_DB)
@@ -263,6 +269,8 @@ public class FilterQueryBuilder {
                     .add(TraceField.END_TIME)
                     .add(TraceField.INPUT)
                     .add(TraceField.OUTPUT)
+                    .add(TraceField.INPUT_JSON)
+                    .add(TraceField.OUTPUT_JSON)
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
                     .add(TraceField.DURATION)
@@ -285,6 +293,8 @@ public class FilterQueryBuilder {
                     .add(SpanField.END_TIME)
                     .add(SpanField.INPUT)
                     .add(SpanField.OUTPUT)
+                    .add(SpanField.INPUT_JSON)
+                    .add(SpanField.OUTPUT_JSON)
                     .add(SpanField.METADATA)
                     .add(SpanField.MODEL)
                     .add(SpanField.PROVIDER)

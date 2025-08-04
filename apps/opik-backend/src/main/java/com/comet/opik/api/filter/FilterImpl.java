@@ -19,4 +19,8 @@ public abstract class FilterImpl implements Filter {
     private final String key;
     private final @NonNull String value;
 
+    @Override
+    public Filter buildFromCustom(String customField, FieldType type, Operator operator, String key, String value) {
+        return null; // custom filters are not supported by default
+    }
 }

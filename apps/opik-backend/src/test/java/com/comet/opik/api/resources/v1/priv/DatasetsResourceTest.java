@@ -5269,18 +5269,6 @@ class DatasetsResourceTest {
                     Arguments.of(ExperimentsComparisonFilter.builder()
                             .field("input")
                             .type(FieldType.STRING)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("input")
-                            .type(FieldType.STRING)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("input")
-                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
@@ -5293,18 +5281,6 @@ class DatasetsResourceTest {
                     Arguments.of(ExperimentsComparisonFilter.builder()
                             .field("output")
                             .type(FieldType.STRING)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("output")
-                            .type(FieldType.STRING)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("output")
-                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
@@ -5312,18 +5288,6 @@ class DatasetsResourceTest {
                             .field("output")
                             .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("expected_output")
-                            .type(FieldType.STRING)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomNumeric(3))
-                            .build()),
-                    Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field("expected_output")
-                            .type(FieldType.STRING)
-                            .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
