@@ -260,4 +260,3 @@ git branch -D username/OPIK-1234-some-task
 - Clean up local branches
 - Update your local main branch
 - Verify the merged changes work as expected
-```
