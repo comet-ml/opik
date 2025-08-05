@@ -529,9 +529,6 @@ navigation:
           - page: Ragas
             path: docs/cookbook/ragas.mdx
             slug: ragas
-          - page: Vertex AI
-            path: docs/cookbook/vertexai.mdx
-            slug: vertexai
           - page: Smolagents
             path: docs/cookbook/smolagents.mdx
             slug: smolagents
