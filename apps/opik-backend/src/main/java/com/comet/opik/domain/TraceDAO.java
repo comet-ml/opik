@@ -324,67 +324,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_ID = """
-            SELECT
-                t.*,
-                t.id as id,
-                t.project_id as project_id,
-                sumMap(s.usage) as usage,
-                sum(s.total_estimated_cost) as total_estimated_cost,
-                COUNT(s.id) AS span_count,
-                toInt64(countIf(s.type = 'llm')) AS llm_span_count,
-                groupUniqArrayArray(c.comments_array) as comments,
-                any(fs.feedback_scores_list) as feedback_scores_list,
-                any(gr.guardrails) as guardrails_validations
-            FROM (
-                SELECT
-                    *,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND id = :id
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS t
-            LEFT JOIN (
-                SELECT
-                    trace_id,
-                    usage,
-                    total_estimated_cost,
-                    id,
-                    type
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                  AND trace_id = :id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS s ON t.id = s.trace_id
-            LEFT JOIN (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(*)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    AND entity_id = :id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY entity_id
-            ) AS c ON t.id = c.entity_id
-            LEFT JOIN (
-                WITH feedback_scores_combined AS (
-                    -- First part: direct scores
+            WITH feedback_scores_combined AS (
                     SELECT workspace_id,
                            project_id,
                            entity_id,
@@ -403,7 +343,6 @@ class TraceDAOImpl implements TraceDAO {
                       AND workspace_id = :workspace_id
                       AND entity_id = :id
                     UNION ALL
-                    -- Second part: aggregated authored scores
                     SELECT
                         workspace_id,
                         project_id,
@@ -446,56 +385,114 @@ class TraceDAOImpl implements TraceDAO {
                              GROUP BY workspace_id, project_id, entity_id, name
                      )
                 )
-                -- Final aggregation over the combined view
                 SELECT
-                    entity_id,
-                    mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
-                    ) AS feedback_scores,
-                    groupArray(tuple(
-                            name,
-                            category_name,
-                            value,
-                            reason,
-                            source,
-                            value_by_author,
+                    t.*,
+                    t.id as id,
+                    t.project_id as project_id,
+                    sumMap(s.usage) as usage,
+                    sum(s.total_estimated_cost) as total_estimated_cost,
+                    COUNT(s.id) AS span_count,
+                    toInt64(countIf(s.type = 'llm')) AS llm_span_count,
+                    groupUniqArrayArray(c.comments_array) as comments,
+                    any(fs.feedback_scores_list) as feedback_scores_list,
+                    any(gr.guardrails) as guardrails_validations
+                FROM (
+                    SELECT
+                        *,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                NULL) AS duration
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id = :id
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        usage,
+                        total_estimated_cost,
+                        id,
+                        type
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                      AND trace_id = :id
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON t.id = s.trace_id
+                LEFT JOIN (
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(*)) AS comments_array
+                    FROM (
+                        SELECT
+                            id,
+                            text,
                             created_at,
                             last_updated_at,
                             created_by,
-                            last_updated_by
-                               )) AS feedback_scores_list
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id
-            ) AS fs ON t.id = fs.entity_id
-            LEFT JOIN (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    groupArray(tuple(
-                         entity_id,
-                         secondary_entity_id,
-                         project_id,
-                         name,
-                         result
-                    )) as guardrails
-                FROM (
+                            last_updated_by,
+                            entity_id
+                        FROM comments
+                        WHERE workspace_id = :workspace_id
+                        AND entity_id = :id
+                        ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY entity_id
+                ) AS c ON t.id = c.entity_id
+                LEFT JOIN (
                     SELECT
-                        *
-                    FROM guardrails
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND entity_id = :id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, id
-                )
-                GROUP BY workspace_id, project_id, entity_type, entity_id
-            ) AS gr ON t.id = gr.entity_id
-            GROUP BY
-                t.*
-            ;
-            """;
+                        entity_id,
+                        mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                        ) AS feedback_scores,
+                        groupArray(tuple(
+                                name,
+                                category_name,
+                                value,
+                                reason,
+                                source,
+                                value_by_author,
+                                created_at,
+                                last_updated_at,
+                                created_by,
+                                last_updated_by
+                                   )) AS feedback_scores_list
+                    FROM feedback_scores_combined
+                    GROUP BY workspace_id, project_id, entity_id
+                ) AS fs ON t.id = fs.entity_id
+                LEFT JOIN (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        groupArray(tuple(
+                             entity_id,
+                             secondary_entity_id,
+                             project_id,
+                             name,
+                             result
+                        )) as guardrails
+                    FROM (
+                        SELECT
+                            *
+                        FROM guardrails
+                        WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
+                        AND entity_id = :id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, id
+                    )
+                    GROUP BY workspace_id, project_id, entity_type, entity_id
+                ) AS gr ON t.id = gr.entity_id
+                GROUP BY
+                    t.*
+                ;
+                """;
 
     private static final String SELECT_DETAILS_BY_ID = """
             SELECT DISTINCT
@@ -1310,7 +1307,6 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_combined AS (
-                -- First part: direct scores
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1330,7 +1326,6 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id = :project_id
                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
-                -- Second part: aggregated authored scores
                 SELECT
                     workspace_id,
                     project_id,
@@ -1374,7 +1369,6 @@ class TraceDAOImpl implements TraceDAO {
                          GROUP BY workspace_id, project_id, entity_id, name
                  )
             ), feedback_scores_agg AS (
-                -- Final aggregation over the combined view
                 SELECT
                     entity_id,
                     mapFromArrays(
@@ -1534,7 +1528,6 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_combined AS (
-                -- First part: direct scores
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1554,7 +1547,6 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id = :project_id
                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
-                -- Second part: aggregated authored scores
                 SELECT
                     workspace_id,
                     project_id,
@@ -1598,7 +1590,6 @@ class TraceDAOImpl implements TraceDAO {
                          GROUP BY workspace_id, project_id, entity_id, name
                  )
             ), feedback_scores_agg AS (
-                -- Final aggregation over the combined view
                 SELECT
                     entity_id,
                     mapFromArrays(
@@ -1801,7 +1792,6 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id = :thread_id
             ), feedback_scores_combined AS (
-                -- First part: direct scores
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1821,7 +1811,6 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id = :project_id
                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
-                -- Second part: aggregated authored scores
                 SELECT
                     workspace_id,
                     project_id,
@@ -1865,7 +1854,6 @@ class TraceDAOImpl implements TraceDAO {
                          GROUP BY workspace_id, project_id, entity_id, name
                  )
             ), feedback_scores_agg AS (
-                -- Final aggregation over the combined view
                 SELECT
                     entity_id,
                     mapFromArrays(
