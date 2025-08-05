@@ -341,9 +341,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
 
-            if (opikConfiguration.getAsyncInsert().enabled()) {
-                template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-            }
+            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
             var statement = connection.createStatement(template.render());
 

@@ -139,9 +139,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .flatMapMany(connection -> {
                     var template = new ST(INSERT_STATEMENT);
 
-                    if (asyncInsertConfig.enabled()) {
-                        template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-                    }
+                    ClickhouseUtils.checkAsyncConfig(template, asyncInsertConfig);
 
                     List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);

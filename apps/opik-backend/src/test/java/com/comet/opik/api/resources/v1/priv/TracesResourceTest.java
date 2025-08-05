@@ -5069,6 +5069,9 @@ class TracesResourceTest {
 
             var projectId = getProjectId(projectName, workspaceName, apiKey);
 
+            // Wait for thread to be created
+            Mono.delay(Duration.ofMillis(250)).block();
+
             var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
 
             // Add tags to the thread

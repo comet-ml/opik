@@ -14,6 +14,8 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -83,7 +85,7 @@ class ExperimentDAO {
                 prompt_versions,
                 type,
                 optimization_id
-            )
+            ) <settings_clause>
             SELECT
                 if(
                     LENGTH(CAST(old.id AS Nullable(String))) > 0,
@@ -414,6 +416,7 @@ class ExperimentDAO {
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -423,7 +426,11 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> insert(Experiment experiment, Connection connection) {
-        var statement = connection.createStatement(INSERT)
+        ST template = new ST(INSERT);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+        var statement = connection.createStatement(template.render())
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
