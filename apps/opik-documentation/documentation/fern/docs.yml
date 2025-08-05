@@ -463,6 +463,9 @@ navigation:
           - page: Quickstart notebook
             path: docs/cookbook/quickstart_notebook.mdx
             slug: quickstart_notebook
+          - page: Dynamic Tracing Control
+            path: docs/cookbook/dynamic_tracing_cookbook.mdx
+            slug: dynamic_tracing_cookbook
       - section: Integrations
         slug: /
         contents:
@@ -496,6 +499,12 @@ navigation:
           - page: Gemini
             path: docs/cookbook/gemini.mdx
             slug: gemini
+          - page: Google ADK
+            path: docs/cookbook/google_adk_integration.mdx
+            slug: google_adk_integration
+          - page: Gretel
+            path: docs/cookbook/gretel_opik_integration_cookbook.mdx
+            slug: gretel
           - page: Groq
             path: docs/cookbook/groq.mdx
             slug: groq
@@ -532,6 +541,9 @@ navigation:
           - page: Smolagents
             path: docs/cookbook/smolagents.mdx
             slug: smolagents
+          - page: Vertex AI
+            path: docs/cookbook/vertexai.mdx
+            slug: vertexai
           - page: WatsonX
             path: docs/cookbook/watsonx.mdx
             slug: watsonx
