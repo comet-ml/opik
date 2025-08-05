@@ -74,13 +74,12 @@ const AddEditDatasetDialog: React.FunctionComponent<
       if (hasValidCsvData && newDataset.id) {
         // Prepare items with manual source and data fields
         const headers = Object.keys(csvData[0]);
-        const [inputKey, outputKey] = headers;
         const items = csvData.map((row) => ({
           source: DATASET_ITEM_SOURCE.manual,
-          data: {
-            [inputKey]: row[inputKey],
-            [outputKey]: row[outputKey],
-          },
+          data: headers.reduce<Record<string, unknown>>((acc, header) => {
+            acc[header] = row[header];
+            return acc;
+          }, {}),
         }));
 
         createItemsMutate(

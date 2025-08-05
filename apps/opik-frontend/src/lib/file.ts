@@ -45,20 +45,6 @@ export async function validateCsvFile(
       };
     }
 
-    const headers = Object.keys(parsed[0] as object);
-    if (
-      headers.length !== 2 ||
-      !headers.includes("input") ||
-      !headers.includes("output")
-    ) {
-      return {
-        error: `File must have only two columns named 'input' and 'output'. Instead, the file has the following columns: ${headers
-          .slice(0, 5)
-          .map((h) => `"${h}"`)
-          .join(",")}`,
-      };
-    }
-
     return { data: parsed as Record<string, unknown>[] };
   } catch (err) {
     console.error(err);
