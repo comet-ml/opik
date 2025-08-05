@@ -77,6 +77,10 @@ import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import com.comet.opik.api.FeedbackScoreGroup;
+import com.comet.opik.domain.EntityType;
+
+import java.util.Map;
 
 @Path("/v1/private/spans")
 @Produces(MediaType.APPLICATION_JSON)
@@ -262,6 +266,43 @@ public class SpansResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Added span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/{id}/feedback-scores")
+    @Operation(operationId = "getSpanFeedbackScoreGroups", summary = "Get span feedback score groups", description = "Get span feedback score groups with multi-scoring support", responses = {
+            @ApiResponse(responseCode = "200", description = "Feedback score groups", content = @Content(schema = @Schema(implementation = FeedbackScoreGroup.class)))})
+    @JsonView({FeedbackScoreGroup.class})
+    public Response getSpanFeedbackScoreGroups(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get span feedback score groups for id '{}' on workspaceId '{}'", id, workspaceId);
+        Map<UUID, List<FeedbackScoreGroup>> scoreGroups = feedbackScoreService.getSpanScoreGroups(List.of(id))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        List<FeedbackScoreGroup> groups = scoreGroups.getOrDefault(id, List.of());
+        log.info("Found '{}' feedback score groups for span id '{}' on workspaceId '{}'", groups.size(), id, workspaceId);
+
+        return Response.ok(groups).build();
+    }
+
+    @DELETE
+    @Path("/{id}/feedback-scores/{scoreId}")
+    @Operation(operationId = "deleteSpanFeedbackScoreById", summary = "Delete specific span feedback score", description = "Delete a specific feedback score by its ID", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteSpanFeedbackScoreById(@PathParam("id") UUID id, @PathParam("scoreId") UUID scoreId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete span feedback score with scoreId '{}' for span id '{}' on workspaceId '{}'", scoreId, id, workspaceId);
+        feedbackScoreService.deleteScoreById(EntityType.SPAN, id, scoreId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Deleted span feedback score with scoreId '{}' for span id '{}' on workspaceId '{}'", scoreId, id, workspaceId);
 
         return Response.noContent().build();
     }

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreGroup;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
@@ -41,6 +42,7 @@ import static java.util.stream.Collectors.groupingBy;
 @ImplementedBy(FeedbackScoreServiceImpl.class)
 public interface FeedbackScoreService {
 
+    // Legacy single-scoring methods (maintained for backward compatibility)
     Mono<Void> scoreTrace(UUID traceId, FeedbackScore score);
     Mono<Void> scoreSpan(UUID spanId, FeedbackScore score);
 
@@ -50,6 +52,14 @@ public interface FeedbackScoreService {
     Mono<Void> deleteSpanScore(UUID id, String tag);
     Mono<Void> deleteTraceScore(UUID id, String tag);
 
+    // New multi-scoring methods
+    Mono<Map<UUID, List<FeedbackScoreGroup>>> getTraceScoreGroups(List<UUID> traceIds);
+    Mono<Map<UUID, List<FeedbackScoreGroup>>> getSpanScoreGroups(List<UUID> spanIds);
+    Mono<Map<UUID, List<FeedbackScoreGroup>>> getThreadScoreGroups(List<UUID> threadIds);
+
+    Mono<Void> deleteScoreById(EntityType entityType, UUID entityId, UUID scoreId);
+
+    // Common methods
     Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId);
 
     Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
@@ -82,6 +92,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
     }
 
+    // Legacy single-scoring methods (maintained for backward compatibility)
     @Override
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
         return traceDAO.getProjectIdFromTrace(traceId)
@@ -107,6 +118,27 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     @Override
     public Mono<Void> scoreBatchOfTraces(@NonNull List<FeedbackScoreBatchItem> scores) {
         return processScoreBatch(EntityType.TRACE, scores);
+    }
+
+    // New multi-scoring methods
+    @Override
+    public Mono<Map<UUID, List<FeedbackScoreGroup>>> getTraceScoreGroups(@NonNull List<UUID> traceIds) {
+        return dao.getScoreGroups(EntityType.TRACE, traceIds);
+    }
+
+    @Override
+    public Mono<Map<UUID, List<FeedbackScoreGroup>>> getSpanScoreGroups(@NonNull List<UUID> spanIds) {
+        return dao.getScoreGroups(EntityType.SPAN, spanIds);
+    }
+
+    @Override
+    public Mono<Map<UUID, List<FeedbackScoreGroup>>> getThreadScoreGroups(@NonNull List<UUID> threadIds) {
+        return dao.getScoreGroups(EntityType.THREAD, threadIds);
+    }
+
+    @Override
+    public Mono<Void> deleteScoreById(@NonNull EntityType entityType, @NonNull UUID entityId, @NonNull UUID scoreId) {
+        return dao.deleteScoreById(entityType, entityId, scoreId);
     }
 
     private Mono<Void> processScoreBatch(EntityType entityType, List<FeedbackScoreBatchItem> scores) {

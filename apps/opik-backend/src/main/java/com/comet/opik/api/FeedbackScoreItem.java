@@ -50,6 +50,9 @@ public abstract sealed class FeedbackScoreItem {
 
     @NotNull private final ScoreSource source;
 
+    @Schema(description = "Unique identifier for this score instance (auto-generated if not provided)")
+    private final UUID scoreId;
+
     public abstract UUID id();
 
     public abstract String threadId();
@@ -73,10 +76,10 @@ public abstract sealed class FeedbackScoreItem {
         // entity (trace or span) id
         @NotNull private UUID id;
 
-        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source"})
+        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source", "scoreId"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, UUID scoreId, UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, source, scoreId);
             this.id = id;
         }
 
@@ -102,10 +105,10 @@ public abstract sealed class FeedbackScoreItem {
         private UUID id;
 
         @ConstructorProperties({"threadId", "projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source"})
+                "source", "scoreId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, UUID scoreId, String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, source, scoreId);
             this.threadId = threadId;
         }
 

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreGroup;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -47,10 +48,14 @@ public interface FeedbackScoreDAO {
 
     Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds);
 
+    Mono<Map<UUID, List<FeedbackScoreGroup>>> getScoreGroups(EntityType entityType, List<UUID> entityIds);
+
     Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
             UUID projectId);
 
     Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name);
+
+    Mono<Void> deleteScoreById(EntityType entityType, UUID id, UUID scoreId);
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
@@ -92,6 +97,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 value,
                 reason,
                 source,
+                score_id,
                 created_by,
                 last_updated_by
             ) <settings_clause>
@@ -107,6 +113,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :value<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
+                         :score_id<item.index>,
                          :user_name,
                          :user_name
                      )
@@ -125,7 +132,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
             ORDER BY entity_id DESC, last_updated_at DESC
-            LIMIT 1 BY entity_id, name
             ;
             """;
 
@@ -134,6 +140,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             WHERE entity_id = :entity_id
             AND entity_type = :entity_type
             AND name = :name
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String DELETE_FEEDBACK_SCORE_BY_ID = """
+            DELETE FROM feedback_scores
+            WHERE entity_id = :entity_id
+            AND entity_type = :entity_type
+            AND score_id = :score_id
             AND workspace_id = :workspace_id
             ;
             """;
@@ -266,6 +281,18 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .map(this::groupByEntityId);
     }
 
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, List<FeedbackScoreGroup>>> getScoreGroups(@NonNull EntityType entityType,
+            @NonNull List<UUID> entityIds) {
+        return getScores(entityType, entityIds)
+                .map(scoresMap -> scoresMap.entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreGroups(entry.getValue())
+                        )));
+    }
+
     private Map<UUID, List<FeedbackScore>> groupByEntityId(List<FeedbackScoreDto> feedbackLogs) {
         return feedbackLogs.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreDto::entityId,
@@ -307,6 +334,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                         .createdBy(row.get("created_by", String.class))
                         .lastUpdatedBy(row.get("last_updated_by", String.class))
+                        .scoreId(row.get("score_id", UUID.class))
                         .build());
     }
 
@@ -376,7 +404,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
-                    .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
+                    .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()))
+                    .bind("score_id" + i, feedbackScoreBatchItem.scoreId() != null ? 
+                            feedbackScoreBatchItem.scoreId() : UUID.randomUUID());
         }
     }
 
@@ -391,6 +421,24 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
                     .bind("name", name);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then();
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> deleteScoreById(EntityType entityType, UUID id, UUID scoreId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_FEEDBACK_SCORE_BY_ID);
+
+            statement
+                    .bind("entity_id", id)
+                    .bind("entity_type", entityType.getType())
+                    .bind("score_id", scoreId);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))

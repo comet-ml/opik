@@ -11,6 +11,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.FeedbackScoreGroup;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -81,6 +82,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -90,6 +92,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchT
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import com.comet.opik.domain.EntityType;
 
 @Path("/v1/private/traces")
 @Produces(MediaType.APPLICATION_JSON)
@@ -381,12 +384,47 @@ public class TracesResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Add trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-
         feedbackScoreService.scoreTrace(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
         log.info("Added trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/{id}/feedback-scores")
+    @Operation(operationId = "getTraceFeedbackScoreGroups", summary = "Get trace feedback score groups", description = "Get trace feedback score groups with multi-scoring support", responses = {
+            @ApiResponse(responseCode = "200", description = "Feedback score groups", content = @Content(schema = @Schema(implementation = FeedbackScoreGroup.class)))})
+    @JsonView({FeedbackScoreGroup.class})
+    public Response getTraceFeedbackScoreGroups(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get trace feedback score groups for id '{}' on workspaceId '{}'", id, workspaceId);
+        Map<UUID, List<FeedbackScoreGroup>> scoreGroups = feedbackScoreService.getTraceScoreGroups(List.of(id))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        List<FeedbackScoreGroup> groups = scoreGroups.getOrDefault(id, List.of());
+        log.info("Found '{}' feedback score groups for trace id '{}' on workspaceId '{}'", groups.size(), id, workspaceId);
+
+        return Response.ok(groups).build();
+    }
+
+    @DELETE
+    @Path("/{id}/feedback-scores/{scoreId}")
+    @Operation(operationId = "deleteTraceFeedbackScoreById", summary = "Delete specific trace feedback score", description = "Delete a specific feedback score by its ID", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteTraceFeedbackScoreById(@PathParam("id") UUID id, @PathParam("scoreId") UUID scoreId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete trace feedback score with scoreId '{}' for trace id '{}' on workspaceId '{}'", scoreId, id, workspaceId);
+        feedbackScoreService.deleteScoreById(EntityType.TRACE, id, scoreId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Deleted trace feedback score with scoreId '{}' for trace id '{}' on workspaceId '{}'", scoreId, id, workspaceId);
 
         return Response.noContent().build();
     }
