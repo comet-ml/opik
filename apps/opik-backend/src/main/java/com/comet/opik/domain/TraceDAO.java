@@ -351,7 +351,7 @@ class TraceDAOImpl implements TraceDAO {
                         arrayStringConcat(categories, ', ') AS category_name,
                         toDecimal64(arrayAvg(values), 9) AS value,
                         arrayStringConcat(reasons, ', ') AS reason,
-                        arrayStringConcat(sources, ', ') AS source,
+                        sources[1] AS source,
                         mapFromArrays(
                                 authors,
                                 arrayMap(
@@ -531,7 +531,7 @@ class TraceDAOImpl implements TraceDAO {
                         arrayStringConcat(categories, ', ') AS category_name,
                         toDecimal64(arrayAvg(values), 9) AS value,
                         arrayStringConcat(reasons, ', ') AS reason,
-                        arrayStringConcat(sources, ', ') AS source,
+                        sources[1] AS source,
                         mapFromArrays(
                                 authors,
                                 arrayMap(
@@ -1082,7 +1082,7 @@ class TraceDAOImpl implements TraceDAO {
                         arrayStringConcat(categories, ', ') AS category_name,
                         toDecimal64(arrayAvg(values), 9) AS value,
                         arrayStringConcat(reasons, ', ') AS reason,
-                        arrayStringConcat(sources, ', ') AS source,
+                        sources[1] AS source,
                         mapFromArrays(
                                 authors,
                                 arrayMap(
@@ -1334,7 +1334,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    arrayStringConcat(sources, ', ') AS source,
+                    sources[1] AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1555,7 +1555,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    arrayStringConcat(sources, ', ') AS source,
+                    sources[1] AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1819,7 +1819,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    arrayStringConcat(sources, ', ') AS source,
+                    sources[1] AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -2259,46 +2259,24 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private List<FeedbackScore> mapFeedbackScores(List<List<Object>> feedbackScores) {
-        try {
-            return Optional.ofNullable(feedbackScores)
-                    .orElse(List.of())
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .map(feedbackScore -> {
-                        try {
-                            // Defensive casting - ensure we have enough elements
-                            if (feedbackScore.size() < 10) {
-                                return null; // Skip invalid entries
-                            }
-
-                            // Parse valueByAuthor from ClickHouse map format
-                            Map<String, ValueEntry> valueByAuthor = parseValueByAuthor(feedbackScore.get(5));
-
-                            return FeedbackScore.builder()
-                                    .name((String) feedbackScore.get(0))
-                                    .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                                    .value((BigDecimal) feedbackScore.get(2))
-                                    .reason(getIfNotEmpty(feedbackScore.get(3)))
-                                    .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                                    .valueByAuthor(valueByAuthor)
-                                    .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                                    .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                                    .createdBy((String) feedbackScore.get(8))
-                                    .lastUpdatedBy((String) feedbackScore.get(9))
-                                    .build();
-                        } catch (Exception e) {
-                            // Log and skip problematic entries rather than failing the entire query
-                            log.warn("Failed to parse feedback score entry: {}", e.getMessage());
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (Exception e) {
-            // If the entire structure is wrong, log and return empty list
-            log.warn("Failed to parse feedback scores list: {}", e.getMessage());
-            return List.of();
-        }
+        return Optional.ofNullable(feedbackScores)
+                .orElse(List.of())
+                .stream()
+                .filter(Objects::nonNull)
+                .map(feedbackScore -> FeedbackScore.builder()
+                        .name((String) feedbackScore.get(0))
+                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                        .value((BigDecimal) feedbackScore.get(2))
+                        .reason(getIfNotEmpty(feedbackScore.get(3)))
+                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
+                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
+                        .createdBy((String) feedbackScore.get(8))
+                        .lastUpdatedBy((String) feedbackScore.get(9))
+                        .build())
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
