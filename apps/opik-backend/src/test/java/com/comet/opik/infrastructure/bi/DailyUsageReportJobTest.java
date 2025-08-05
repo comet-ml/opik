@@ -251,7 +251,7 @@ class DailyUsageReportJobTest {
 
         @BeforeAll
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
-                      TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
+                TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
 
             this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;
@@ -396,7 +396,7 @@ class DailyUsageReportJobTest {
 
         @BeforeAll
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
-                      TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
+                TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
 
             this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;

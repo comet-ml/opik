@@ -27,7 +27,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     // This event cannot depend on authentication
     private final AtomicReference<Injector> injector = new AtomicReference<>();
 
-    private volatile GuiceJobManager guiceJobManager = null;
+    private final AtomicReference<GuiceJobManager> guiceJobManager = new AtomicReference<>();
 
     @Override
     public void onEvent(GuiceyLifecycleEvent event) {
@@ -41,7 +41,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             }
 
             case GuiceyLifecycle.ApplicationStopped -> {
-                guiceJobManager = null;
+                guiceJobManager.set(null);
                 log.info("Cleared GuiceJobManager instance");
             }
         }
@@ -58,7 +58,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             injector.set(injectorEvent.getInjector());
 
             log.info("Installing jobs...");
-            guiceJobManager = injector.get().getInstance(GuiceJobManager.class);
+            guiceJobManager.set(injector.get().getInstance(GuiceJobManager.class));
             log.info("Jobs installed.");
         }
     }
@@ -135,7 +135,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     private Scheduler getScheduler() {
-        return guiceJobManager.getScheduler();
+        return guiceJobManager.get().getScheduler();
     }
 
 }
