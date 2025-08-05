@@ -18,7 +18,7 @@ class PromptClient:
         prompt: str,
         metadata: Optional[Dict[str, Any]],
         type: PromptType = PromptType.MUSTACHE,
-    ) -> opik_prompt.Prompt:
+    ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
 
@@ -41,11 +41,7 @@ class PromptClient:
                 name=name, prompt=prompt, type=type, metadata=metadata
             )
 
-        prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
-            name=name, prompt_version=prompt_version
-        )
-
-        return prompt_obj
+        return prompt_version
 
     def _create_new_version(
         self,
@@ -84,7 +80,7 @@ class PromptClient:
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Optional[opik_prompt.Prompt]:
+    ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
 
@@ -100,12 +96,7 @@ class PromptClient:
                 name=name,
                 commit=commit,
             )
-            prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
-                name=name,
-                prompt_version=prompt_version,
-            )
-
-            return prompt_obj
+            return prompt_version
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
@@ -115,7 +106,7 @@ class PromptClient:
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
-    def get_all_prompts(self, name: str) -> List[opik_prompt.Prompt]:
+    def get_all_prompts(self, name: str) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 
@@ -146,17 +137,30 @@ class PromptClient:
             page = 1
             size = 100
 
-            prompts: List[opik_prompt.Prompt] = []
+            prompts: List[prompt_version_detail.PromptVersionDetail] = []
             while True:
                 prompt_versions = self._rest_client.prompts.get_prompt_versions(
                     id=prompt_id, page=page, size=size
                 ).content
+
                 prompts.extend(
                     [
-                        opik_prompt.Prompt.from_fern_prompt_version(name, version)
+                        # Converting to PromptVersionDetail for consistency with other methods.
+                        # TODO: backend should implement non-frontend endpoint which will return PromptVersionDetail objects
+                        prompt_version_detail.PromptVersionDetail(
+                            id=version.id,
+                            prompt_id=version.prompt_id,
+                            template=version.template,
+                            type=version.type,
+                            metadata=version.metadata,
+                            commit=version.commit,
+                            created_at=version.created_at,
+                            created_by=version.created_by,
+                        )
                         for version in prompt_versions
                     ]
                 )
+
                 if len(prompt_versions) < size:
                     break
                 page += 1
