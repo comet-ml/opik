@@ -44,6 +44,12 @@ class SpanCostCalculator {
                 "original_usage.cache_creation_input_tokens");
     }
 
+    public static BigDecimal textGenerationWithCacheCostBedrock(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.inputTokens",
+                "original_usage.outputTokens", "original_usage.cacheReadInputTokens",
+                "original_usage.cacheWriteInputTokens");
+    }
+
     /**
      * Calculates the cost of text generation where cached tokens are treated separately from input/output tokens.
      * In this case, cached tokens (both read and creation) are not included in the input or output token counts,
