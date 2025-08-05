@@ -7,6 +7,7 @@ import * as OpikApi from "../index";
 export interface Delta {
     role?: string;
     content?: string;
+    reasoningContent?: string;
     toolCalls?: OpikApi.ToolCall[];
     functionCall?: OpikApi.FunctionCall;
 }
