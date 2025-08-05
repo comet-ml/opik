@@ -755,20 +755,9 @@ class SpanDAO {
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
-                    SELECT entity_id, name
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                    UNION ALL
-                    SELECT entity_id, name
-                    FROM authored_feedback_scores
-                    WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    SELECT *
+                    FROM feedback_scores_combined
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
@@ -797,18 +786,9 @@ class SpanDAO {
                   SELECT
                       entity_id
                   FROM (
-                      SELECT entity_id, name, value
-                      FROM feedback_scores
-                      WHERE entity_type = 'span'
-                      AND project_id = :project_id
-                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                      LIMIT 1 BY entity_id, name
-                      UNION ALL
-                      SELECT entity_id, name, value
-                      FROM authored_feedback_scores
-                      WHERE entity_type = 'span'
-                      AND project_id = :project_id
-                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                      SELECT *
+                      FROM feedback_scores_combined
+                      ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                       LIMIT 1 BY entity_id, name
                   )
                   GROUP BY entity_id
@@ -852,28 +832,38 @@ class SpanDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            <if(feedback_scores_empty_filters)>
-             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT entity_id, name, value
-                    FROM feedback_scores
+            WITH feedback_scores_combined AS (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at
+                    FROM feedback_scores FINAL
                     WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
                     UNION ALL
-                    SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                    FROM (
-                        SELECT *
-                        FROM authored_feedback_scores
-                        WHERE entity_type = 'span'
-                        AND project_id = :project_id
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        toDecimal64(avg(value), 9) AS value,
+                        min(last_updated_at)
+                    FROM authored_feedback_scores FINAL
+                    WHERE entity_type = 'span'
                         AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
-                    GROUP BY entity_id, name
+                        AND project_id = :project_id
+                    GROUP BY workspace_id, project_id, entity_id, name
+            )
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores_combined
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
@@ -903,24 +893,10 @@ class SpanDAO {
                     SELECT
                         entity_id
                     FROM (
-                        SELECT entity_id, name, value
-                        FROM feedback_scores
-                        WHERE entity_type = 'span'
-                        AND project_id = :project_id
-                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        SELECT *
+                        FROM feedback_scores_combined
+                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
-                        UNION ALL
-                        SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                        FROM (
-                            SELECT *
-                            FROM authored_feedback_scores
-                            WHERE entity_type = 'span'
-                            AND project_id = :project_id
-                            AND workspace_id = :workspace_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id, name
                     )
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
@@ -1035,25 +1011,10 @@ class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                  , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                      FROM (
-                        SELECT entity_id, name, value
-                        FROM feedback_scores
-                        WHERE entity_type = 'span'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        SELECT *
+                        FROM feedback_scores_combined
+                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
-                        UNION ALL
-                        SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                        FROM (
-                            SELECT *
-                            FROM authored_feedback_scores
-                            WHERE entity_type = 'span'
-                            AND project_id = :project_id
-                            AND workspace_id = :workspace_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id, name
                      )
                      GROUP BY entity_id
                      HAVING <feedback_scores_empty_filters>
@@ -1089,25 +1050,10 @@ class SpanDAO {
                         SELECT
                             entity_id
                         FROM (
-                            SELECT entity_id, name, value
-                            FROM feedback_scores
-                            WHERE entity_type = 'span'
-                            AND project_id = :project_id
-                            AND workspace_id = :workspace_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            SELECT *
+                            FROM feedback_scores_combined
+                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
-                            UNION ALL
-                            SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                            FROM (
-                                SELECT *
-                                FROM authored_feedback_scores
-                                WHERE entity_type = 'span'
-                                AND project_id = :project_id
-                                AND workspace_id = :workspace_id
-                                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
-                            )
-                            GROUP BY entity_id, name
                         )
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
