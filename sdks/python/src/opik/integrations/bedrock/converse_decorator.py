@@ -52,6 +52,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
             metadata=metadata,
             project_name=track_options.project_name,
             model=kwargs.get("modelId", None),
+            provider=opik.LLMProvider.BEDROCK,
         )
 
         return result
