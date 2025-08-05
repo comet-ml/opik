@@ -1,0 +1,13 @@
+name: "Release with Release-n-Deploy-Agent"
+run-name: "Release from ${{ github.ref_name }}"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  notify-release-n-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Step
+        run: |
+            echo "run echo"
