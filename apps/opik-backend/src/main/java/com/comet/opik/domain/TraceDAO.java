@@ -643,34 +643,16 @@ class TraceDAOImpl implements TraceDAO {
                     GROUP BY workspace_id, project_id, entity_id
                 )
                 <if(feedback_scores_empty_filters)>
-                 , fsc AS (
-                     SELECT
-                        entity_id,
-                        COUNT(entity_id) AS feedback_scores_count
+                 , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                      FROM (
-                        SELECT entity_id, name, value
-                        FROM feedback_scores
-                        WHERE entity_type = 'trace'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        SELECT *
+                        FROM feedback_scores_combined
+                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
-                        UNION ALL
-                        SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                        FROM (
-                            SELECT *
-                            FROM authored_feedback_scores
-                            WHERE entity_type = 'trace'
-                            AND project_id = :project_id
-                            AND workspace_id = :workspace_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id, name
                      )
                      GROUP BY entity_id
                      HAVING <feedback_scores_empty_filters>
-                )
+                 )
                 <endif>
                 , traces_final AS (
                     SELECT
@@ -696,28 +678,13 @@ class TraceDAOImpl implements TraceDAO {
                         SELECT
                             entity_id
                         FROM (
-                            SELECT entity_id, name, value
-                            FROM feedback_scores
-                            WHERE entity_type = 'trace'
-                            AND workspace_id = :workspace_id
-                            AND project_id = :project_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            SELECT *
+                            FROM feedback_scores_combined
+                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
-                            UNION ALL
-                            SELECT entity_id, name, toDecimal64(avg(value), 9) AS value
-                            FROM (
-                                SELECT *
-                                FROM authored_feedback_scores
-                                WHERE entity_type = 'trace'
-                                AND project_id = :project_id
-                                AND workspace_id = :workspace_id
-                                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
-                            )
-                            GROUP BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_filters>
+                      )
+                      GROUP BY entity_id
+                      HAVING <feedback_scores_filters>
                      )
                      <endif>
                      <if(trace_aggregation_filters)>
