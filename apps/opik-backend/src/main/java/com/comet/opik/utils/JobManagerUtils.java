@@ -7,6 +7,9 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.SchedulerException;
 
+import java.time.Duration;
+import java.time.Instant;
+
 @Slf4j
 @UtilityClass
 public class JobManagerUtils {
@@ -21,7 +24,7 @@ public class JobManagerUtils {
                 log.debug("JobManager already set with the same instance, skipping");
                 return;
             }
-
+            
             // Properly shutdown the existing JobManager before replacing it
             log.info("Existing JobManager detected during setJobManager - this may indicate test cleanup issues");
             logRunningJobs();
@@ -42,7 +45,7 @@ public class JobManagerUtils {
         }
         jobManager = null;
     }
-
+    
     private static void logRunningJobs() {
         try {
             var scheduler = jobManager.getScheduler();
@@ -59,14 +62,46 @@ public class JobManagerUtils {
     private static void shutdown() {
         try {
             var scheduler = jobManager.getScheduler();
-            scheduler.shutdown(true); // Wait for jobs to complete
-            // Give it a moment to shut down gracefully
-            if (!scheduler.isShutdown()) {
-                log.warn("JobManager did not shut down gracefully during clear, may have running jobs");
+            
+            // First, try graceful shutdown with timeout
+            log.info("Attempting graceful scheduler shutdown...");
+            scheduler.shutdown(false); // Don't wait for jobs to complete
+            
+            // Wait up to 10 seconds for graceful shutdown
+            var shutdownStart = Instant.now();
+            var maxWaitTime = Duration.ofSeconds(10);
+            
+            while (!scheduler.isShutdown() && Duration.between(shutdownStart, Instant.now()).compareTo(maxWaitTime) < 0) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-            log.debug("JobManager shut down successfully");
+            
+            if (!scheduler.isShutdown()) {
+                log.warn("Scheduler did not shut down gracefully within {} seconds, forcing shutdown", maxWaitTime.toSeconds());
+                
+                // Force shutdown by interrupting running jobs
+                var runningJobs = scheduler.getCurrentlyExecutingJobs();
+                for (var jobExecution : runningJobs) {
+                    try {
+                        log.warn("Interrupting job: {}", jobExecution.getJobDetail().getKey());
+                        scheduler.interrupt(jobExecution.getJobDetail().getKey());
+                    } catch (Exception e) {
+                        log.warn("Failed to interrupt job: {}", jobExecution.getJobDetail().getKey(), e);
+                    }
+                }
+                
+                // Force shutdown now
+                scheduler.shutdown(false);
+            }
+            
+            log.info("JobManager shutdown completed");
+            
         } catch (SchedulerException e) {
-            log.warn("Error shutting down JobManager during clear", e);
+            log.warn("Error shutting down JobManager", e);
         }
     }
 }
