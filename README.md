@@ -90,7 +90,7 @@ Access Opik instantly without any setup. Ideal for quick starts and hassle-free 
 Deploy Opik in your own environment. Choose between Docker for local setups or Kubernetes for scalability.
 
 #### Self-Hosting with Docker Compose (for Local Development & Testing)
-This is the simplest way to get a local Opik instance running. Note the new `.opik.sh` installation script:
+This is the simplest way to get a local Opik instance running. Note the new `./opik.sh` installation script:
 
 On Linux or Mac Enviroment:
 ```bash
