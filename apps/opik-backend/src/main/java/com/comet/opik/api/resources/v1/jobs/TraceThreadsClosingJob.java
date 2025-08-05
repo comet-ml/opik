@@ -43,12 +43,19 @@ public class TraceThreadsClosingJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
+        // Check for interruption before starting
+        if (Thread.currentThread().isInterrupted()) {
+            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+            return;
+        }
+
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
         var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
         int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
+                .timeout(Duration.ofSeconds(30)) // Add timeout to prevent hanging
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
                         error -> log.error("Error processing closing of trace threads", error));
