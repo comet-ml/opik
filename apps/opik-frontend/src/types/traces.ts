@@ -27,6 +27,17 @@ export interface TraceFeedbackScore {
   value: number;
   last_updated_by?: string;
   last_updated_at?: string;
+  score_id?: string;
+}
+
+export interface FeedbackScoreGroup {
+  name: string;
+  category_name?: string;
+  average_value: number;
+  min_value: number;
+  max_value: number;
+  score_count: number;
+  scores: TraceFeedbackScore[];
 }
 
 export interface BaseTraceDataErrorInfo {
