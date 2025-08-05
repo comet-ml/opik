@@ -191,7 +191,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 log.warn("Error shutting down JobManager", e);
             }
         }
-        
+
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
     }
