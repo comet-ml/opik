@@ -1659,30 +1659,18 @@ class SpanDAO {
                 .orElse(List.of())
                 .stream()
                 .filter(Objects::nonNull)
-                .map(feedbackScore -> {
-                    // Expected tuple structure: (name, category_name, value, reason, source, value_by_author, created_at, last_updated_at, created_by, last_updated_by)
-                    if (feedbackScore.size() != 10) {
-                        log.warn("Expected feedback score tuple with 10 elements, got {}: {}", feedbackScore.size(),
-                                feedbackScore);
-                        return null;
-                    }
-
-                    // Parse valueByAuthor from ClickHouse map format
-                    Map<String, ValueEntry> valueByAuthor = parseValueByAuthor(feedbackScore.get(5));
-
-                    return FeedbackScore.builder()
-                            .name((String) feedbackScore.get(0))
-                            .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                            .value((BigDecimal) feedbackScore.get(2))
-                            .reason(getIfNotEmpty(feedbackScore.get(3)))
-                            .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                            .valueByAuthor(valueByAuthor)
-                            .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                            .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                            .createdBy((String) feedbackScore.get(8))
-                            .lastUpdatedBy((String) feedbackScore.get(9))
-                            .build();
-                })
+                .map(feedbackScore -> FeedbackScore.builder()
+                        .name((String) feedbackScore.get(0))
+                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                        .value((BigDecimal) feedbackScore.get(2))
+                        .reason(getIfNotEmpty(feedbackScore.get(3)))
+                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
+                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
+                        .createdBy((String) feedbackScore.get(8))
+                        .lastUpdatedBy((String) feedbackScore.get(9))
+                        .build())
                 .filter(Objects::nonNull)
                 .toList();
     }
