@@ -1,13 +1,11 @@
 import copy
 from typing import Any, Dict, Optional
-import logging
 
 from opik.rest_api.types import PromptVersionDetail
 from .prompt_template import PromptTemplate
 from .types import PromptType
 from opik.api_objects.prompt import client as prompt_client
 
-LOGGER = logging.getLogger(__name__)
 
 class Prompt:
     """
@@ -29,34 +27,29 @@ class Prompt:
             name: The name for the prompt.
             prompt: The template for the prompt.
         """
-        
+
         self._template = PromptTemplate(template=prompt, type=type)
         self._name = name
         self._metadata = metadata
         self._type = type
 
-        self._commit: Optional[str] = None
-        self.__internal_api__prompt_id__: Optional[str] = None
-        self.__internal_api__version_id__: Optional[str] = None
-        self._try_sync_with_backend()
-    
-    def _try_sync_with_backend(self) -> None:
+        self._sync_with_backend()
+
+    def _sync_with_backend(self) -> None:
         from opik.api_objects import opik_client
+
         opik_client_ = opik_client.get_client_cached()
         prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
-        try:
-            prompt_version = prompt_client_.create_prompt(
-                name=self._name,
-                prompt=self._template.text,
-                metadata=self._metadata,
-                type=self._type,
-            )
+        prompt_version = prompt_client_.create_prompt(
+            name=self._name,
+            prompt=self._template.text,
+            metadata=self._metadata,
+            type=self._type,
+        )
 
-            self._commit = prompt_version.commit
-            self.__internal_api__prompt_id__ = prompt_version.prompt_id
-            self.__internal_api__version_id__ = prompt_version.id
-        except Exception as exception:
-            LOGGER.error(f"Failed to sync new prompt with the backend: {exception}")
+        self._commit = prompt_version.commit
+        self.__internal_api__prompt_id__ = prompt_version.prompt_id
+        self.__internal_api__version_id__ = prompt_version.id
 
     @property
     def name(self) -> str:

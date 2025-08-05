@@ -4,7 +4,6 @@ from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail, PromptVersionDetailType
 
-from . import prompt as opik_prompt
 from .prompt import PromptType
 
 
@@ -106,7 +105,9 @@ class PromptClient:
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
-    def get_all_prompts(self, name: str) -> List[prompt_version_detail.PromptVersionDetail]:
+    def get_all_prompts(
+        self, name: str
+    ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 

@@ -1131,10 +1131,7 @@ class Opik:
         """
         prompt_client = PromptClient(self._rest_client)
         prompt_version = prompt_client.create_prompt(
-            name=name,
-            prompt=prompt,
-            metadata=metadata,
-            type=type
+            name=name, prompt=prompt, metadata=metadata, type=type
         )
         return Prompt.from_fern_prompt_version(name, prompt_version)
 
