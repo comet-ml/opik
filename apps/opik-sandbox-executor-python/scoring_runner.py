@@ -1,58 +1,27 @@
-#!/usr/bin/env python3
-"""
-Enhanced Optimized Scoring Runner
-Balanced approach combining research optimizations with practical stability:
-- Local imports for all non-essential modules (json, traceback, uuid, types, typing, inspect)
-- python -S benefits while keeping essential modules
-- Lazy loading for opik-specific imports
-- Minimal global imports (only sys for path setup)
-"""
+# Legacy scoring commands - EXACT production format
+PYTHON_SCORING_COMMAND = """
+import inspect
+import json
+import traceback
+import uuid
+from sys import argv
+from types import ModuleType
+from typing import Type, Union, List, Any, Dict
 
-import sys
-
-# Add site-packages manually for python -S compatibility
-# More conservative than ultra-optimized approach
-sys.path.insert(0, '/usr/local/lib/python3.12/site-packages')
-
-# OPTIMIZATION 1: Lazy import heavy opik modules only when needed
-_opik_imports_loaded = False
-_BaseMetric = None
-_ScoreResult = None
-
-def load_opik_imports():
-    """Load opik imports lazily - only when actually needed."""
-    global _opik_imports_loaded, _BaseMetric, _ScoreResult
-    if not _opik_imports_loaded:
-        from opik.evaluation.metrics import BaseMetric
-        from opik.evaluation.metrics.score_result import ScoreResult
-        _BaseMetric = BaseMetric
-        _ScoreResult = ScoreResult
-        _opik_imports_loaded = True
-
-    return _BaseMetric, _ScoreResult
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
 
 # Constants
-TRACE_THREAD_METRIC_TYPE = "trace_thread"
+TRACE_THREAD_METRIC_TYPE = "trace_thread"  # Referenced in the payload_types.py as it's not available in the scoring_commands.py process
 
-def get_metric_class(module):
-    """Find BaseMetric subclass in the provided module."""
-    import inspect
-    from types import ModuleType
-    from typing import Type
-    
-    BaseMetric, ScoreResult = load_opik_imports()
-
+def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
         if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
     return None
 
-def to_scores(score_result):
-    """Convert score result to list of ScoreResult objects."""
-    from typing import List
-    
-    BaseMetric, ScoreResult = load_opik_imports()
 
+def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
     if score_result is None:
         return scores
@@ -64,62 +33,42 @@ def to_scores(score_result):
                 scores.append(item)
     return scores
 
-def execute_scoring(code: str, data: dict, payload_type: str = None) -> dict:
-    """Execute scoring code matching Docker production behavior exactly."""
-    import uuid
-    import traceback
-    from types import ModuleType
 
-    module = ModuleType(str(uuid.uuid4()))
+code = argv[1]
+data = json.loads(argv[2])
+payload_type = argv[3] if len(argv) > 3 else None
 
-    try:
-        exec(code, module.__dict__)
-    except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[1:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+module = ModuleType(str(uuid.uuid4()))
 
-    metric_class = get_metric_class(module)
-    if metric_class is None:
-        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
+try:
+    exec(code, module.__dict__)
+except Exception:  
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[1:])  
+    print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
+    exit(1)
 
-    score_result = []
-    try:
-        metric = metric_class()
-        if payload_type == TRACE_THREAD_METRIC_TYPE:
-            score_result = metric.score(data)
-        else:
-            score_result = metric.score(**data)
-    except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[1:])
-        return {"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
+metric_class = get_metric_class(module)
+if metric_class is None:
+    print(json.dumps({"error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}))
+    exit(1)
 
-    scores = to_scores(score_result)
-    result = {"scores": [s.__dict__ for s in scores]}
+score_result : Union[ScoreResult, List[ScoreResult]] = []
+try:
+    metric = metric_class()
+    
+    # Handle trace_thread type differently - pass data as first positional argument
+    if payload_type == TRACE_THREAD_METRIC_TYPE:
+        score_result = metric.score(data)
+    else:
+        # Regular scoring - unpack data as keyword arguments
+        score_result = metric.score(**data)
+except Exception:
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[1:])
+    print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
+    exit(1)
+        
+scores = to_scores(score_result)
 
-    return result
-
-def main():
-    """Main execution function with enhanced optimizations."""
-    import json
-
-    if len(sys.argv) < 3:
-        print(json.dumps({"code": 400, "error": "Usage: enhanced_runner.py <code> <data_json> [payload_type]"}), file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        code = sys.argv[1]
-        data = json.loads(sys.argv[2])
-        payload_type = sys.argv[3] if len(sys.argv) > 3 else None
-
-        result = execute_scoring(code, data, payload_type)
-        print(json.dumps(result))
-
-    except json.JSONDecodeError as e:
-        print(json.dumps({"code": 400, "error": f"Invalid JSON in data parameter: {str(e)}"}))
-        sys.exit(1)
-    except Exception as e:
-        print(json.dumps({"code": 500, "error": f"Unexpected error: {str(e)}"}))
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+response = json.dumps({"scores": [score.__dict__ for score in scores]})
+print(response)
+"""

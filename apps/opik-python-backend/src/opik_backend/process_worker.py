@@ -23,15 +23,12 @@ logger.setLevel(logging.INFO)
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:   
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        if issubclass(cls, BaseMetric) and cls != BaseMetric:
+        if issubclass(cls, BaseMetric):
             return cls
-    return None
 
 
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
-    if score_result is None:
-        return scores
     if isinstance(score_result, ScoreResult):
         scores = [score_result]
     elif isinstance(score_result, list):
@@ -51,7 +48,7 @@ def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dic
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[1:])
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
         return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
 
     metric_class = get_metric_class(module)
@@ -69,7 +66,7 @@ def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dic
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[1:])
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
         return {"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
             
     scores = to_scores(score_result)
