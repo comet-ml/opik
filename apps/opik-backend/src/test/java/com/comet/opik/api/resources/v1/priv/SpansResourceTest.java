@@ -1131,54 +1131,96 @@ class SpansResourceTest {
         }
 
         private Stream<Arguments> getCustomFilterArgs() {
+            String dictInput = "{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}";
+            String listInput = "[\"Chat-GPT 4.0\", 2025, {\"provider\": \"provider_1\"}]";
             return Stream.of(
                     Arguments.of(
                             statsTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             statsTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             statsTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS),
+                            Operator.CONTAINS,
+                            dictInput),
 
                     Arguments.of(
                             spansTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             spansTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             spansTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS),
+                            Operator.CONTAINS,
+                            dictInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.[1]",
+                            "2025",
+                            Operator.EQUAL,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.[0]",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[1]",
+                            "2025",
+                            Operator.EQUAL,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[0]",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[2].provider",
+                            "provider_1",
+                            Operator.EQUAL,
+                            listInput),
 
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS));
+                            Operator.CONTAINS,
+                            dictInput));
         }
 
         private Stream<Arguments> getFeedbackScoresArgs() {
@@ -3793,7 +3835,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getCustomFilterArgs")
         void whenFilterWithCustomFilter__thenReturnSpansFiltered(SpanPageTestAssertion testAssertion,
-                String key, String value, Operator operator) {
+                String key, String value, Operator operator, String input) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3812,8 +3854,7 @@ class SpansResourceTest {
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
                     .input(JsonUtils
-                            .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
-                                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                            .getJsonNodeFromString(input))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
