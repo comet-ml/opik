@@ -320,7 +320,8 @@ class ExperimentDAO {
             WITH experiments_filtered AS (
                 SELECT
                     dataset_id,
-                    metadata
+                    metadata,
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>

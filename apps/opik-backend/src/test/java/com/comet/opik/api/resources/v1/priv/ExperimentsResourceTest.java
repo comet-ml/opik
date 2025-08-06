@@ -135,6 +135,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -2070,6 +2071,61 @@ class ExperimentsResourceTest {
             assertThat(response).isEqualTo(expectedResponse);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void groupExperimentsWithFilter(List<GroupBy> groups, Function<Experiment, ExperimentFilter> filterFunction,
+                Function<Experiment, Predicate<Experiment>> predicateFunction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Random random = new Random();
+
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .promptVersion(versionLink)
+                                .promptVersions(List.of(versionLink))
+                                .datasetName(dataset.name())
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(
+                                                "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
+                                                        .formatted(random.nextBoolean() ? "2024" : "2025") +
+                                                        "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                return experiments.stream();
+            }).toList();
+
+            var response = experimentResourceClient.findGroups(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), List.of(filterFunction.apply(allExperiments.getFirst())), null,
+                    apiKey, workspaceName, 200);
+
+            var expectedExperiments = allExperiments.stream()
+                    .filter(predicateFunction.apply(allExperiments.getFirst()))
+                    .toList();
+
+            var expectedResponse = buildExpectedGroupResponse(
+                    groups,
+                    expectedExperiments);
+            assertThat(response).isEqualTo(expectedResponse);
+        }
+
         @Test
         void groupExperimentsWithDeletedDataset() {
             var workspaceName = UUID.randomUUID().toString();
@@ -2167,6 +2223,64 @@ class ExperimentsResourceTest {
                             .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
+        }
+
+        private Stream<Arguments> groupExperimentsWithFilter() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())));
+        }
+
+        private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
+            return Stream.of(
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build()),
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build()));
         }
 
         /**
