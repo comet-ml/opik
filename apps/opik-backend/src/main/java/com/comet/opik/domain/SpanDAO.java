@@ -493,125 +493,123 @@ class SpanDAO {
 
     private static final String SELECT_BY_ID = """
             WITH feedback_scores_combined AS (
-                    SELECT workspace_id,
-                           project_id,
-                           entity_id,
-                           name,
-                           category_name,
-                           value,
-                           reason,
-                           source,
-                           map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
-                           created_by,
-                           last_updated_by,
-                           created_at,
-                           last_updated_at
-                    FROM feedback_scores FINAL
-                    WHERE entity_type = 'span'
-                      AND workspace_id = :workspace_id
-                      AND entity_id = :id
-                    UNION ALL
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        arrayStringConcat(categories, ', ') AS category_name,
-                        toDecimal64(arrayAvg(values), 9) AS value,
-                        arrayStringConcat(reasons, ', ') AS reason,
-                        sources[1] AS source,
-                        mapFromArrays(
-                                authors,
-                                arrayMap(
-                                        i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                        arrayEnumerate(values)
-                                )
-                        ) AS value_by_author,
-                        arrayStringConcat(created_bies, ', ') AS created_by,
-                        arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                        arrayMin(created_ats) AS created_at,
-                        arrayMax(last_updated_ats) AS last_updated_at
-                    FROM (
-                             SELECT
-                                 workspace_id,
-                                 project_id,
-                                 entity_id,
-                                 name,
-                                 groupArray(value) AS values,
-                                 groupArray(reason) AS reasons,
-                                 groupArray(category_name) AS categories,
-                                 groupArray(author) AS authors,
-                                 groupArray(source) AS sources,
-                                 groupArray(created_by) AS created_bies,
-                                 groupArray(last_updated_by) AS updated_bies,
-                                 groupArray(created_at) AS created_ats,
-                                 groupArray(last_updated_at) AS last_updated_ats
-                             FROM authored_feedback_scores FINAL
-                             WHERE entity_type = 'span'
-                               AND workspace_id = :workspace_id
-                               AND entity_id = :id
-                             GROUP BY workspace_id, project_id, entity_id, name
-                     )
-                )
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND entity_id = :id
+                UNION ALL
                 SELECT
-                    s.*,
-                    s.project_id as project_id,
-                    groupArray(tuple(c.*)) AS comments,
-                    any(fs.feedback_scores_list) as feedback_scores_list
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    toDecimal64(arrayAvg(values), 9) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    sources[1] AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
                 FROM (
-                    SELECT
-                        *,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                NULL) AS duration
-                    FROM spans
-                    WHERE id = :id
-                    AND workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1
-                ) AS s
-                LEFT JOIN (
-                    SELECT
-                        id AS comment_id,
-                        text,
-                        created_at AS comment_created_at,
-                        last_updated_at AS comment_last_updated_at,
-                        created_by AS comment_created_by,
-                        last_updated_by AS comment_last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    AND entity_id = :id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS c ON s.id = c.entity_id
-                LEFT JOIN (
-                    SELECT
-                        entity_id,
-                        mapFromArrays(
-                                groupArray(name),
-                                groupArray(value)
-                        ) AS feedback_scores,
-                        groupArray(tuple(
-                                name,
-                                category_name,
-                                value,
-                                reason,
-                                source,
-                                value_by_author,
-                                created_at,
-                                last_updated_at,
-                                created_by,
-                                last_updated_by
-                                   )) AS feedback_scores_list
-                    FROM feedback_scores_combined
-                    GROUP BY workspace_id, project_id, entity_id
-                ) AS fs ON s.id = fs.entity_id
-                GROUP BY
-                    s.*
-                ;
-                """;
+                     SELECT
+                         workspace_id,
+                         project_id,
+                         entity_id,
+                         name,
+                         groupArray(value) AS values,
+                         groupArray(reason) AS reasons,
+                         groupArray(category_name) AS categories,
+                         groupArray(author) AS authors,
+                         groupArray(source) AS sources,
+                         groupArray(created_by) AS created_bies,
+                         groupArray(last_updated_by) AS updated_bies,
+                         groupArray(created_at) AS created_ats,
+                         groupArray(last_updated_at) AS last_updated_ats
+                     FROM authored_feedback_scores FINAL
+                     WHERE entity_type = 'span'
+                       AND workspace_id = :workspace_id
+                       AND entity_id = :id
+                     GROUP BY workspace_id, project_id, entity_id, name
+                 )
+            )
+            SELECT
+                s.*,
+                s.project_id as project_id,
+                groupArray(tuple(c.*)) AS comments,
+                any(fs.feedback_scores) as feedback_scores_list
+            FROM (
+                SELECT
+                    *,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) AS duration
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS s
+            LEFT JOIN (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND entity_id = :id
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS c ON s.id = c.entity_id
+            LEFT JOIN (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS feedback_scores
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id
+            ) AS fs ON s.id = fs.entity_id
+            GROUP BY
+                s.*
+            ;
+            """;
 
     private static final String SELECT_ONLY_SPAN_BY_ID = """
             SELECT
@@ -710,45 +708,45 @@ class SpanDAO {
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
                 FROM (
-                         SELECT
-                             workspace_id,
-                             project_id,
-                             entity_id,
-                             name,
-                             groupArray(value) AS values,
-                             groupArray(reason) AS reasons,
-                             groupArray(category_name) AS categories,
-                             groupArray(author) AS authors,
-                             groupArray(source) AS sources,
-                             groupArray(created_by) AS created_bies,
-                             groupArray(last_updated_by) AS updated_bies,
-                             groupArray(created_at) AS created_ats,
-                             groupArray(last_updated_at) AS last_updated_ats
-                         FROM authored_feedback_scores FINAL
-                         WHERE entity_type = 'span'
-                           AND workspace_id = :workspace_id
-                           AND project_id = :project_id
-                         GROUP BY workspace_id, project_id, entity_id, name
+                     SELECT
+                         workspace_id,
+                         project_id,
+                         entity_id,
+                         name,
+                         groupArray(value) AS values,
+                         groupArray(reason) AS reasons,
+                         groupArray(category_name) AS categories,
+                         groupArray(author) AS authors,
+                         groupArray(source) AS sources,
+                         groupArray(created_by) AS created_bies,
+                         groupArray(last_updated_by) AS updated_bies,
+                         groupArray(created_at) AS created_ats,
+                         groupArray(last_updated_at) AS last_updated_ats
+                     FROM authored_feedback_scores FINAL
+                     WHERE entity_type = 'span'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                     GROUP BY workspace_id, project_id, entity_id, name
                  )
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
                     mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
-                    ) AS feedback_scores,
-                    groupArray(tuple(
-                            name,
-                            category_name,
-                            value,
-                            reason,
-                            source,
-                            value_by_author,
-                            created_at,
-                            last_updated_at,
-                            created_by,
-                            last_updated_by
-                               )) AS feedback_scores_list
+                        groupArray(name),
+                        groupArray(value)
+                ) AS feedback_scores,
+                groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS feedback_scores_list
                 FROM feedback_scores_combined
                 GROUP BY workspace_id, project_id, entity_id
             )
@@ -833,29 +831,29 @@ class SpanDAO {
 
     private static final String COUNT_BY_PROJECT_ID = """
             WITH feedback_scores_combined AS (
-                    SELECT workspace_id,
-                           project_id,
-                           entity_id,
-                           name,
-                           value,
-                           last_updated_at
-                    FROM feedback_scores FINAL
-                    WHERE entity_type = 'span'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                    UNION ALL
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        toDecimal64(avg(value), 9) AS value,
-                        min(last_updated_at)
-                    FROM authored_feedback_scores FINAL
-                    WHERE entity_type = 'span'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                    GROUP BY workspace_id, project_id, entity_id, name
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    toDecimal64(avg(value), 9) AS value,
+                    min(last_updated_at)
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                GROUP BY workspace_id, project_id, entity_id, name
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -937,152 +935,152 @@ class SpanDAO {
 
     private static final String SELECT_SPANS_STATS = """
             WITH feedback_scores_combined AS (
-                    SELECT workspace_id,
-                           project_id,
-                           entity_id,
-                           name,
-                           category_name,
-                           value,
-                           reason,
-                           source,
-                           map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
-                           created_by,
-                           last_updated_by,
-                           created_at,
-                           last_updated_at
-                    FROM feedback_scores FINAL
-                    WHERE entity_type = 'span'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                    UNION ALL
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        arrayStringConcat(categories, ', ') AS category_name,
-                        toDecimal64(arrayAvg(values), 9) AS value,
-                        arrayStringConcat(reasons, ', ') AS reason,
-                        sources[1] AS source,
-                        mapFromArrays(
-                                authors,
-                                arrayMap(
-                                        i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                        arrayEnumerate(values)
-                                )
-                        ) AS value_by_author,
-                        arrayStringConcat(created_bies, ', ') AS created_by,
-                        arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                        arrayMin(created_ats) AS created_at,
-                        arrayMax(last_updated_ats) AS last_updated_at
-                    FROM (
-                             SELECT
-                                 workspace_id,
-                                 project_id,
-                                 entity_id,
-                                 name,
-                                 groupArray(value) AS values,
-                                 groupArray(reason) AS reasons,
-                                 groupArray(category_name) AS categories,
-                                 groupArray(author) AS authors,
-                                 groupArray(source) AS sources,
-                                 groupArray(created_by) AS created_bies,
-                                 groupArray(last_updated_by) AS updated_bies,
-                                 groupArray(created_at) AS created_ats,
-                                 groupArray(last_updated_at) AS last_updated_ats
-                             FROM authored_feedback_scores FINAL
-                             WHERE entity_type = 'span'
-                               AND workspace_id = :workspace_id
-                               AND project_id = :project_id
-                             GROUP BY workspace_id, project_id, entity_id, name
-                     )
-                )
-                , feedback_scores_agg AS (
-                    SELECT
-                        project_id,
-                        entity_id,
-                        mapFromArrays(
-                                groupArray(name),
-                                groupArray(value)
-                        ) AS feedback_scores
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    toDecimal64(arrayAvg(values), 9) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    sources[1] AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM (
+                     SELECT
+                         workspace_id,
+                         project_id,
+                         entity_id,
+                         name,
+                         groupArray(value) AS values,
+                         groupArray(reason) AS reasons,
+                         groupArray(category_name) AS categories,
+                         groupArray(author) AS authors,
+                         groupArray(source) AS sources,
+                         groupArray(created_by) AS created_bies,
+                         groupArray(last_updated_by) AS updated_bies,
+                         groupArray(created_at) AS created_ats,
+                         groupArray(last_updated_at) AS last_updated_ats
+                     FROM authored_feedback_scores FINAL
+                     WHERE entity_type = 'span'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                     GROUP BY workspace_id, project_id, entity_id, name
+                 )
+            )
+            , feedback_scores_agg AS (
+                SELECT
+                    project_id,
+                    entity_id,
+                    mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                    ) AS feedback_scores
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id
+            )
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
                     FROM feedback_scores_combined
-                    GROUP BY workspace_id, project_id, entity_id
-                )
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            , spans_final AS (
+                SELECT
+                     workspace_id,
+                     project_id,
+                     id,
+                     if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                             NULL) AS duration,
+                     if(input_length > 0, 1, 0) as input_count,
+                     if(output_length > 0, 1, 0) as output_count,
+                     if(metadata_length > 0, 1, 0) as metadata_count,
+                     length(tags) as tags_count,
+                     usage,
+                     total_estimated_cost,
+                     error_info
+                FROM spans final
                 <if(feedback_scores_empty_filters)>
-                 , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                     FROM (
+                    LEFT JOIN fsc ON fsc.entity_id = spans.id
+                <endif>
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(feedback_scores_filters)>
+                AND id in (
+                    SELECT
+                        entity_id
+                    FROM (
                         SELECT *
                         FROM feedback_scores_combined
                         ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
-                     )
-                     GROUP BY entity_id
-                     HAVING <feedback_scores_empty_filters>
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
                 )
                 <endif>
-                , spans_final AS (
-                    SELECT
-                         workspace_id,
-                         project_id,
-                         id,
-                         if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                     AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                 (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                 NULL) AS duration,
-                         if(input_length > 0, 1, 0) as input_count,
-                         if(output_length > 0, 1, 0) as output_count,
-                         if(metadata_length > 0, 1, 0) as metadata_count,
-                         length(tags) as tags_count,
-                         usage,
-                         total_estimated_cost,
-                         error_info
-                    FROM spans final
-                    <if(feedback_scores_empty_filters)>
-                        LEFT JOIN fsc ON fsc.entity_id = spans.id
-                    <endif>
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    <if(trace_id)> AND trace_id = :trace_id <endif>
-                    <if(type)> AND type = :type <endif>
-                    <if(filters)> AND <filters> <endif>
-                    <if(feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores_combined
-                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_filters>
-                    )
-                    <endif>
-                    <if(feedback_scores_empty_filters)>
-                    AND fsc.feedback_scores_count = 0
-                    <endif>
-                )
-                SELECT
-                    project_id as project_id,
-                    count(DISTINCT id) as span_count,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
-                    sum(input_count) as input,
-                    sum(output_count) as output,
-                    sum(metadata_count) as metadata,
-                    avg(tags_count) as tags,
-                    avgMap(usage) as usage,
-                    avgMap(feedback_scores) AS feedback_scores,
-                    avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
-                    sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                    toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                    countIf(error_info, error_info != '') AS error_count
-                FROM spans_final s
-                LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
-                GROUP BY project_id
-                ;
-                """;
+                <if(feedback_scores_empty_filters)>
+                AND fsc.feedback_scores_count = 0
+                <endif>
+            )
+            SELECT
+                project_id as project_id,
+                count(DISTINCT id) as span_count,
+                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                sum(input_count) as input,
+                sum(output_count) as output,
+                sum(metadata_count) as metadata,
+                avg(tags_count) as tags,
+                avgMap(usage) as usage,
+                avgMap(feedback_scores) AS feedback_scores,
+                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                countIf(error_info, error_info != '') AS error_count
+            FROM spans_final s
+            LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
+            GROUP BY project_id
+            ;
+            """;
 
     public static final String SELECT_SPAN_IDS_BY_TRACE_ID = """
             SELECT
@@ -1604,7 +1602,6 @@ class SpanDAO {
         return Optional.ofNullable(feedbackScores)
                 .orElse(List.of())
                 .stream()
-                .filter(Objects::nonNull)
                 .map(feedbackScore -> FeedbackScore.builder()
                         .name((String) feedbackScore.get(0))
                         .categoryName(getIfNotEmpty(feedbackScore.get(1)))
@@ -1617,7 +1614,6 @@ class SpanDAO {
                         .createdBy((String) feedbackScore.get(8))
                         .lastUpdatedBy((String) feedbackScore.get(9))
                         .build())
-                .filter(Objects::nonNull)
                 .toList();
     }
 
