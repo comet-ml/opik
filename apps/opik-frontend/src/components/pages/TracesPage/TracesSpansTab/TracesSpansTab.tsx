@@ -27,6 +27,7 @@ import {
   COLUMN_GUARDRAIL_STATISTIC_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
+  COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -92,6 +93,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
+import { Filter } from "@/types/filters";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -349,6 +351,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type,
             placeholder: "key",
             excludeRoot: true,
+          },
+        },
+        [COLUMN_CUSTOM_ID]: {
+          keyComponent: TracesOrSpansPathsAutocomplete,
+          keyComponentProps: {
+            rootKeys: ["input", "output"],
+            projectId,
+            type,
+            placeholder: "key",
+            excludeRoot: false,
+          },
+          validateFilter: (filter: Filter) => {
+            if (
+              filter.key &&
+              filter.value &&
+              !/^((\$\.)?input|(\$\.)?output)(\.[^.]+)*$/.test(filter.key)
+            ) {
+              return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
+            }
           },
         },
         [COLUMN_FEEDBACK_SCORES_ID]: {
@@ -661,6 +682,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
+      },
+      {
+        id: COLUMN_CUSTOM_ID,
+        label: "Custom filter",
+        type: COLUMN_TYPE.dictionary,
       },
       ...(isGuardrailsEnabled
         ? [

@@ -21,7 +21,9 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -111,8 +113,6 @@ interface TraceDAO {
 
     Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
 
-    Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
-
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
@@ -149,7 +149,8 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            ) VALUES
+            ) <settings_clause>
+            VALUES
                 <items:{item |
                     (
                         :id<item.index>,
@@ -181,7 +182,7 @@ class TraceDAOImpl implements TraceDAO {
      **/
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT = """
-            INSERT INTO traces(
+            INSERT INTO traces (
                 id,
                 project_id,
                 workspace_id,
@@ -198,7 +199,7 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            )
+            ) <settings_clause>
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -294,7 +295,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String UPDATE = """
             INSERT INTO traces (
             	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            ) SELECT
+            )  <settings_clause>
+            SELECT
             	id,
             	project_id,
             	workspace_id,
@@ -622,24 +624,24 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String TRACE_COUNT_BY_WORKSPACE_ID = """
-                SELECT
-                     workspace_id,
-                     COUNT(DISTINCT id) as trace_count
-                 FROM traces
-                 WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                 <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
-                 GROUP BY workspace_id
+            SELECT
+                 workspace_id,
+                 COUNT(DISTINCT id) as trace_count
+             FROM traces
+             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+             <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
+             GROUP BY workspace_id
             ;
             """;
 
     private static final String TRACE_DAILY_BI_INFORMATION = """
-                SELECT
-                     workspace_id,
-                     created_by AS user,
-                     COUNT(DISTINCT id) AS trace_count
-                FROM traces
-                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id, created_by
+            SELECT
+                 workspace_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS trace_count
+            FROM traces
+            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -773,7 +775,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
                 id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            )
+            ) <settings_clause>
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -1424,13 +1426,6 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String DELETE_THREADS_BY_PROJECT_ID = """
-            DELETE FROM traces
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND thread_id IN :thread_ids
-            """;
-
     private static final String SELECT_TRACE_IDS_BY_THREAD_IDS = """
             SELECT DISTINCT id
             FROM traces
@@ -1598,6 +1593,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -1656,6 +1652,8 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         return template;
     }
@@ -1719,6 +1717,8 @@ class TraceDAOImpl implements TraceDAO {
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2169,6 +2169,8 @@ class TraceDAOImpl implements TraceDAO {
             var template = new ST(BATCH_INSERT)
                     .add("items", queryItems);
 
+            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
             Statement statement = connection.createStatement(template.render());
 
             int i = 0;
@@ -2486,24 +2488,6 @@ class TraceDAOImpl implements TraceDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
-        });
-    }
-
-    @Override
-    public Mono<Long> deleteThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
-        Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(DELETE_THREADS_BY_PROJECT_ID)
-                    .bind("project_id", projectId)
-                    .bind("thread_ids", threadIds.toArray(String[]::new));
-
-            Segment segment = startSegment("traces", "Clickhouse", "deleteThreads");
-
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMapMany(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum);
         });
     }
 

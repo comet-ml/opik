@@ -3,6 +3,8 @@ package com.comet.opik.domain.evaluators;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.LogItem;
+import com.comet.opik.infrastructure.AsyncInsertConfig;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
@@ -33,8 +35,8 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
 
     List<String> CUSTOM_MARKER_KEYS = List.of("trace_id", "thread_model_id");
 
-    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory) {
-        return new AutomationRuleEvaluatorLogsDAOImpl(factory);
+    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory, AsyncInsertConfig configuration) {
+        return new AutomationRuleEvaluatorLogsDAOImpl(factory, configuration);
     }
 
     Mono<LogPage> findLogs(LogCriteria criteria);
@@ -48,6 +50,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
     private static final String INSERT_STATEMENT = """
             INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, markers)
+            <settings_clause>
             VALUES <items:{item |
                 (
                     parseDateTime64BestEffort(:timestamp<item.index>, 9),
@@ -72,6 +75,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull AsyncInsertConfig asyncInsertConfig;
 
     public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
@@ -134,6 +138,8 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var template = new ST(INSERT_STATEMENT);
+
+                    ClickhouseUtils.checkAsyncConfig(template, asyncInsertConfig);
 
                     List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);

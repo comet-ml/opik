@@ -17,6 +17,7 @@ import com.comet.opik.infrastructure.events.EventListenerRegistrar;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
+import com.comet.opik.infrastructure.job.JobModule;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
@@ -88,7 +89,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new CacheModule(), new AnthropicModule(),
+                        new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule())
                 .installers(JobGuiceyInstaller.class)

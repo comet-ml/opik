@@ -1,66 +1,71 @@
-import { useMemo } from "react";
-import { ColumnPinningState } from "@tanstack/react-table";
+import { useMemo, useCallback } from "react";
+import { useQueryParam } from "use-query-params";
 
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import Loader from "@/components/shared/Loader/Loader";
+import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
+import { formatIso8601Duration } from "@/lib/date";
+
 import {
-  WORKSPACE_PREFERENCE_TYPE,
   WorkspacePreference,
+  WORKSPACE_PREFERENCE_TYPE,
   WorkspacePreferenceParam,
 } from "./types";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import {
+  WORKSPACE_PREFERENCES_DEFAULT_COLUMNS,
+  WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING,
+  WORKSPACE_PREFERENCES_QUERY_PARAMS,
+  WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT,
+} from "./constants";
 import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
-import { useQueryParam } from "use-query-params";
-import { useCallback } from "react";
+import useAppStore from "@/store/AppStore";
 
-export const DEFAULT_COLUMNS: ColumnData<WorkspacePreference>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Preference",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "value",
-    label: "Value",
-    type: COLUMN_TYPE.string,
-  },
-];
+const WorkspacePreferencesTab: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { data: workspaceConfig, isPending } = useWorkspaceConfig({
+    workspaceName: workspaceName,
+  });
 
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
-  right: [],
-};
-
-const WorkspacePreferencesTab = () => {
   const [editPreferenceOpen, setEditPreferenceOpen] = useQueryParam(
-    "editPreference",
+    WORKSPACE_PREFERENCES_QUERY_PARAMS.EDIT_PREFERENCE,
     WorkspacePreferenceParam,
     {
       updateType: "replaceIn",
     },
   );
 
-  const data = [
-    {
-      name: "Thread timeout",
-      value: "15 min",
-      type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+  const threadTimeoutValue =
+    workspaceConfig?.timeout_to_mark_thread_as_inactive ??
+    WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT;
+
+  const data = useMemo(
+    () => [
+      {
+        name: "Thread timeout",
+        value: formatIso8601Duration(threadTimeoutValue) ?? "Not set",
+        type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+      },
+    ],
+    [threadTimeoutValue],
+  );
+
+  const getPreferencesDialogConfig = useCallback(
+    (type: WORKSPACE_PREFERENCE_TYPE) => {
+      const isOpen = editPreferenceOpen === type;
+      const setOpen = (v: boolean) => setEditPreferenceOpen(v ? type : null);
+
+      return {
+        open: isOpen,
+        setOpen,
+      };
     },
-  ];
+    [editPreferenceOpen, setEditPreferenceOpen],
+  );
 
-  const getPreferencesDialogConfig = (type: WORKSPACE_PREFERENCE_TYPE) => {
-    const isOpen = editPreferenceOpen === type;
-    const setOpen = (v: boolean) => setEditPreferenceOpen(v ? type : null);
-
-    return {
-      open: isOpen,
-      setOpen,
-    };
-  };
-
-  const onEdit = useCallback(
+  const handleEdit = useCallback(
     (row: WorkspacePreference) => {
       setEditPreferenceOpen(row.type);
     },
@@ -70,30 +75,35 @@ const WorkspacePreferencesTab = () => {
   const columns = useMemo(() => {
     return [
       ...convertColumnDataToColumn<WorkspacePreference, WorkspacePreference>(
-        DEFAULT_COLUMNS,
+        WORKSPACE_PREFERENCES_DEFAULT_COLUMNS,
         {},
       ),
       generateActionsColumDef({
         cell: WorkspacePreferencesActionsCell,
         customMeta: {
-          onEdit,
+          onEdit: handleEdit,
         },
       }),
     ];
-  }, [onEdit]);
+  }, [handleEdit]);
 
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={data}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-      />
+      {isPending ? (
+        <Loader />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={data}
+          columnPinning={WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING}
+        />
+      )}
+
       <EditThreadTimeoutDialog
         {...getPreferencesDialogConfig(
           WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
         )}
-        defaultValue="15"
+        defaultValue={threadTimeoutValue}
       />
     </>
   );

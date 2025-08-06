@@ -2,7 +2,10 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from opik import datetime_helpers, id_helpers, llm_usage, Attachment
+import opik.datetime_helpers as datetime_helpers
+import opik.id_helpers as id_helpers
+import opik.llm_usage as llm_usage
+import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
 
 from ..attachment import converters as attachment_converters
@@ -165,7 +168,7 @@ class Span:
         provider: LLMProvider = LLMProvider.OPENAI,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        attachments: Optional[List[attachment.Attachment]] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -281,7 +284,7 @@ def create_span(
     provider: Optional[Union[LLMProvider, str]] = None,
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
-    attachments: Optional[List[Attachment]] = None,
+    attachments: Optional[List[attachment.Attachment]] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -357,7 +360,7 @@ def update_span(
     provider: Optional[Union[LLMProvider, str]] = None,
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
-    attachments: Optional[List[Attachment]] = None,
+    attachments: Optional[List[attachment.Attachment]] = None,
 ) -> None:
     backend_compatible_usage = validation_helpers.validate_and_parse_usage(
         usage=usage,

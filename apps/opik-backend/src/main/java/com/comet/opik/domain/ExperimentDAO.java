@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupCriteria;
+import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
@@ -12,6 +14,8 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -43,6 +47,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
@@ -80,7 +85,7 @@ class ExperimentDAO {
                 prompt_versions,
                 type,
                 optimization_id
-            )
+            ) <settings_clause>
             SELECT
                 if(
                     LENGTH(CAST(old.id AS Nullable(String))) > 0,
@@ -128,7 +133,7 @@ class ExperimentDAO {
     private static final String FIND = """
             WITH experiments_final AS (
                 SELECT
-                    *
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -294,7 +299,7 @@ class ExperimentDAO {
             SELECT count(id) as count
             FROM
             (
-                SELECT id
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -307,6 +312,23 @@ class ExperimentDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
+            ;
+            """;
+
+    private static final String FIND_GROUPS = """
+            WITH experiments_filtered AS (
+                SELECT
+                    dataset_id,
+                    metadata
+                FROM experiments final
+                WHERE workspace_id = :workspace_id
+                <if(types)> AND type IN :types <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND <filters> <endif>
+            )
+            SELECT <groupSelects>
+            FROM experiments_filtered
+            GROUP BY <groupBy>
             ;
             """;
 
@@ -393,6 +415,8 @@ class ExperimentDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -402,7 +426,11 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> insert(Experiment experiment, Connection connection) {
-        var statement = connection.createStatement(INSERT)
+        ST template = new ST(INSERT);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+        var statement = connection.createStatement(template.render())
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
@@ -830,5 +858,63 @@ class ExperimentDAO {
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
                 .reduce(0L, Long::sum);
+    }
+
+    @WithSpan
+    public Flux<ExperimentGroupItem> findGroups(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups by criteria '{}'", criteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = newGroupTemplate(FIND_GROUPS, criteria);
+                    var statement = connection.createStatement(template.render());
+                    bindGroupCriteria(statement, criteria);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> mapExperimentGroupItem(result, criteria.groups().size()));
+    }
+
+    private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
+        var template = new ST(query);
+
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
+                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
+
+        groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
+
+        return template;
+    }
+
+    private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.filters())
+                .ifPresent(filters -> {
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
+                });
+    }
+
+    private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
+        return result.map((row, rowMetadata) -> {
+
+            var groupValues = IntStream.range(0, groupsCount)
+                    .mapToObj(i -> "group_" + i)
+                    .map(columnName -> row.get(columnName, String.class))
+                    .toList();
+
+            return ExperimentGroupItem.builder()
+                    .groupValues(groupValues)
+                    .build();
+        });
     }
 }
