@@ -6,10 +6,10 @@ on:
     inputs:
       resumeUrl:
         description: 'URL to call to resume n8n'
-        required: false
+        required: true
       trackingId:
         description: 'UUID for tracking this release step'
-        required: false
+        required: true
         type: string
 
 jobs:
