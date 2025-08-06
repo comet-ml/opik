@@ -62,7 +62,14 @@ public class TraceThreadsClosingJob extends Job {
                 .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
-                        error -> log.error("Error processing closing of trace threads", error));
+                        error -> {
+                            if (Thread.currentThread().isInterrupted()
+                                    || error.getCause() instanceof InterruptedException) {
+                                log.info("TraceThreadsClosingJob was interrupted");
+                            } else {
+                                log.error("Error processing closing of trace threads", error);
+                            }
+                        });
     }
 
     private Mono<Void> lockAndProcessJob(Lock lock, Duration defaultTimeoutToMarkThreadAsInactive, int limit) {

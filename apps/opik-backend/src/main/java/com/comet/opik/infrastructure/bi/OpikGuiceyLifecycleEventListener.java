@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
-import io.dropwizard.jobs.JobConfiguration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobBuilder;
@@ -59,10 +58,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             injector.set(injectorEvent.getInjector());
 
             log.info("Installing jobs...");
-            JobConfiguration configuration = injectorEvent.getConfiguration();
-            var jobManager = new GuiceJobManager(configuration, injector.get());
-            injectorEvent.getEnvironment().lifecycle().manage(jobManager);
-            guiceJobManager.set(jobManager);
+            guiceJobManager.set(injector.get().getInstance(GuiceJobManager.class));
             log.info("Jobs installed.");
         }
     }
@@ -144,52 +140,56 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     private void shutdownJobManager() {
         var jobManager = guiceJobManager.get();
-        if (jobManager != null) {
-            try {
-                var scheduler = jobManager.getScheduler();
 
-                // First, try graceful shutdown with timeout
-                log.info("Attempting graceful scheduler shutdown...");
-                scheduler.shutdown(true);
+        if (jobManager == null) {
+            log.info("No GuiceJobManager instance to shut down");
+            return;
+        }
 
-                // Wait up to 10 seconds for graceful shutdown
-                var shutdownStart = Instant.now();
-                var maxWaitTime = Duration.ofSeconds(10);
+        try {
+            var scheduler = jobManager.getScheduler();
 
-                while (!scheduler.isShutdown()
-                        && Duration.between(shutdownStart, Instant.now()).compareTo(maxWaitTime) < 0) {
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+            // First, try graceful shutdown with timeout
+            log.info("Attempting graceful scheduler shutdown...");
+            scheduler.shutdown(true);
+
+            // Wait up to 10 seconds for graceful shutdown
+            var shutdownStart = Instant.now();
+            var maxWaitTime = Duration.ofSeconds(10);
+
+            while (!scheduler.isShutdown()
+                    && Duration.between(shutdownStart, Instant.now()).compareTo(maxWaitTime) < 0) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
                 }
-
-                if (!scheduler.isShutdown()) {
-                    log.warn("Scheduler did not shut down gracefully within {} seconds, forcing shutdown",
-                            maxWaitTime.toSeconds());
-
-                    // Force shutdown by interrupting running jobs
-                    var runningJobs = scheduler.getCurrentlyExecutingJobs();
-                    for (var jobExecution : runningJobs) {
-                        try {
-                            log.warn("Interrupting job: {}", jobExecution.getJobDetail().getKey());
-                            scheduler.interrupt(jobExecution.getJobDetail().getKey());
-                        } catch (Exception e) {
-                            log.warn("Failed to interrupt job: {}", jobExecution.getJobDetail().getKey(), e);
-                        }
-                    }
-
-                    // Force shutdown now
-                    scheduler.shutdown(false);
-                }
-
-                log.info("JobManager shutdown completed");
-
-            } catch (SchedulerException e) {
-                log.warn("Error shutting down JobManager", e);
             }
+
+            if (!scheduler.isShutdown()) {
+                log.warn("Scheduler did not shut down gracefully within {} seconds, forcing shutdown",
+                        maxWaitTime.toSeconds());
+
+                // Force shutdown by interrupting running jobs
+                var runningJobs = scheduler.getCurrentlyExecutingJobs();
+                for (var jobExecution : runningJobs) {
+                    try {
+                        log.warn("Interrupting job: {}", jobExecution.getJobDetail().getKey());
+                        scheduler.interrupt(jobExecution.getJobDetail().getKey());
+                    } catch (Exception e) {
+                        log.warn("Failed to interrupt job: {}", jobExecution.getJobDetail().getKey(), e);
+                    }
+                }
+
+                // Force shutdown now
+                scheduler.shutdown(false);
+            }
+
+            log.info("JobManager shutdown completed");
+
+        } catch (SchedulerException e) {
+            log.warn("Error shutting down JobManager", e);
         }
 
         guiceJobManager.set(null);

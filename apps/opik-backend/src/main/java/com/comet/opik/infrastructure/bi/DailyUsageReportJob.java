@@ -82,7 +82,12 @@ public class DailyUsageReportJob extends Job {
                         .block(Duration.ofSeconds(6 + config.getJobTimeout().getDailyUsageReportJobTimeout())); // Total timeout
                 log.info("Daily usage report processed");
             } catch (Exception e) {
-                log.error("Failed to generate daily usage report", e);
+                if (Thread.currentThread().isInterrupted() || e.getCause() instanceof InterruptedException) {
+                    log.info("Daily usage report job was interrupted");
+                    Thread.currentThread().interrupt(); // Restore interrupt status
+                } else {
+                    log.error("Failed to generate daily usage report", e);
+                }
             }
         }
 
