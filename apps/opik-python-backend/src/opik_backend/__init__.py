@@ -9,6 +9,7 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 
 
 def create_app(test_config=None, should_init_executor=True):
@@ -79,3 +80,6 @@ def setup_telemetry(app):
     
     # Configure Flask instrumentation
     FlaskInstrumentor().instrument_app(app)
+
+    # Configure system metrics instrumentation
+    SystemMetricsInstrumentor().instrument()
