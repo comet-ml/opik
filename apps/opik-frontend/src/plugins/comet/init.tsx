@@ -15,7 +15,7 @@ type EnvironmentVariablesOverwrite = {
 declare global {
   interface Window {
     analytics: SegmentAnalytics.AnalyticsJS;
-    dataLayer: Array<Record<string, any>>;
+    dataLayer: Array<Record<string, unknown>>;
     environmentVariablesOverwrite?: EnvironmentVariablesOverwrite;
   }
 }
