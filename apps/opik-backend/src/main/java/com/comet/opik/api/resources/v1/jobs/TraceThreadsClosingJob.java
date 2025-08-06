@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.threads.TraceThreadService;
+import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -29,16 +30,19 @@ public class TraceThreadsClosingJob extends Job {
     private final LockService lockService;
     private final TraceThreadConfig traceThreadConfig;
     private final RedissonReactiveClient redisClient;
+    private final JobTimeoutConfig jobTimeoutConfig;
 
     @Inject
     public TraceThreadsClosingJob(@NonNull TraceThreadService traceThreadService,
             @NonNull LockService lockService,
             @NonNull @Config TraceThreadConfig traceThreadConfig,
-            @NonNull RedissonReactiveClient redisClient) {
+            @NonNull RedissonReactiveClient redisClient,
+            @NonNull @Config("jobTimeout") JobTimeoutConfig jobTimeoutConfig) {
         this.traceThreadService = traceThreadService;
         this.lockService = lockService;
         this.traceThreadConfig = traceThreadConfig;
         this.redisClient = redisClient;
+        this.jobTimeoutConfig = jobTimeoutConfig;
     }
 
     @Override
@@ -55,7 +59,7 @@ public class TraceThreadsClosingJob extends Job {
         int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
-                .timeout(Duration.ofSeconds(30)) // Add timeout to prevent hanging
+                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
                         error -> log.error("Error processing closing of trace threads", error));

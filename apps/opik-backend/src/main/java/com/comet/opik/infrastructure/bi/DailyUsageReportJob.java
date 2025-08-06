@@ -72,13 +72,14 @@ public class DailyUsageReportJob extends Job {
                 lockService.executeWithLockCustomExpire(
                         lock,
                         Mono.defer(this::generateReportInternal)
-                                .timeout(Duration.ofSeconds(30)) // Timeout after 30 seconds
+                                .timeout(Duration.ofSeconds(config.getJobTimeout().getDailyUsageReportJobTimeout()))
                                 .doOnSubscribe(__ -> {
                                     if (Thread.currentThread().isInterrupted()) {
                                         throw new RuntimeException("Job interrupted during execution");
                                     }
                                 }),
-                        Duration.ofSeconds(5)).block(Duration.ofSeconds(45)); // Total timeout 45 seconds
+                        Duration.ofSeconds(5))
+                        .block(Duration.ofSeconds(6 + config.getJobTimeout().getDailyUsageReportJobTimeout())); // Total timeout
                 log.info("Daily usage report processed");
             } catch (Exception e) {
                 log.error("Failed to generate daily usage report", e);
