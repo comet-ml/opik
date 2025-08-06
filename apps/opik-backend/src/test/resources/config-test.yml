@@ -323,3 +323,12 @@ traceThreadConfig:
   # Default: 1000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
+
+# Job timeout configuration
+jobTimeout:
+  # Default: 30s
+  # Description: Timeout for the daily usage report job execution
+  dailyUsageReportJobTimeout: 30
+  # Default: 30s
+  # Description: Timeout for the trace threads closing job execution
+  traceThreadsClosingJobTimeout: 30

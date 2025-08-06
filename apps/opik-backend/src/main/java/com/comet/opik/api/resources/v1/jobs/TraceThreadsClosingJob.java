@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.threads.TraceThreadService;
+import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -29,29 +30,47 @@ public class TraceThreadsClosingJob extends Job {
     private final LockService lockService;
     private final TraceThreadConfig traceThreadConfig;
     private final RedissonReactiveClient redisClient;
+    private final JobTimeoutConfig jobTimeoutConfig;
 
     @Inject
     public TraceThreadsClosingJob(@NonNull TraceThreadService traceThreadService,
             @NonNull LockService lockService,
             @NonNull @Config TraceThreadConfig traceThreadConfig,
-            @NonNull RedissonReactiveClient redisClient) {
+            @NonNull RedissonReactiveClient redisClient,
+            @NonNull @Config("jobTimeout") JobTimeoutConfig jobTimeoutConfig) {
         this.traceThreadService = traceThreadService;
         this.lockService = lockService;
         this.traceThreadConfig = traceThreadConfig;
         this.redisClient = redisClient;
+        this.jobTimeoutConfig = jobTimeoutConfig;
     }
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
+        // Check for interruption before starting
+        if (Thread.currentThread().isInterrupted()) {
+            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+            return;
+        }
+
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
         var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
         int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
+                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
                 .subscribe(
                         __ -> log.info("Successfully started closing trace threads process"),
-                        error -> log.error("Error processing closing of trace threads", error));
+                        error -> {
+                            if (Thread.currentThread().isInterrupted()
+                                    || error.getCause() instanceof InterruptedException) {
+                                log.info("TraceThreadsClosingJob was interrupted");
+                                Thread.currentThread().interrupt(); // Restore interrupt status
+                            } else {
+                                log.error("Error processing closing of trace threads", error);
+                            }
+                        });
     }
 
     private Mono<Void> lockAndProcessJob(Lock lock, Duration defaultTimeoutToMarkThreadAsInactive, int limit) {

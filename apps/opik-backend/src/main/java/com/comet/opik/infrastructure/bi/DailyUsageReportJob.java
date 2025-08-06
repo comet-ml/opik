@@ -20,6 +20,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.UncheckedInterruptedException;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -60,16 +61,35 @@ public class DailyUsageReportJob extends Job {
                 return;
             }
 
+            // Check for interruption before starting
+            if (Thread.currentThread().isInterrupted()) {
+                log.info("Job interrupted before execution, skipping daily usage report");
+                return;
+            }
+
             var lock = new LockService.Lock("daily_usage_report");
 
             try {
                 lockService.executeWithLockCustomExpire(
                         lock,
-                        Mono.defer(this::generateReportInternal),
-                        Duration.ofSeconds(5)).block();
+                        Mono.defer(this::generateReportInternal)
+                                .timeout(Duration.ofSeconds(config.getJobTimeout().getDailyUsageReportJobTimeout()))
+                                .doOnSubscribe(__ -> {
+                                    if (Thread.currentThread().isInterrupted()) {
+                                        throw new UncheckedInterruptedException(
+                                                new InterruptedException("Job interrupted during execution"));
+                                    }
+                                }),
+                        Duration.ofSeconds(5))
+                        .block(Duration.ofSeconds(6 + config.getJobTimeout().getDailyUsageReportJobTimeout())); // Total timeout
                 log.info("Daily usage report processed");
             } catch (Exception e) {
-                log.error("Failed to generate daily usage report", e);
+                if (Thread.currentThread().isInterrupted() || e.getCause() instanceof InterruptedException) {
+                    log.info("Daily usage report job was interrupted");
+                    Thread.currentThread().interrupt(); // Restore interrupt status
+                } else {
+                    log.error("Failed to generate daily usage report", e);
+                }
             }
         }
 
