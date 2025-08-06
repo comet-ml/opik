@@ -66,6 +66,7 @@ public class TraceThreadsClosingJob extends Job {
                             if (Thread.currentThread().isInterrupted()
                                     || error.getCause() instanceof InterruptedException) {
                                 log.info("TraceThreadsClosingJob was interrupted");
+                                Thread.currentThread().interrupt(); // Restore interrupt status
                             } else {
                                 log.error("Error processing closing of trace threads", error);
                             }

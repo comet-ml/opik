@@ -20,6 +20,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.UncheckedInterruptedException;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -75,7 +76,7 @@ public class DailyUsageReportJob extends Job {
                                 .timeout(Duration.ofSeconds(config.getJobTimeout().getDailyUsageReportJobTimeout()))
                                 .doOnSubscribe(__ -> {
                                     if (Thread.currentThread().isInterrupted()) {
-                                        throw new RuntimeException("Job interrupted during execution");
+                                        throw new UncheckedInterruptedException(new InterruptedException("Job interrupted during execution"));
                                     }
                                 }),
                         Duration.ofSeconds(5))
