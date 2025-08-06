@@ -1,5 +1,3 @@
-# Legacy scoring commands - EXACT production format
-PYTHON_SCORING_COMMAND = """
 import inspect
 import json
 import traceback
@@ -71,4 +69,3 @@ scores = to_scores(score_result)
 
 response = json.dumps({"scores": [score.__dict__ for score in scores]})
 print(response)
-"""

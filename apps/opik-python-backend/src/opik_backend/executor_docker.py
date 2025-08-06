@@ -207,11 +207,11 @@ class DockerExecutor(CodeExecutorBase):
 
             # Remove the container
             container.remove(force=True)
-            
+
             # Calculate and record the latency
             latency = self._calculate_latency_ms(start_time)
             container_stop_histogram.record(latency, attributes={"method": "stop_container"})
-            
+
             logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
 
         except docker.errors.APIError as e:
@@ -250,8 +250,8 @@ class DockerExecutor(CodeExecutorBase):
                 stdin=False,
                 tty=False
             )
-            result = future.result(timeout=self.exec_timeout)
 
+            result = future.result(timeout=self.exec_timeout)
             exec_result = ExecutionResult(
                 exit_code=result.exit_code,
                 output=result.output
