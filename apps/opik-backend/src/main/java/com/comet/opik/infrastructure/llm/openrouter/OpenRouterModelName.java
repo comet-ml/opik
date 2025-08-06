@@ -447,4 +447,3 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
         return value;
     }
 }
-
