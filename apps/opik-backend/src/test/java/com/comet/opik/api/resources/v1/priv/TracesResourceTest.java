@@ -61,9 +61,7 @@ import com.comet.opik.api.resources.utils.traces.TraceTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreMapper;
-import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.SpanType;
@@ -76,7 +74,6 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
@@ -7575,8 +7572,7 @@ class TracesResourceTest {
             var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
-                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class).stream()
-                            .map(score -> score.toBuilder().valueByAuthor(null).build()).toList())
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -9149,78 +9145,6 @@ class TracesResourceTest {
 
             // then
             assertFeedbackScoreNames(actualNames, names);
-        }
-
-        @Test
-        @DisplayName("when get trace threads feedback score names with authored scores, then return feedback score names")
-        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNamesWithAuthoredScores__thenReturnFeedbackScoreNames(
-                FeedbackScoreService feedbackScoreService) {
-
-            // given
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
-
-            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-
-            // Create multiple values feedback scores for trace threads (old way)
-            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
-
-            createMultiValueTraceThreadScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
-
-            createMultiValueTraceThreadScores(List.of(names.getLast()), project, apiKey, workspaceName);
-
-            // Create authored feedback scores for the same project (new way)
-            String threadId = UUID.randomUUID().toString();
-            Trace trace = createTrace().toBuilder()
-                    .projectName(project.name())
-                    .threadId(threadId)
-                    .build();
-
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
-
-            // Close thread
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId, project.id(), null, apiKey, workspaceName);
-
-            // Create authored feedback scores using the service directly
-
-            // Create a score with author
-            FeedbackScore authoredScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
-                    .name("authored_score_name")
-                    .build();
-
-            feedbackScoreService
-                    .scoreAuthoredEntity(EntityType.THREAD, trace.id(), authoredScore, "test_author", project.id())
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "test_user", workspaceId))
-                    .block();
-
-            // Add the authored score name to expected names
-            List<String> expectedNames = new ArrayList<>(names);
-            expectedNames.add("authored_score_name");
-
-            // Create unexpected feedback scores for a different project
-            String unexpectedProjectName = RandomStringUtils.secure().nextAlphanumeric(20);
-            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey,
-                    workspaceName);
-            Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
-
-            createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
-
-            // when
-            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
-                    workspaceName);
-
-            // then
-            assertFeedbackScoreNames(actualNames, expectedNames);
         }
     }
 
