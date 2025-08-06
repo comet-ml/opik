@@ -76,7 +76,8 @@ public class DailyUsageReportJob extends Job {
                                 .timeout(Duration.ofSeconds(config.getJobTimeout().getDailyUsageReportJobTimeout()))
                                 .doOnSubscribe(__ -> {
                                     if (Thread.currentThread().isInterrupted()) {
-                                        throw new UncheckedInterruptedException(new InterruptedException("Job interrupted during execution"));
+                                        throw new UncheckedInterruptedException(
+                                                new InterruptedException("Job interrupted during execution"));
                                     }
                                 }),
                         Duration.ofSeconds(5))
