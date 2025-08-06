@@ -1,9 +1,16 @@
 import copy
+import logging
 from typing import Any, Dict, Optional
 
+import tenacity
+
+from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import PromptVersionDetail
 from .prompt_template import PromptTemplate
 from .types import PromptType
+
+# Create module-level logger following cursor rules
+LOGGER = logging.getLogger(__name__)
 
 
 class Prompt:
@@ -25,6 +32,8 @@ class Prompt:
         Parameters:
             name: The name for the prompt.
             prompt: The template for the prompt.
+            metadata: Optional metadata to be included in the prompt.
+            type: The prompt type (defaults to MUSTACHE).
         """
         # We import opik client here to avoid circular import issue.
         #
@@ -37,25 +46,55 @@ class Prompt:
 
         client = opik_client.get_client_cached()
 
-        new_instance = client.create_prompt(
-            name=name,
-            prompt=prompt,
-            metadata=metadata,
-            type=type,
-        )
+        try:
+            new_instance = client.create_prompt(
+                name=name,
+                prompt=prompt,
+                metadata=metadata,
+                type=type,
+            )
 
-        # TODO: synchronize names? Template and prompt.
-        # prompt is actually a prompt template.
-        self._template = PromptTemplate(template=new_instance.prompt, type=type)
-        self._name = new_instance.name
-        self._commit = new_instance.commit
-        self._metadata = new_instance.metadata
-        self._type = new_instance.type
+            # TODO: synchronize names? Template and prompt.
+            # prompt is actually a prompt template.
+            self._template = PromptTemplate(template=new_instance.prompt, type=type)
+            self._name = new_instance.name
+            self._commit = new_instance.commit
+            self._metadata = new_instance.metadata
+            self._type = new_instance.type
 
-        self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
-        self.__internal_api__version_id__: str = (
-            new_instance.__internal_api__version_id__
-        )
+            self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
+            self.__internal_api__version_id__: str = (
+                new_instance.__internal_api__version_id__
+            )
+
+        except (rest_api_core.ApiError, tenacity.RetryError) as e:
+            # Graceful error handling when Opik backend is unavailable
+            # Log the error for monitoring but don't crash the application
+            
+            error_msg = str(e)
+            if isinstance(e, tenacity.RetryError) and e.last_attempt.exception():
+                cause = e.last_attempt.exception()
+                error_msg = f"{cause.__class__.__name__} - {cause}"
+            
+            LOGGER.error(
+                "Failed to create prompt via Opik API, falling back to local prompt. "
+                "Prompt name: %s, Error: %s",
+                name,
+                error_msg,
+                extra={"prompt_name": name, "error_type": e.__class__.__name__}
+            )
+            
+            # Create a fallback prompt object that can still be used locally
+            # This allows the application to continue functioning even when Opik is down
+            self._template = PromptTemplate(template=prompt, type=type)
+            self._name = name
+            self._commit = "fallback"  # Use a special commit hash to indicate fallback mode
+            self._metadata = metadata
+            self._type = type
+
+            # Set placeholder IDs for fallback mode
+            self.__internal_api__prompt_id__: str = f"fallback-{name}"
+            self.__internal_api__version_id__: str = f"fallback-{name}-version"
 
     @property
     def name(self) -> str:
