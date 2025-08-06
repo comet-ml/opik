@@ -23,13 +23,17 @@ import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class FiltersFactory {
 
     private static final String JSON_PREFIX = "$.";
+    private static final Pattern INDEX_PATTERN = Pattern.compile("^(.*?)(\\[\\d+])?$");
 
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
@@ -175,15 +179,23 @@ public class FiltersFactory {
             customKey = customKey.substring(JSON_PREFIX.length());
         }
 
-        int index = customKey.indexOf('.');
+        int keyFieldSeparatorIndex = customKey.indexOf('.');
 
-        if (index < 0) {
-            return Pair.of(customKey, null);
+        if (keyFieldSeparatorIndex < 0) {
+            Matcher matcher = INDEX_PATTERN.matcher(customKey);
+            matcher.matches();
+
+            return Pair.of(matcher.group(1), matcher.group(2));
         } else {
-            String field = customKey.substring(0, index);
-            String key = customKey.substring(index + 1);
+            String field = customKey.substring(0, keyFieldSeparatorIndex);
+            String key = customKey.substring(keyFieldSeparatorIndex + 1);
 
-            return Pair.of(field, key);
+            Matcher matcher = INDEX_PATTERN.matcher(field);
+            matcher.matches();
+
+            return Pair.of(matcher.group(1), Optional.ofNullable(matcher.group(2))
+                    .map(index -> index + "." + key) // remove square brackets
+                    .orElse(key));
         }
 
     }
