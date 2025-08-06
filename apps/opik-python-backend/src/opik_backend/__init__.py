@@ -10,6 +10,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 
 def create_app(test_config=None, should_init_executor=True):
@@ -83,3 +84,6 @@ def setup_telemetry(app):
 
     # Configure system metrics instrumentation
     SystemMetricsInstrumentor().instrument()
+
+    # Configure requests instrumentation
+    RequestsInstrumentor().instrument()

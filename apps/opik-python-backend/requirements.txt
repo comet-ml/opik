@@ -20,5 +20,6 @@ opentelemetry-api==1.36.0
 opentelemetry-sdk==1.36.0
 opentelemetry-exporter-otlp-proto-http==1.36.0
 opentelemetry-instrumentation-flask==0.57b0
+opentelemetry-instrumentation-requests==0.57b0
 opentelemetry-instrumentation-system-metrics==0.57b0
 schedule==1.2.1
