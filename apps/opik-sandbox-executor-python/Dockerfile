@@ -13,7 +13,8 @@ RUN chmod +x /app/scoring_runner.py
 # Step 3: Minimal .pyc compilation
 RUN python -m compileall -q /app/scoring_runner.py
 
-# Step 4: Pre-warm essential modules (conservative)
+# Step 4: Pre-warm modules used by local imports (build-time caching for runtime efficiency)
+# These modules are imported locally in scoring_runner.py but benefit from pre-compilation
 RUN echo "import sys, json, time, traceback, uuid, inspect; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python -S /tmp/prewarm.py && rm /tmp/prewarm.py
 
 # Step 5: Test execution
