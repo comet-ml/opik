@@ -227,7 +227,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
 
     assert evaluation_result.dataset_id == dataset.id
 
-
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2
