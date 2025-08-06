@@ -41,6 +41,7 @@ from . import (
 )
 from .attachment import converters as attachment_converters
 from .attachment import Attachment
+from .attachment import client as attachment_client
 from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
@@ -1106,6 +1107,22 @@ class Opik:
             with the current context.
         """
         return threads_client.ThreadsClient(self)
+
+    def get_attachments_client(self) -> attachment_client.AttachmentClient:
+        """
+        Creates and provides an instance of the ``AttachmentClient`` tied to the current context.
+
+        The ``AttachmentClient`` can be used to interact with the attachments API to retrieve
+        attachment lists and download attachments for traces and spans.
+
+        Returns:
+            AttachmentClient: An instance of ``attachment.client.AttachmentClient``
+        """
+        return attachment_client.AttachmentClient(
+            rest_client=self._rest_client,
+            url_override=self._config.url_override,
+            workspace_name=self._workspace,
+        )
 
     def create_prompt(
         self,
