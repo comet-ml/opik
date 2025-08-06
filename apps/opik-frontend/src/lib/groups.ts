@@ -58,15 +58,20 @@ export const isGroupFullyExpanded = (
   });
 };
 
-export const generateExpandedMapForAllGroups = (
+export const generateAutoExpandMap = (
   flattenGroups: FlattenGroup[],
   maxExpandedDeepestGroups: number = Number.MAX_SAFE_INTEGER,
 ): Record<string, boolean> => {
   const expandedMap: Record<string, boolean> = {};
   const maxLevel = Math.max(...flattenGroups.map((group) => group.level), 0);
 
+  if (flattenGroups.length === 0) return expandedMap;
+
   flattenGroups
-    .filter((group) => group.level === maxLevel)
+    .filter(
+      (group) =>
+        group.level === maxLevel && group.id.startsWith(flattenGroups[0].id),
+    )
     .forEach((group, i) => {
       const groupIdParts = group.id.split(GROUP_ID_SEPARATOR).slice(0, -1);
       groupIdParts.forEach((_, idx) => {

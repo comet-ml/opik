@@ -7,20 +7,30 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { Explainer } from "@/types/shared";
 
 type CustomMeta = {
   valueKey: string;
   labelKey: string;
-  countKey?: string;
+  countAggregationKey?: string;
+  explainer?: Explainer;
 };
 
 const GroupTextCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const cellData = context.row.original;
-  const { valueKey, labelKey, countKey } = (custom ?? {}) as CustomMeta;
-  const label = get(cellData, labelKey, undefined);
-  const value = get(cellData, valueKey, undefined);
-  const count = countKey ? get(cellData, countKey, undefined) : undefined;
+  const { valueKey, labelKey, countAggregationKey, explainer } = (custom ??
+    {}) as CustomMeta;
+  const label = get(cellData, labelKey.split("."), undefined);
+  const value = get(cellData, valueKey.split("."), undefined);
+
+  const rowId = context.row.id;
+  const { aggregationMap } = context.table.options.meta ?? {};
+  const data = aggregationMap?.[rowId];
+  const count =
+    countAggregationKey && data
+      ? get(data, countAggregationKey, undefined)
+      : undefined;
 
   const hasValue = Boolean(label || value);
 
@@ -39,10 +49,7 @@ const GroupTextCell = <TData,>(context: CellContext<TData, unknown>) => {
             {text}
             {countText}
           </span>
-          <ExplainerIcon
-            description="Some of the experiments didn’t match any group."
-            className="ml-1"
-          />
+          {explainer && <ExplainerIcon {...explainer} className="ml-1" />}
         </CellTooltipWrapper>
       </CellWrapper>
     );

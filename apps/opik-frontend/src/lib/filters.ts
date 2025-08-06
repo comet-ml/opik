@@ -67,7 +67,6 @@ export const generateVisibilityFilters = () => {
 };
 
 export const generatePromptFilters = (promptId?: string) => {
-  return undefined; // TODO lala
   if (!promptId) return undefined;
 
   return [

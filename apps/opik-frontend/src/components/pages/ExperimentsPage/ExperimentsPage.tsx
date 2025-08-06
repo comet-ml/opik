@@ -76,6 +76,7 @@ import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtual
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -116,6 +117,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p50,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p50",
+    },
   },
   {
     id: "duration.p90",
@@ -123,6 +128,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p90,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p90",
+    },
   },
   {
     id: "duration.p99",
@@ -130,6 +139,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p99,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p99",
+    },
   },
   {
     id: "prompt",
@@ -151,18 +164,30 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+    aggregatedCell: TextCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "trace_count",
+    },
   },
   {
     id: "total_estimated_cost",
     label: "Total Est. Cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
+    aggregatedCell: CostCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "total_estimated_cost",
+    },
   },
   {
     id: "total_estimated_cost_avg",
     label: "Avg. Cost per Trace",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
+    aggregatedCell: CostCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "total_estimated_cost_avg",
+    },
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
@@ -174,9 +199,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         value: formatNumericData(score.value),
       })),
     cell: FeedbackScoreListCell as never,
+    aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
       isAverageScores: true,
+      aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
   },
@@ -296,6 +323,10 @@ const ExperimentsPage: React.FC = () => {
     [data?.flattenGroups],
   );
 
+  const aggregationMap = useMemo(() => {
+    return data?.aggregationMap ?? {};
+  }, [data?.aggregationMap]);
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -362,8 +393,8 @@ const ExperimentsPage: React.FC = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (row: Row<GroupedExperiment>) => {
+      return renderCustomRow(row, setGroupLimit);
     },
     [setGroupLimit],
   );
@@ -401,13 +432,13 @@ const ExperimentsPage: React.FC = () => {
               name: group.metadataPath.map((metadataPath) => {
                 const label = get(
                   groupExperiments[0],
-                  `${metadataPath}.label`,
+                  `${metadataPath}.label`.split("."),
                   undefined,
                 );
 
                 const value = get(
                   groupExperiments[0],
-                  `${metadataPath}.value`,
+                  `${metadataPath}.value`.split("."),
                   undefined,
                 );
 
@@ -555,7 +586,7 @@ const ExperimentsPage: React.FC = () => {
                   No charts to show
                 </div>
                 <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to
+                  Please expand a group to see its chart. You can expand up to{" "}
                   {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
                 </div>
               </Card>
@@ -566,6 +597,7 @@ const ExperimentsPage: React.FC = () => {
       )}
       <DataTable
         columns={columns}
+        aggregationMap={aggregationMap}
         data={experiments}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}

@@ -36,6 +36,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -55,9 +56,6 @@ export type UseExperimentsTableConfigProps<T> = {
 export const useExperimentsTableConfig = <
   T extends {
     id: string;
-    dataset_id: string;
-    dataset_name: string;
-    name: string;
   },
 >({
   storageKeyPrefix,
@@ -125,10 +123,19 @@ export const useExperimentsTableConfig = <
             type: columnType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
+            aggregatedCell: FeedbackScoreCell.Aggregation as never,
             accessorFn: (row: T) =>
               (
                 row as T & { feedback_scores?: Array<{ name: string }> }
               ).feedback_scores?.find((f) => f.name === label),
+            customMeta: {
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                (
+                  aggregation as ExperimentsAggregations & {
+                    feedback_scores?: Array<{ name: string }>;
+                  }
+                ).feedback_scores?.find((f) => f.name === label)?.value,
+            },
           }) as ColumnData<T>,
       ),
     ];
@@ -159,6 +166,11 @@ export const useExperimentsTableConfig = <
         customMeta: {
           valueKey: `${metaKey}.value`,
           labelKey: `${metaKey}.label`,
+          countAggregationKey: "experiment_count",
+          explainer: {
+            id: "group-experiments",
+            description: `Some of the experiments didn’t match any group`,
+          },
         },
       } as ColumnData<T>;
 
@@ -175,8 +187,7 @@ export const useExperimentsTableConfig = <
               idKey: `${metaKey}.value`,
               resource: RESOURCE_TYPE.dataset,
               getIsDeleted: (row: T) =>
-                get(row, `${metaKey}.label`, row.dataset_name) ===
-                DELETED_DATASET_LABEL,
+                get(row, `${metaKey}.label`, "") === DELETED_DATASET_LABEL,
             },
           } as ColumnData<T>;
           break;
@@ -197,8 +208,24 @@ export const useExperimentsTableConfig = <
 
     const baseColumns = [
       generateGroupedNameColumDef<T>(
+        {
+          id: COLUMN_NAME_ID,
+          label: "Name",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.experiment,
+            getSearch: (data: Experiment) => ({
+              experiments: [data.id],
+            }),
+          },
+          headerCheckbox: true,
+          sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
+          size: 200,
+        },
         checkboxClickHandler,
-        isColumnSortable(COLUMN_NAME_ID, sortableBy),
       ),
       ...groupColumns,
       ...convertColumnDataToColumn<T, T>(defaultColumns, {

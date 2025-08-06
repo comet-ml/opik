@@ -53,7 +53,6 @@ export const getExperimentsList = async (
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...(optimizationId && { optimization_id: optimizationId }),
-      ...(promptId && { prompt_id: promptId }), //TODO lala
       ...(types && { types: JSON.stringify(types) }),
       size,
       page,

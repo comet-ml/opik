@@ -61,7 +61,12 @@ const PromptPage: React.FunctionComponent = () => {
           prompt={prompt}
         />
       </PageBodyStickyContainer>
-      <Tabs defaultValue="prompt" value={tab as string} onValueChange={setTab}>
+      <Tabs
+        defaultValue="prompt"
+        value={tab as string}
+        onValueChange={setTab}
+        className="min-w-min"
+      >
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="prompt">

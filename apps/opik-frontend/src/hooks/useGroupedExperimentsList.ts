@@ -10,7 +10,12 @@ import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import md5 from "md5";
 
-import { Experiment, ExperimentsGroupNode } from "@/types/datasets";
+import {
+  Experiment,
+  ExperimentsGroupNode,
+  ExperimentsAggregations,
+  ExperimentsGroupNodeWithAggregations,
+} from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import useExperimentsList, {
   getExperimentsList,
@@ -21,9 +26,9 @@ import useExperimentsGroups from "@/api/datasets/useExperimentsGroups";
 import { SORT_DIRECTION, Sorting } from "@/types/sorting";
 import {
   DEFAULT_ITEMS_PER_GROUP,
-  DELETED_DATASET_LABEL,
   GROUP_ID_SEPARATOR,
   GROUP_ROW_TYPE,
+  DELETED_DATASET_LABEL,
 } from "@/constants/groups";
 import { FlattenGroup, Groups } from "@/types/groups";
 import { createFilter } from "@/lib/filters";
@@ -34,6 +39,7 @@ import {
   buildGroupFieldName,
   buildGroupFieldNameForMeta,
 } from "@/lib/groups";
+import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
 
 export type GroupedExperiment = Record<string, string> & Experiment;
 
@@ -55,6 +61,7 @@ type UseGroupedExperimentsListResponse = {
   data: {
     content: GroupedExperiment[];
     flattenGroups: FlattenGroup[];
+    aggregationMap: Record<string, ExperimentsAggregations>;
     sortable_by: string[];
     total: number;
   };
@@ -91,6 +98,13 @@ const buildGroupPath = (
   const sortedEntries = entries.sort(([a], [b]) => {
     const labelA = currentGroupsMap[a].label ?? a;
     const labelB = currentGroupsMap[b].label ?? b;
+
+    const isEmptyOrDeletedA = labelA === "" || labelA === DELETED_DATASET_LABEL;
+    const isEmptyOrDeletedB = labelB === "" || labelB === DELETED_DATASET_LABEL;
+
+    if (isEmptyOrDeletedA && !isEmptyOrDeletedB) return 1; // A goes to the end
+    if (!isEmptyOrDeletedA && isEmptyOrDeletedB) return -1; // B goes to the end
+    if (isEmptyOrDeletedA && isEmptyOrDeletedB) return 0;
 
     if (currentGroup.direction === SORT_DIRECTION.ASC) {
       return labelA.localeCompare(labelB);
@@ -164,6 +178,46 @@ const flattenExperimentsGroups = (
   return buildGroupPath(groupsMap, groups);
 };
 
+const buildAggregationMap = (
+  currentGroupsMap: Record<string, ExperimentsGroupNodeWithAggregations>,
+  groups: Groups,
+  parentId: string = "",
+  groupIndex: number = 0,
+): Record<string, ExperimentsAggregations> => {
+  if (groupIndex >= groups.length) {
+    return {};
+  }
+
+  const currentGroup = groups[groupIndex];
+  const result: Record<string, ExperimentsAggregations> = {};
+
+  Object.entries(currentGroupsMap).forEach(([value, node]) => {
+    const uniqId = md5(value);
+    const id = `${
+      parentId ? `${parentId}${GROUP_ID_SEPARATOR}` : ""
+    }${buildGroupFieldId(currentGroup, uniqId)}`;
+
+    // Add aggregation data for this group if available
+    if (node.aggregations) {
+      result[id] = node.aggregations;
+    }
+
+    // Recursively process nested groups
+    if (node.groups && Object.keys(node.groups).length > 0) {
+      const nestedAggregations = buildAggregationMap(
+        node.groups,
+        groups,
+        id,
+        groupIndex + 1,
+      );
+
+      Object.assign(result, nestedAggregations);
+    }
+  });
+
+  return result;
+};
+
 const wrapExperimentWithGroupData = (
   experiment: Experiment,
   group: FlattenGroup,
@@ -232,6 +286,22 @@ export default function useGroupedExperimentsList(
     },
   );
 
+  const { data: groupsAggregationsData, refetch: refetchGroupsAggregations } =
+    useExperimentsGroupsAggregations(
+      {
+        workspaceName: params.workspaceName,
+        filters: params.filters,
+        groups: groups!,
+        search: params.search,
+        promptId: params.promptId,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval,
+        enabled: hasGroups,
+      },
+    );
+
   const { data, isPending, isPlaceholderData, refetch } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
@@ -255,6 +325,14 @@ export default function useGroupedExperimentsList(
     () => flattenExperimentsGroups(groupsMap, groups),
     [groupsMap, groups],
   );
+
+  const aggregationMap = useMemo(() => {
+    if (!groupsAggregationsData?.content || !groups.length) {
+      return {};
+    }
+
+    return buildAggregationMap(groupsAggregationsData.content, groups);
+  }, [groupsAggregationsData, groups]);
 
   const flattenDeepestGroups = useMemo(() => {
     return flattenGroups.filter((group) => group.level === groups.length - 1);
@@ -382,12 +460,13 @@ export default function useGroupedExperimentsList(
     (options?: RefetchOptions) => {
       return Promise.all([
         refetchGroups(options),
+        refetchGroupsAggregations(options),
         ...Object.values(experimentsResponses).map((response) =>
           response.refetch(options),
         ),
       ]);
     },
-    [experimentsResponses, refetchGroups],
+    [experimentsResponses, refetchGroups, refetchGroupsAggregations],
   );
 
   const transformedData = useMemo(
@@ -396,12 +475,23 @@ export default function useGroupedExperimentsList(
         ? groupedData.content
         : (data?.content as GroupedExperiment[]) ?? [],
       flattenGroups: hasGroups ? groupedData.flattenGroups : [],
+      aggregationMap: hasGroups ? aggregationMap : {},
       sortable_by: hasGroups
         ? groupedData.sortable_by
         : data?.sortable_by ?? [],
       total: hasGroups ? groupedData.total : data?.total ?? 0,
     }),
-    [hasGroups, groupedData, data],
+    [
+      hasGroups,
+      groupedData.content,
+      groupedData.flattenGroups,
+      groupedData.sortable_by,
+      groupedData.total,
+      data?.content,
+      data?.sortable_by,
+      data?.total,
+      aggregationMap,
+    ],
   );
 
   return {

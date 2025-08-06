@@ -1,6 +1,9 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { EXPERIMENT_TYPE, ExperimentsGroupNode } from "@/types/datasets";
+import {
+  EXPERIMENT_TYPE,
+  ExperimentsGroupNodeWithAggregations,
+} from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { Groups } from "@/types/groups";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
@@ -18,10 +21,10 @@ export type UseExperimentsGroupsParams = {
 };
 
 export type UseExperimentsGroupsResponse = {
-  content: Record<string, ExperimentsGroupNode>;
+  content: Record<string, ExperimentsGroupNodeWithAggregations>;
 };
 
-export const getExperimentsGroups = async (
+export const getExperimentsGroupsAggregations = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
@@ -32,27 +35,30 @@ export const getExperimentsGroups = async (
     search,
   }: UseExperimentsGroupsParams,
 ) => {
-  const { data } = await api.get(`${EXPERIMENTS_REST_ENDPOINT}groups`, {
-    signal,
-    params: {
-      ...(workspaceName && { workspace_name: workspaceName }),
-      ...processFilters(filters, generatePromptFilters(promptId)),
-      ...processGroups(groups),
-      ...(search && { name: search }),
-      ...(types && { types: JSON.stringify(types) }),
+  const { data } = await api.get(
+    `${EXPERIMENTS_REST_ENDPOINT}groups/aggregations`,
+    {
+      signal,
+      params: {
+        ...(workspaceName && { workspace_name: workspaceName }),
+        ...processFilters(filters, generatePromptFilters(promptId)),
+        ...processGroups(groups),
+        ...(search && { name: search }),
+        ...(types && { types: JSON.stringify(types) }),
+      },
     },
-  });
+  );
 
   return data;
 };
 
-export default function useExperimentsGroups(
+export default function useExperimentsGroupsAggregations(
   params: UseExperimentsGroupsParams,
   options?: QueryConfig<UseExperimentsGroupsResponse>,
 ) {
   return useQuery({
-    queryKey: ["experiments", { __hook: "groups", ...params }],
-    queryFn: (context) => getExperimentsGroups(context, params),
+    queryKey: ["experiments", { __hook: "groups-aggregations", ...params }],
+    queryFn: (context) => getExperimentsGroupsAggregations(context, params),
     ...options,
   });
 }

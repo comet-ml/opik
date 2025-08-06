@@ -22,6 +22,7 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
+import uniq from "lodash/uniq";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -44,6 +45,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { Filter } from "@/types/filters";
+import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
@@ -79,7 +81,6 @@ import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
-import uniq from "lodash/uniq";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -269,10 +270,23 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateGroupedNameColumDef<GroupedOptimization>(
+        {
+          id: COLUMN_NAME_ID,
+          label: "Name",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.optimization,
+            getSearch: (data: Optimization) => ({
+              optimizations: [data.id],
+            }),
+          },
+          headerCheckbox: true,
+          size: 200,
+        },
         checkboxClickHandler,
-        false,
-        RESOURCE_TYPE.optimization,
-        "optimizations",
       ),
       generateGroupedCellDef<GroupedOptimization, unknown>(
         {
@@ -356,8 +370,8 @@ const OptimizationsPage: React.FunctionComponent = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedOptimization>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (row: Row<GroupedOptimization>) => {
+      return renderCustomRow(row, setGroupLimit);
     },
     [setGroupLimit],
   );
@@ -376,7 +390,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
             name: optimization.dataset.name,
             data: [],
             lines: [],
-            index,
           };
           index += 1;
         }

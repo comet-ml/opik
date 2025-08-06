@@ -90,7 +90,7 @@ export const GroupRow = <TColumnData,>({
           <div className="flex size-full items-center gap-1 pr-2">
             {!disabledSorting && (
               <Button
-                variant="ghost"
+                variant="minimal"
                 size="icon-xs"
                 className="cursor-move "
                 {...listeners}

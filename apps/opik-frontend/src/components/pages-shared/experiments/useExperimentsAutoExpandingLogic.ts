@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { Groups, FlattenGroup } from "@/types/groups";
-import { generateExpandedMapForAllGroups } from "@/lib/groups";
+import { generateAutoExpandMap } from "@/lib/groups";
 import { OnChangeFn } from "@/types/shared";
 import { ExpandedState } from "@tanstack/react-table";
 
@@ -36,7 +36,7 @@ export const useExperimentsAutoExpandingLogic = ({
       !isPending &&
       !isPlaceholderData
     ) {
-      const newExpandedMap = generateExpandedMapForAllGroups(
+      const newExpandedMap = generateAutoExpandMap(
         flattenGroups,
         maxExpandedDeepestGroups,
       );

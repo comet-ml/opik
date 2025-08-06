@@ -75,6 +75,7 @@ export type ColumnData<T> = {
   headerCheckbox?: boolean;
   explainer?: Explainer;
   cell?: Cell<T, unknown>;
+  aggregatedCell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;

@@ -22,6 +22,11 @@ import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtual
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -31,8 +36,12 @@ import {
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
   ColumnData,
+  COLUMN_ID_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_COMMENTS_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
+import { formatNumericData } from "@/lib/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -77,6 +86,12 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
     type: COLUMN_TYPE.string,
@@ -86,16 +101,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
       idKey: "dataset_id",
       resource: RESOURCE_TYPE.dataset,
     },
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata,
-    cell: CodeCell as never,
   },
   {
     id: "created_at",
@@ -114,6 +119,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p50,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p50",
+    },
   },
   {
     id: "duration.p90",
@@ -121,6 +130,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p90,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p90",
+    },
   },
   {
     id: "duration.p99",
@@ -128,6 +141,73 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p99,
     cell: DurationCell as never,
+    aggregatedCell: DurationCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "duration.p99",
+    },
+  },
+  {
+    id: "trace_count",
+    label: "Trace count",
+    type: COLUMN_TYPE.number,
+    aggregatedCell: TextCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "trace_count",
+    },
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Total Est. Cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    aggregatedCell: CostCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "total_estimated_cost",
+    },
+  },
+  {
+    id: "total_estimated_cost_avg",
+    label: "Avg. Cost per Trace",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    aggregatedCell: CostCell.Aggregation as never,
+    customMeta: {
+      aggregationKey: "total_estimated_cost_avg",
+    },
+  },
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback scores (avg.)",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: (row) =>
+      get(row, "feedback_scores", []).map((score) => ({
+        ...score,
+        value: formatNumericData(score.value),
+      })),
+    cell: FeedbackScoreListCell as never,
+    aggregatedCell: FeedbackScoreListCell.Aggregation as never,
+    customMeta: {
+      getHoverCardName: (row: GroupedExperiment) => row.name,
+      isAverageScores: true,
+      aggregationKey: "feedback_scores",
+    },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.string,
+    cell: CommentsCell as never,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
   },
 ];
 
@@ -221,6 +301,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [data?.flattenGroups],
   );
 
+  const aggregationMap = useMemo(() => {
+    return data?.aggregationMap ?? {};
+  }, [data?.aggregationMap]);
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -258,14 +342,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? "There are no experiments used this prompt"
+    ? "No experiments have used this prompt yet"
     : "No search results";
 
   const hasGroups = Boolean(groups.length);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (row: Row<GroupedExperiment>) => {
+      return renderCustomRow(row, setGroupLimit);
     },
     [setGroupLimit],
   );
@@ -317,6 +401,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       </PageBodyStickyContainer>
       <DataTable
         columns={columns}
+        aggregationMap={aggregationMap}
         data={experiments}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsGroupRow}

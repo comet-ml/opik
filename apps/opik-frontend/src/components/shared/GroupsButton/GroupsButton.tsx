@@ -29,6 +29,7 @@ import useDeepMemo from "@/hooks/useDeepMemo";
 import { cn } from "@/lib/utils";
 import { createEmptyGroup, isGroupValid } from "@/lib/groups";
 import GroupRow from "@/components/shared/GroupsButton/GroupRow";
+import { MAX_GROUP_LEVELS } from "@/constants/groups";
 
 const hasDuplication = (groups: Groups, group: Group, index: number) => {
   return (
@@ -101,7 +102,12 @@ const GroupsButton = <TColumnData,>({
   }, []);
 
   const addHandler = useCallback(() => {
-    setGroups((state) => [...state, createEmptyGroup()]);
+    setGroups((state) => {
+      if (state.length >= MAX_GROUP_LEVELS) {
+        return state;
+      }
+      return [...state, createEmptyGroup()];
+    });
   }, []);
 
   const onRemoveRow = useCallback((id: string) => {
@@ -223,10 +229,19 @@ const GroupsButton = <TColumnData,>({
             </DndContext>
           </div>
           <div className="flex items-center">
-            <Button variant="secondary" onClick={addHandler}>
+            <Button
+              variant="secondary"
+              onClick={addHandler}
+              disabled={groups.length >= MAX_GROUP_LEVELS}
+            >
               <Plus className="mr-2 size-4" />
               Add group
             </Button>
+            {groups.length >= MAX_GROUP_LEVELS && (
+              <span className="ml-2 text-xs text-gray-500">
+                Maximum {MAX_GROUP_LEVELS} levels reached
+              </span>
+            )}
           </div>
         </div>
       </PopoverContent>

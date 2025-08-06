@@ -6,23 +6,20 @@ import {
   ColumnDefTemplate,
   flexRender,
   Row,
+  Table,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import isString from "lodash/isString";
 import get from "lodash/get";
+import last from "lodash/last";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { TableCell, TableRow } from "@/components/ui/table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
-import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import Loader from "@/components/shared/Loader/Loader";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
 import {
   ROW_HEIGHT_MAP,
   TABLE_HEADER_Z_INDEX,
@@ -31,9 +28,7 @@ import {
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_ACTIONS_ID,
-  COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
-  COLUMN_TYPE,
   ColumnData,
   OnChangeFn,
   ROW_HEIGHT,
@@ -50,18 +45,28 @@ export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
 };
 
-export const getCommonPinningStyles = <TData,>(
-  column: Column<TData>,
-  isHeader: boolean = false,
+export type GetCommonPinningStylesProps<TData> = {
+  column: Column<TData>;
+  isHeader?: boolean;
+  applyStickyWorkaround?: boolean;
+  forceGroup?: boolean;
+  table: Table<TData>;
+};
+
+export const getCommonPinningStyles = <TData,>({
+  column,
+  isHeader = false,
   applyStickyWorkaround = false,
-): CSSProperties => {
+  forceGroup = false,
+  table,
+}: GetCommonPinningStylesProps<TData>): CSSProperties => {
   const isPinned = column.getIsPinned();
 
-  if (!isPinned) {
+  if (!isPinned && !forceGroup) {
     return {};
   }
 
-  const allColumns = column.getFlatColumns();
+  const allColumns = table.getVisibleLeafColumns();
   const leftPinnedNonGroupedColumns = allColumns.filter(
     (col) => col.getIsPinned() === "left" && !col.getIsGrouped?.(),
   );
@@ -70,36 +75,44 @@ export const getCommonPinningStyles = <TData,>(
   );
 
   const isLastLeftPinnedNonGroupedColumn =
-    isPinned === "left" &&
-    leftPinnedNonGroupedColumns.length > 0 &&
-    leftPinnedNonGroupedColumns[leftPinnedNonGroupedColumns.length - 1].id ===
-      column.id;
+    isPinned === "left" && last(leftPinnedNonGroupedColumns)?.id === column.id;
 
   const isFirstRightPinnedNonGroupedColumn =
     isPinned === "right" &&
-    rightPinnedNonGroupedColumns.length > 0 &&
-    rightPinnedNonGroupedColumns[0].id === column.id;
+    last(rightPinnedNonGroupedColumns)?.id === column.id;
 
   return {
-    boxShadow: isLastLeftPinnedNonGroupedColumn
-      ? "inset -1px 0px 0px 0px rgb(226, 232, 240)"
-      : isFirstRightPinnedNonGroupedColumn
-        ? "inset 1px 0px 0px 0px rgb(226, 232, 240)"
+    boxShadow:
+      isLastLeftPinnedNonGroupedColumn || forceGroup
+        ? "inset -1px 0px 0px 0px rgb(226, 232, 240)"
+        : isFirstRightPinnedNonGroupedColumn
+          ? "inset 1px 0px 0px 0px rgb(226, 232, 240)"
+          : undefined,
+    left: forceGroup
+      ? 0
+      : isPinned === "left"
+        ? `${column.getStart("left")}px`
         : undefined,
-    left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     position: applyStickyWorkaround ? "unset" : "sticky",
     zIndex: isHeader ? TABLE_HEADER_Z_INDEX + 1 : TABLE_ROW_Z_INDEX + 1,
   };
 };
 
-export const getCommonPinningClasses = <TData,>(
-  column: Column<TData>,
-  isHeader: boolean = false,
-): string => {
+export type GetCommonPinningClassesProps<TData> = {
+  column: Column<TData>;
+  isHeader?: boolean;
+  forceGroup?: boolean;
+};
+
+export const getCommonPinningClasses = <TData,>({
+  column,
+  isHeader = false,
+  forceGroup = false,
+}: GetCommonPinningClassesProps<TData>): string => {
   const isPinned = column.getIsPinned();
 
-  return isPinned ? (isHeader ? "bg-[#FBFCFD]" : "bg-white") : "";
+  return isPinned || forceGroup ? (isHeader ? "bg-[#FBFCFD]" : "bg-white") : "";
 };
 
 const getRowRange = <TData,>(
@@ -250,49 +263,16 @@ export const getSharedShiftCheckboxClickHandler = () => {
     previousSelectedRowID = context.row.id;
   };
 };
-export const getIsGroupRow = <TData extends { id: string }>(
-  row: Row<TData>,
-) => {
-  const id = row?.original?.id || "";
-  return checkIsGroupRowType(id) || row.getIsGrouped();
-};
+export const getIsGroupRow = <TData extends { id: string }>(row: Row<TData>) =>
+  checkIsGroupRowType(row?.id || "");
 
 export const renderCustomRow = <TData,>(
   row: Row<TData>,
   setGroupLimit: OnChangeFn<Record<string, number>>,
-  applyStickyWorkaround?: boolean,
 ) => {
   const rowId = row.id ?? "";
 
-  if (row.getIsGrouped()) {
-    const cells = row.getVisibleCells();
-
-    const cell = cells.find((cell) => cell.getIsGrouped());
-
-    if (!cell) return null;
-
-    return (
-      <TableRow key={rowId} data-state={row.getIsSelected() && "selected"}>
-        <TableCell
-          key={cell.id}
-          data-cell-id={cell.id}
-          style={{
-            ...getCommonPinningStyles(
-              cell.column,
-              false,
-              applyStickyWorkaround,
-            ),
-            left: "0",
-            boxShadow: "inset -1px 0px 0px 0px rgb(226, 232, 240)",
-          }}
-          className={getCommonPinningClasses(cell.column)}
-        >
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-        <TableCell colSpan={cells.length - 1} />
-      </TableRow>
-    );
-  } else if (checkIsRowType(rowId, GROUP_ROW_TYPE.MORE)) {
+  if (checkIsRowType(rowId, GROUP_ROW_TYPE.MORE)) {
     const extractedRowId = extractIdFromRowId(GROUP_ROW_TYPE.MORE, rowId);
     return (
       <tr key={rowId} className="border-b">
@@ -344,28 +324,23 @@ export const renderCustomRow = <TData,>(
 export const generateGroupedNameColumDef = <
   TData extends {
     id: string;
-    dataset_id: string;
-    dataset_name: string;
-    name: string;
   },
 >(
+  columnData: ColumnData<TData>,
   checkboxClickHandler: (
     event: React.MouseEvent<HTMLButtonElement>,
     context: CellContext<TData, unknown>,
   ) => void,
-  sortable: boolean = false,
-  resourceType: RESOURCE_TYPE = RESOURCE_TYPE.experiment,
-  searchKey: string = "experiments",
 ) => {
+  const columDataFields = mapColumnDataFields(columnData);
   return {
-    accessorKey: COLUMN_NAME_ID,
-    header: TypeHeader,
+    ...columDataFields,
     cell: (context) => {
-      const data = context.row.original as TData;
       return (
         <CellWrapper
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
+          className="gap-2"
         >
           <Checkbox
             style={{
@@ -377,28 +352,17 @@ export const generateGroupedNameColumDef = <
             onClick={(event) => checkboxClickHandler(event, context)}
             aria-label="Select row"
           />
-          <div className="ml-3 min-w-1 max-w-full">
-            <ResourceLink
-              id={data.dataset_id}
-              name={data.name}
-              resource={resourceType}
-              search={{
-                [searchKey]: [data.id],
-              }}
-            />
+          <div className="min-w-1 max-w-full">
+            {flexRender(
+              columDataFields.cell as never,
+              context.cell.getContext(),
+            )}
           </div>
         </CellWrapper>
       );
     },
-    size: 200,
     minSize: 100,
-    enableSorting: sortable,
     enableHiding: false,
-    meta: {
-      header: "Name",
-      headerCheckbox: true,
-      type: COLUMN_TYPE.string,
-    },
   } as ColumnDef<TData>;
 };
 
@@ -417,10 +381,13 @@ export const generateGroupedCellDef = <TData, TValue>(
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
       return (
-        <div className="flex size-full h-11 items-center">
+        <div
+          className="flex size-full h-11 items-center pr-2"
+          data-cell-wrapper="true"
+        >
           <div
             className="flex max-w-full items-center overflow-hidden"
-            style={{ paddingLeft: `${24 + context.row.depth * 20}px` }}
+            style={{ paddingLeft: `${context.row.depth * 20}px` }}
           >
             <Checkbox
               checked={
@@ -435,7 +402,7 @@ export const generateGroupedCellDef = <TData, TValue>(
             <Button
               variant="minimal"
               size="sm"
-              className="ml-1.5"
+              className="ml-1.5 pr-1"
               onClick={(event) => {
                 row.toggleExpanded();
                 event.stopPropagation();
@@ -456,7 +423,7 @@ export const generateGroupedCellDef = <TData, TValue>(
               )}
             </Button>
           </div>
-          <div className="-ml-5 min-w-4 flex-1">
+          <div className="min-w-4 flex-1">
             {flexRender(columDataFields.cell as never, cell.getContext())}
           </div>
         </div>

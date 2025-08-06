@@ -10,13 +10,13 @@ type DefaultRowProps = {
 export const DefaultRow: React.FC<DefaultRowProps> = ({ group, onChange }) => {
   return (
     <>
+      <td className="p-1"></td>
       <td className="p-1">
         <SortDirectionSelector
           direction={group.direction}
           onSelect={(d) => onChange({ ...group, direction: d })}
         />
       </td>
-      <td className="p-1"></td>
     </>
   );
 };
