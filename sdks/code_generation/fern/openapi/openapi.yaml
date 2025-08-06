@@ -5073,6 +5073,8 @@ components:
           - function
         content:
           type: string
+        reasoning_content:
+          type: string
         name:
           type: string
         tool_calls:
@@ -5080,7 +5082,7 @@ components:
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
-          type: boolean
+          type: string
         function_call:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
@@ -5127,6 +5129,8 @@ components:
         role:
           type: string
         content:
+          type: string
+        reasoning_content:
           type: string
         tool_calls:
           type: array

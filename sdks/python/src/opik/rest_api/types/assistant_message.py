@@ -12,9 +12,10 @@ from .tool_call import ToolCall
 class AssistantMessage(UniversalBaseModel):
     role: typing.Optional[AssistantMessageRole] = None
     content: typing.Optional[str] = None
+    reasoning_content: typing.Optional[str] = None
     name: typing.Optional[str] = None
     tool_calls: typing.Optional[typing.List[ToolCall]] = None
-    refusal: typing.Optional[bool] = None
+    refusal: typing.Optional[str] = None
     function_call: typing.Optional[FunctionCall] = None
 
     if IS_PYDANTIC_V2:

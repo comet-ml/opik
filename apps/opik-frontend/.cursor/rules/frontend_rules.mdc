@@ -1,3 +1,10 @@
+---
+description: Guidelines for Frontend Development
+globs:
+alwaysApply: true
+---
+
+
 # Opik Frontend Development Rules for Cursor
 
 ## Technology Stack & Architecture

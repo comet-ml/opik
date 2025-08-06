@@ -36,4 +36,6 @@ EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
     "total_tokens": ANY_BUT_NONE,
     "original_usage.inputTokens": ANY_BUT_NONE,
     "original_usage.outputTokens": ANY_BUT_NONE,
+    "original_usage.cacheReadInputTokens": ANY_BUT_NONE,
+    "original_usage.cacheWriteInputTokens": ANY_BUT_NONE,
 }
