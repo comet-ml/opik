@@ -83,4 +83,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AsyncInsertConfig asyncInsert = new AsyncInsertConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
 }
