@@ -426,6 +426,8 @@ class ExperimentDAO {
             experiments_full AS (
                 SELECT
                     e.id as id,
+                    e.dataset_id AS dataset_id,
+                    e.metadata AS metadata,
                     fs.feedback_scores as feedback_scores,
                     ed.trace_count as trace_count,
                     ed.duration_values AS duration,
@@ -673,10 +675,20 @@ class ExperimentDAO {
         return Optional.ofNullable(row.get("duration", Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        (BigDecimal) durations.get("p50"),
-                        (BigDecimal) durations.get("p90"),
-                        (BigDecimal) durations.get("p99")))
+                        convertToBigDecimal(durations.get("p50")),
+                        convertToBigDecimal(durations.get("p90")),
+                        convertToBigDecimal(durations.get("p99"))))
                 .orElse(null);
+    }
+
+    private static BigDecimal convertToBigDecimal(Number value) {
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        } else if (value instanceof Double) {
+            return BigDecimal.valueOf((Double) value);
+        } else {
+            return BigDecimal.ZERO;
+        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
