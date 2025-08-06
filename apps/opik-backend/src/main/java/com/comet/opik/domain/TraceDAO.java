@@ -333,7 +333,7 @@ class TraceDAOImpl implements TraceDAO {
                            value,
                            reason,
                            source,
-                           map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                           map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                            created_by,
                            last_updated_by,
                            created_at,
@@ -513,7 +513,7 @@ class TraceDAOImpl implements TraceDAO {
                            value,
                            reason,
                            source,
-                           map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                           map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                            created_by,
                            last_updated_by,
                            created_at,
@@ -1049,7 +1049,7 @@ class TraceDAOImpl implements TraceDAO {
                            value,
                            reason,
                            source,
-                           map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                           map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                            created_by,
                            last_updated_by,
                            created_at,
@@ -1300,7 +1300,7 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
@@ -1521,7 +1521,7 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
@@ -1785,7 +1785,7 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(created_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
+                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
@@ -2280,40 +2280,33 @@ class TraceDAOImpl implements TraceDAO {
                 .toList());
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, ValueEntry> parseValueByAuthor(Object valueByAuthorObj) {
         if (valueByAuthorObj == null) {
             return Map.of();
         }
 
-        try {
-            // ClickHouse returns maps as LinkedHashMap<String, List<Object>>
-            Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
+        // ClickHouse returns maps as LinkedHashMap<String, List<Object>> where List<Object> represents a tuple
+        @SuppressWarnings("unchecked")
+        Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
 
-            Map<String, ValueEntry> result = new HashMap<>();
-            for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
-                String author = entry.getKey();
-                List<Object> tuple = entry.getValue();
+        Map<String, ValueEntry> result = new HashMap<>();
+        for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
+            String author = entry.getKey();
+            List<Object> tuple = entry.getValue();
 
-                if (tuple != null && tuple.size() >= 5) {
-                    // tuple contains: (value, reason, category_name, source, last_updated_at)
-                    ValueEntry valueEntry = ValueEntry.builder()
-                            .value((BigDecimal) tuple.get(0))
-                            .reason(getIfNotEmpty(tuple.get(1)))
-                            .categoryName(getIfNotEmpty(tuple.get(2)))
-                            .source(ScoreSource.fromString((String) tuple.get(3)))
-                            .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
-                            .build();
+            // tuple contains: (value, reason, category_name, source, last_updated_at)
+            ValueEntry valueEntry = ValueEntry.builder()
+                    .value((BigDecimal) tuple.get(0))
+                    .reason(getIfNotEmpty(tuple.get(1)))
+                    .categoryName(getIfNotEmpty(tuple.get(2)))
+                    .source(ScoreSource.fromString((String) tuple.get(3)))
+                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
+                    .build();
 
-                    result.put(author, valueEntry);
-                }
-            }
-
-            return result;
-        } catch (Exception e) {
-            // If parsing fails, return an empty map to avoid breaking the query
-            return Map.of();
+            result.put(author, valueEntry);
         }
+
+        return result;
     }
 
     private String getIfNotEmpty(Object value) {

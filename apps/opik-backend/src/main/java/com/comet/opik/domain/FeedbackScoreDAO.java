@@ -28,7 +28,9 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -454,10 +456,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     private FeedbackScoreDto mapFeedback(Row row) {
-        // TODO: Implement proper parsing of ClickHouse map format for valueByAuthor
-        // For now, return empty map - this needs to be implemented based on ClickHouse's map format
-        Map<String, ValueEntry> valueByAuthor = Map.of();
-
         return new FeedbackScoreDto(
                 row.get("entity_id", UUID.class),
                 FeedbackScore.builder()
@@ -474,8 +472,41 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                         .createdBy(row.get("created_by", String.class))
                         .lastUpdatedBy(row.get("last_updated_by", String.class))
-                        .valueByAuthor(valueByAuthor)
+                        .valueByAuthor(parseValueByAuthor(row.get("value_by_author")))
                         .build());
+    }
+
+    private Map<String, ValueEntry> parseValueByAuthor(Object valueByAuthorObj) {
+        if (valueByAuthorObj == null) {
+            return Map.of();
+        }
+
+        // ClickHouse returns maps as LinkedHashMap<String, List<Object>> where List<Object> represents a tuple
+        @SuppressWarnings("unchecked")
+        Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
+
+        Map<String, ValueEntry> result = new HashMap<>();
+        for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
+            String author = entry.getKey();
+            List<Object> tuple = entry.getValue();
+
+            // tuple contains: (value, reason, category_name, source, last_updated_at)
+            ValueEntry valueEntry = ValueEntry.builder()
+                    .value((BigDecimal) tuple.get(0))
+                    .reason(Optional.ofNullable((String) tuple.get(1))
+                            .filter(it -> !it.isBlank())
+                            .orElse(null))
+                    .categoryName(Optional.ofNullable((String) tuple.get(2))
+                            .filter(it -> !it.isBlank())
+                            .orElse(null))
+                    .source(ScoreSource.fromString((String) tuple.get(3)))
+                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
+                    .build();
+
+            result.put(author, valueEntry);
+        }
+
+        return result;
     }
 
     @Override
