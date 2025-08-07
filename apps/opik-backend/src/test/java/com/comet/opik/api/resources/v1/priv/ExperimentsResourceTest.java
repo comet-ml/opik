@@ -2032,8 +2032,11 @@ class ExperimentsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GroupExperimentsAggregations {
 
-        @Test
-        void findGroupsAggregations__happyFlow() {
+        @ParameterizedTest
+        @MethodSource
+        void findGroupsAggregationsWithFilter__happyFlow(boolean withFilter, List<GroupBy> groups,
+                Function<Experiment, ExperimentFilter> filterFunction,
+                Function<Experiment, Predicate<Experiment>> predicateFunction) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2054,11 +2057,17 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
                         .map(experiment -> experiment.toBuilder()
                                 .datasetId(dataset.id())
                                 .datasetName(dataset.name())
+                                .promptVersion(versionLink)
+                                .promptVersions(List.of(versionLink))
                                 .metadata(JsonUtils
                                         .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
                                 .build())
@@ -2117,25 +2126,26 @@ class ExperimentsResourceTest {
                 return experiments.stream();
             }).toList();
 
-            // Define grouping criteria
-            var groups = List.of(
-                    GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
-                    GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build());
-
             // Call the aggregations endpoint
             var response = experimentResourceClient.findGroupsAggregations(
                     groups,
                     Set.of(ExperimentType.REGULAR),
-                    null,
+                    withFilter ? List.of(filterFunction.apply(allExperiments.getFirst())) : null,
                     null,
                     apiKey,
                     workspaceName,
                     200);
 
+            var expectedExperiments = withFilter
+                    ? allExperiments.stream()
+                            .filter(predicateFunction.apply(allExperiments.getFirst()))
+                            .toList()
+                    : allExperiments;
+
             // Build expected response
             var expectedResponse = buildExpectedGroupAggregationsResponse(
                     groups,
-                    allExperiments,
+                    expectedExperiments,
                     experimentToItems,
                     traceToSpans,
                     tracesAll);
@@ -2145,6 +2155,85 @@ class ExperimentsResourceTest {
                             .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedResponse);
+        }
+
+        private Stream<Arguments> findGroupsAggregationsWithFilter__happyFlow() {
+            return Stream.of(
+                    Arguments.of(false, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            null, null),
+                    Arguments.of(true, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(true, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(true, List
+                            .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(true,
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void groupExperimentsAggregationsInvalidGroupingsShouldFail(List<GroupBy> groups) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroupsAggregations(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
+        }
+
+        private Stream<Arguments> groupExperimentsAggregationsInvalidGroupingsShouldFail() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+        }
+
+        @Test
+        void groupExperimentsAggregationsMissingGroupingsShouldFail() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroupsAggregations(
+                    null,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
         }
 
         private Trace createTraceWithDuration(long durationMillis) {
