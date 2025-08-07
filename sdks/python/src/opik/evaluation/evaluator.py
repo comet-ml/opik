@@ -153,6 +153,7 @@ def _evaluate_task(
     client.flush()
 
     evaluation_result_ = evaluation_result.EvaluationResult(
+        dataset_id=dataset.id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
@@ -240,6 +241,7 @@ def evaluate_experiment(
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
+        dataset_id=experiment.dataset_id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
@@ -380,6 +382,7 @@ def evaluate_prompt(
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
+        dataset_id=dataset.id,
         experiment_name=experiment.name,
         test_results=test_results,
     )

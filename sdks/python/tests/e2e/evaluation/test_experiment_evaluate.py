@@ -79,6 +79,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         prompts=[prompt],
     )
 
+    assert evaluation_result.dataset_id == dataset.id
+
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 3
@@ -223,6 +225,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         prompts=[prompt],
     )
 
+    assert evaluation_result.dataset_id == dataset.id
+
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2
@@ -343,6 +347,8 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         feedback_scores_amount=1,
         prompts=[prompt1, prompt2],
     )
+
+    assert evaluation_result.dataset_id == dataset.id
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
@@ -643,6 +649,8 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         feedback_scores_amount=3,
         prompts=[prompt],
     )
+
+    assert evaluation_result.dataset_id == dataset.id
 
 
 def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
