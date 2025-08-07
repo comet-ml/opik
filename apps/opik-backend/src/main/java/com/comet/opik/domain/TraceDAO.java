@@ -328,57 +328,74 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
-                       last_updated_at
+                       last_updated_at,
+                   feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND entity_id = :id
+                   AND workspace_id = :workspace_id
+                   AND entity_id = :id
                 UNION ALL
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
-                    arrayElement(sources, 1) AS source,
-                    mapFromArrays(
-                            authors,
-                            arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                    arrayEnumerate(values)
-                            )
-                    ) AS value_by_author,
-                    arrayStringConcat(created_bies, ', ') AS created_by,
-                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                    arrayMin(created_ats) AS created_at,
-                    arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                     SELECT
-                         workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         groupArray(value) AS values,
-                         groupArray(reason) AS reasons,
-                         groupArray(category_name) AS categories,
-                         groupArray(author) AS authors,
-                         groupArray(source) AS sources,
-                         groupArray(created_by) AS created_bies,
-                         groupArray(last_updated_by) AS updated_bies,
-                         groupArray(created_at) AS created_ats,
-                         groupArray(last_updated_at) AS last_updated_ats
-                     FROM authored_feedback_scores FINAL
-                     WHERE entity_type = 'trace'
-                       AND workspace_id = :workspace_id
-                       AND entity_id = :id
-                     GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+               FROM authored_feedback_scores FINAL
+               WHERE entity_type = 'trace'
+                 AND workspace_id = :workspace_id
+                 AND entity_id = :id
+            ),
+            feedback_scores_combined_grouped AS (
+                SELECT
+                     workspace_id,
+                     project_id,
+                     entity_id,
+                     name,
+                     groupArray(value) AS values,
+                     groupArray(reason) AS reasons,
+                     groupArray(category_name) AS categories,
+                     groupArray(author) AS authors,
+                     groupArray(source) AS sources,
+                     groupArray(created_by) AS created_bies,
+                     groupArray(last_updated_by) AS updated_bies,
+                     groupArray(created_at) AS created_ats,
+                     groupArray(last_updated_at) AS last_updated_ats
+                 FROM feedback_scores_combined
+                 GROUP BY workspace_id, project_id, entity_id, name
+             ), feedback_scores_final AS (
+                 SELECT
+                     workspace_id,
+                     project_id,
+                     entity_id,
+                     name,
+                     arrayStringConcat(categories, ', ') AS category_name,
+                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                     arrayStringConcat(reasons, ', ') AS reason,
+                     arrayElement(sources, 1) AS source,
+                     mapFromArrays(
+                             authors,
+                             arrayMap(
+                                     i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                     arrayEnumerate(values)
+                             )
+                     ) AS value_by_author,
+                     arrayStringConcat(created_bies, ', ') AS created_by,
+                     arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                     arrayMin(created_ats) AS created_at,
+                     arrayMax(last_updated_ats) AS last_updated_at
+                 FROM feedback_scores_combined_grouped
             )
             SELECT
                 t.*,
@@ -457,7 +474,7 @@ class TraceDAOImpl implements TraceDAO {
                         created_by,
                         last_updated_by
                     )) AS feedback_scores_list
-                FROM feedback_scores_combined
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ) AS fs ON t.id = fs.entity_id
             LEFT JOIN (
@@ -508,23 +525,59 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
-                       last_updated_at
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
                 UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                 FROM authored_feedback_scores FINAL
+                 WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+             ),
+             feedback_scores_combined_grouped AS (
+                 SELECT
+                     workspace_id,
+                     project_id,
+                     entity_id,
+                     name,
+                     groupArray(value) AS values,
+                     groupArray(reason) AS reasons,
+                     groupArray(category_name) AS categories,
+                     groupArray(author) AS authors,
+                     groupArray(source) AS sources,
+                     groupArray(created_by) AS created_bies,
+                     groupArray(last_updated_by) AS updated_bies,
+                     groupArray(created_at) AS created_ats,
+                     groupArray(last_updated_at) AS last_updated_ats
+                 FROM feedback_scores_combined
+                 GROUP BY workspace_id, project_id, entity_id, name
+             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
@@ -538,27 +591,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(updated_bies, ', ') AS last_updated_by,
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                         SELECT
-                             workspace_id,
-                             project_id,
-                             entity_id,
-                             name,
-                             groupArray(value) AS values,
-                             groupArray(reason) AS reasons,
-                             groupArray(category_name) AS categories,
-                             groupArray(author) AS authors,
-                             groupArray(source) AS sources,
-                             groupArray(created_by) AS created_bies,
-                             groupArray(last_updated_by) AS updated_bies,
-                             groupArray(created_at) AS created_ats,
-                             groupArray(last_updated_at) AS last_updated_ats
-                         FROM authored_feedback_scores FINAL
-                         WHERE entity_type = 'trace'
-                           AND workspace_id = :workspace_id
-                           AND project_id = :project_id
-                         GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                FROM feedback_scores_combined_grouped
             )
             , feedback_scores_agg AS (
                 SELECT
@@ -579,7 +612,7 @@ class TraceDAOImpl implements TraceDAO {
                         created_by,
                         last_updated_by
                     )) AS feedback_scores_list
-                FROM feedback_scores_combined
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ), guardrails_agg AS (
                 SELECT
@@ -641,7 +674,7 @@ class TraceDAOImpl implements TraceDAO {
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
-                    FROM feedback_scores_combined
+                    FROM feedback_scores_final
                     ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
@@ -674,7 +707,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM (
                         SELECT *
-                        FROM feedback_scores_combined
+                        FROM feedback_scores_final
                         ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
                   )
@@ -1036,19 +1069,20 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       category_name,
-                       value,
-                       reason,
-                       source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
-                       created_by,
-                       last_updated_by,
-                       created_at,
-                       last_updated_at
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
@@ -1059,42 +1093,58 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     entity_id,
                     name,
-                    arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
-                    arrayElement(sources, 1) AS source,
-                    mapFromArrays(
-                            authors,
-                            arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                    arrayEnumerate(values)
-                            )
-                    ) AS value_by_author,
-                    arrayStringConcat(created_bies, ', ') AS created_by,
-                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                    arrayMin(created_ats) AS created_at,
-                    arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                     SELECT
-                         workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         groupArray(value) AS values,
-                         groupArray(reason) AS reasons,
-                         groupArray(category_name) AS categories,
-                         groupArray(author) AS authors,
-                         groupArray(source) AS sources,
-                         groupArray(created_by) AS created_bies,
-                         groupArray(last_updated_by) AS updated_bies,
-                         groupArray(created_at) AS created_ats,
-                         groupArray(last_updated_at) AS last_updated_ats
-                     FROM authored_feedback_scores FINAL
-                     WHERE entity_type = 'trace'
-                       AND workspace_id = :workspace_id
-                       AND project_id IN :project_ids
-                     GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND project_id IN :project_ids
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+               SELECT
+                   workspace_id,
+                   project_id,
+                   entity_id,
+                   name,
+                   arrayStringConcat(categories, ', ') AS category_name,
+                   IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                   arrayStringConcat(reasons, ', ') AS reason,
+                   arrayElement(sources, 1) AS source,
+                   mapFromArrays(
+                       authors,
+                       arrayMap(
+                           i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                               arrayEnumerate(values)
+                           )
+                   ) AS value_by_author,
+                   arrayStringConcat(created_bies, ', ') AS created_by,
+                   arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                   arrayMin(created_ats) AS created_at,
+                   arrayMax(last_updated_ats) AS last_updated_at
+               FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -1102,7 +1152,7 @@ class TraceDAOImpl implements TraceDAO {
                             groupArray(name),
                             groupArray(value)
                     ) AS feedback_scores
-                FROM feedback_scores_combined
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ),
             guardrails_agg AS (
@@ -1147,14 +1197,11 @@ class TraceDAOImpl implements TraceDAO {
                 )
             <endif>
             <if(feedback_scores_empty_filters)>
-            , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    FROM feedback_scores_combined
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
@@ -1287,67 +1334,84 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       category_name,
-                       value,
-                       reason,
-                       source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
-                       created_by,
-                       last_updated_by,
-                       created_at,
-                       last_updated_at
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
                     arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
-                            authors,
-                            arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                    arrayEnumerate(values)
-                            )
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
                     ) AS value_by_author,
                     arrayStringConcat(created_bies, ', ') AS created_by,
                     arrayStringConcat(updated_bies, ', ') AS last_updated_by,
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                     SELECT
-                         workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         groupArray(value) AS values,
-                         groupArray(reason) AS reasons,
-                         groupArray(category_name) AS categories,
-                         groupArray(author) AS authors,
-                         groupArray(source) AS sources,
-                         groupArray(created_by) AS created_bies,
-                         groupArray(last_updated_by) AS updated_bies,
-                         groupArray(created_at) AS created_ats,
-                         groupArray(last_updated_at) AS last_updated_ats
-                     FROM authored_feedback_scores FINAL
-                     WHERE entity_type = 'thread'
-                       AND workspace_id = :workspace_id
-                       AND project_id = :project_id
-                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                     GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -1356,30 +1420,26 @@ class TraceDAOImpl implements TraceDAO {
                             groupArray(value)
                     ) AS feedback_scores,
                     groupArray(tuple(
-                            name,
-                            category_name,
-                            value,
-                            reason,
-                            source,
-                            value_by_author,
-                            created_at,
-                            last_updated_at,
-                            created_by,
-                            last_updated_by
-                               )) AS feedback_scores_list
-                FROM feedback_scores_combined
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS feedback_scores_list
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
-            , fsc AS (
-                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'thread'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    FROM feedback_scores_combined
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
@@ -1508,19 +1568,20 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       category_name,
-                       value,
-                       reason,
-                       source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
-                       created_by,
-                       last_updated_by,
-                       created_at,
-                       last_updated_at
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
@@ -1532,43 +1593,59 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     entity_id,
                     name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
                     arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
-                            authors,
-                            arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                    arrayEnumerate(values)
-                            )
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
                     ) AS value_by_author,
                     arrayStringConcat(created_bies, ', ') AS created_by,
                     arrayStringConcat(updated_bies, ', ') AS last_updated_by,
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                     SELECT
-                         workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         groupArray(value) AS values,
-                         groupArray(reason) AS reasons,
-                         groupArray(category_name) AS categories,
-                         groupArray(author) AS authors,
-                         groupArray(source) AS sources,
-                         groupArray(created_by) AS created_bies,
-                         groupArray(last_updated_by) AS updated_bies,
-                         groupArray(created_at) AS created_ats,
-                         groupArray(last_updated_at) AS last_updated_ats
-                     FROM authored_feedback_scores FINAL
-                     WHERE entity_type = 'thread'
-                       AND workspace_id = :workspace_id
-                       AND project_id = :project_id
-                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                     GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -1588,7 +1665,7 @@ class TraceDAOImpl implements TraceDAO {
                             created_by,
                             last_updated_by
                                )) AS feedback_scores_list
-                FROM feedback_scores_combined
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ), comments_final AS (
               SELECT
@@ -1614,15 +1691,11 @@ class TraceDAOImpl implements TraceDAO {
               GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
-            , fsc AS (
-                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'thread'
-                    AND workspace_id = :workspace_id
-                    AND project_id=:project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    FROM feedback_scores_combined
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
@@ -1780,11 +1853,11 @@ class TraceDAOImpl implements TraceDAO {
                        value,
                        reason,
                        source,
-                       map(last_updated_by, tuple(value, reason, category_name, source, last_updated_at)) AS value_by_author,
                        created_by,
                        last_updated_by,
                        created_at,
-                       last_updated_at
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
@@ -1796,43 +1869,59 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     entity_id,
                     name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
                     arrayStringConcat(categories, ', ') AS category_name,
-                    toDecimal64(arrayAvg(values), 9) AS value,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
-                            authors,
-                            arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                    arrayEnumerate(values)
-                            )
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
                     ) AS value_by_author,
                     arrayStringConcat(created_bies, ', ') AS created_by,
                     arrayStringConcat(updated_bies, ', ') AS last_updated_by,
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
-                FROM (
-                     SELECT
-                         workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         groupArray(value) AS values,
-                         groupArray(reason) AS reasons,
-                         groupArray(category_name) AS categories,
-                         groupArray(author) AS authors,
-                         groupArray(source) AS sources,
-                         groupArray(created_by) AS created_bies,
-                         groupArray(last_updated_by) AS updated_bies,
-                         groupArray(created_at) AS created_ats,
-                         groupArray(last_updated_at) AS last_updated_ats
-                     FROM authored_feedback_scores FINAL
-                     WHERE entity_type = 'thread'
-                       AND workspace_id = :workspace_id
-                       AND project_id = :project_id
-                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                     GROUP BY workspace_id, project_id, entity_id, name
-                 )
+                 FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -1852,7 +1941,7 @@ class TraceDAOImpl implements TraceDAO {
                         created_by,
                         last_updated_by
                     )) AS feedback_scores_list
-                FROM feedback_scores_combined
+                FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ), comments_final AS (
               SELECT
