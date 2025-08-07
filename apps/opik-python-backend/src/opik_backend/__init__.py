@@ -71,8 +71,81 @@ def create_app(test_config=None, should_init_executor=True):
 
     return app
 
+def setup_otel_metrics(app, resource):
+    """Configure OpenTelemetry metrics export."""
+    otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
+    provider = MeterProvider(resource=resource, metric_readers=[otlp_reader])
+    metrics.set_meter_provider(provider)
+    app.logger.debug("OpenTelemetry metrics configured")
+
+def setup_otel_traces(app, resource):
+    """Configure OpenTelemetry traces export.""" 
+    trace_provider = TracerProvider(resource=resource)
+    trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.set_tracer_provider(trace_provider)
+    app.logger.debug("OpenTelemetry traces configured")
+
+def setup_otel_logs(app, resource):
+    """Configure OpenTelemetry logs export and return the logging handler."""
+    logger_provider = LoggerProvider(resource=resource)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
+    set_logger_provider(logger_provider)
+    
+    # Create and configure OpenTelemetry logging handler
+    handler = LoggingHandler(logger_provider=logger_provider)
+    
+    # Set OpenTelemetry handler level based on environment or app debug mode
+    otel_log_level_str = os.getenv('OTEL_PYTHON_LOG_LEVEL', 'DEBUG' if app.debug else 'INFO')
+    try:
+        otel_log_level = getattr(logging, otel_log_level_str.upper())
+    except AttributeError:
+        otel_log_level = logging.INFO
+        app.logger.warning(f"Invalid OTEL_PYTHON_LOG_LEVEL '{otel_log_level_str}', defaulting to INFO")
+    
+    handler.setLevel(otel_log_level)
+    app.logger.info(f"OpenTelemetry log level set to: {logging.getLevelName(otel_log_level)}")
+    
+    return handler, otel_log_level
+
+def setup_console_logging(app):
+    """Configure console logging levels to control verbosity."""
+    console_log_level_str = os.getenv('OPIK_CONSOLE_LOG_LEVEL', 'INFO')
+    try:
+        console_log_level = getattr(logging, console_log_level_str.upper())
+    except AttributeError:
+        console_log_level = logging.INFO
+        app.logger.warning(f"Invalid OPIK_CONSOLE_LOG_LEVEL '{console_log_level_str}', defaulting to INFO")
+    
+    # Set root logger level to control all third-party library logging
+    # This is cleaner than maintaining hardcoded logger lists
+    root_logger = logging.getLogger()
+    if console_log_level > root_logger.level or root_logger.level == logging.NOTSET:
+        root_logger.setLevel(console_log_level)
+        app.logger.info(f"Console log level set to: {logging.getLevelName(console_log_level)}")
+
+def setup_otel_instrumentation(app, otel_log_level):
+    """Configure OpenTelemetry auto-instrumentation with double-instrumentation checks."""
+    # Check if instrumentors are already active to prevent double instrumentation
+    flask_instrumentor = FlaskInstrumentor()
+    if not flask_instrumentor.is_instrumented_by_opentelemetry:
+        flask_instrumentor.instrument_app(app)
+
+    system_metrics_instrumentor = SystemMetricsInstrumentor()
+    if not system_metrics_instrumentor.is_instrumented_by_opentelemetry:
+        system_metrics_instrumentor.instrument()
+
+    requests_instrumentor = RequestsInstrumentor()
+    if not requests_instrumentor.is_instrumented_by_opentelemetry:
+        requests_instrumentor.instrument()
+
+    logging_instrumentor = LoggingInstrumentor()
+    if not logging_instrumentor.is_instrumented_by_opentelemetry:
+        logging_instrumentor.instrument(log_level=otel_log_level)
+    
+    app.logger.debug("OpenTelemetry instrumentation configured")
+
 def setup_telemetry(app):
-    """Configure OpenTelemetry metrics for the application using OTLP push metrics only."""
+    """Configure OpenTelemetry metrics, traces, and logs using OTLP export."""
     # Check if OTLP endpoint is configured
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if not otlp_endpoint:
@@ -81,49 +154,27 @@ def setup_telemetry(app):
 
     app.logger.info(f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint.")
 
-    # Create OTLP reader for pushing metrics
-    otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
-
-    # Create MeterProvider with OTLP reader only
+    # Create shared resource for all telemetry signals
     resource = Resource.create()
-    provider = MeterProvider(resource=resource, metric_readers=[otlp_reader])
 
-    # Set the global MeterProvider
-    metrics.set_meter_provider(provider)
-
-    trace_provider = TracerProvider(resource=resource)
-    trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-    trace.set_tracer_provider(trace_provider)
-
-    logger_provider = LoggerProvider(resource=resource)
-    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
-    set_logger_provider(logger_provider)
-
-    # Add single OpenTelemetry handler to root logger for comprehensive logging
-    handler = LoggingHandler(logger_provider=logger_provider)
-
+    # Set up each telemetry signal
+    setup_otel_metrics(app, resource)
+    setup_otel_traces(app, resource)
+    otel_handler, otel_log_level = setup_otel_logs(app, resource)
+    
+    # Configure logging handlers
     # Set root logger to NOTSET to allow all messages through to handlers
     # This ensures OpenTelemetry can receive all log levels, as recommended by:
     # https://markandruth.co.uk/2025/05/30/getting-opentelemetry-logging-working-in-python
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.NOTSET)
-    root_logger.addHandler(handler)
-
+    root_logger.addHandler(otel_handler)
+    
     # Also add handler to Flask app logger for guaranteed coverage
-    # This ensures Flask application logs are captured regardless of propagation settings
-    app.logger.addHandler(handler)
-
-    otel_log_level = logging.DEBUG if app.debug else logging.INFO
-    handler.setLevel(otel_log_level)
-
-    # Configure Flask instrumentation
-    FlaskInstrumentor().instrument_app(app)
-
-    # Configure system metrics instrumentation
-    SystemMetricsInstrumentor().instrument()
-
-    # Configure requests instrumentation
-    RequestsInstrumentor().instrument()
-
-    # Configure logging instrumentation
-    LoggingInstrumentor(log_level=logging.DEBUG if app.debug else logging.INFO).instrument()
+    app.logger.addHandler(otel_handler)
+    
+    # Configure console logging levels
+    setup_console_logging(app)
+    
+    # Configure auto-instrumentation
+    setup_otel_instrumentation(app, otel_log_level)
