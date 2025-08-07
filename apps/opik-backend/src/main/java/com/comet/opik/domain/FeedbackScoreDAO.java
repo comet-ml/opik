@@ -106,15 +106,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String DELETE_FEEDBACK_SCORE = """
-            DELETE FROM feedback_scores
-            WHERE entity_id = :entity_id
-            AND entity_type = :entity_type
-            AND name = :name
-            AND workspace_id = :workspace_id
-            """;
-
-    private static final String DELETE_AUTHORED_FEEDBACK_SCORE = """
-            DELETE FROM authored_feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_id = :entity_id
             AND entity_type = :entity_type
             AND name = :name
@@ -122,22 +114,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
-            DELETE FROM feedback_scores
-            WHERE entity_type = 'span'
-            AND entity_id IN (
-                SELECT id
-                FROM spans
-                WHERE trace_id IN :trace_ids
-                AND workspace_id = :workspace_id
-                <if(project_id)>AND project_id = :project_id<endif>
-            )
-            AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
-            SETTINGS allow_nondeterministic_mutations = 1
-            """;
-
-    private static final String DELETE_SPANS_CASCADE_AUTHORED_FEEDBACK_SCORE = """
-            DELETE FROM authored_feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_type = 'span'
             AND entity_id IN (
                 SELECT id
@@ -152,17 +129,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
-            DELETE FROM feedback_scores
-            WHERE entity_id IN :entity_ids
-            AND entity_type = :entity_type
-            AND workspace_id = :workspace_id
-            <if(names)>AND name IN :names <endif>
-            <if(project_id)>AND project_id = :project_id<endif>
-            <if(sources)>AND source IN :sources<endif>
-            """;
-
-    private static final String DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS = """
-            DELETE FROM authored_feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
@@ -405,14 +372,20 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
             // Delete from feedback_scores table
-            var statement1 = connection.createStatement(DELETE_FEEDBACK_SCORE);
+            String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "feedback_scores")
+                    .render();
+            var statement1 = connection.createStatement(deleteFeedbackScore);
             statement1
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
                     .bind("name", name);
 
             // Delete from authored_feedback_scores table
-            var statement2 = connection.createStatement(DELETE_AUTHORED_FEEDBACK_SCORE);
+            String deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "authored_feedback_scores")
+                    .render();
+            var statement2 = connection.createStatement(deleteAuthoredFeedbackScore);
             statement2
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
@@ -461,6 +434,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             // Delete from feedback_scores table
             ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template1.add("names", names);
+            template1.add("table_name", "feedback_scores");
 
             var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", Set.of(entityId))
@@ -468,8 +442,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("names", names);
 
             // Delete from authored_feedback_scores table
-            ST template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            ST template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("names", names);
+            template2.add("table_name", "authored_feedback_scores");
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
@@ -576,6 +551,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template1.add("project_id", projectId);
             template1.add("sources", sources);
+            template1.add("table_name", "feedback_scores");
 
             var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", threadModelIds)
@@ -584,9 +560,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("project_id", projectId);
 
             // Delete from authored_feedback_scores table
-            var template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("project_id", projectId);
             template2.add("sources", sources);
+            template2.add("table_name", "authored_feedback_scores");
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", threadModelIds)
@@ -664,6 +641,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         var template1 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template1.add("project_id", id));
+        template1.add("table_name", "feedback_scores");
 
         var statement1 = connection.createStatement(template1.render())
                 .bind("trace_ids", traceIds.toArray(UUID[]::new));
@@ -673,9 +651,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
 
         // Delete from authored_feedback_scores table
-        var template2 = new ST(DELETE_SPANS_CASCADE_AUTHORED_FEEDBACK_SCORE);
+        var template2 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template2.add("project_id", id));
+        template2.add("table_name", "authored_feedback_scores");
 
         var statement2 = connection.createStatement(template2.render())
                 .bind("trace_ids", traceIds.toArray(UUID[]::new));
@@ -696,6 +675,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template1.add("project_id", id));
+        template1.add("table_name", "feedback_scores");
 
         var statement1 = connection.createStatement(template1.render())
                 .bind("entity_ids", entityIds.toArray(UUID[]::new))
@@ -706,9 +686,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
 
         // Delete from authored_feedback_scores table
-        var template2 = new ST(DELETE_AUTHORED_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template2.add("project_id", id));
+        template2.add("table_name", "authored_feedback_scores");
 
         var statement2 = connection.createStatement(template2.render())
                 .bind("entity_ids", entityIds.toArray(UUID[]::new))
