@@ -519,7 +519,7 @@ class SpanDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -695,7 +695,7 @@ class SpanDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -961,7 +961,7 @@ class SpanDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(

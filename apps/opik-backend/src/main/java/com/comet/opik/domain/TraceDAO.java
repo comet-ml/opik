@@ -351,7 +351,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -531,7 +531,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1067,7 +1067,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1319,7 +1319,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1540,7 +1540,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
@@ -1804,7 +1804,7 @@ class TraceDAOImpl implements TraceDAO {
                     arrayStringConcat(categories, ', ') AS category_name,
                     toDecimal64(arrayAvg(values), 9) AS value,
                     arrayStringConcat(reasons, ', ') AS reason,
-                    sources[1] AS source,
+                    arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
                             arrayMap(
