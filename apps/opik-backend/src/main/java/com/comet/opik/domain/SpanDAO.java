@@ -1,13 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -42,10 +39,8 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1571,7 +1566,7 @@ class SpanDAO {
                         .ofNullable(getValue(exclude, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
                                 List.class))
                         .filter(not(List::isEmpty))
-                        .map(this::mapFeedbackScores)
+                        .map(FeedbackScoreMapper::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
                 .tags(Optional.ofNullable(getValue(exclude, SpanField.TAGS, row, "tags", String[].class))
@@ -1596,31 +1591,6 @@ class SpanDAO {
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
                 .build());
-    }
-
-    private List<FeedbackScore> mapFeedbackScores(List<List<Object>> feedbackScores) {
-        return Optional.ofNullable(feedbackScores)
-                .orElse(List.of())
-                .stream()
-                .map(feedbackScore -> FeedbackScore.builder()
-                        .name((String) feedbackScore.get(0))
-                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                        .value((BigDecimal) feedbackScore.get(2))
-                        .reason(getIfNotEmpty(feedbackScore.get(3)))
-                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
-                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                        .createdBy((String) feedbackScore.get(8))
-                        .lastUpdatedBy((String) feedbackScore.get(9))
-                        .build())
-                .toList();
-    }
-
-    private String getIfNotEmpty(Object value) {
-        return Optional.ofNullable((String) value)
-                .filter(StringUtils::isNotEmpty)
-                .orElse(null);
     }
 
     private Publisher<Span> mapToPartialDto(Result result) {
@@ -1943,34 +1913,5 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
-    }
-
-    private Map<String, ValueEntry> parseValueByAuthor(Object valueByAuthorObj) {
-        if (valueByAuthorObj == null) {
-            return Map.of();
-        }
-
-        // ClickHouse returns maps as LinkedHashMap<String, List<Object>> where List<Object> represents a tuple
-        @SuppressWarnings("unchecked")
-        Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
-
-        Map<String, ValueEntry> result = new HashMap<>();
-        for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
-            String author = entry.getKey();
-            List<Object> tuple = entry.getValue();
-
-            // tuple contains: (value, reason, category_name, source, last_updated_at)
-            ValueEntry valueEntry = ValueEntry.builder()
-                    .value((BigDecimal) tuple.get(0))
-                    .reason(getIfNotEmpty(tuple.get(1)))
-                    .categoryName(getIfNotEmpty(tuple.get(2)))
-                    .source(ScoreSource.fromString((String) tuple.get(3)))
-                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
-                    .build();
-
-            result.put(author, valueEntry);
-        }
-
-        return result;
     }
 }
