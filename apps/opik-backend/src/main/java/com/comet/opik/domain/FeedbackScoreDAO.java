@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickhouseUtils;
@@ -13,7 +12,6 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -23,16 +21,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -40,15 +31,12 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
-
-    Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds);
 
     Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
             UUID projectId);
@@ -80,9 +68,6 @@ public interface FeedbackScoreDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
-
-    record FeedbackScoreDto(UUID entityId, FeedbackScore score) {
-    }
 
     private static final String BULK_INSERT_FEEDBACK_SCORE = """
             INSERT INTO feedback_scores(
@@ -117,46 +102,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         ,
                      <endif>
                 }>
-            ;
-            """;
-
-    private static final String SELECT_FEEDBACK_SCORE_BY_ID = """
-            WITH combined_scores AS (
-                SELECT
-                    *,
-                    '' as author
-                FROM feedback_scores
-                WHERE entity_id in :entity_ids
-                AND entity_type = :entity_type
-                AND workspace_id = :workspace_id
-                LIMIT 1 BY entity_id, name
-                UNION ALL
-                SELECT
-                    *
-                FROM authored_feedback_scores
-                WHERE entity_id in :entity_ids
-                AND entity_type = :entity_type
-                AND workspace_id = :workspace_id
-                LIMIT 1 BY entity_id, author, name
-            )
-            SELECT
-                entity_id,
-                name,
-                category_name,
-                avg(value) as value,
-                reason,
-                source,
-                min(created_at) as created_at,
-                max(last_updated_at) as last_updated_at,
-                created_by,
-                last_updated_by,
-                mapFromArrays(
-                    groupArray(author),
-                    groupArray(tuple(value, category_name))
-                ) as value_by_author
-            FROM combined_scores
-            GROUP BY entity_id, name, category_name, reason, source, created_by, last_updated_by
-            ORDER BY entity_id DESC, last_updated_at DESC
             ;
             """;
 
@@ -383,127 +328,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String INSERT_AUTHORED_FEEDBACK_SCORE = """
-            INSERT INTO authored_feedback_scores(
-                entity_type,
-                entity_id,
-                project_id,
-                workspace_id,
-                author,
-                name,
-                category_name,
-                value,
-                reason,
-                source,
-                created_by,
-                last_updated_by
-            )
-            VALUES (
-                :entity_type,
-                :entity_id,
-                :project_id,
-                :workspace_id,
-                :author,
-                :name,
-                :category_name,
-                :value,
-                :reason,
-                :source,
-                :user_name,
-                :user_name
-            )
-            ;
-            """;
-
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull OpikConfiguration opikConfiguration;
-
-    @Override
-    @WithSpan
-    public Mono<Map<UUID, List<FeedbackScore>>> getScores(@NonNull EntityType entityType,
-            @NonNull List<UUID> entityIds) {
-        return asyncTemplate.stream(connection -> fetchFeedbackScoresByEntityIds(entityType, entityIds, connection))
-                .collectList()
-                .map(this::groupByEntityId);
-    }
-
-    private Map<UUID, List<FeedbackScore>> groupByEntityId(List<FeedbackScoreDto> feedbackLogs) {
-        return feedbackLogs.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreDto::entityId,
-                        Collectors.mapping(FeedbackScoreDto::score, Collectors.toList())));
-    }
-
-    private Flux<FeedbackScoreDto> fetchFeedbackScoresByEntityIds(EntityType entityType,
-            Collection<UUID> entityIds,
-            Connection connection) {
-
-        if (entityIds.isEmpty()) {
-            return Flux.empty();
-        }
-
-        var statement = connection.createStatement(SELECT_FEEDBACK_SCORE_BY_ID);
-
-        statement
-                .bind("entity_ids", entityIds.toArray(UUID[]::new))
-                .bind("entity_type", entityType.getType());
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .flatMap(result -> result.map((row, rowMetadata) -> mapFeedback(row)));
-    }
-
-    private FeedbackScoreDto mapFeedback(Row row) {
-        return new FeedbackScoreDto(
-                row.get("entity_id", UUID.class),
-                FeedbackScore.builder()
-                        .name(row.get("name", String.class))
-                        .categoryName(Optional.ofNullable(row.get("category_name", String.class))
-                                .filter(it -> !it.isBlank())
-                                .orElse(null))
-                        .value(row.get("value", BigDecimal.class))
-                        .reason(Optional.ofNullable(row.get("reason", String.class))
-                                .filter(it -> !it.isBlank())
-                                .orElse(null))
-                        .source(ScoreSource.fromString(row.get("source", String.class)))
-                        .createdAt(row.get("created_at", Instant.class))
-                        .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                        .createdBy(row.get("created_by", String.class))
-                        .lastUpdatedBy(row.get("last_updated_by", String.class))
-                        .valueByAuthor(parseValueByAuthor(row.get("value_by_author")))
-                        .build());
-    }
-
-    private Map<String, ValueEntry> parseValueByAuthor(Object valueByAuthorObj) {
-        if (valueByAuthorObj == null) {
-            return Map.of();
-        }
-
-        // ClickHouse returns maps as LinkedHashMap<String, List<Object>> where List<Object> represents a tuple
-        @SuppressWarnings("unchecked")
-        Map<String, List<Object>> valueByAuthorMap = (Map<String, List<Object>>) valueByAuthorObj;
-
-        Map<String, ValueEntry> result = new HashMap<>();
-        for (Map.Entry<String, List<Object>> entry : valueByAuthorMap.entrySet()) {
-            String author = entry.getKey();
-            List<Object> tuple = entry.getValue();
-
-            // tuple contains: (value, reason, category_name, source, last_updated_at)
-            ValueEntry valueEntry = ValueEntry.builder()
-                    .value((BigDecimal) tuple.get(0))
-                    .reason(Optional.ofNullable((String) tuple.get(1))
-                            .filter(it -> !it.isBlank())
-                            .orElse(null))
-                    .categoryName(Optional.ofNullable((String) tuple.get(2))
-                            .filter(it -> !it.isBlank())
-                            .orElse(null))
-                    .source(ScoreSource.fromString((String) tuple.get(3)))
-                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
-                    .build();
-
-            result.put(author, valueEntry);
-        }
-
-        return result;
-    }
 
     @Override
     @WithSpan
