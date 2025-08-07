@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -22,11 +23,17 @@ import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class FiltersFactory {
+
+    private static final String JSON_PREFIX = "$.";
+    private static final Pattern INDEX_PATTERN = Pattern.compile("^(.*?)(\\[\\d+])?$");
 
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
@@ -97,6 +104,7 @@ public class FiltersFactory {
 
         filters = filters.stream()
                 .distinct()
+                .map(this::mapCustom)
                 .map(this::toValidAndDecoded)
                 .toList();
         return filters.isEmpty() ? null : filters;
@@ -107,6 +115,7 @@ public class FiltersFactory {
             return filters;
         }
         return filters.stream()
+                .map(this::mapCustom)
                 .map(this::toValidAndDecoded)
                 .map(filter -> (T) filter)
                 .toList();
@@ -137,5 +146,57 @@ public class FiltersFactory {
 
     private boolean validateFieldType(Filter filter) {
         return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter);
+    }
+
+    public <T extends Filter> T mapCustom(T filter) {
+        if (filter.field().getType() != FieldType.CUSTOM) {
+            return filter;
+        }
+
+        filter = (T) filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
+
+        Pair<String, String> T2 = getFieldAndKey(filter.key());
+        String customField = T2.getLeft();
+        String customKey = T2.getRight();
+
+        var mappedFilter = filter.buildFromCustom(customField,
+                customKey == null ? FieldType.STRING : FieldType.DICTIONARY, filter.operator(), customKey,
+                filter.value());
+
+        if (mappedFilter == null) {
+            throw new BadRequestException("Invalid key '%s' for custom filter".formatted(filter.key()));
+        }
+
+        return (T) mappedFilter;
+    }
+
+    private Pair<String, String> getFieldAndKey(String customKey) {
+        if (StringUtils.isBlank(customKey)) {
+            throw new BadRequestException("Custom key cannot be null or empty");
+        }
+
+        if (customKey.startsWith(JSON_PREFIX)) {
+            customKey = customKey.substring(JSON_PREFIX.length());
+        }
+
+        int keyFieldSeparatorIndex = customKey.indexOf('.');
+
+        if (keyFieldSeparatorIndex < 0) {
+            Matcher matcher = INDEX_PATTERN.matcher(customKey);
+            matcher.matches();
+
+            return Pair.of(matcher.group(1), matcher.group(2));
+        } else {
+            String field = customKey.substring(0, keyFieldSeparatorIndex);
+            String key = customKey.substring(keyFieldSeparatorIndex + 1);
+
+            Matcher matcher = INDEX_PATTERN.matcher(field);
+            matcher.matches();
+
+            return Pair.of(matcher.group(1), Optional.ofNullable(matcher.group(2))
+                    .map(index -> index + "." + key) // remove square brackets
+                    .orElse(key));
+        }
+
     }
 }

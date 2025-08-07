@@ -11,6 +11,7 @@ from .tool_call import ToolCall
 class Delta(UniversalBaseModel):
     role: typing.Optional[str] = None
     content: typing.Optional[str] = None
+    reasoning_content: typing.Optional[str] = None
     tool_calls: typing.Optional[typing.List[ToolCall]] = None
     function_call: typing.Optional[FunctionCall] = None
 

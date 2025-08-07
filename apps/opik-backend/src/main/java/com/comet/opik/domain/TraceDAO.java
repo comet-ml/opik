@@ -149,7 +149,8 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            ) VALUES
+            ) <settings_clause>
+            VALUES
                 <items:{item |
                     (
                         :id<item.index>,
@@ -623,24 +624,24 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String TRACE_COUNT_BY_WORKSPACE_ID = """
-                SELECT
-                     workspace_id,
-                     COUNT(DISTINCT id) as trace_count
-                 FROM traces
-                 WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                 <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
-                 GROUP BY workspace_id
+            SELECT
+                 workspace_id,
+                 COUNT(DISTINCT id) as trace_count
+             FROM traces
+             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+             <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
+             GROUP BY workspace_id
             ;
             """;
 
     private static final String TRACE_DAILY_BI_INFORMATION = """
-                SELECT
-                     workspace_id,
-                     created_by AS user,
-                     COUNT(DISTINCT id) AS trace_count
-                FROM traces
-                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id, created_by
+            SELECT
+                 workspace_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS trace_count
+            FROM traces
+            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -1652,9 +1653,7 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
-        if (opikConfiguration.getAsyncInsert().enabled()) {
-            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-        }
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         return template;
     }
@@ -1719,9 +1718,7 @@ class TraceDAOImpl implements TraceDAO {
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
 
-        if (opikConfiguration.getAsyncInsert().enabled()) {
-            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-        }
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2171,6 +2168,8 @@ class TraceDAOImpl implements TraceDAO {
 
             var template = new ST(BATCH_INSERT)
                     .add("items", queryItems);
+
+            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
             Statement statement = connection.createStatement(template.render());
 
