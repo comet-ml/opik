@@ -843,7 +843,7 @@ class SpanDAO {
                     entity_id,
                     name,
                     toDecimal64(avg(value), 9) AS value,
-                    min(last_updated_at)
+                    max(last_updated_at)
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                     AND workspace_id = :workspace_id
