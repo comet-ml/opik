@@ -2040,95 +2040,82 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create datasets
-            var dataset1 = podamFactory.manufacturePojo(Dataset.class);
-            var dataset2 = podamFactory.manufacturePojo(Dataset.class);
-            datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
-            datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            Random random = new Random();
 
-            // Create experiments
-            var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetName(dataset1.name())
-                    .datasetId(dataset1.id())
-                    .metadata(JsonUtils.getJsonNodeFromString("{\"provider\":\"openai\",\"model\":\"gpt-4\"}"))
-                    .build();
-            var experiment2 = experimentResourceClient.createPartialExperiment()
-                    .datasetName(dataset1.name())
-                    .datasetId(dataset1.id())
-                    .metadata(JsonUtils.getJsonNodeFromString("{\"provider\":\"anthropic\",\"model\":\"claude-3\"}"))
-                    .build();
-            var experiment3 = experimentResourceClient.createPartialExperiment()
-                    .datasetName(dataset2.name())
-                    .datasetId(dataset2.id())
-                    .metadata(JsonUtils.getJsonNodeFromString("{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}"))
-                    .build();
+            List<String> metadatas = List.of("{\"provider\":\"openai\",\"model\":\"gpt-4\"}",
+                    "{\"provider\":\"anthropic\",\"model\":\"claude-3\"}",
+                    "{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}");
 
-            createAndAssert(experiment1, apiKey, workspaceName);
-            createAndAssert(experiment2, apiKey, workspaceName);
-            createAndAssert(experiment3, apiKey, workspaceName);
+            Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
+            List<Trace> tracesAll = new ArrayList<>();
+            Map<UUID, List<Span>> traceToSpans = new HashMap<>();
 
-            // Create traces with different durations and setup spans with cost
-            var trace1 = createTraceWithDuration(100);
-            var trace2 = createTraceWithDuration(200);
-            var trace3 = createTraceWithDuration(300);
-            var trace4 = createTraceWithDuration(150);
-            var trace5 = createTraceWithDuration(250);
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-            var traces = List.of(trace1, trace2, trace3, trace4, trace5);
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .datasetName(dataset.name())
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
 
-            // Create spans with cost for each trace
-            var span1 = createSpanWithCost(trace1, new BigDecimal("0.05"));
-            var span2 = createSpanWithCost(trace2, new BigDecimal("0.10"));
-            var span3 = createSpanWithCost(trace3, new BigDecimal("0.15"));
-            var span4 = createSpanWithCost(trace4, new BigDecimal("0.08"));
-            var span5 = createSpanWithCost(trace5, new BigDecimal("0.12"));
+                // Create traces with different durations and setup spans with cost
+                var traces = IntStream.range(0, 10)
+                        .mapToObj(i -> createTraceWithDuration(random.nextInt(300)))
+                        .toList();
+                tracesAll.addAll(traces);
+                traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            spanResourceClient.createSpan(span1, apiKey, workspaceName);
-            spanResourceClient.createSpan(span2, apiKey, workspaceName);
-            spanResourceClient.createSpan(span3, apiKey, workspaceName);
-            spanResourceClient.createSpan(span4, apiKey, workspaceName);
-            spanResourceClient.createSpan(span5, apiKey, workspaceName);
+                // Create spans with cost for each trace
+                var spans = traces.stream().map(trace -> {
+                    var span = createSpanWithCost(trace, BigDecimal.valueOf(random.nextDouble()));
+                    traceToSpans.put(trace.id(), List.of(span));
+                    return span;
+                }).toList();
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Create feedback scores
-            var scoreForTrace1 = makeTraceScoresWithSpecificValues(trace1, List.of(
-                    new BigDecimal("0.8"), new BigDecimal("0.9")));
-            var scoreForTrace2 = makeTraceScoresWithSpecificValues(trace2, List.of(
-                    new BigDecimal("0.7"), new BigDecimal("0.85")));
-            var scoreForTrace3 = makeTraceScoresWithSpecificValues(trace3, List.of(
-                    new BigDecimal("0.9"), new BigDecimal("0.95")));
-            var scoreForTrace4 = makeTraceScoresWithSpecificValues(trace4, List.of(
-                    new BigDecimal("0.75"), new BigDecimal("0.8")));
-            var scoreForTrace5 = makeTraceScoresWithSpecificValues(trace5, List.of(
-                    new BigDecimal("0.6"), new BigDecimal("0.7")));
+                // Create feedback scores
+                List<List<FeedbackScoreBatchItem>> allScores = traces.stream()
+                        .map(trace -> makeTraceScoresWithSpecificValues(trace,
+                                List.of(BigDecimal.valueOf(random.nextDouble()),
+                                        BigDecimal.valueOf(random.nextDouble()))))
+                        .toList();
 
-            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
-            allScores.addAll(scoreForTrace1);
-            allScores.addAll(scoreForTrace2);
-            allScores.addAll(scoreForTrace3);
-            allScores.addAll(scoreForTrace4);
-            allScores.addAll(scoreForTrace5);
+                var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class)
+                        .toBuilder()
+                        .scores(allScores.stream().flatMap(List::stream).collect(Collectors.toList()))
+                        .build();
 
-            var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class)
-                    .toBuilder()
-                    .scores(allScores)
-                    .build();
+                createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
-            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+                Set<ExperimentItem> experimentItems = IntStream.range(0, traces.size())
+                        .mapToObj(i -> {
+                            var experimentId = experiments.get(i % experiments.size()).id();
+                            List<ExperimentItem> experimentItemList = experimentToItems.computeIfAbsent(
+                                    experimentId, k -> new ArrayList<>());
+                            ExperimentItem experimentItem = createExperimentItemWithFeedbackScores(
+                                    experimentId,
+                                    traces.get(i).id(),
+                                    allScores.get(i));
+                            experimentItemList.add(experimentItem);
+                            return experimentItem;
+                        })
+                        .collect(Collectors.toSet());
 
-            // Create experiment items linking experiments to traces
-            var experimentItem1 = createExperimentItemWithFeedbackScores(experiment1.id(), trace1.id(), scoreForTrace1);
-            var experimentItem2 = createExperimentItemWithFeedbackScores(experiment1.id(), trace2.id(), scoreForTrace2);
-            var experimentItem3 = createExperimentItemWithFeedbackScores(experiment2.id(), trace3.id(), scoreForTrace3);
-            var experimentItem4 = createExperimentItemWithFeedbackScores(experiment2.id(), trace4.id(), scoreForTrace4);
-            var experimentItem5 = createExperimentItemWithFeedbackScores(experiment3.id(), trace5.id(), scoreForTrace5);
+                var experimentItemsBatch = ExperimentItemsBatch.builder()
+                        .experimentItems(experimentItems)
+                        .build();
 
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(
-                            Set.of(experimentItem1, experimentItem2, experimentItem3, experimentItem4, experimentItem5))
-                    .build();
+                createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+                return experiments.stream();
+            }).toList();
 
             // Define grouping criteria
             var groups = List.of(
@@ -2148,20 +2135,16 @@ class ExperimentsResourceTest {
             // Build expected response
             var expectedResponse = buildExpectedGroupAggregationsResponse(
                     groups,
-                    List.of(experiment1, experiment2, experiment3),
-                    Map.of(
-                            experiment1.id(), List.of(experimentItem1, experimentItem2),
-                            experiment2.id(), List.of(experimentItem3, experimentItem4),
-                            experiment3.id(), List.of(experimentItem5)),
-                    Map.of(
-                            trace1.id(), List.of(span1),
-                            trace2.id(), List.of(span2),
-                            trace3.id(), List.of(span3),
-                            trace4.id(), List.of(span4),
-                            trace5.id(), List.of(span5)),
-                    traces);
+                    allExperiments,
+                    experimentToItems,
+                    traceToSpans,
+                    tracesAll);
 
-            assertThat(response).isEqualTo(expectedResponse);
+            assertThat(response)
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .build())
+                    .isEqualTo(expectedResponse);
         }
 
         private Trace createTraceWithDuration(long durationMillis) {
@@ -2228,8 +2211,14 @@ class ExperimentsResourceTest {
                         experimentToItems, traceToSpans, traces);
             }
 
+            // Calculate recursive aggregations for parent levels
+            var updatedContentMap = new HashMap<String, GroupContentWithAggregations>();
+            for (Map.Entry<String, GroupContentWithAggregations> entry : contentMap.entrySet()) {
+                updatedContentMap.put(entry.getKey(), calculateRecursiveAggregations(entry.getValue()));
+            }
+
             return ExperimentGroupAggregationsResponse.builder()
-                    .content(contentMap)
+                    .content(updatedContentMap)
                     .build();
         }
 
@@ -2291,7 +2280,7 @@ class ExperimentsResourceTest {
                 List<Trace> traces) {
 
             long experimentCount = experiments.size();
-            
+
             // Calculate per-experiment metrics
             List<ExperimentMetrics> experimentMetrics = experiments.stream()
                     .map(experiment -> calculateExperimentMetrics(experiment, experimentToItems, traceToSpans, traces))
@@ -2376,7 +2365,7 @@ class ExperimentsResourceTest {
 
             // Calculate duration percentiles for this experiment using the same logic as FindExperiments
             List<BigDecimal> quantiles = getQuantities(experimentTraces.stream());
-            PercentageValues durationPercentiles = quantiles.isEmpty() 
+            PercentageValues durationPercentiles = quantiles.isEmpty()
                     ? new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
                     : new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2));
 
@@ -2424,7 +2413,127 @@ class ExperimentsResourceTest {
                 PercentageValues durationPercentiles) {
         }
 
+        /**
+         * Calculate recursive aggregations for parent levels (same logic as ExperimentService).
+         */
+        private GroupContentWithAggregations calculateRecursiveAggregations(GroupContentWithAggregations content) {
+            if (content.groups().isEmpty()) {
+                // Leaf node - return as-is
+                return content;
+            }
 
+            // Recursively calculate aggregations for all child groups first
+            var updatedChildGroups = new HashMap<String, GroupContentWithAggregations>();
+            for (Map.Entry<String, GroupContentWithAggregations> entry : content.groups().entrySet()) {
+                updatedChildGroups.put(entry.getKey(), calculateRecursiveAggregations(entry.getValue()));
+            }
+
+            // Calculate aggregated values from all children
+            long totalExperimentCount = 0;
+            long totalTraceCount = 0;
+            BigDecimal totalCost = BigDecimal.ZERO;
+
+            // For weighted averages
+            BigDecimal weightedCostSum = BigDecimal.ZERO;
+            BigDecimal p50Sum = BigDecimal.ZERO;
+            BigDecimal p90Sum = BigDecimal.ZERO;
+            BigDecimal p99Sum = BigDecimal.ZERO;
+
+            // For feedback scores - group by name and calculate weighted averages
+            Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
+            Map<String, Long> feedbackScoreCounts = new HashMap<>();
+
+            for (GroupContentWithAggregations child : updatedChildGroups.values()) {
+                AggregationData childAgg = child.aggregations();
+                long expCount = childAgg.experimentCount();
+
+                totalExperimentCount += childAgg.experimentCount();
+                totalTraceCount += childAgg.traceCount();
+                if (childAgg.totalEstimatedCost() != null) {
+                    totalCost = totalCost.add(childAgg.totalEstimatedCost());
+                }
+
+                // For weighted cost average
+                if (childAgg.totalEstimatedCostAvg() != null) {
+                    weightedCostSum = weightedCostSum.add(
+                            childAgg.totalEstimatedCostAvg().multiply(BigDecimal.valueOf(expCount)));
+                }
+
+                // For duration percentiles (weighted average)
+                if (childAgg.duration() != null) {
+                    if (childAgg.duration().p50() != null) {
+                        p50Sum = p50Sum.add(childAgg.duration().p50().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                    if (childAgg.duration().p90() != null) {
+                        p90Sum = p90Sum.add(childAgg.duration().p90().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                    if (childAgg.duration().p99() != null) {
+                        p99Sum = p99Sum.add(childAgg.duration().p99().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                }
+
+                // For feedback scores (weighted average per name)
+                if (childAgg.feedbackScores() != null) {
+                    for (FeedbackScoreAverage score : childAgg.feedbackScores()) {
+                        String name = score.name();
+                        BigDecimal value = score.value();
+
+                        if (value != null && name != null) {
+                            feedbackScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)),
+                                    BigDecimal::add);
+                            feedbackScoreCounts.merge(name, expCount, Long::sum);
+                        }
+                    }
+                }
+            }
+
+            // Calculate averages
+            BigDecimal avgCost = totalExperimentCount > 0
+                    ? weightedCostSum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                            RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+
+            PercentageValues avgDuration = totalExperimentCount > 0
+                    ? new PercentageValues(
+                            p50Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP),
+                            p90Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP),
+                            p99Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP))
+                    : null;
+
+            List<FeedbackScoreAverage> avgFeedbackScores = feedbackScoreSums.entrySet().stream()
+                    .map(entry -> {
+                        String name = entry.getKey();
+                        BigDecimal sum = entry.getValue();
+                        Long count = feedbackScoreCounts.get(name);
+                        BigDecimal avg = count > 0
+                                ? sum.divide(BigDecimal.valueOf(count), ValidationUtils.SCALE, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                        return FeedbackScoreAverage.builder()
+                                .name(name)
+                                .value(avg)
+                                .build();
+                    })
+                    .toList();
+
+            // Build updated aggregation data
+            AggregationData updatedAggregations = AggregationData.builder()
+                    .experimentCount(totalExperimentCount)
+                    .traceCount(totalTraceCount)
+                    .totalEstimatedCost(totalCost)
+                    .totalEstimatedCostAvg(avgCost)
+                    .duration(avgDuration)
+                    .feedbackScores(avgFeedbackScores)
+                    .build();
+
+            // Return new GroupContentWithAggregations with calculated aggregations
+            return GroupContentWithAggregations.builder()
+                    .aggregations(updatedAggregations)
+                    .groups(updatedChildGroups)
+                    .build();
+        }
 
         private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
             Map<String, List<BigDecimal>> scoresByName = new HashMap<>();

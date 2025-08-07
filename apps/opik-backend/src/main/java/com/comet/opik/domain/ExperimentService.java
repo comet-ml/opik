@@ -448,7 +448,9 @@ public class ExperimentService {
 
             totalExperimentCount += childAgg.experimentCount();
             totalTraceCount += childAgg.traceCount();
-            totalCost = totalCost.add(childAgg.totalEstimatedCost());
+            if (childAgg.totalEstimatedCost() != null) {
+                totalCost = totalCost.add(childAgg.totalEstimatedCost());
+            }
 
             // For weighted cost average
             if (childAgg.totalEstimatedCostAvg() != null) {
