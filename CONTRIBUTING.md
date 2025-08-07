@@ -190,6 +190,7 @@ cd sdks/python
 
 # Install the test requirements
 pip install -r tests/test_requirements.txt
+pip install -r tests/unit/test_requirements.txt
 
 # Install pre-commit for linting
 pip install pre-commit

@@ -41,9 +41,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setTraceThreadsClosingJob();
             }
 
-            case GuiceyLifecycle.ApplicationStopped -> {
-                shutdownJobManager();
-            }
+            case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManager();
         }
     }
 
