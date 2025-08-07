@@ -9,15 +9,16 @@ on:
 jobs:
     lint:
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         defaults:
             run:
                 working-directory: sdks/opik_optimizer
         steps:
             - uses: actions/checkout@v4
-            
+
             - name: install pre-commit
               run: pip install pre-commit
-            
+
             - name: linting
               run: pre-commit run --all-files --show-diff-on-failure
         

@@ -9,6 +9,7 @@ jobs:
   assign_pr_creator_or_pusher:
     name: Assign PR Creator or Pusher
     runs-on: ubuntu-latest
+    timeout-minutes: 1
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
