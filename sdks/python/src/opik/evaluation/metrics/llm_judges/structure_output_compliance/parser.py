@@ -8,13 +8,22 @@ LOGGER = logging.getLogger(__name__)
 def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
     """
     Parses the LLM output for the StructuredOutputCompliance metric.
+
     Expected LLM output format:
-    {
-        "score": true or false,
-        "reason": ["reason 1", "reason 2"]
-    }
+        {
+            "score": true or false,
+            "reason": ["reason 1", "reason 2"]
+        }
+
+    Args:
+        content (str): The raw output string from the LLM to be parsed.
+        name (str): The name of the metric or evaluation context.
+
     Returns:
         score_result.ScoreResult: Standardized score result.
+
+    Raises:
+        opik.exceptions.MetricComputationError: If the output cannot be parsed or does not conform to the expected format.
     """
     try:
         dict_content = parsing_helpers.extract_json_content_or_raise(content)
