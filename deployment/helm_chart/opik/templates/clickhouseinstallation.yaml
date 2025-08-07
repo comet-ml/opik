@@ -11,11 +11,6 @@ metadata:
     {{- end }}
     {{- include "opik.clickhouse.labels" . | nindent 4 }}
 spec:
-  defaults:
-    templates:
-      podTemplate: clickhouse-cluster-pod-template
-      serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
-      volumeClaimTemplate: storage-vc-template
   configuration:
     users:
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
@@ -68,9 +63,11 @@ spec:
           shardsCount: {{ .Values.clickhouse.shardsCount }}
           replicasCount: {{ .Values.clickhouse.replicasCount }}
         templates:
-          podTemplate: clickhouse-cluster-pod-template
-          serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
-          volumeClaimTemplate: storage-vc-template
+          podTemplate: {{ .Values.clickhouse.templates.podTemplate }}
+          serviceTemplate: {{ .Values.clickhouse.templates.serviceTemplate }}
+          clusterServiceTemplate: {{ .Values.clickhouse.templates.clusterServiceTemplate }}
+          replicaServiceTemplate: {{ .Values.clickhouse.templates.replicaServiceTemplate }}
+          volumeClaimTemplate: {{ .Values.clickhouse.templates.volumeClaimTemplate }}
   templates:
     podTemplates:
       - name: clickhouse-cluster-pod-template
@@ -96,7 +93,7 @@ spec:
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-          {{- if and .Values.clickhouse.enabled .Values.clickhouse.backupServer.enabled }}
+          {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
             image: {{ .Values.clickhouse.backupServer.image }}
             imagePullPolicy: {{ .Values.clickhouse.backupServer.imagePullPolicy | default "IfNotPresent" }}
@@ -128,7 +125,9 @@ spec:
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
+      {{- with .Values.clickhouse.extraPodTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     serviceTemplates:
       - name: clickhouse-cluster-svc-lb-template
         metadata:
@@ -144,8 +143,53 @@ spec:
             - name: tcp
               port: 9000
               targetPort: 9000
-          type: LoadBalancer      
-
+          type: LoadBalancer
+      - name: clickhouse-cluster-svc-template
+        metadata:
+          annotations:
+            {{- with .Values.clickhouse.service.annotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: tcp
+              port: 9000
+              targetPort: 9000
+          type: ClusterIP
+      - name: clickhouse-replica-svc-template
+        metadata:
+          labels:
+            comet.com/service-monitoring: "true"
+        spec:
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: tcp
+              port: 9000
+              targetPort: 9000
+            - name: interserver
+              port: 9009
+              targetPort: 9009
+          {{- if .Values.clickhouse.backupServer.enabled }}
+            - protocol: TCP
+              port: {{ .Values.clickhouse.backupServer.port }}
+              targetPort: {{ .Values.clickhouse.backupServer.port }}
+              name: ch-backup-svc
+          {{- end }}
+          {{- if .Values.clickhouse.monitoring.enabled }}
+            - protocol: TCP
+              port: {{ .Values.clickhouse.monitoring.port }}
+              targetPort: {{ .Values.clickhouse.monitoring.port }}
+              name: ch-monitoring-svc
+          {{- end }}
+          type: ClusterIP
+      {{- with .Values.clickhouse.extraServiceTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     volumeClaimTemplates:
       - name: storage-vc-template
         {{- if .Values.clickhouse.volumeAnnotations }}
@@ -163,5 +207,8 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: {{ .Values.clickhouse.storage }}    
+              storage: {{ .Values.clickhouse.storage }}
+      {{- with .Values.clickhouse.extraVolumeClaimTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
 {{- end }}

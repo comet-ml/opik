@@ -175,11 +175,80 @@ def test__g_eval(model):
     result = g_eval_metric.score(
         output="""
                 OUTPUT: What is the capital of France?
-                CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
+                CONTEXT: France is a country in Western Europe, Its capital is Paris, which is known for landmarks like the Eiffel Tower.
                """
     )
 
     assert_helpers.assert_score_result(result)
+
+
+def test__trajectory_accuracy():
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+
+    result = trajectory_accuracy_metric.score(
+        goal="Find the weather in Paris",
+        trajectory=[
+            {
+                "thought": "I need to search for weather information in Paris",
+                "action": "search_weather(location='Paris')",
+                "observation": "Found weather data for Paris: 22°C, sunny",
+            },
+            {
+                "thought": "I have the weather data, now I should summarize it",
+                "action": "summarize_result()",
+                "observation": "Summary created: The weather in Paris is 22°C and sunny",
+            },
+        ],
+        final_result="The weather in Paris is 22°C and sunny",
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@pytest.mark.asyncio
+async def test__trajectory_accuracy__async():
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+
+    result = await trajectory_accuracy_metric.ascore(
+        goal="Calculate the sum of 15 and 27",
+        trajectory=[
+            {
+                "thought": "I need to add 15 and 27 together",
+                "action": "calculate(15 + 27)",
+                "observation": "Result: 42",
+            }
+        ],
+        final_result="The sum of 15 and 27 is 42",
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__trajectory_accuracy__poor_quality(model):
+    """Test trajectory accuracy with a poorly executed trajectory."""
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(model=model, track=False)
+
+    result = trajectory_accuracy_metric.score(
+        goal="Find the capital of France",
+        trajectory=[
+            {
+                "thought": "I need to find France's capital",
+                "action": "search('weather in France')",  # Wrong action
+                "observation": "Found weather information for various French cities",
+            },
+            {
+                "thought": "This doesn't help, let me try something else",
+                "action": "search('French cuisine')",  # Still wrong
+                "observation": "Found information about French food",
+            },
+        ],
+        final_result="Paris is the capital of France",  # Result doesn't match trajectory
+    )
+
+    assert_helpers.assert_score_result(result)
+    # The score should be low due to inappropriate actions
+    assert result.value < 0.6  # Should get a low score for poor trajectory
 
 
 def test__ragas_exact_match():

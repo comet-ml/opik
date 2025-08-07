@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from openai.types import responses as openai_responses
 
-from opik import logging_messages
+import opik.logging_messages as logging_messages
 
 LOGGER = logging.getLogger(__name__)
 

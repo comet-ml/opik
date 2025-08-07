@@ -26,11 +26,16 @@ public class CostService {
             "vertex_ai-language-models", "google_vertexai",
             "gemini", "google_ai",
             "anthropic", "anthropic",
-            "vertex_ai-anthropic_models", "anthropic_vertexai");
+            "vertex_ai-anthropic_models", "anthropic_vertexai",
+            "bedrock", "bedrock",
+            "bedrock_converse", "bedrock");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
+    private static final String BEDROCK_PROVIDER = "bedrock";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
-                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI);
+                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
+                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock);
 
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_MULTIMODAL_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::multimodalCostWithCacheAnthropic,
@@ -86,6 +91,10 @@ public class CostService {
         modelCosts.forEach((modelName, modelCost) -> {
             String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
             if (PROVIDERS_MAPPING.containsKey(provider)) {
+
+                if (!isValidModelProvider(modelName, PROVIDERS_MAPPING.get(provider))) {
+                    return;
+                }
 
                 BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
@@ -169,5 +178,14 @@ public class CostService {
 
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
+    }
+
+    private static boolean isValidModelProvider(String modelName, String provider) {
+        if (BEDROCK_PROVIDER.equals(provider) && modelName.contains("/")) {
+            // Bedrock models with / in the name are not supported as considered old
+            return false;
+        }
+
+        return true;
     }
 }

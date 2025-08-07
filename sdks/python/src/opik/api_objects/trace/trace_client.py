@@ -2,7 +2,9 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from opik import datetime_helpers, llm_usage, Attachment
+import opik.datetime_helpers as datetime_helpers
+import opik.llm_usage as llm_usage
+import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
 from opik.types import ErrorInfoDict, SpanType, LLMProvider
 from .. import constants, span
@@ -125,7 +127,7 @@ class Trace:
         provider: Optional[Union[LLMProvider, str]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        attachments: Optional[List[attachment.Attachment]] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.

@@ -1223,6 +1223,43 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/experiments/groups:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups
+      description: Find experiments grouped by specified fields
+      operationId: findExperimentGroups
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -5036,6 +5073,8 @@ components:
           - function
         content:
           type: string
+        reasoning_content:
+          type: string
         name:
           type: string
         tool_calls:
@@ -5043,7 +5082,7 @@ components:
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
-          type: boolean
+          type: string
         function_call:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
@@ -5090,6 +5129,8 @@ components:
         role:
           type: string
         content:
+          type: string
+        reasoning_content:
           type: string
         tool_calls:
           type: array
@@ -7001,6 +7042,18 @@ components:
         message:
           type: string
         details:
+          type: string
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContent"
+    GroupContent:
+      type: object
+      properties:
+        label:
           type: string
     ExperimentItemStreamRequest:
       required:
@@ -9289,6 +9342,22 @@ components:
           items:
             minLength: 1
             type: string
+    BatchDeleteByProject:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        project_id:
+          type: string
+          format: uuid
     Check_Public:
       type: object
       properties:
