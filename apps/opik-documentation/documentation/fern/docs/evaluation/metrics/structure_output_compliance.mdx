@@ -23,13 +23,13 @@ metric = StructuredOutputCompliance()
 # Example 1: Valid JSON, but not schema-compliant
 metric.score(
     output='{"name": "John Doe"}',
-    pydantic_schema=User,
+    schema=User,
 )
 
 # Example 2: Valid JSON and schema-compliant
 metric.score(
     output='{"name": "John Doe", "age": 30}',
-    pydantic_schema=User,
+    schema=User,
 )
 
 # Example 3: Invalid JSON
