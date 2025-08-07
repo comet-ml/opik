@@ -49,7 +49,7 @@ def test_attachments_client__get_attachment_list__happyflow(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     attachments_list = attachments_client.get_attachment_list(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
@@ -91,7 +91,7 @@ def test_attachments_client__download_attachment__happyflow(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     attachment_data = attachments_client.download_attachment(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
@@ -144,7 +144,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     attachments_list = attachments_client.get_attachment_list(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
@@ -159,7 +159,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
 def test_attachments_client__invalid_project_name__or_non_existing_entity_id__raises_error(
     opik_client: opik.Opik,
 ):
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     with pytest.raises(rest_api_core.ApiError):
         attachments_client.get_attachment_list(
@@ -199,7 +199,7 @@ def test_attachments_client__upload_attachment_for_trace__happyflow(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     file_name = os.path.basename(data_file.name)
     attachments_client.upload_attachment(
@@ -255,7 +255,7 @@ def test_attachments_client__upload_attachment_for_span__happyflow(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-    attachments_client = opik_client.get_attachments_client()
+    attachments_client = opik_client.get_attachment_client()
 
     file_name = os.path.basename(data_file.name)
     attachments_client.upload_attachment(

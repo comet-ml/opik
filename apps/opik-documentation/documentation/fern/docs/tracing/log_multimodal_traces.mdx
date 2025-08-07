@@ -63,6 +63,41 @@ supported content type for the attachment. We support the following content type
 
 </Note>
 
+## Managing Attachments Programmatically
+
+You can also manage attachments programmatically using the `AttachmentClient`:
+
+```python wordWrap
+import opik
+
+opik_client = opik.Opik()
+attachment_client = opik_client.get_attachments_client()
+
+# Get list of attachments
+attachments = attachment_client.get_attachment_list(
+    project_name="my-project",
+    entity_id="some-trace-uuid-7",
+    entity_type="trace"
+)
+
+# Download an attachment
+attachment_data = attachment_client.download_attachment(
+    project_name="my-project",
+    entity_type="trace",
+    entity_id="some-trace-uuid-7",
+    file_name="report.pdf",
+    mime_type="application/pdf"
+)
+
+# Upload a new attachment
+attachment_client.upload_attachment(
+    project_name="my-project",
+    entity_type="trace", 
+    entity_id="some-trace-uuid-7",
+    file_path="/path/to/document.pdf"
+)
+```
+
 ## Previewing base64 encoded images and image URLs
 
 Opik automatically detects base64 encoded images and URLs logged to the platform,
@@ -109,9 +144,10 @@ print(response.choices[0])
 
 ## Downloading attachments
 
-You can download attachments from the UI by hovering over the attachments and
-clicking on the download icon. SDKs methods are not yet available but it's
-coming soon !
+You can download attachments in two ways:
+
+1. **From the UI**: Hover over the attachments and click on the download icon
+2. **Programmatically**: Use the `AttachmentClient` as shown in the examples above
 
 <Tip>
   Let's us know on [Github](https://github.com/comet-ml/opik/issues/new/choose) if you would like to us to support

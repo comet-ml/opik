@@ -1108,7 +1108,7 @@ class Opik:
         """
         return threads_client.ThreadsClient(self)
 
-    def get_attachments_client(self) -> attachment_client.AttachmentClient:
+    def get_attachment_client(self) -> attachment_client.AttachmentClient:
         """
         Creates and provides an instance of the ``AttachmentClient`` tied to the current context.
 
