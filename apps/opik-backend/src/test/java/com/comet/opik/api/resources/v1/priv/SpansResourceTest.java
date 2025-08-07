@@ -1131,54 +1131,96 @@ class SpansResourceTest {
         }
 
         private Stream<Arguments> getCustomFilterArgs() {
+            String dictInput = "{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}";
+            String listInput = "[\"Chat-GPT 4.0\", 2025, {\"provider\": \"provider_1\"}]";
             return Stream.of(
                     Arguments.of(
                             statsTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             statsTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             statsTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS),
+                            Operator.CONTAINS,
+                            dictInput),
 
                     Arguments.of(
                             spansTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             spansTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             spansTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS),
+                            Operator.CONTAINS,
+                            dictInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.[1]",
+                            "2025",
+                            Operator.EQUAL,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input.[0]",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[1]",
+                            "2025",
+                            Operator.EQUAL,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[0]",
+                            "Chat-GPT 4.0",
+                            Operator.CONTAINS,
+                            listInput),
+                    Arguments.of(
+                            spansTestAssertion,
+                            "input[2].provider",
+                            "provider_1",
+                            Operator.EQUAL,
+                            listInput),
 
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input.model[0].year",
                             "2024",
-                            Operator.EQUAL),
+                            Operator.EQUAL,
+                            dictInput),
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input.model[0].year",
                             "2025",
-                            Operator.LESS_THAN),
+                            Operator.LESS_THAN,
+                            dictInput),
                     Arguments.of(
                             spanStreamTestAssertion,
                             "input",
                             "Chat-GPT 4.0",
-                            Operator.CONTAINS));
+                            Operator.CONTAINS,
+                            dictInput));
         }
 
         private Stream<Arguments> getFeedbackScoresArgs() {
@@ -3793,7 +3835,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getCustomFilterArgs")
         void whenFilterWithCustomFilter__thenReturnSpansFiltered(SpanPageTestAssertion testAssertion,
-                String key, String value, Operator operator) {
+                String key, String value, Operator operator, String input) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3812,8 +3854,7 @@ class SpansResourceTest {
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
                     .input(JsonUtils
-                            .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
-                                    "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                            .getJsonNodeFromString(input))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
@@ -5023,6 +5064,14 @@ class SpansResourceTest {
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "bedrock",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "gpt-4o-mini-2024-07-18", "openai",
                             null, null),
                     Arguments.of(
@@ -5048,6 +5097,26 @@ class SpansResourceTest {
                                     "original_usage.cache_creation_input_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-3-5-sonnet-latest", "anthropic",
+                            null, null),
+                    Arguments.of(
+                            Map.of("original_usage.inputTokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.outputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cacheReadInputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cacheWriteInputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "us.anthropic.claude-3-5-sonnet-20241022-v2:0", "bedrock",
+                            null, null),
+                    Arguments.of(
+                            Map.of("original_usage.inputTokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.outputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cacheReadInputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cacheWriteInputTokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),

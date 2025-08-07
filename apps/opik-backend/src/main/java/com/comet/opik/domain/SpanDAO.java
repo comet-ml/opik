@@ -97,7 +97,7 @@ class SpanDAO {
                 error_info,
                 created_by,
                 last_updated_by
-            ) VALUES
+            ) <settings_clause> VALUES
                 <items:{item |
                     (
                         :id<item.index>,
@@ -967,6 +967,8 @@ class SpanDAO {
             var template = new ST(BULK_INSERT)
                     .add("items", queryItems);
 
+            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
             Statement statement = connection.createStatement(template.render());
 
             int i = 0;
@@ -1100,9 +1102,7 @@ class SpanDAO {
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
-        if (opikConfiguration.getAsyncInsert().enabled()) {
-            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-        }
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         return template;
     }
@@ -1220,9 +1220,7 @@ class SpanDAO {
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
 
-        if (opikConfiguration.getAsyncInsert().enabled()) {
-            template.add("settings_clause", ClickhouseUtils.ASYNC_INSERT);
-        }
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());

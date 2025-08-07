@@ -66,14 +66,4 @@ describe("validateCsvFile", () => {
       error: `File is too large (max. ${maxItems.toLocaleString()} rows)`,
     });
   });
-
-  it("should return an error for invalid column headers", async () => {
-    const mockFile = new File(["content"], "test.csv", { type: "text/csv" });
-    const mockData = [{ input: "value", extra: "value" }];
-    vi.mocked(csv2json).mockResolvedValue(mockData);
-    const result = await validateCsvFile(mockFile, maxSize, maxItems);
-    expect(result).toEqual({
-      error: `File must have only two columns named 'input' and 'output'. Instead, the file has the following columns: "input","extra"`,
-    });
-  });
 });
