@@ -1,5 +1,5 @@
 AttachmentClient
-==========
+================
 
 .. autoclass:: opik.api_objects.attachment.client.AttachmentClient
     :members:
