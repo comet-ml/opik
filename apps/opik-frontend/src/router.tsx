@@ -30,7 +30,7 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
-import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
+import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
@@ -109,7 +109,7 @@ const quickstartRoute = createRoute({
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: GetStartedPage,
+  component: NewQuickstartPage,
 });
 
 // ----------- home
