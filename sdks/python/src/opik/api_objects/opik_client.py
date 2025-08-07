@@ -159,6 +159,7 @@ class Opik:
             check_tls_certificate=check_tls_certificate,
             compress_json_requests=enable_json_request_compression,
         )
+        self._httpx_client = httpx_client_
         self._rest_client = rest_api_client.OpikApi(
             base_url=url_override,
             httpx_client=httpx_client_,
@@ -1122,6 +1123,7 @@ class Opik:
             rest_client=self._rest_client,
             url_override=self._config.url_override,
             workspace_name=self._workspace,
+            upload_httpx_client=self._httpx_client,
         )
 
     def create_prompt(

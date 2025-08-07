@@ -2,6 +2,7 @@ import base64
 import logging
 import os
 import mimetypes
+import httpx
 from typing import Iterator, List, Literal, Optional
 
 from opik.file_upload import file_uploader, upload_options
@@ -34,6 +35,7 @@ class AttachmentClient:
         rest_client: rest_api_client.OpikApi,
         url_override: str,
         workspace_name: str,
+        upload_httpx_client: httpx.Client,
     ) -> None:
         """
         Initialize the AttachmentClient.
@@ -44,6 +46,7 @@ class AttachmentClient:
             rest_client: The REST API client instance for making backend requests.
             url_override: The base URL for the Opik server.
             workspace_name: The workspace name used for download operations.
+            upload_httpx_client: The httpx client instance to use for making file uploads.
 
         Returns:
             None
@@ -51,11 +54,7 @@ class AttachmentClient:
         self._rest_client = rest_client
         self._url_override = url_override
         self._workspace_name = workspace_name
-
-        # Import httpx here to avoid circular dependencies
-        import httpx
-
-        self._httpx_client = httpx.Client()
+        self._upload_httpx_client = upload_httpx_client
 
     def get_attachment_list(
         self,
@@ -171,7 +170,7 @@ class AttachmentClient:
         file_uploader.upload_attachment(
             upload_options=upload_opts,
             rest_client=self._rest_client,
-            upload_httpx_client=self._httpx_client,
+            upload_httpx_client=self._upload_httpx_client,
         )
 
     def _resolve_project_id(self, project_name: str) -> str:
