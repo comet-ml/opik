@@ -1113,7 +1113,7 @@ class Opik:
         Creates and provides an instance of the ``AttachmentClient`` tied to the current context.
 
         The ``AttachmentClient`` can be used to interact with the attachments API to retrieve
-        attachment lists and download attachments for traces and spans.
+        attachment lists, download attachments, and upload attachments for traces and spans.
 
         Returns:
             AttachmentClient: An instance of ``attachment.client.AttachmentClient``
