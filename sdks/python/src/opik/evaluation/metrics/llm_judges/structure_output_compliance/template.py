@@ -38,13 +38,15 @@ def generate_query(
     if few_shot_examples is None:
         examples_str = ""
     else:
-        examples_str = "\n\nEXAMPLES:\n\n".join(
-            [
-                f"<example>\nTitle: {example['title']}\nExpected Schema: {example.get('schema', 'None')}\nOutput: {example['output']}\n\n"
-                f"{{\"score\": {str(example['score']).lower()}, \"reason\": [\"{example['reason']}\"]}}\n</example>"
-                for example in few_shot_examples
-            ]
-        )
+        examples_str = ""
+        if few_shot_examples:
+            examples_str = "\n\nEXAMPLES:\n\n" + "\n\n".join(
+                [
+                    f"<example>\nTitle: {example['title']}\nExpected Schema: {example.get('schema', 'None')}\nOutput: {example['output']}\n\n"
+                    f"{{\"score\": {str(example['score']).lower()}, \"reason\": [\"{example['reason']}\"]}}\n</example>"
+                    for example in few_shot_examples
+                ]
+            )
 
     return structured_output_compliance_template.format(
         examples_str=examples_str,
