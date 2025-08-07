@@ -36,8 +36,9 @@ class AttachmentClient:
         workspace_name: str,
     ) -> None:
         """
-        Initialize the AttachmentClient. It is typically created via ``Opik.get_attachments_client()`` rather
-            than being instantiated directly.
+        Initialize the AttachmentClient.
+        It is typically created via ``Opik.get_attachment_client()`` rather
+        than being instantiated directly.
 
         Parameters:
             rest_client: The REST API client instance for making backend requests.
