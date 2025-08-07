@@ -141,7 +141,9 @@ class RedissonLockService implements LockService {
                         // If the lock is not acquired, it executes the fallback action and returns empty to make sure the main action is not executed
                         .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
                         .flatMap(locked -> expire(actionTimeout, locked, semaphore))
-                        .flatMap(lockInstance -> runAction(lock, action, lockInstance))))
+                        .flatMap(lockInstance -> runAction(lock, action, lockInstance)
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .doFinally(__ -> lockInstance.release(lock)))))
                 .onErrorResume(RedisException.class,
                         e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()))
                 .onErrorResume(IllegalStateException.class,
