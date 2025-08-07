@@ -12,4 +12,3 @@ alwaysApply: true
 - use assertJ for assertions
 - prefer using @ParameterizedTest when possible to cover multiple scenarios
 - when running tests, prefer running specific test classes or methods instead of the entire test suite
-- to run a specific test inside a @Nested test class, use the following command: `mvn test -Dtest="<OUTER_TEST_CLASS>\$<NESTED_TEST_CLASS>#<TEST_NAME>" -Dsurefire.failIfNoSpecifiedTests=false`, for example `mvn test -Dtest="TracesResourceTest\$CreateTrace#testCreateTrace" -Dsurefire.failIfNoSpecifiedTests=false`
