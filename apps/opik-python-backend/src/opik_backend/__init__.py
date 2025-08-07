@@ -20,10 +20,7 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry._logs import set_logger_provider
 
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
+# Note: All auto-instrumentation is handled by 'opentelemetry-instrument' command in entrypoint.sh
 
 def create_app(test_config=None, should_init_executor=True):
     app = Flask(__name__, instance_relative_config=True)
@@ -105,7 +102,7 @@ def setup_otel_logs(app, resource):
     handler.setLevel(otel_log_level)
     app.logger.info(f"OpenTelemetry log level set to: {logging.getLevelName(otel_log_level)}")
     
-    return handler, otel_log_level
+    return handler
 
 def setup_console_logging(app):
     """Configure console logging levels to control verbosity."""
@@ -123,26 +120,7 @@ def setup_console_logging(app):
         root_logger.setLevel(console_log_level)
         app.logger.info(f"Console log level set to: {logging.getLevelName(console_log_level)}")
 
-def setup_otel_instrumentation(app, otel_log_level):
-    """Configure OpenTelemetry auto-instrumentation with double-instrumentation checks."""
-    # Check if instrumentors are already active to prevent double instrumentation
-    flask_instrumentor = FlaskInstrumentor()
-    if not flask_instrumentor.is_instrumented_by_opentelemetry:
-        flask_instrumentor.instrument_app(app)
 
-    system_metrics_instrumentor = SystemMetricsInstrumentor()
-    if not system_metrics_instrumentor.is_instrumented_by_opentelemetry:
-        system_metrics_instrumentor.instrument()
-
-    requests_instrumentor = RequestsInstrumentor()
-    if not requests_instrumentor.is_instrumented_by_opentelemetry:
-        requests_instrumentor.instrument()
-
-    logging_instrumentor = LoggingInstrumentor()
-    if not logging_instrumentor.is_instrumented_by_opentelemetry:
-        logging_instrumentor.instrument(log_level=otel_log_level)
-    
-    app.logger.debug("OpenTelemetry instrumentation configured")
 
 def setup_telemetry(app):
     """Configure OpenTelemetry metrics, traces, and logs using OTLP export."""
@@ -160,7 +138,7 @@ def setup_telemetry(app):
     # Set up each telemetry signal
     setup_otel_metrics(app, resource)
     setup_otel_traces(app, resource)
-    otel_handler, otel_log_level = setup_otel_logs(app, resource)
+    otel_handler = setup_otel_logs(app, resource)
     
     # Configure logging handlers
     # Set root logger to NOTSET to allow all messages through to handlers
@@ -176,5 +154,5 @@ def setup_telemetry(app):
     # Configure console logging levels
     setup_console_logging(app)
     
-    # Configure auto-instrumentation
-    setup_otel_instrumentation(app, otel_log_level)
+    # Note: Auto-instrumentation is handled by 'opentelemetry-instrument' command in entrypoint.sh
+    # No manual instrumentation needed here
