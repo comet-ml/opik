@@ -59,7 +59,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: openAiCode,
-    executionUrl: "openai/run_stream",
+    // executionUrl: "openai/run_stream",
     executionLogs: integrationLogsMap.OpenAI,
   },
   {
@@ -69,7 +69,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: anthropicCode,
-    executionUrl: "anthropic/run_stream",
+    // executionUrl: "anthropic/run_stream",
     executionLogs: integrationLogsMap.Anthropic,
   },
   {
