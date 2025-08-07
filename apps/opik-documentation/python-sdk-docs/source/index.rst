@@ -231,11 +231,14 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/Experiment.rst
    Objects/ExperimentItemContent.rst
    Objects/ExperimentItemReferences.rst
+   Objects/EvaluationResult.rst
+   Objects/TestResult.rst
    Objects/Prompt.rst
    Objects/ScoreResult.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst
    Objects/DistributedTraceHeadersDict.rst
+   
 .. toctree::
    :maxdepth: 1
    :caption: Command Line Interface

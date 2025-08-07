@@ -37,6 +37,16 @@ class RagasMetricWrapper(base_metric.BaseMetric):
             ragas_metrics.MetricType.SINGLE_TURN.name
         ]
 
+        self._opik_tracer = None
+        if self.track:
+            from opik.integrations.langchain import OpikTracer
+
+            self._opik_tracer = OpikTracer()
+
+            self.callbacks = [self._opik_tracer]
+        else:
+            self.callbacks = []
+
     def _create_ragas_single_turn_sample(
         self, input_dict: Dict[str, Any]
     ) -> "ragas_dataset_schema.SingleTurnSample":
@@ -68,28 +78,15 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         return sample
 
     async def ascore(self, **kwargs: Any) -> score_result.ScoreResult:
-        return await self._ascore(kwargs)
+        sample = self._create_ragas_single_turn_sample(kwargs)
 
-    async def _ascore(self, input_dict: Dict[str, Any]) -> score_result.ScoreResult:
-        """Separate internal function to avoid creating two spans. Both score and ascore are track-decorated and if score calls ascore, two spans would be created."""
-        sample = self._create_ragas_single_turn_sample(input_dict)
-
-        if self.track:
-            from opik.integrations.langchain import OpikTracer
-
-            opik_tracer = OpikTracer()
-            callbacks = [opik_tracer]
-        else:
-            callbacks = []
-
-        # TODO: Add LLM callback when the metric is using an LLM
-        score = await self.ragas_metric.single_turn_ascore(sample, callbacks=callbacks)
+        score = await self.ragas_metric.single_turn_ascore(
+            sample, callbacks=self.callbacks
+        )
         return score_result.ScoreResult(value=score, name=self.name)
 
     def score(self, **kwargs: Any) -> score_result.ScoreResult:
-        # Run the async function using the current event loop
-        loop = get_or_create_asyncio_loop()
+        sample = self._create_ragas_single_turn_sample(kwargs)
 
-        result = loop.run_until_complete(self._ascore(kwargs))
-
-        return result
+        score = self.ragas_metric.single_turn_score(sample, callbacks=self.callbacks)
+        return score_result.ScoreResult(value=score, name=self.name)

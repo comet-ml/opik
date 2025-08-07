@@ -1147,9 +1147,10 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(
+        prompt_version = prompt_client.create_prompt(
             name=name, prompt=prompt, metadata=metadata, type=type
         )
+        return Prompt.from_fern_prompt_version(name, prompt_version)
 
     def get_prompt(
         self,
@@ -1167,7 +1168,11 @@ class Opik:
             Prompt: The details of the specified prompt.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_prompt(name=name, commit=commit)
+        fern_prompt_version = prompt_client.get_prompt(name=name, commit=commit)
+        if fern_prompt_version is None:
+            return None
+
+        return Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
     def get_all_prompts(self, name: str) -> List[Prompt]:
         """
@@ -1180,7 +1185,12 @@ class Opik:
             List[Prompt]: A list of prompts for the given name.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_all_prompts(name=name)
+        fern_prompt_versions = prompt_client.get_all_prompts(name=name)
+        result = [
+            Prompt.from_fern_prompt_version(name, version)
+            for version in fern_prompt_versions
+        ]
+        return result
 
     def create_optimization(
         self,

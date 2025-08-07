@@ -19,6 +19,7 @@ jobs:
 
   notify-release-n-deploy-agent:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     needs: trigger-release
     if: ${{ always() }}
     steps:
