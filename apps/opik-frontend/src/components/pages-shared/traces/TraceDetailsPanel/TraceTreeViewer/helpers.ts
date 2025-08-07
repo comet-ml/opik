@@ -18,9 +18,10 @@ import isUndefined from "lodash/isUndefined";
 import { JSONPath } from "jsonpath-plus";
 
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
-import { FilterOperator, Filters } from "@/types/filters";
+import { Filter, FilterOperator, Filters } from "@/types/filters";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -91,6 +92,11 @@ export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
+  },
+  {
+    id: COLUMN_CUSTOM_ID,
+    label: "Custom filter",
+    type: COLUMN_TYPE.dictionary,
   },
 ];
 
@@ -393,13 +399,38 @@ const applyOperator = (
   }
 };
 
+const processFilter = (filterItem: Filter): Filter => {
+  if (filterItem.field === COLUMN_CUSTOM_ID && filterItem.key) {
+    const { field, key: originalKey, type: originalType } = filterItem;
+    let key = originalKey;
+    let type = originalType;
+    let processedField: string = field;
+    const prefixes = [
+      { fieldName: "input" as const, prefix: "input." },
+      { fieldName: "output" as const, prefix: "output." },
+    ];
+
+    for (const { fieldName, prefix } of prefixes) {
+      if (key.startsWith(prefix)) {
+        processedField = fieldName;
+        key = key.substring(prefix.length);
+        type = COLUMN_TYPE.dictionary;
+        break;
+      }
+    }
+    return { ...filterItem, field: processedField, key, type };
+  }
+
+  return filterItem;
+};
+
 const filter = (filters: Filters, data: Trace | Span): boolean => {
   if (isEmpty(filters)) {
     return true;
   }
 
   return every(filters, (filterItem) => {
-    const { field, operator, value, key, type } = filterItem;
+    const { field, key, type, operator, value } = processFilter(filterItem);
 
     if (!field || !operator) return true; // Skip invalid filters
 
