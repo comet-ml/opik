@@ -14,7 +14,7 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     environment: ${{ inputs.environment }}
     steps:      
       - name: checkout

@@ -43,7 +43,7 @@ jobs:
     run_suite:
         name: "Run suite: ${{ github.event.inputs.suite || 'regression' }}"
         runs-on: ubuntu-latest
-        timeout-minutes: 30
+        timeout-minutes: 60
 
         steps:
             - name: Checkout repo

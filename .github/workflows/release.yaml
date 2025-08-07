@@ -13,7 +13,7 @@ on:
 jobs:
   set-version:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -29,7 +29,7 @@ jobs:
     needs:
       - set-version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -89,7 +89,7 @@ jobs:
       - release-sdk
       - publish-helm-chart
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
