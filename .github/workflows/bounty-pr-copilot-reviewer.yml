@@ -1,6 +1,7 @@
+---
 name: 🤖 Auto Assign Copilot Reviewer for Bounty Claims
 
-on:
+"on":
   pull_request:
     types: [opened, labeled]
 
@@ -16,37 +17,25 @@ jobs:
       contents: read
 
     steps:
-      - name: Check if bounty claim label exists
-        id: check_label
-        run: |
-          echo "Checking for bounty claim label on PR #${{ github.event.pull_request.number }}"
-          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels --jq '.labels[].name')
-          echo "PR labels: $LABELS"
-          
-          if echo "$LABELS" | grep -q "🙋 Bounty claim"; then
-            echo "bounty_claim=true" >> "$GITHUB_OUTPUT"
-            echo "Found bounty claim label"
-          else
-            echo "bounty_claim=false" >> "$GITHUB_OUTPUT"
-            echo "No bounty claim label found"
-          fi
-
       - name: Request GitHub Copilot review
-        if: steps.check_label.outputs.bounty_claim == 'true'
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          
+
           echo "Requesting GitHub Copilot review for bounty claim PR #$PR_NUMBER"
-          
+
           # Add github-copilot[bot] as a reviewer
-          gh pr edit "$PR_NUMBER" --add-reviewer "github-copilot[bot]" --repo "${{ github.repository }}" || true
-          
+          gh pr edit "$PR_NUMBER" --add-reviewer "github-copilot[bot]" \
+            --repo "${{ github.repository }}" || true
+
           echo "Successfully requested GitHub Copilot review for PR #$PR_NUMBER"
-          
+
       - name: Add comment about Copilot review
-        if: steps.check_label.outputs.bounty_claim == 'true'
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          
+
           # Add a comment explaining the automatic Copilot review
-          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "🤖 **GitHub Copilot has been automatically assigned as a reviewer** for this bounty claim PR. Copilot will provide an initial code review to help ensure code quality and security standards."
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+            --body "🤖 **GitHub Copilot has been automatically assigned as \
+            a reviewer** for this bounty claim PR. Copilot will provide an \
+            initial code review to help ensure code quality and security \
+            standards."
