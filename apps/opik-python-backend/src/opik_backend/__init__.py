@@ -18,12 +18,12 @@ from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExp
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-from opentelemetry._logs import set_logger_provider, get_logger_provider
+from opentelemetry._logs import set_logger_provider
 
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
 def create_app(test_config=None, should_init_executor=True):
     app = Flask(__name__, instance_relative_config=True)
@@ -78,12 +78,12 @@ def setup_telemetry(app):
     if not otlp_endpoint:
         app.logger.warning("No OTLP endpoint configured. Metrics will not be exported.")
         return
-    
+
     app.logger.info(f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint.")
-    
+
     # Create OTLP reader for pushing metrics
     otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
-    
+
     # Create MeterProvider with OTLP reader only
     resource = Resource.create()
     provider = MeterProvider(resource=resource, metric_readers=[otlp_reader])
@@ -99,9 +99,23 @@ def setup_telemetry(app):
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=otlp_endpoint)))
     set_logger_provider(logger_provider)
 
-    handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
-    logging.getLogger().addHandler(handler)
-    
+    # Add single OpenTelemetry handler to root logger for comprehensive logging
+    handler = LoggingHandler(logger_provider=logger_provider)
+
+    # Set root logger to NOTSET to allow all messages through to handlers
+    # This ensures OpenTelemetry can receive all log levels, as recommended by:
+    # https://markandruth.co.uk/2025/05/30/getting-opentelemetry-logging-working-in-python
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.NOTSET)
+    root_logger.addHandler(handler)
+
+    # Also add handler to Flask app logger for guaranteed coverage
+    # This ensures Flask application logs are captured regardless of propagation settings
+    app.logger.addHandler(handler)
+
+    otel_log_level = logging.DEBUG if app.debug else logging.INFO
+    handler.setLevel(otel_log_level)
+
     # Configure Flask instrumentation
     FlaskInstrumentor().instrument_app(app)
 
@@ -110,3 +124,6 @@ def setup_telemetry(app):
 
     # Configure requests instrumentation
     RequestsInstrumentor().instrument()
+
+    # Configure logging instrumentation
+    LoggingInstrumentor(log_level=logging.DEBUG if app.debug else logging.INFO).instrument()
