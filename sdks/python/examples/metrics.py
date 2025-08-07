@@ -153,4 +153,3 @@ if True:
         final_result="Paris is the capital of France",  # Result doesn't match trajectory
     )
     print("poor_trajectory_score:", poor_trajectory_score)
->>>>>>> upstream/main
