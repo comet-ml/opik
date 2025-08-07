@@ -4,6 +4,7 @@ import os
 import mimetypes
 import httpx
 import json.decoder
+from opik import s3_httpx_client
 from typing import Iterator, List, Literal, Optional, TypeAlias
 
 from opik.file_upload import file_uploader, upload_options
@@ -37,7 +38,7 @@ class AttachmentClient:
         rest_client: rest_api_client.OpikApi,
         url_override: str,
         workspace_name: str,
-        upload_httpx_client: httpx.Client,
+        rest_httpx_client: httpx.Client,
     ) -> None:
         """
         Initialize the AttachmentClient.
@@ -48,7 +49,7 @@ class AttachmentClient:
             rest_client: The REST API client instance for making backend requests.
             url_override: The base URL for the Opik server.
             workspace_name: The workspace name used for download operations.
-            upload_httpx_client: The httpx client instance to use for making file uploads.
+            rest_httpx_client: The httpx client instance to use for making file uploads.
 
         Returns:
             None
@@ -56,7 +57,7 @@ class AttachmentClient:
         self._rest_client = rest_client
         self._url_override = url_override
         self._workspace_name = workspace_name
-        self._upload_httpx_client = upload_httpx_client
+        self._rest_httpx_client = rest_httpx_client
 
     def get_attachment_list(
         self,
@@ -131,10 +132,13 @@ class AttachmentClient:
         if attachment_to_download.link is None:
             raise ValueError(f"No download URL available for attachment: {file_name}")
 
-        # Download via presigned URL (works for both S3 and MinIO)
-        with self._upload_httpx_client.stream(
-            "GET", attachment_to_download.link
-        ) as response:
+        httpx_client_upload = (
+            s3_httpx_client.get_cached()
+            if _is_aws_presigned_url(attachment_to_download.link)
+            else self._rest_httpx_client
+        )
+
+        with httpx_client_upload.stream("GET", attachment_to_download.link) as response:
             try:
                 if 200 <= response.status_code < 300:
                     for chunk in response.iter_bytes():
@@ -205,9 +209,15 @@ class AttachmentClient:
         file_uploader.upload_attachment(
             upload_options=upload_opts,
             rest_client=self._rest_client,
-            upload_httpx_client=self._upload_httpx_client,
+            upload_httpx_client=self._rest_httpx_client,
         )
 
     def _resolve_project_id(self, project_name: str) -> str:
         project = self._rest_client.projects.retrieve_project(name=project_name)
         return project.id
+
+
+def _is_aws_presigned_url(url: str) -> bool:
+    return "X-Amz-Signature" in url or (
+        "Signature=" in url and "AWSAccessKeyId=" in url
+    )

@@ -1123,7 +1123,7 @@ class Opik:
             rest_client=self._rest_client,
             url_override=self._config.url_override,
             workspace_name=self._workspace,
-            upload_httpx_client=self._httpx_client,
+            rest_httpx_client=self._httpx_client,
         )
 
     def create_prompt(
