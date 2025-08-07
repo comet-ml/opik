@@ -174,3 +174,105 @@ def test_attachments_client__invalid_project_name__or_non_existing_entity_id__ra
             entity_id="non-existent-entity-id",
             entity_type="trace",
         )
+
+
+def test_attachments_client__upload_attachment_for_trace__happyflow(
+    opik_client: opik.Opik, data_file
+):
+    """Test uploading an attachment for a trace."""
+    trace_id = id_helpers.generate_id()
+
+    opik_client.trace(
+        id=trace_id,
+        name="test-trace-for-upload",
+        input={"input": "test input"},
+        output={"output": "test output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    opik_client.flush()
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace_id,
+        name="test-trace-for-upload",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    attachments_client = opik_client.get_attachments_client()
+
+    file_name = os.path.basename(data_file.name)
+    attachments_client.upload_attachment(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        entity_type="trace",
+        entity_id=trace_id,
+        file_path=data_file.name,
+        file_name=file_name,
+        mime_type="text/plain",
+    )
+
+    attachments_list = attachments_client.get_attachment_list(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        entity_id=trace_id,
+        entity_type="trace",
+    )
+
+    assert len(attachments_list) == 1
+    assert attachments_list[0].file_name == file_name
+    assert attachments_list[0].mime_type == "text/plain"
+
+
+def test_attachments_client__upload_attachment_for_span__happyflow(
+    opik_client: opik.Opik, data_file
+):
+    """Test uploading an attachment for a span."""
+    span_id = id_helpers.generate_id()
+    trace_id = id_helpers.generate_id()
+
+    opik_client.trace(
+        id=trace_id,
+        name="test-trace-for-span-upload",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input={"trace_input": "test"},
+        output={"trace_output": "test"},
+    )
+    opik_client.span(
+        id=span_id,
+        trace_id=trace_id,
+        name="test-span-for-upload",
+        input={"span_input": "test"},
+        output={"span_output": "test"},
+    )
+
+    opik_client.flush()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        name="test-span-for-upload",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    attachments_client = opik_client.get_attachments_client()
+
+    file_name = os.path.basename(data_file.name)
+    attachments_client.upload_attachment(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        entity_type="span",
+        entity_id=span_id,
+        file_path=data_file.name,
+        file_name=file_name,
+        mime_type="application/json",
+    )
+
+    attachments_list = attachments_client.get_attachment_list(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        entity_id=span_id,
+        entity_type="span",
+    )
+
+    assert len(attachments_list) == 1
+    assert attachments_list[0].file_name == file_name
+    assert attachments_list[0].mime_type == "application/json"
