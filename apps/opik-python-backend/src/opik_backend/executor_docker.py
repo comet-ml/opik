@@ -219,8 +219,11 @@ class DockerExecutor(CodeExecutorBase):
                 container_stop_histogram.record(latency, attributes={"method": "stop_container"})
 
                 logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+
+            except docker.errors.APIError as e:
+                logger.error(f"Container {container.id} failed to be removed")
             except Exception as e:
-                logger.error(f"Failed to stop container: {e}")
+                logger.error(f"Failed to stop container {container.id}: {e}")
 
     def get_container(self):
         with self.tracer.start_as_current_span("get_container"):
@@ -243,7 +246,7 @@ class DockerExecutor(CodeExecutorBase):
         start_time = time.time()
         container = self.get_container()
         latency = self._calculate_latency_ms(start_time)
-        logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
+        logger.info(f"Get container latency: {latency:.3f} milliseconds")
         get_container_histogram.record(latency, attributes={"method": "get_container"})
 
         with self.tracer.start_as_current_span("docker.run_scoring"):

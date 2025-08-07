@@ -92,11 +92,11 @@ def setup_telemetry(app):
     metrics.set_meter_provider(provider)
 
     trace_provider = TracerProvider(resource=resource)
-    trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint)))
+    trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(trace_provider)
 
     logger_provider = LoggerProvider(resource=resource)
-    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=otlp_endpoint)))
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
     set_logger_provider(logger_provider)
 
     # Add single OpenTelemetry handler to root logger for comprehensive logging

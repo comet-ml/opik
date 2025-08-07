@@ -366,7 +366,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             if (
               filter.key &&
               filter.value &&
-              !/^((\$\.)?input|(\$\.)?output)(\.[^.]+)*$/.test(filter.key)
+              !/^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/.test(
+                filter.key,
+              )
             ) {
               return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
             }

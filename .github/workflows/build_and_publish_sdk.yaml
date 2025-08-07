@@ -26,14 +26,15 @@ on:
           default: false
 
     push:
-        branches: 
+        branches:
         - 'main'
-        paths: 
+        paths:
           - "sdks/python/**"
-        
+
 jobs:
     build-and-publish:
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         steps:
         - name: Setup
           id: setup
@@ -60,7 +61,7 @@ jobs:
                 pip3 install -U pip build
                 if [[ "${{inputs.version}}" != "" ]]; then export VERSION=${{inputs.version}};fi
                 python3 -m build --sdist --wheel --outdir dist/ .
-                
+
         - name: Publish package distributions to PyPI
           if: inputs.is_release
           uses: pypa/gh-action-pypi-publish@v1.12.4
