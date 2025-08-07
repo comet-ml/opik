@@ -74,7 +74,7 @@ opik_client = opik.Opik()
 attachment_client = opik_client.get_attachments_client()
 
 # Get list of attachments
-attachments = attachment_client.get_attachment_list(
+attachments_details = attachment_client.get_attachment_list(
     project_name="my-project",
     entity_id="some-trace-uuid-7",
     entity_type="trace"
