@@ -28,6 +28,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       VERSION: ${{ github.event.inputs.version || inputs.version }}
       IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}

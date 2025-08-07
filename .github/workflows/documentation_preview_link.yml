@@ -8,6 +8,7 @@ on:
 jobs:
     run:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         permissions: write-all
         steps:
             - name: Checkout repository
