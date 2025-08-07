@@ -16,6 +16,7 @@ def test_opik_usage__from_openai_completions_dict__happyflow():
             "audio_tokens": 10,
             "cached_tokens": 30,
         },
+        "video_seconds": 10,
     }
     usage = OpikUsage.from_openai_completions_dict(usage_data)
     assert usage.completion_tokens == 100
@@ -24,6 +25,7 @@ def test_opik_usage__from_openai_completions_dict__happyflow():
     assert usage.provider_usage.completion_tokens == 100
     assert usage.provider_usage.prompt_tokens == 200
     assert usage.provider_usage.total_tokens == 300
+    assert usage.provider_usage.video_seconds == 10
 
 
 def test_opik_usage__from_google_dict__happyflow():

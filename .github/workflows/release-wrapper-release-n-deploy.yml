@@ -1,0 +1,76 @@
+name: "Release with Release-n-Deploy-Agent"
+run-name: "Release from ${{ github.ref_name }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      resumeUrl:
+        description: 'URL to call to resume n8n'
+        required: true
+      trackingId:
+        description: 'UUID for tracking this release step'
+        required: true
+        type: string
+
+jobs:
+  trigger-release:
+    uses: ./.github/workflows/release.yaml  # Call the actual release workflow
+    secrets: inherit
+
+  notify-release-n-deploy-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: trigger-release
+    if: ${{ always() }}
+    steps:
+      - name: Determine release status
+        id: status
+        run: |
+          if [ "${{ needs.trigger-release.result }}" == "success" ]; then
+            echo "status=completed" >> $GITHUB_OUTPUT
+            echo "conclusion=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=completed" >> $GITHUB_OUTPUT
+            echo "conclusion=failure" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Notify Release-n-Deploy-Agent
+        if: ${{ inputs.resumeUrl != '' }}
+        run: |
+          echo "url: ${{ inputs }}"
+          echo "All inputs: ${{ toJSON(inputs) }}"
+          echo "resumeUrl input: '${{ inputs.resumeUrl }}'"
+          
+          # Get actual release outputs
+          VERSION="${{ needs.trigger-release.outputs.version }}"
+          STATUS="${{ steps.status.outputs.status }}"
+          CONCLUSION="${{ steps.status.outputs.conclusion }}"
+          
+          echo "📦 Release completed with version: $VERSION"
+          echo "Status: $STATUS, Conclusion: $CONCLUSION"
+          
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "release": {
+                "id": "${{ github.run_id }}",
+                "releaseTag": "'$VERSION'"
+              },
+              "trackingId": "${{ inputs.trackingId }}",
+              "workflow_run": {
+                "id": "${{ github.event.workflow_run.id  }}",
+                "name": "${{ github.event.workflow_run.name }}",
+                "status": "'$STATUS'",
+                "conclusion": "'$CONCLUSION'",
+                "run_started_at": "${{ github.event.workflow_run.run_started_at }}",
+                "updated_at": "${{ github.event.workflow_run.updated_at }}",
+                "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              },
+              "repository": {
+                "full_name": "${{ github.repository }}"
+              },
+              "sender": {
+                "login": "${{ github.actor }}"
+              }
+            }' \
+            ${{ inputs.resumeUrl }}

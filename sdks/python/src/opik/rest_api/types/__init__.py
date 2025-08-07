@@ -149,6 +149,7 @@ from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
+from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -194,6 +195,7 @@ from .feedback_score_source import FeedbackScoreSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
+from .group_content import GroupContent
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -477,6 +479,7 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -526,6 +529,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GroupContent",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",

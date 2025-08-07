@@ -144,6 +144,12 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
   },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
+  },
 ];
 
 const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
@@ -170,13 +176,6 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     label: "Comments",
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
-  },
-  // TODO: move to shared once filters BE are implemented
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    cell: ListCell as never,
   },
 ];
 

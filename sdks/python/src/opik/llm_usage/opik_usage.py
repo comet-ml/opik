@@ -10,7 +10,7 @@ from . import (
     openai_responses_usage,
     openai_audio_speech_usage,
 )
-from opik import dict_utils
+import opik.dict_utils as dict_utils
 
 ProviderUsage = Union[
     openai_chat_completions_usage.OpenAICompletionsUsage,

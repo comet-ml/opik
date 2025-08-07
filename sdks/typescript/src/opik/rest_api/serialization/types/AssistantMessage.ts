@@ -15,9 +15,10 @@ export const AssistantMessage: core.serialization.ObjectSchema<
 > = core.serialization.object({
     role: AssistantMessageRole.optional(),
     content: core.serialization.string().optional(),
+    reasoningContent: core.serialization.property("reasoning_content", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
     toolCalls: core.serialization.property("tool_calls", core.serialization.list(ToolCall).optional()),
-    refusal: core.serialization.boolean().optional(),
+    refusal: core.serialization.string().optional(),
     functionCall: core.serialization.property("function_call", FunctionCall.optional()),
 });
 
@@ -25,9 +26,10 @@ export declare namespace AssistantMessage {
     export interface Raw {
         role?: AssistantMessageRole.Raw | null;
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string | null;
         tool_calls?: ToolCall.Raw[] | null;
-        refusal?: boolean | null;
+        refusal?: string | null;
         function_call?: FunctionCall.Raw | null;
     }
 }

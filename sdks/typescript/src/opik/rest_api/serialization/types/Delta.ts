@@ -11,6 +11,7 @@ import { FunctionCall } from "./FunctionCall";
 export const Delta: core.serialization.ObjectSchema<serializers.Delta.Raw, OpikApi.Delta> = core.serialization.object({
     role: core.serialization.string().optional(),
     content: core.serialization.string().optional(),
+    reasoningContent: core.serialization.property("reasoning_content", core.serialization.string().optional()),
     toolCalls: core.serialization.property("tool_calls", core.serialization.list(ToolCall).optional()),
     functionCall: core.serialization.property("function_call", FunctionCall.optional()),
 });
@@ -19,6 +20,7 @@ export declare namespace Delta {
     export interface Raw {
         role?: string | null;
         content?: string | null;
+        reasoning_content?: string | null;
         tool_calls?: ToolCall.Raw[] | null;
         function_call?: FunctionCall.Raw | null;
     }

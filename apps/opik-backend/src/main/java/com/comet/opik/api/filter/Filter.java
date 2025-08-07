@@ -19,4 +19,6 @@ public interface Filter {
     String value();
 
     Filter build(String decodedValue);
+
+    Filter buildFromCustom(String customField, FieldType type, Operator operator, String key, String value);
 }

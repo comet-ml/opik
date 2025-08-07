@@ -35,3 +35,11 @@ def dataset_name(opik_client: opik.Opik):
 def experiment_name(opik_client: opik.Opik):
     name = f"e2e-tests-experiment-{random_chars()}"
     yield name
+
+
+@pytest.fixture
+def temporary_project_name(opik_client: opik.Opik):
+    name = f"e2e-tests-temporary-project-{random_chars()}"
+    yield name
+    project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
+    opik_client.rest_client.projects.delete_project_by_id(project_id)

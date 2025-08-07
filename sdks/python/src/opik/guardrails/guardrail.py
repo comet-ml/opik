@@ -5,7 +5,8 @@ from typing import (
 
 import httpx
 
-from opik import exceptions, config
+import opik.exceptions as exceptions
+import opik.config as config
 from opik.api_objects import opik_client
 from opik.message_processing.messages import (
     GuardrailBatchItemMessage,
