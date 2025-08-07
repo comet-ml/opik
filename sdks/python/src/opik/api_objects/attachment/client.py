@@ -18,12 +18,12 @@ class AttachmentClient:
 
     This client provides methods to retrieve attachment lists, download attachments,
     and upload attachments for traces and spans.
-    
+
     The AttachmentClient supports:
     - Listing attachments associated with traces or spans
     - Downloading attachment content as a byte stream
     - Uploading files as attachments to traces or spans
-    
+
     All operations are performed within the context of a specific project and require
     the project name to be provided.
     """
@@ -41,7 +41,7 @@ class AttachmentClient:
             rest_client: The REST API client instance for making backend requests.
             url_override: The base URL for the Opik server.
             workspace_name: The workspace name used for download operations.
-            
+
         Note:
             This client is typically created via ``Opik.get_attachments_client()`` rather
             than being instantiated directly.
@@ -49,9 +49,10 @@ class AttachmentClient:
         self._rest_client = rest_client
         self._url_override = url_override
         self._workspace_name = workspace_name
-        
+
         # Import httpx here to avoid circular dependencies
         import httpx
+
         self._httpx_client = httpx.Client()
 
     def get_attachment_list(
@@ -73,15 +74,14 @@ class AttachmentClient:
             (file name, MIME type, size, etc.).
 
         Raises:
-            ValueError: If the project name cannot be resolved to a project ID.
             ApiError: If the API request fails or returns an error status.
-            
+
         Example:
             ```python
             attachments_client = opik_client.get_attachments_client()
             attachments = attachments_client.get_attachment_list(
                 project_name="my-project",
-                entity_id="trace-123",
+                entity_id="some-trace-uuid-7",
                 entity_type="trace"
             )
             for attachment in attachments:
@@ -131,7 +131,7 @@ class AttachmentClient:
         Raises:
             ValueError: If the project name cannot be resolved to a project ID.
             ApiError: If the API request fails, the file is not found, or access is denied.
-            
+
         Example:
             ```python
             attachments_client = opik_client.get_attachments_client()
@@ -178,7 +178,7 @@ class AttachmentClient:
             entity_type: The type of entity ("trace" or "span").
             entity_id: The ID of the trace or span to attach the file to.
             file_path: The path to the file to upload on the local filesystem.
-            file_name: The name to assign to the uploaded file. If not provided, 
+            file_name: The name to assign to the uploaded file. If not provided,
                       uses the basename of file_path (e.g., "document.pdf" from "/path/to/document.pdf").
             mime_type: The MIME type of the file. If not provided, attempts to automatically
                       detect based on the file extension using the mimetypes module.
@@ -190,7 +190,7 @@ class AttachmentClient:
         Example:
             ```python
             attachments_client = opik_client.get_attachments_client()
-            
+
             # Upload with explicit file name and MIME type
             attachments_client.upload_attachment(
                 project_name="my-project",
@@ -200,7 +200,7 @@ class AttachmentClient:
                 file_name="analysis-report.pdf",
                 mime_type="application/pdf"
             )
-            
+
             # Upload with automatic detection
             attachments_client.upload_attachment(
                 project_name="my-project",
@@ -219,10 +219,13 @@ class AttachmentClient:
 
         if mime_type is None:
             import mimetypes
+
             mime_type, _ = mimetypes.guess_type(file_path)
 
         file_size = os.path.getsize(file_path)
-        encoded_url_override = base64.b64encode(self._url_override.encode("utf-8")).decode("utf-8")
+        encoded_url_override = base64.b64encode(
+            self._url_override.encode("utf-8")
+        ).decode("utf-8")
 
         upload_opts = upload_options.FileUploadOptions(
             file_path=file_path,
