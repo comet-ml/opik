@@ -1351,7 +1351,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id = :project_id
+                   AND project_id IN :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT
@@ -1371,7 +1371,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id = :project_id
+                   AND project_id IN :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
             ), feedback_scores_combined_grouped AS (
                 SELECT
@@ -1585,7 +1585,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
-                  AND project_id = :project_id
+                  AND project_id IN :project_id
                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT
@@ -1605,7 +1605,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id = :project_id
+                   AND project_id IN :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
             ), feedback_scores_combined_grouped AS (
                 SELECT
