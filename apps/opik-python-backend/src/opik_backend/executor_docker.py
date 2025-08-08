@@ -253,20 +253,18 @@ class DockerExecutor(CodeExecutorBase):
             start_time = time.time()
 
             # Remove the container
-            try:
-                container.remove(force=True)
-                
-                # Calculate and record the latency
-                latency = self._calculate_latency_ms(start_time)
-                container_stop_histogram.record(latency, attributes={"method": "stop_container"})
-                
-                logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
-                
-            except docker.errors.APIError as e:
-                logger.error(f"Container {container.id} failed to be removed")
-                    
+            container.remove(force=True)
+
+            # Calculate and record the latency
+            latency = self._calculate_latency_ms(start_time)
+            container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+
+            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+
+        except docker.errors.APIError as e:
+            logger.error(f"Container {container.id} failed to be removed")
         except Exception as e:
-            logger.info(f"Failed to stop container {container.id}: {e}")
+            logger.error(f"Failed to stop container {container.id}: {e}")
 
     def get_container(self):
         if self.stop_event.is_set():

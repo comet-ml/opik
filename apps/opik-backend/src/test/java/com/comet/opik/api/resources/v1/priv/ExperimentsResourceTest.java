@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AggregationData;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -21,11 +23,13 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
@@ -135,6 +139,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -2025,6 +2030,662 @@ class ExperimentsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GroupExperimentsAggregations {
+
+        @ParameterizedTest
+        @MethodSource
+        void findGroupsAggregationsWithFilter__happyFlow(boolean withFilter, List<GroupBy> groups,
+                Function<Experiment, ExperimentFilter> filterFunction,
+                Function<Experiment, Predicate<Experiment>> predicateFunction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            Random random = new Random();
+
+            List<String> metadatas = List.of("{\"provider\":\"openai\",\"model\":\"gpt-4\"}",
+                    "{\"provider\":\"anthropic\",\"model\":\"claude-3\"}",
+                    "{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}");
+
+            Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
+            List<Trace> tracesAll = new ArrayList<>();
+            Map<UUID, List<Span>> traceToSpans = new HashMap<>();
+
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .datasetName(dataset.name())
+                                .promptVersion(versionLink)
+                                .promptVersions(List.of(versionLink))
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                // Create traces with different durations and setup spans with cost
+                var traces = IntStream.range(0, 10)
+                        .mapToObj(i -> createTraceWithDuration(random.nextInt(300)))
+                        .toList();
+                tracesAll.addAll(traces);
+                traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+                // Create spans with cost for each trace
+                var spans = traces.stream().map(trace -> {
+                    var span = createSpanWithCost(trace, BigDecimal.valueOf(random.nextDouble()));
+                    traceToSpans.put(trace.id(), List.of(span));
+                    return span;
+                }).toList();
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+                // Create feedback scores
+                List<List<FeedbackScoreBatchItem>> allScores = traces.stream()
+                        .map(trace -> makeTraceScoresWithSpecificValues(trace,
+                                List.of(BigDecimal.valueOf(random.nextDouble()),
+                                        BigDecimal.valueOf(random.nextDouble()))))
+                        .toList();
+
+                var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class)
+                        .toBuilder()
+                        .scores(allScores.stream().flatMap(List::stream).collect(Collectors.toList()))
+                        .build();
+
+                createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+
+                Set<ExperimentItem> experimentItems = IntStream.range(0, traces.size())
+                        .mapToObj(i -> {
+                            var experimentId = experiments.get(i % experiments.size()).id();
+                            List<ExperimentItem> experimentItemList = experimentToItems.computeIfAbsent(
+                                    experimentId, k -> new ArrayList<>());
+                            ExperimentItem experimentItem = createExperimentItemWithFeedbackScores(
+                                    experimentId,
+                                    traces.get(i).id(),
+                                    allScores.get(i));
+                            experimentItemList.add(experimentItem);
+                            return experimentItem;
+                        })
+                        .collect(Collectors.toSet());
+
+                var experimentItemsBatch = ExperimentItemsBatch.builder()
+                        .experimentItems(experimentItems)
+                        .build();
+
+                createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+                return experiments.stream();
+            }).toList();
+
+            // Call the aggregations endpoint
+            var response = experimentResourceClient.findGroupsAggregations(
+                    groups,
+                    Set.of(ExperimentType.REGULAR),
+                    withFilter ? List.of(filterFunction.apply(allExperiments.getFirst())) : null,
+                    null,
+                    apiKey,
+                    workspaceName,
+                    200);
+
+            var expectedExperiments = withFilter
+                    ? allExperiments.stream()
+                            .filter(predicateFunction.apply(allExperiments.getFirst()))
+                            .toList()
+                    : allExperiments;
+
+            // Build expected response
+            var expectedResponse = buildExpectedGroupAggregationsResponse(
+                    groups,
+                    expectedExperiments,
+                    experimentToItems,
+                    traceToSpans,
+                    tracesAll);
+
+            assertThat(response)
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .build())
+                    .isEqualTo(expectedResponse);
+        }
+
+        private Stream<Arguments> findGroupsAggregationsWithFilter__happyFlow() {
+            return Stream.of(
+                    Arguments.of(false, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            null, null),
+                    Arguments.of(true, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(true, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(true, List
+                            .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(true,
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void groupExperimentsAggregationsInvalidGroupingsShouldFail(List<GroupBy> groups) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroupsAggregations(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
+        }
+
+        private Stream<Arguments> groupExperimentsAggregationsInvalidGroupingsShouldFail() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+        }
+
+        @Test
+        void groupExperimentsAggregationsMissingGroupingsShouldFail() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            experimentResourceClient.findGroupsAggregations(
+                    null,
+                    Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
+        }
+
+        private Trace createTraceWithDuration(long durationMillis) {
+            var startTime = Instant.now();
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .startTime(startTime)
+                    .endTime(startTime.plusMillis(durationMillis))
+                    .build();
+        }
+
+        private Span createSpanWithCost(Trace trace, BigDecimal cost) {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(trace.id())
+                    .projectName(trace.projectName())
+                    .type(SpanType.llm)
+                    .totalEstimatedCost(cost)
+                    .build();
+        }
+
+        private List<FeedbackScoreBatchItem> makeTraceScoresWithSpecificValues(Trace trace, List<BigDecimal> values) {
+            var scoreNames = List.of("accuracy", "helpfulness");
+            return IntStream.range(0, Math.min(scoreNames.size(), values.size()))
+                    .<FeedbackScoreBatchItem>mapToObj(i -> FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name(scoreNames.get(i))
+                            .value(values.get(i))
+                            .source(ScoreSource.SDK)
+                            .build())
+                    .collect(toList());
+        }
+
+        private ExperimentItem createExperimentItemWithFeedbackScores(UUID experimentId, UUID traceId,
+                List<FeedbackScoreBatchItem> scores) {
+            return podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .traceId(traceId)
+                    .feedbackScores(scores.stream()
+                            .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                            .toList())
+                    .build();
+        }
+
+        /**
+         * Build expected ExperimentGroupAggregationsResponse for testing.
+         * This function groups experiments and calculates aggregations based on the provided criteria.
+         */
+        private ExperimentGroupAggregationsResponse buildExpectedGroupAggregationsResponse(
+                List<GroupBy> groups,
+                List<Experiment> experiments,
+                Map<UUID, List<ExperimentItem>> experimentToItems,
+                Map<UUID, List<Span>> traceToSpans,
+                List<Trace> traces) {
+
+            // Group experiments by extracting values for each GroupBy criterion
+            Map<List<String>, List<Experiment>> experimentGroups = experiments.stream()
+                    .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
+
+            // Build the nested response structure with aggregations
+            var contentMap = new HashMap<String, GroupContentWithAggregations>();
+
+            for (Map.Entry<List<String>, List<Experiment>> entry : experimentGroups.entrySet()) {
+                buildNestedGroupsWithAggregations(contentMap, entry.getKey(), 0, entry.getValue(),
+                        experimentToItems, traceToSpans, traces);
+            }
+
+            // Calculate recursive aggregations for parent levels
+            var updatedContentMap = new HashMap<String, GroupContentWithAggregations>();
+            for (Map.Entry<String, GroupContentWithAggregations> entry : contentMap.entrySet()) {
+                updatedContentMap.put(entry.getKey(), calculateRecursiveAggregations(entry.getValue()));
+            }
+
+            return ExperimentGroupAggregationsResponse.builder()
+                    .content(updatedContentMap)
+                    .build();
+        }
+
+        /**
+         * Recursively build nested groups structure with aggregations.
+         */
+        private void buildNestedGroupsWithAggregations(
+                Map<String, GroupContentWithAggregations> parentLevel,
+                List<String> groupValues,
+                int depth,
+                List<Experiment> experimentsInGroup,
+                Map<UUID, List<ExperimentItem>> experimentToItems,
+                Map<UUID, List<Span>> traceToSpans,
+                List<Trace> traces) {
+
+            if (depth >= groupValues.size()) {
+                return;
+            }
+
+            String groupingValue = groupValues.get(depth);
+            if (groupingValue == null) {
+                return;
+            }
+
+            GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
+                    groupingValue,
+                    k -> {
+                        if (depth == groupValues.size() - 1) {
+                            // Leaf level - calculate aggregations
+                            return GroupContentWithAggregations.builder()
+                                    .aggregations(calculateAggregations(experimentsInGroup, experimentToItems,
+                                            traceToSpans, traces))
+                                    .groups(Map.of())
+                                    .build();
+                        } else {
+                            // Intermediate level
+                            return GroupContentWithAggregations.builder()
+                                    .aggregations(null)
+                                    .groups(new HashMap<>())
+                                    .build();
+                        }
+                    });
+
+            if (depth < groupValues.size() - 1) {
+                buildNestedGroupsWithAggregations(currentLevel.groups(), groupValues, depth + 1,
+                        experimentsInGroup, experimentToItems, traceToSpans, traces);
+            }
+        }
+
+        /**
+         * Calculate aggregations for a group of experiments.
+         * First calculates avgCost and duration percentiles per experiment,
+         * then averages those values across all experiments in the group.
+         */
+        private AggregationData calculateAggregations(
+                List<Experiment> experiments,
+                Map<UUID, List<ExperimentItem>> experimentToItems,
+                Map<UUID, List<Span>> traceToSpans,
+                List<Trace> traces) {
+
+            long experimentCount = experiments.size();
+
+            // Calculate per-experiment metrics
+            List<ExperimentMetrics> experimentMetrics = experiments.stream()
+                    .map(experiment -> calculateExperimentMetrics(experiment, experimentToItems, traceToSpans, traces))
+                    .toList();
+
+            // Calculate total trace count across all experiments
+            long totalTraceCount = experimentMetrics.stream()
+                    .mapToLong(ExperimentMetrics::traceCount)
+                    .sum();
+
+            // Calculate total cost across all experiments
+            BigDecimal totalCost = experimentMetrics.stream()
+                    .map(ExperimentMetrics::totalCost)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // Average the per-experiment avgCost values
+            BigDecimal avgCost = experimentMetrics.stream()
+                    .map(ExperimentMetrics::avgCost)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(experimentCount), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+
+            // Average the per-experiment duration percentiles
+            PercentageValues avgDurationPercentiles = averageDurationPercentiles(experimentMetrics);
+
+            // Calculate feedback score averages across all experiments
+            var allItems = experiments.stream()
+                    .flatMap(exp -> experimentToItems.getOrDefault(exp.id(), List.of()).stream())
+                    .toList();
+            List<FeedbackScoreAverage> feedbackScores = calculateFeedbackScoreAverages(allItems);
+
+            return AggregationData.builder()
+                    .experimentCount(experimentCount)
+                    .traceCount(totalTraceCount)
+                    .totalEstimatedCost(totalCost)
+                    .totalEstimatedCostAvg(avgCost)
+                    .duration(avgDurationPercentiles)
+                    .feedbackScores(feedbackScores)
+                    .build();
+        }
+
+        /**
+         * Calculate metrics for a single experiment.
+         */
+        private ExperimentMetrics calculateExperimentMetrics(
+                Experiment experiment,
+                Map<UUID, List<ExperimentItem>> experimentToItems,
+                Map<UUID, List<Span>> traceToSpans,
+                List<Trace> traces) {
+
+            // Get experiment items for this experiment
+            var experimentItems = experimentToItems.getOrDefault(experiment.id(), List.of());
+
+            // Get traces for this experiment
+            var experimentTraces = experimentItems.stream()
+                    .map(ExperimentItem::traceId)
+                    .distinct()
+                    .map(traceId -> traces.stream()
+                            .filter(t -> t.id().equals(traceId))
+                            .findFirst()
+                            .orElse(null))
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            // Get spans for this experiment's traces
+            var experimentSpans = experimentTraces.stream()
+                    .flatMap(trace -> traceToSpans.getOrDefault(trace.id(), List.of()).stream())
+                    .toList();
+
+            // Calculate total cost for this experiment
+            BigDecimal totalCost = experimentSpans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // Calculate average cost for this experiment (total cost / trace count)
+            long traceCount = experimentTraces.size();
+            BigDecimal avgCost = traceCount > 0
+                    ? totalCost.divide(BigDecimal.valueOf(traceCount), ValidationUtils.SCALE, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+
+            // Calculate duration percentiles for this experiment using the same logic as FindExperiments
+            List<BigDecimal> quantiles = getQuantities(experimentTraces.stream());
+            PercentageValues durationPercentiles = quantiles.isEmpty()
+                    ? new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+                    : new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2));
+
+            return new ExperimentMetrics(traceCount, totalCost, avgCost, durationPercentiles);
+        }
+
+        /**
+         * Average the duration percentiles across all experiments.
+         */
+        private PercentageValues averageDurationPercentiles(List<ExperimentMetrics> experimentMetrics) {
+            List<PercentageValues> allPercentiles = experimentMetrics.stream()
+                    .map(ExperimentMetrics::durationPercentiles)
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            if (allPercentiles.isEmpty()) {
+                return new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+            }
+
+            BigDecimal avgP50 = allPercentiles.stream()
+                    .map(PercentageValues::p50)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(allPercentiles.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+
+            BigDecimal avgP90 = allPercentiles.stream()
+                    .map(PercentageValues::p90)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(allPercentiles.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+
+            BigDecimal avgP99 = allPercentiles.stream()
+                    .map(PercentageValues::p99)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(allPercentiles.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+
+            return new PercentageValues(avgP50, avgP90, avgP99);
+        }
+
+        /**
+         * Helper record to hold metrics for a single experiment.
+         */
+        private record ExperimentMetrics(
+                long traceCount,
+                BigDecimal totalCost,
+                BigDecimal avgCost,
+                PercentageValues durationPercentiles) {
+        }
+
+        /**
+         * Calculate recursive aggregations for parent levels (same logic as ExperimentService).
+         */
+        private GroupContentWithAggregations calculateRecursiveAggregations(GroupContentWithAggregations content) {
+            if (content.groups().isEmpty()) {
+                // Leaf node - return as-is
+                return content;
+            }
+
+            // Recursively calculate aggregations for all child groups first
+            var updatedChildGroups = new HashMap<String, GroupContentWithAggregations>();
+            for (Map.Entry<String, GroupContentWithAggregations> entry : content.groups().entrySet()) {
+                updatedChildGroups.put(entry.getKey(), calculateRecursiveAggregations(entry.getValue()));
+            }
+
+            // Calculate aggregated values from all children
+            long totalExperimentCount = 0;
+            long totalTraceCount = 0;
+            BigDecimal totalCost = BigDecimal.ZERO;
+
+            // For weighted averages
+            BigDecimal weightedCostSum = BigDecimal.ZERO;
+            BigDecimal p50Sum = BigDecimal.ZERO;
+            BigDecimal p90Sum = BigDecimal.ZERO;
+            BigDecimal p99Sum = BigDecimal.ZERO;
+
+            // For feedback scores - group by name and calculate weighted averages
+            Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
+            Map<String, Long> feedbackScoreCounts = new HashMap<>();
+
+            for (GroupContentWithAggregations child : updatedChildGroups.values()) {
+                AggregationData childAgg = child.aggregations();
+                long expCount = childAgg.experimentCount();
+
+                totalExperimentCount += childAgg.experimentCount();
+                totalTraceCount += childAgg.traceCount();
+                if (childAgg.totalEstimatedCost() != null) {
+                    totalCost = totalCost.add(childAgg.totalEstimatedCost());
+                }
+
+                // For weighted cost average
+                if (childAgg.totalEstimatedCostAvg() != null) {
+                    weightedCostSum = weightedCostSum.add(
+                            childAgg.totalEstimatedCostAvg().multiply(BigDecimal.valueOf(expCount)));
+                }
+
+                // For duration percentiles (weighted average)
+                if (childAgg.duration() != null) {
+                    if (childAgg.duration().p50() != null) {
+                        p50Sum = p50Sum.add(childAgg.duration().p50().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                    if (childAgg.duration().p90() != null) {
+                        p90Sum = p90Sum.add(childAgg.duration().p90().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                    if (childAgg.duration().p99() != null) {
+                        p99Sum = p99Sum.add(childAgg.duration().p99().multiply(BigDecimal.valueOf(expCount)));
+                    }
+                }
+
+                // For feedback scores (weighted average per name)
+                if (childAgg.feedbackScores() != null) {
+                    for (FeedbackScoreAverage score : childAgg.feedbackScores()) {
+                        String name = score.name();
+                        BigDecimal value = score.value();
+
+                        if (value != null && name != null) {
+                            feedbackScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)),
+                                    BigDecimal::add);
+                            feedbackScoreCounts.merge(name, expCount, Long::sum);
+                        }
+                    }
+                }
+            }
+
+            // Calculate averages
+            BigDecimal avgCost = totalExperimentCount > 0
+                    ? weightedCostSum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                            RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+
+            PercentageValues avgDuration = totalExperimentCount > 0
+                    ? new PercentageValues(
+                            p50Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP),
+                            p90Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP),
+                            p99Sum.divide(BigDecimal.valueOf(totalExperimentCount), ValidationUtils.SCALE,
+                                    RoundingMode.HALF_UP))
+                    : null;
+
+            List<FeedbackScoreAverage> avgFeedbackScores = feedbackScoreSums.entrySet().stream()
+                    .map(entry -> {
+                        String name = entry.getKey();
+                        BigDecimal sum = entry.getValue();
+                        Long count = feedbackScoreCounts.get(name);
+                        BigDecimal avg = count > 0
+                                ? sum.divide(BigDecimal.valueOf(count), ValidationUtils.SCALE, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                        return FeedbackScoreAverage.builder()
+                                .name(name)
+                                .value(avg)
+                                .build();
+                    })
+                    .toList();
+
+            // Build updated aggregation data
+            AggregationData updatedAggregations = AggregationData.builder()
+                    .experimentCount(totalExperimentCount)
+                    .traceCount(totalTraceCount)
+                    .totalEstimatedCost(totalCost)
+                    .totalEstimatedCostAvg(avgCost)
+                    .duration(avgDuration)
+                    .feedbackScores(avgFeedbackScores)
+                    .build();
+
+            // Return new GroupContentWithAggregations with calculated aggregations
+            return GroupContentWithAggregations.builder()
+                    .aggregations(updatedAggregations)
+                    .groups(updatedChildGroups)
+                    .build();
+        }
+
+        private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+            Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
+
+            for (ExperimentItem item : items) {
+                if (item.feedbackScores() != null) {
+                    for (FeedbackScore score : item.feedbackScores()) {
+                        scoresByName.computeIfAbsent(score.name(), k -> new ArrayList<>())
+                                .add(score.value());
+                    }
+                }
+            }
+
+            return scoresByName.entrySet().stream()
+                    .map(entry -> {
+                        BigDecimal average = entry.getValue().stream()
+                                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                .divide(BigDecimal.valueOf(entry.getValue().size()),
+                                        ValidationUtils.SCALE, RoundingMode.HALF_UP);
+                        return FeedbackScoreAverage.builder()
+                                .name(entry.getKey())
+                                .value(average)
+                                .build();
+                    })
+                    .toList();
+        }
+    }
+
+    /**
+     * Extract grouping values from an experiment based on GroupBy criteria.
+     */
+    private List<String> extractGroupValues(Experiment experiment, List<GroupBy> groups) {
+        return groups.stream()
+                .map(group -> extractFieldValue(experiment, group))
+                .toList();
+    }
+
+    /**
+     * Extract a single field value from an experiment based on a GroupBy criterion.
+     */
+    private String extractFieldValue(Experiment experiment, GroupBy group) {
+        return switch (group.field()) {
+            case DATASET_ID -> experiment.datasetId().toString();
+            case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
+            default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());
+        };
+    }
+
+    /**
+     * Extract value from JSON metadata using JsonPath-like key syntax.
+     */
+    private String extractFromJsonMetadata(JsonNode metadata, String key) {
+        String jsonText = JsonUtils.getStringOrDefault(metadata);
+        try {
+            Object value = JsonPath.read(jsonText, key);
+            return String.valueOf(value);
+        } catch (PathNotFoundException e) {
+            return "";
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GroupExperiments {
 
         @ParameterizedTest
@@ -2067,6 +2728,61 @@ class ExperimentsResourceTest {
             var expectedResponse = buildExpectedGroupResponse(
                     groups,
                     allExperiments);
+            assertThat(response).isEqualTo(expectedResponse);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void groupExperimentsWithFilter(List<GroupBy> groups, Function<Experiment, ExperimentFilter> filterFunction,
+                Function<Experiment, Predicate<Experiment>> predicateFunction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Random random = new Random();
+
+            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            var allExperiments = datasets.stream().flatMap(dataset -> {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+
+                var experiments = experimentResourceClient.generateExperimentList()
+                        .stream()
+                        .map(experiment -> experiment.toBuilder()
+                                .datasetId(dataset.id())
+                                .promptVersion(versionLink)
+                                .promptVersions(List.of(versionLink))
+                                .datasetName(dataset.name())
+                                .metadata(JsonUtils
+                                        .getJsonNodeFromString(
+                                                "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
+                                                        .formatted(random.nextBoolean() ? "2024" : "2025") +
+                                                        "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .build())
+                        .toList();
+                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                return experiments.stream();
+            }).toList();
+
+            var response = experimentResourceClient.findGroups(
+                    groups,
+                    Set.of(ExperimentType.REGULAR), List.of(filterFunction.apply(allExperiments.getFirst())), null,
+                    apiKey, workspaceName, 200);
+
+            var expectedExperiments = allExperiments.stream()
+                    .filter(predicateFunction.apply(allExperiments.getFirst()))
+                    .toList();
+
+            var expectedResponse = buildExpectedGroupResponse(
+                    groups,
+                    expectedExperiments);
             assertThat(response).isEqualTo(expectedResponse);
         }
 
@@ -2169,6 +2885,64 @@ class ExperimentsResourceTest {
                             GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
         }
 
+        private Stream<Arguments> groupExperimentsWithFilter() {
+            return Stream.of(
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
+                                    .equals(experiment.promptVersion())));
+        }
+
+        private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
+            return Stream.of(
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build()),
+                    Arguments.of(
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.PROMPT_IDS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.promptVersion().promptId().toString())
+                                    .build()));
+        }
+
         /**
          * Helper function to build expected ExperimentGroupResponse for testing.
          * This function groups experiments according to the provided GroupBy criteria and
@@ -2194,40 +2968,6 @@ class ExperimentsResourceTest {
 
             // Build the nested response structure
             return buildGroupResponse(groupItems, enrichInfoHolder, groups);
-        }
-
-        /**
-         * Extract grouping values from an experiment based on GroupBy criteria.
-         */
-        private List<String> extractGroupValues(Experiment experiment, List<GroupBy> groups) {
-            return groups.stream()
-                    .map(group -> extractFieldValue(experiment, group))
-                    .toList();
-        }
-
-        /**
-         * Extract a single field value from an experiment based on a GroupBy criterion.
-         */
-        private String extractFieldValue(Experiment experiment, GroupBy group) {
-            return switch (group.field()) {
-                case DATASET_ID -> experiment.datasetId().toString();
-                case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
-                default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());
-            };
-        }
-
-        /**
-         * Extract value from JSON metadata using JsonPath-like key syntax.
-         */
-        private String extractFromJsonMetadata(JsonNode metadata, String key) {
-            String jsonText = JsonUtils.getStringOrDefault(metadata);
-            try {
-                Object value = JsonPath.read(jsonText, key);
-
-                return String.valueOf(value);
-            } catch (PathNotFoundException e) {
-                return "";
-            }
         }
 
         /**

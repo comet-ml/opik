@@ -4,6 +4,8 @@ WORKDIR /opt/opik-sandbox-executor-python
 
 # Step 1: Install dependencies
 COPY requirements.txt .
+COPY scoring_runner.py .
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Step 2: Copy optimized scoring runner
