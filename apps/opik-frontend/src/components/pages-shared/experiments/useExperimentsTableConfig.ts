@@ -26,12 +26,12 @@ import {
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import GroupTextCell from "@/components/shared/DataTableCells/GroupTextCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   generateActionsColumDef,
-  generateGroupedCellDef,
-  generateGroupedNameColumDef,
+  generateGroupedRowCellDef,
+  generateDataRowCellDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -162,7 +162,7 @@ export const useExperimentsTableConfig = <
         id,
         label,
         type: COLUMN_TYPE.string,
-        cell: GroupTextCell as never,
+        cell: TextCell.Group as never,
         customMeta: {
           valueKey: `${metaKey}.value`,
           labelKey: `${metaKey}.label`,
@@ -181,13 +181,18 @@ export const useExperimentsTableConfig = <
             ...groupCellDef,
             label: "Dataset",
             type: COLUMN_TYPE.string,
-            cell: ResourceCell as never,
+            cell: ResourceCell.Group as never,
             customMeta: {
               nameKey: `${metaKey}.label`,
               idKey: `${metaKey}.value`,
               resource: RESOURCE_TYPE.dataset,
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_DATASET_LABEL,
+              countAggregationKey: "experiment_count",
+              explainer: {
+                id: "group-experiments",
+                description: `Some experiments reference a dataset that has been deleted`,
+              },
             },
           } as ColumnData<T>;
           break;
@@ -200,14 +205,14 @@ export const useExperimentsTableConfig = <
           break;
       }
 
-      return generateGroupedCellDef<T, unknown>(
+      return generateGroupedRowCellDef<T, unknown>(
         groupCellDef,
         checkboxClickHandler,
       );
     });
 
     const baseColumns = [
-      generateGroupedNameColumDef<T>(
+      generateDataRowCellDef<T>(
         {
           id: COLUMN_NAME_ID,
           label: "Name",
