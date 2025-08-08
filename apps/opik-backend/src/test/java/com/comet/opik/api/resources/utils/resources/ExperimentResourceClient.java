@@ -231,7 +231,7 @@ public class ExperimentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
-
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_OK) {
                 return response.readEntity(ExperimentGroupAggregationsResponse.class);
             }
