@@ -12,6 +12,7 @@ import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
+import org.quartz.impl.matchers.GroupMatcher;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
@@ -141,9 +142,16 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             log.info("GuiceJobManager instance already cleared, nothing to shutdown");
             return;
         }
+        var scheduler = jobManager.getScheduler();
+        try {
+            log.info("Attempting to delete all jobs from the scheduler...");
+            scheduler.deleteJobs(scheduler.getJobKeys(GroupMatcher.anyGroup()).stream().toList());
+            log.info("Jobs deleted");
+        } catch (SchedulerException exception) {
+            log.warn("Error deleting jobs during scheduler shutdown", exception);
+        }
         try {
             log.info("Attempting scheduler shutdown...");
-            var scheduler = jobManager.getScheduler();
             scheduler.shutdown(false); // Don't wait for jobs to complete
             log.info("Scheduler shutdown completed");
         } catch (SchedulerException exception) {
