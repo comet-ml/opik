@@ -951,7 +951,7 @@ def test_tracked_function__update_current_span__with_attachments(
 
 
 def test_opik_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
-    opik_client: opik.Opik, data_file
+    opik_client: opik.Opik, attachment_data_file
 ):
     root_span_client = opik_client.span(
         name="root-span-name",
@@ -964,10 +964,10 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
     )
     opik_client.flush()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
