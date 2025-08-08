@@ -8,6 +8,16 @@ providers:
     display_name: "OpenAI"
     api_key_env_var: "OPENAI_API_KEY"
     models:
+      - name: "GPT 5"
+        ui_selector: "GPT 5"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "GPT 5 Mini"
+        ui_selector: "GPT 5 Mini"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
       - name: "GPT 4o Mini"
         ui_selector: "GPT 4o Mini"
         enabled: true

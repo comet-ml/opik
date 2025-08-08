@@ -9,6 +9,8 @@ export enum PROVIDER_TYPE {
 
 export enum PROVIDER_MODEL_TYPE {
   // <------ openai
+  GPT_5 = "gpt-5",
+  GPT_5_MINI = "gpt-5-mini",
   GPT_4O = "gpt-4o",
   GPT_4O_MINI = "gpt-4o-mini",
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
@@ -432,6 +434,7 @@ export interface LLMOpenAIConfigsType {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  reasoningEffort: string;
 }
 
 export interface LLMAnthropicConfigsType {
