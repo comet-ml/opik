@@ -41,6 +41,7 @@ NUM_THREADS=${PYTHON_CODE_EXECUTOR_PARALLEL_NUM:-5}
 echo "OPIK_VERSION=$OPIK_VERSION"
 echo "OPIK_OTEL_SDK_ENABLED=$OPIK_OTEL_SDK_ENABLED"
 
+# Configure OpenTelemetry environment if enabled
 if [ "$OPIK_OTEL_SDK_ENABLED" = "true" ]; then
   echo "Starting the Opik Python Backend server with Open Telemetry instrumentation"
 
@@ -51,20 +52,17 @@ if [ "$OPIK_OTEL_SDK_ENABLED" = "true" ]; then
   export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
   export OTEL_PYTHON_LOG_CORRELATION=true
 
-  opentelemetry-instrument gunicorn --access-logfile '-' \
-         --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
-         --workers 1 \
-         --threads "$NUM_THREADS" \
-         --worker-class gthread \
-         --bind=0.0.0.0:8000 \
-         --chdir ./src 'opik_backend:create_app()'
+  INSTRUMENTATION_CMD="opentelemetry-instrument"
 else
   echo "Starting the Opik Python Backend server without Open Telemetry instrumentation"
-  gunicorn --access-logfile '-' \
-      --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
-      --workers 1 \
-      --threads "$NUM_THREADS" \
-      --worker-class gthread \
-      --bind=0.0.0.0:8000 \
-      --chdir ./src 'opik_backend:create_app()'
+  INSTRUMENTATION_CMD=""
 fi
+
+# Single parameterized gunicorn command
+$INSTRUMENTATION_CMD gunicorn --access-logfile '-' \
+  --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
+  --workers 1 \
+  --threads "$NUM_THREADS" \
+  --worker-class gthread \
+  --bind=0.0.0.0:8000 \
+  --chdir ./src 'opik_backend:create_app()'
