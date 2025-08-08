@@ -5,6 +5,7 @@ import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.google.common.base.Throwables;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -63,24 +64,30 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
         int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
-                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
-                .subscribe(
-                        __ -> {
-                            if (!interrupted.get()) {
-                                log.info("Successfully started closing trace threads process");
-                            } else {
-                                log.info("TraceThreadsClosingJob completed but was interrupted during execution");
-                            }
-                        },
-                        error -> {
-                            if (Thread.currentThread().isInterrupted() || interrupted.get()
-                                    || error.getCause() instanceof InterruptedException) {
-                                log.info("TraceThreadsClosingJob was interrupted");
-                                Thread.currentThread().interrupt(); // Restore interrupt status
-                            } else {
-                                log.error("Error processing closing of trace threads", error);
-                            }
-                        });
+                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout()))
+                .doOnSuccess(__ -> {
+                    if (!interrupted.get()) {
+                        log.info("Successfully started closing trace threads process");
+                    } else {
+                        log.info("TraceThreadsClosingJob completed but was interrupted during execution");
+                    }
+                })
+                .doOnError(error -> {
+                    if (Thread.currentThread().isInterrupted()
+                            || interrupted.get()
+                            || error instanceof InterruptedException
+                            || hasCause(error, InterruptedException.class)) {
+                        log.warn("TraceThreadsClosingJob was interrupted", error);
+                        Thread.currentThread().interrupt(); // Restore interrupt status
+                    } else {
+                        log.error("Error processing closing of trace threads", error);
+                    }
+                })
+                .block(Duration.ofSeconds(6 + jobTimeoutConfig.getTraceThreadsClosingJobTimeout()));
+    }
+
+    public static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        return Throwables.getCausalChain(throwable).stream().anyMatch(type::isInstance);
     }
 
     @Override
@@ -143,7 +150,8 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                 .collectList()
                 .doOnSuccess(ids -> {
                     if (interrupted.get()) {
-                        log.info("TraceThreadsClosingJob interrupted, processed '{}' messages before stopping", ids.size());
+                        log.info("TraceThreadsClosingJob interrupted, processed '{}' messages before stopping",
+                                ids.size());
                     } else if (ids.isEmpty()) {
                         log.info("No messages to enqueue in stream {}", traceThreadConfig.getStreamName());
                     } else {
