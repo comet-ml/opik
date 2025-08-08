@@ -22,7 +22,8 @@ public class SpanAssertions {
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
             "totalEstimatedCostVersion", "comments"};
 
-    public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+    public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+            "valueByAuthor"};
 
     public static void assertPage(SpanPage actualPage, int page, int expectedPageSize, int expectedTotal) {
         assertThat(actualPage.page()).isEqualTo(page);
