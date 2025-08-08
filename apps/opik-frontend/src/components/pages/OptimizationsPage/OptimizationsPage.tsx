@@ -64,8 +64,8 @@ import useGroupedOptimizationsList, {
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   generateActionsColumDef,
-  generateGroupedCellDef,
-  generateGroupedNameColumDef,
+  generateGroupedRowCellDef,
+  generateDataRowCellDef,
   getIsGroupRow,
   getRowId,
   getSharedShiftCheckboxClickHandler,
@@ -269,7 +269,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateGroupedNameColumDef<GroupedOptimization>(
+      generateDataRowCellDef<GroupedOptimization>(
         {
           id: COLUMN_NAME_ID,
           label: "Name",
@@ -288,7 +288,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         },
         checkboxClickHandler,
       ),
-      generateGroupedCellDef<GroupedOptimization, unknown>(
+      generateGroupedRowCellDef<GroupedOptimization, unknown>(
         {
           id: GROUPING_COLUMN,
           label: "Dataset",
