@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.redisson.api.RedissonReactiveClient;
@@ -27,6 +28,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @Singleton
 @Slf4j
+@DisallowConcurrentExecution
 public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     private final TraceThreadService traceThreadService;
