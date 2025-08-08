@@ -2,6 +2,8 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { Label } from "@/components/ui/label";
 import { LLMOpenAIConfigsType } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
@@ -10,6 +12,12 @@ interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
 }
+
+const REASONING_EFFORT_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
 
 const OpenAIModelConfigs = ({
   configs,
@@ -95,6 +103,18 @@ const OpenAIModelConfigs = ({
             <PromptModelSettingsTooltipContent text="How much to penalize new tokens based on whether they appear in the text so far. Increases the model's likelihood to talk about new topics" />
           }
         />
+      )}
+
+      {!isUndefined(configs.reasoningEffort) && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="reasoningEffort">Reasoning effort</Label>
+          <SelectBox
+            id="reasoningEffort"
+            value={configs.reasoningEffort}
+            onChange={(v) => onChange({ reasoningEffort: v })}
+            options={REASONING_EFFORT_OPTIONS}
+          />
+        </div>
       )}
     </div>
   );

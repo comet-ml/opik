@@ -35,6 +35,7 @@ export const getDefaultConfigByProvider = (
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
+      reasoningEffort: DEFAULT_OPEN_AI_CONFIGS.REASONING_EFFORT,
     } as LLMOpenAIConfigsType;
   }
 
