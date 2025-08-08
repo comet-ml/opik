@@ -96,7 +96,7 @@ class TestS3FileDataUploaderRetry:
         )
         # Now patch the decorator where the decorator is being imported from
         patch(
-            "opik.file_upload.s3_multipart_upload.s3_httpx_client.s3_retry",
+            "opik.s3_httpx_client.s3_retry",
             lambda x: s3_retry(x),
         ).start()
         # Reloads the module which applies our patched decorator
