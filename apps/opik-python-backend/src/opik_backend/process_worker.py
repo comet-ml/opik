@@ -23,8 +23,9 @@ logger.setLevel(logging.INFO)
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:   
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        if issubclass(cls, BaseMetric):
+        if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
+    return None
 
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []

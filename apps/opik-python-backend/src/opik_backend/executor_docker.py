@@ -64,6 +64,9 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.network_disabled = os.getenv("PYTHON_CODE_EXECUTOR_ALLOW_NETWORK", "false").lower() != "true"
+        
+        # Container warm-up configuration
+        self.warmup_enabled = os.getenv("PYTHON_CODE_EXECUTOR_ENABLE_WARMUP", "true").lower() == "true"
 
         self.client = docker.from_env()
         self.instance_id = str(uuid7())
@@ -75,6 +78,9 @@ class DockerExecutor(CodeExecutorBase):
 
         self.stop_event = Event()
 
+        # Log configuration
+        logger.info(f"DockerExecutor initialized with warmup_enabled={self.warmup_enabled}")
+        
         # Pre-warm the container pool
         self._pre_warm_container_pool()
 
@@ -123,7 +129,8 @@ class DockerExecutor(CodeExecutorBase):
         Pre-warm the container pool by creating all containers in parallel.
         This ensures containers are ready when the service starts.
         """
-        logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
+        warmup_status = "with warm-up validation" if self.warmup_enabled else "without warm-up validation"
+        logger.info(f"Pre-warming container pool with {self.max_parallel} containers {warmup_status}")
         # Submit container creation tasks in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
             futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
@@ -156,12 +163,72 @@ class DockerExecutor(CodeExecutorBase):
     def _calculate_latency_ms(self, start_time):
         return (time.time() - start_time) * 1000  # Convert to milliseconds
 
+    def _warm_up_container(self, container):
+        """Warm up a container by running a scoring test to ensure it's ready for production use."""
+        try:
+            # Ensure container is running and available
+            container.reload()
+            if container.status != 'running':
+                logger.warning(f"Container {container.id} is not running, skipping warm-up")
+                return
+            
+            # Warm-up test with a valid BaseMetric implementation
+            warmup_code = '''
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+class WarmupMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "warmup_metric"):
+        super().__init__(name=name, track=False)
+    
+    def score(self, output: str, reference: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)
+'''
+            # Build the warm-up command in readable parts
+            scoring_runner_path = "/opt/opik-sandbox-executor-python/scoring_runner.py"
+            # Use the same BaseMetric code for both input and validation to ensure it passes
+            test_code = warmup_code.strip()
+            test_data = '{"output": "test", "reference": "test"}'
+            fallback_warning = "Warning: scoring test failed"
+            
+            warmup_command = (
+                f'echo \'print("scoring test passed")\' | '
+                f'python {scoring_runner_path} \'{test_code}\' \'{test_data}\' || '
+                f'echo "{fallback_warning}"'
+            )
+            
+            warmup_cmd = ['sh', '-c', warmup_command]
+            warmup_result = container.exec_run(warmup_cmd, stdout=True, stderr=True)
+            
+            # If warm-up fails, kill the container as it's not reliable
+            if warmup_result.exit_code != 0:
+                logger.warning(f"Container {container.id} failed warm-up (exit_code={warmup_result.exit_code}), removing container")
+                try:
+                    container.remove(force=True)
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup failed container {container.id}: {cleanup_error}")
+                return 
+                
+        except Exception as e:
+            logger.warning(f"Container {container.id} warm-up failed with exception, removing container: {e}")
+            try:
+                container.remove(force=True)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup failed container {container.id}: {cleanup_error}")
+            return  # Don't add this container to the pool
+
     def create_container(self):
         # Record the start time for detailed container creation metrics
         start_time = time.time()
 
+        # Construct image reference properly for local vs remote images
+        if self.docker_registry and self.docker_registry.strip():
+            image_ref = f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}"
+        else:
+            image_ref = f"{self.docker_image}:{self.docker_tag}"
+        
         new_container = self.client.containers.run(
-            image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
+            image=image_ref,
             command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
             mem_limit="256mb",
             cpu_shares=2,
@@ -170,6 +237,13 @@ class DockerExecutor(CodeExecutorBase):
             security_opt=["no-new-privileges"],
             labels=self.container_labels
         )
+
+        # Conditionally warm up the container to ensure it's ready for production use
+        if self.warmup_enabled:
+            logger.debug(f"Warming up container {new_container.id}")
+            self._warm_up_container(new_container)
+        else:
+            logger.debug(f"Skipping warm-up for container {new_container.id} (warmup disabled)")
 
         # Add the container to the pool
         self.container_pool.put(new_container)
