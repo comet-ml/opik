@@ -20,7 +20,9 @@ import {
   DEFAULT_ITEMS_PER_GROUP,
   DELETED_DATASET_ID,
   GROUPING_COLUMN,
-} from "@/constants/grouping";
+  GROUP_ROW_TYPE,
+} from "@/constants/groups";
+import { buildRowId } from "@/lib/groups";
 
 export const GROUP_SORTING = [
   { id: "last_created_optimization_at", desc: true },
@@ -28,7 +30,7 @@ export const GROUP_SORTING = [
 
 export type GroupedOptimization = {
   dataset: Dataset;
-  virtual_dataset_id: string;
+  [GROUPING_COLUMN]: string;
 } & Optimization;
 
 type UseGroupedOptimizationsListParams = {
@@ -66,14 +68,10 @@ const wrapOptimizationRow = (optimization: Optimization, dataset: Dataset) => {
   } as GroupedOptimization;
 };
 
-const buildMoreRowId = (id: string) => {
-  return `more_${id}`;
-};
-
 const generateMoreRow = (dataset: Dataset) => {
   return wrapOptimizationRow(
     {
-      id: buildMoreRowId(dataset.id),
+      id: buildRowId(GROUP_ROW_TYPE.MORE, dataset.id),
       dataset_id: dataset.id,
       dataset_name: dataset.name,
     } as Optimization,
