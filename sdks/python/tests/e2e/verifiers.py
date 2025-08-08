@@ -14,6 +14,7 @@ from opik.rest_api.types import (
     trace_public,
 )
 from opik.types import ErrorInfoDict, FeedbackScoreDict
+from opik import url_helpers
 from .. import testlib
 
 InputType = Union[
@@ -340,9 +341,10 @@ def verify_attachments(
             attachment.mime_type == expected_attachment.content_type
         ), f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
 
-        assert attachment.link.startswith(
-            url_override
-        ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
+        if not url_helpers.is_aws_presigned_url(attachment.link):
+            assert attachment.link.startswith(
+                url_override
+            ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
 
 
 def _get_attachments(

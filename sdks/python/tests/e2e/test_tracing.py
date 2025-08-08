@@ -1,9 +1,7 @@
 import os
-import tempfile
 import time
 import uuid
 
-import numpy as np
 import pytest
 
 import opik
@@ -11,22 +9,8 @@ from opik import opik_context, id_helpers, Attachment
 from opik.api_objects import helpers
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 from . import verifiers
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from .conftest import OPIK_E2E_TESTS_PROJECT_NAME, ATTACHMENT_FILE_SIZE
 from ..testlib import ANY_STRING
-
-FILE_SIZE = 2 * 1024 * 1024
-
-
-@pytest.fixture
-def data_file():
-    temp_file = tempfile.NamedTemporaryFile(delete=False)
-    try:
-        temp_file.write(np.random.bytes(FILE_SIZE))
-        temp_file.seek(0)
-        yield temp_file
-    finally:
-        temp_file.close()
-        os.unlink(temp_file.name)
 
 
 @pytest.mark.parametrize(
@@ -675,25 +659,25 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
     )
 
 
-def test_opik_trace__attachments(opik_client, data_file):
+def test_opik_trace__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -719,22 +703,22 @@ def test_opik_trace__attachments(opik_client, data_file):
 
 
 def test_tracked_function__update_current_trace__with_attachments(
-    opik_client, data_file
+    opik_client, attachment_data_file
 ):
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     @opik.track
@@ -763,25 +747,25 @@ def test_tracked_function__update_current_trace__with_attachments(
     )
 
 
-def test_opik_client_span__attachments(opik_client, data_file):
+def test_opik_client_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -812,25 +796,25 @@ def test_opik_client_span__attachments(opik_client, data_file):
     )
 
 
-def test_span_span__attachments(opik_client, data_file):
+def test_span_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -866,25 +850,25 @@ def test_span_span__attachments(opik_client, data_file):
     )
 
 
-def test_trace_span__attachments(opik_client, data_file):
+def test_trace_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -915,22 +899,22 @@ def test_trace_span__attachments(opik_client, data_file):
 
 
 def test_tracked_function__update_current_span__with_attachments(
-    opik_client, data_file
+    opik_client, attachment_data_file
 ):
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     @opik.track
@@ -967,7 +951,7 @@ def test_tracked_function__update_current_span__with_attachments(
 
 
 def test_opik_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
-    opik_client: opik.Opik, data_file
+    opik_client: opik.Opik, attachment_data_file
 ):
     root_span_client = opik_client.span(
         name="root-span-name",
@@ -980,16 +964,16 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
     )
     opik_client.flush()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     opik_client.update_span(

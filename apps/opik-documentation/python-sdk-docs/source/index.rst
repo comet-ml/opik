@@ -226,6 +226,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/SpanData.rst
    Objects/SpanPublic.rst
    Objects/Attachment.rst
+   Objects/AttachmentClient.rst
    Objects/FeedbackScoreDict.rst
    Objects/Experiment.rst
    Objects/ExperimentItemContent.rst

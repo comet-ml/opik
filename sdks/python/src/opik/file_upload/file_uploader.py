@@ -3,9 +3,10 @@ from typing import Optional
 
 import httpx
 
+from opik import s3_httpx_client
 from . import upload_client, file_upload_monitor
 from . import upload_options as file_upload_options
-from .s3_multipart_upload import file_parts_strategy, s3_file_uploader, s3_httpx_client
+from .s3_multipart_upload import file_parts_strategy, s3_file_uploader
 from ..rest_api import client as rest_api_client
 from ..rest_api import types as rest_api_types
 
