@@ -13,7 +13,6 @@ import schedule
 from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
-from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
 
@@ -243,15 +242,18 @@ class DockerExecutor(CodeExecutorBase):
         get_container_histogram.record(latency, attributes={"method": "get_container"})
 
         try:
+            # Legacy format: string command with python -c
+            cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.py", code, json.dumps(data), payload_type or ""]
+            
             future = self.scoring_executor.submit(
                 container.exec_run,
-                cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
+                cmd=cmd,
                 detach=False,
                 stdin=False,
                 tty=False
             )
-
             result = future.result(timeout=self.exec_timeout)
+
             exec_result = ExecutionResult(
                 exit_code=result.exit_code,
                 output=result.output
