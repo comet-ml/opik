@@ -5,13 +5,12 @@ import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import { generatePromptFilters, processFilters } from "@/lib/filters";
 
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
 export type UseExperimentsListParams = {
   workspaceName?: string;
-  datasetId?: string;
   promptId?: string;
   optimizationId?: string;
   datasetDeleted?: boolean;
@@ -33,7 +32,6 @@ export const getExperimentsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
-    datasetId,
     promptId,
     optimizationId,
     datasetDeleted,
@@ -50,12 +48,10 @@ export const getExperimentsList = async (
     params: {
       ...(workspaceName && { workspace_name: workspaceName }),
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
-      ...processFilters(filters),
+      ...processFilters(filters, generatePromptFilters(promptId)),
       ...processSorting(sorting),
       ...(search && { name: search }),
-      ...(datasetId && { datasetId }),
       ...(optimizationId && { optimization_id: optimizationId }),
-      ...(promptId && { prompt_id: promptId }),
       ...(types && { types: JSON.stringify(types) }),
       size,
       page,

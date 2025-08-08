@@ -58,7 +58,8 @@ class OptimizableAgent:
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
         # Litellm bug requires this (maybe problematic if multi-threaded)
-        os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
+        if "OPIK_PROJECT_NAME" not in os.environ:
+            os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
         self.opik_logger = OpikLogger()
         litellm.callbacks = [self.opik_logger]
 
