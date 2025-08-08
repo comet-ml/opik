@@ -61,9 +61,7 @@ def execute_evaluator_python():
     response = get_executor().run_scoring(code, data, payload_type)
 
     if "error" in response:
-        # ProcessExecutor includes "code" field, DockerExecutor (production) does not
-        error_code = response.get("code", 400)  # Default to 400 for Docker responses
-        abort(error_code, response["error"])
+        abort(response["code"], response["error"])
 
     scores = response.get("scores", [])
     if len(scores) == 0:

@@ -13,7 +13,6 @@ import schedule
 from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
-# Commands will be imported dynamically based on Docker image capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +243,7 @@ class DockerExecutor(CodeExecutorBase):
 
         try:
             # Legacy format: string command with python -c
-            cmd = ["python", "-S", "/opt/opik-python-backend/scoring_runner.py", code, json.dumps(data), payload_type or ""]
+            cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.py", code, json.dumps(data), payload_type or ""]
             
             future = self.scoring_executor.submit(
                 container.exec_run,

@@ -9,7 +9,6 @@ COPY scoring_runner.py .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Step 2: Copy optimized scoring runner
-COPY scoring_runner.py ./scoring_runner.py
 RUN chmod +x ./scoring_runner.py
 
 # Step 3: Minimal .pyc compilation
@@ -17,7 +16,7 @@ RUN python -m compileall -q ./scoring_runner.py
 
 # Step 4: Pre-warm modules used by local imports (build-time caching for runtime efficiency)
 # These modules are imported locally in scoring_runner.py but benefit from pre-compilation
-RUN echo "import sys, json, time, traceback, uuid, inspect; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python -S /tmp/prewarm.py && rm /tmp/prewarm.py
+RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python -S /tmp/prewarm.py && rm /tmp/prewarm.py
 
 # Step 5: Test execution
 RUN printf 'print("scoring test passed")' | python -S ./scoring_runner.py 'print("minimal test")' '{"test": true}' || echo "Warning: scoring test failed"
