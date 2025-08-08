@@ -5,6 +5,13 @@ from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
+def normalize_error_message(error_message: str) -> str:
+    """
+    Normalize error messages to handle differences between remote and local images.
+    Remote images may have double-escaped newlines, this method standardizes them.
+    """
+    return error_message.replace('\\n', '\n')
+
 @pytest.fixture(params=[DockerExecutor, ProcessExecutor])
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
@@ -338,7 +345,10 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
     })
     assert response.status_code == 400
     assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
-    assert stacktrace in str(response.json["error"])
+    
+    # Normalize error message to handle differences between remote and local images
+    error_message = normalize_error_message(str(response.json["error"]))
+    assert stacktrace in error_message
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -370,7 +380,10 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
     })
     assert response.status_code == 400
     assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
-    assert stacktrace in str(response.json["error"])
+    
+    # Normalize error message to handle differences between remote and local images
+    error_message = normalize_error_message(str(response.json["error"]))
+    assert stacktrace in error_message
 
 
 def test_no_scores_returns_bad_request(client):

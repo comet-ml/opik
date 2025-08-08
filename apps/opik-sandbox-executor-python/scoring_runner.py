@@ -41,7 +41,7 @@ module = ModuleType(str(uuid.uuid4()))
 try:
     exec(code, module.__dict__)
 except Exception:  
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[1:])  
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])  
     print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
     exit(1)
 
@@ -61,7 +61,7 @@ try:
         # Regular scoring - unpack data as keyword arguments
         score_result = metric.score(**data)
 except Exception:
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[1:])
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])
     print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
     exit(1)
         
