@@ -5,7 +5,8 @@ import mimetypes
 import httpx
 import json.decoder
 from opik import s3_httpx_client
-from typing import Iterator, List, Literal, Optional, TypeAlias
+from typing import Iterator, List, Literal, Optional
+from typing_extensions import TypeAlias
 
 from opik.file_upload import file_uploader, upload_options
 from opik.rest_api import client as rest_api_client
