@@ -12,6 +12,7 @@ from opik.file_upload import file_uploader, upload_options
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import attachment as rest_api_attachment
 from opik.rest_api import core as rest_api_core
+from opik import url_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class AttachmentClient:
 
         httpx_client_upload = (
             s3_httpx_client.get_cached()
-            if _is_aws_presigned_url(attachment_to_download.link)
+            if url_helpers.is_aws_presigned_url(attachment_to_download.link)
             else self._rest_httpx_client
         )
 
@@ -216,9 +217,3 @@ class AttachmentClient:
     def _resolve_project_id(self, project_name: str) -> str:
         project = self._rest_client.projects.retrieve_project(name=project_name)
         return project.id
-
-
-def _is_aws_presigned_url(url: str) -> bool:
-    return "X-Amz-Signature" in url or (
-        "Signature=" in url and "AWSAccessKeyId=" in url
-    )
