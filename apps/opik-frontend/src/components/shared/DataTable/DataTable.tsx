@@ -220,9 +220,7 @@ const DataTable = <TData, TValue>({
     },
   });
 
-  const { onClick } = useCustomRowClick<TData>({
-    onRowClick: onRowClick,
-  });
+  const rowClickWrapper = useCustomRowClick();
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -278,11 +276,21 @@ const DataTable = <TData, TValue>({
         data-row-active={row.id === activeRowId}
         data-row-id={row.id}
         className={cn({
-          "cursor-pointer": isRowClickable && !isGrouped,
+          "cursor-pointer": isRowClickable || isGrouped,
         })}
-        {...(isRowClickable && !isGrouped
+        {...(isRowClickable || isGrouped
           ? {
-              onClick: (e) => onClick?.(e, row.original),
+              onClick: (e) =>
+                rowClickWrapper(
+                  e,
+                  isGrouped
+                    ? () => {
+                        row.toggleExpanded();
+                      }
+                    : () => {
+                        onRowClick?.(row.original);
+                      },
+                ),
             }
           : {})}
       >

@@ -321,7 +321,7 @@ export const renderCustomRow = <TData,>(
   }
 };
 
-export const generateGroupedNameColumDef = <
+export const generateDataRowCellDef = <
   TData extends {
     id: string;
   },
@@ -366,7 +366,7 @@ export const generateGroupedNameColumDef = <
   } as ColumnDef<TData>;
 };
 
-export const generateGroupedCellDef = <TData, TValue>(
+export const generateGroupedRowCellDef = <TData, TValue>(
   columnData: ColumnData<TData>,
   checkboxClickHandler: (
     event: React.MouseEvent<HTMLButtonElement>,
