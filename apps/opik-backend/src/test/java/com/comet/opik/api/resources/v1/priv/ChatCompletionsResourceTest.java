@@ -233,6 +233,10 @@ class ChatCompletionsResourceTest {
                     .containsIgnoringCase(actual);
 
             return Stream.of(
+                    arguments(OpenaiModelName.GPT_5_CHAT.toString(), LlmProvider.OPEN_AI,
+                            UUID.randomUUID().toString(), actualContainsExpectedEval),
+                    arguments(OpenaiModelName.GPT_5_MINI.toString(), LlmProvider.OPEN_AI,
+                            UUID.randomUUID().toString(), actualContainsExpectedEval),
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString(), actualContainsExpectedEval),
                     arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,

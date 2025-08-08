@@ -58,6 +58,19 @@ export class ChatCompletions {
         return core.HttpResponsePromise.fromPromise(this.__createChatCompletions(request, requestOptions));
     }
 
+    /**
+     * Convenience wrapper for response-based models.
+     *
+     * @param {OpikApi.ChatCompletionRequest} request
+     * @param {ChatCompletions.RequestOptions} requestOptions - Request-specific configuration.
+     */
+    public createResponseBasedChatCompletions(
+        request: OpikApi.ChatCompletionRequest = {},
+        requestOptions?: ChatCompletions.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ChatCompletionResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__createChatCompletions(request, requestOptions));
+    }
+
     private async __createChatCompletions(
         request: OpikApi.ChatCompletionRequest = {},
         requestOptions?: ChatCompletions.RequestOptions,
