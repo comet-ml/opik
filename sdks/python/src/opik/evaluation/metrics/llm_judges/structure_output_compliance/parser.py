@@ -5,6 +5,7 @@ from opik.evaluation.metrics.llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
+
 def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
     """
     Parses the LLM output for the StructuredOutputCompliance metric.
@@ -43,13 +44,13 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
             )
 
         return score_result.ScoreResult(
-            name=name,
-            value=1.0 if score else 0.0,
-            reason="\n".join(reason)
+            name=name, value=1.0 if score else 0.0, reason="\n".join(reason)
         )
 
     except Exception as e:
-        LOGGER.error(f"Failed to parse StructuredOutputCompliance output: {e}", exc_info=True)
+        LOGGER.error(
+            f"Failed to parse StructuredOutputCompliance output: {e}", exc_info=True
+        )
         raise exceptions.MetricComputationError(
             logging_messages.STRUCTURED_OUTPUT_COMPLIANCE_FAILED
         )

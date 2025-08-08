@@ -1,9 +1,13 @@
 from typing import Union, Optional, List, Any
 import pydantic
+import logging
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
+from opik import exceptions
 from . import template, parser
+
+LOGGER = logging.getLogger(__name__)
 
 
 class StructuredOutputComplianceResponseFormat(pydantic.BaseModel):
@@ -28,7 +32,9 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "structured_output_compliance",
-        few_shot_examples: Optional[List[template.FewShotExampleStructuredOutputCompliance]] = None,
+        few_shot_examples: Optional[
+            List[template.FewShotExampleStructuredOutputCompliance]
+        ] = None,
         track: bool = True,
         project_name: Optional[str] = None,
     ):
@@ -36,7 +42,9 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         self._init_model(model)
         self.few_shot_examples = few_shot_examples
 
-    def _init_model(self, model: Optional[Union[str, base_model.OpikBaseModel]]) -> None:
+    def _init_model(
+        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+    ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
@@ -56,17 +64,27 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: An object containing the compliance score and reasons.
         """
-        llm_query = template.generate_query(
-            output=output,
-            schema=schema,
-            few_shot_examples=self.few_shot_examples,
-        )
+        try:
+            llm_query = template.generate_query(
+                output=output,
+                schema=schema,
+                few_shot_examples=self.few_shot_examples,
+            )
 
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=StructuredOutputComplianceResponseFormat
-        )
+            model_output = self._model.generate_string(
+                input=llm_query,
+                response_format=StructuredOutputComplianceResponseFormat,
+            )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+            return parser.parse_model_output(content=model_output, name=self.name)
+
+        except Exception as e:
+            LOGGER.error(
+                f"Structured output compliance evaluation failed: {e}", exc_info=True
+            )
+            raise exceptions.MetricComputationError(
+                f"Structured output compliance evaluation failed: {str(e)}"
+            ) from e
 
     async def ascore(
         self,
@@ -82,14 +100,24 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: An object containing the compliance score and reasons.
         """
-        llm_query = template.generate_query(
-            output=output,
-            schema=schema,
-            few_shot_examples=self.few_shot_examples,
-        )
+        try:
+            llm_query = template.generate_query(
+                output=output,
+                schema=schema,
+                few_shot_examples=self.few_shot_examples,
+            )
 
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=StructuredOutputComplianceResponseFormat
-        )
+            model_output = await self._model.agenerate_string(
+                input=llm_query,
+                response_format=StructuredOutputComplianceResponseFormat,
+            )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+            return parser.parse_model_output(content=model_output, name=self.name)
+
+        except Exception as e:
+            LOGGER.error(
+                f"Structured output compliance evaluation failed: {e}", exc_info=True
+            )
+            raise exceptions.MetricComputationError(
+                f"Structured output compliance evaluation failed: {str(e)}"
+            ) from e

@@ -103,7 +103,7 @@ if True:
 
     structured_output_score = structured_output_metric.score(
         output='{"name": "Alice", "age": 30}',
-        schema='{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}'
+        schema='{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}',
     )
 
     print("structured_output_score:", structured_output_score)
