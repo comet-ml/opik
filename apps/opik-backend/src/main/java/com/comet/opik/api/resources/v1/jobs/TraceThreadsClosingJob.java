@@ -82,7 +82,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                                 || error instanceof InterruptedException
                                 || hasCause(error, InterruptedException.class)) {
                             log.warn("TraceThreadsClosingJob was interrupted", error);
-                            Thread.currentThread().interrupt(); // Restore interrupt status
+//                            Thread.currentThread().interrupt(); // Restore interrupt status
                         } else {
                             log.error("Error processing closing of trace threads", error);
                         }
@@ -101,7 +101,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
     public void interrupt() {
         log.info("TraceThreadsClosingJob interruption requested");
         interrupted.set(true);
-        Thread.currentThread().interrupt();
+//        Thread.currentThread().interrupt();
         log.info("TraceThreadsClosingJob interruption completed");
     }
 
