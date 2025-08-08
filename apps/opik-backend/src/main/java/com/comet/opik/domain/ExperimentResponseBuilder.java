@@ -189,17 +189,7 @@ public class ExperimentResponseBuilder {
                         p99Sum.divide(BigDecimal.valueOf(totalExperimentCount), 9, RoundingMode.HALF_UP))
                 : null;
 
-        List<FeedbackScoreAverage> avgFeedbackScores = feedbackScoreSums.entrySet().stream()
-                .map(entry -> {
-                    String name = entry.getKey();
-                    BigDecimal sum = entry.getValue();
-                    Long count = feedbackScoreCounts.get(name);
-                    BigDecimal avg = count > 0
-                            ? sum.divide(BigDecimal.valueOf(count), 9, RoundingMode.HALF_UP)
-                            : BigDecimal.ZERO;
-                    return new FeedbackScoreAverage(name, avg);
-                })
-                .toList();
+        List<FeedbackScoreAverage> avgFeedbackScores = buildAvgFeedbackScores(feedbackScoreSums, feedbackScoreCounts);
 
         // Build updated aggregation data
         return AggregationData.builder()
@@ -210,6 +200,21 @@ public class ExperimentResponseBuilder {
                 .duration(avgDuration)
                 .feedbackScores(avgFeedbackScores)
                 .build();
+    }
+
+    private List<FeedbackScoreAverage> buildAvgFeedbackScores(Map<String, BigDecimal> feedbackScoreSums,
+            Map<String, Long> feedbackScoreCounts) {
+        return feedbackScoreSums.entrySet().stream()
+                .map(entry -> {
+                    String name = entry.getKey();
+                    BigDecimal sum = entry.getValue();
+                    Long count = feedbackScoreCounts.get(name);
+                    BigDecimal avg = count > 0
+                            ? sum.divide(BigDecimal.valueOf(count), 9, RoundingMode.HALF_UP)
+                            : BigDecimal.ZERO;
+                    return new FeedbackScoreAverage(name, avg);
+                })
+                .toList();
     }
 
     private AggregationData buildAggregationData(ExperimentGroupAggregationItem item) {
