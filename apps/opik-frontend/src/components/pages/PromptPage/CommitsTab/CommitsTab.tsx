@@ -11,7 +11,9 @@ import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 import { COLUMN_TYPE } from "@/types/shared";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
@@ -22,6 +24,7 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 
 export const getRowId = (p: PromptVersion) => p.id;
 
@@ -115,7 +118,6 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   );
 
   const versions = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
   const noDataText = "There are no commits yet";
 
   const resizeConfig = useMemo(
@@ -136,12 +138,16 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-end">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-end gap-x-8 gap-y-2 py-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <CommitsActionsPanel versions={selectedRows} />
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={COMMITS_DEFAULT_COLUMNS}
         data={versions}
@@ -152,17 +158,24 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         }}
         getRowId={getRowId}
         noData={<DataTableNoData title={noDataText} />}
+        TableBody={DataTableVirtualBody}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
-          page={page}
+          page={page as number}
           pageChange={setPage}
-          size={size}
+          size={size as number}
           sizeChange={setSize}
-          total={total}
-        />
-      </div>
-    </div>
+          total={data?.total ?? 0}
+        ></DataTablePagination>
+      </PageBodyStickyContainer>
+    </>
   );
 };
 

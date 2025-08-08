@@ -1,4 +1,3 @@
-PYTHON_SCORING_COMMAND = """
 import inspect
 import json
 import traceback
@@ -15,12 +14,15 @@ TRACE_THREAD_METRIC_TYPE = "trace_thread"  # Referenced in the payload_types.py 
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        if issubclass(cls, BaseMetric):
+        if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
+    return None
 
 
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
+    if score_result is None:
+        return scores
     if isinstance(score_result, ScoreResult):
         scores = [score_result]
     elif isinstance(score_result, list):
@@ -39,7 +41,7 @@ module = ModuleType(str(uuid.uuid4()))
 try:
     exec(code, module.__dict__)
 except Exception:  
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[2:])  
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])  
     print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
     exit(1)
 
@@ -59,7 +61,7 @@ try:
         # Regular scoring - unpack data as keyword arguments
         score_result = metric.score(**data)
 except Exception:
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[2:])
+    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])
     print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
     exit(1)
         
@@ -67,4 +69,3 @@ scores = to_scores(score_result)
 
 response = json.dumps({"scores": [score.__dict__ for score in scores]})
 print(response)
-"""

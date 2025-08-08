@@ -18,6 +18,7 @@ jobs:
   tests:
     name: Evaluation Metrics Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/python

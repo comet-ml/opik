@@ -38,6 +38,7 @@ jobs:
 
   set-version:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
         version: ${{ steps.version.outputs.version }}
         build_from: ${{ steps.version.outputs.build_from }}
