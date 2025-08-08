@@ -251,6 +251,91 @@ def test__trajectory_accuracy__poor_quality(model):
     assert result.value < 0.6  # Should get a low score for poor trajectory
 
 
+@model_parametrizer
+def test__structured_output_compliance__valid_json(model):
+    """Test structured output compliance with valid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__structured_output_compliance__invalid_json(model):
+    """Test structured output compliance with invalid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": New York}'  # Missing quotes
+    )
+
+    assert_helpers.assert_score_result(result)
+    # Should get a low score for invalid JSON
+    assert result.value < 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_schema(model):
+    """Test structured output compliance with schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema="User(name: str, age: int)"
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_few_shot_examples(model):
+    """Test structured output compliance with few-shot examples."""
+    few_shot_examples = [
+        {
+            "title": "Valid JSON",
+            "output": '{"name": "Alice", "age": 25}',
+            "schema": "User(name: str, age: int)",
+            "score": True,
+            "reason": "Valid JSON format",
+        },
+        {
+            "title": "Invalid JSON",
+            "output": '{"name": "Bob", age: 30}',
+            "schema": "User(name: str, age: int)",
+            "score": False,
+            "reason": "Missing quotes around age value",
+        },
+    ]
+
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, few_shot_examples=few_shot_examples, track=False
+    )
+
+    result = structured_output_metric.score(output='{"name": "John", "age": 30}')
+
+    assert_helpers.assert_score_result(result)
+
+
+@pytest.mark.asyncio
+async def test__structured_output_compliance__async():
+    """Test async structured output compliance scoring."""
+    structured_output_metric = metrics.StructuredOutputCompliance()
+
+    result = await structured_output_metric.ascore(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
 def test__ragas_exact_match():
     ragas_exact_match_metric = metrics.RagasMetricWrapper(
         ragas_metric=ragas_metrics.ExactMatch(), track=False
