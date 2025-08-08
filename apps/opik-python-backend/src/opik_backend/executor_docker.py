@@ -79,56 +79,10 @@ class DockerExecutor(CodeExecutorBase):
         # Pre-warm the container pool
         self._pre_warm_container_pool()
 
-        # Detect which scoring commands to use based on Docker image capabilities
-        self._detect_scoring_commands()
-
         # Start the pool monitor
         self._start_pool_monitor()
 
         atexit.register(self.cleanup)
-
-    def _detect_scoring_commands(self):
-        """
-        Check if the Docker image has the new scoring_runner.py file and choose
-        the appropriate commands module accordingly.
-        """
-        logger.info("Detecting Docker image capabilities for scoring commands")
-        
-        try:
-            # Create a temporary container to check file existence
-            image_name = f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}"
-            container = self.client.containers.run(
-                image_name,
-                command=["test", "-f", "/app/scoring_runner.py"],
-                detach=True,
-                remove=False,
-                network_disabled=self.network_disabled,
-                labels=self.container_labels
-            )
-            
-            # Wait for the command to complete
-            result = container.wait()
-            exit_code = result['StatusCode']
-            
-            # Clean up the test container
-            container.remove()
-            
-            if exit_code == 0:
-                # File exists - use modern commands
-                logger.info("Using modern scoring commands (scoring_runner.py found)")
-                from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
-                self.python_scoring_command = PYTHON_SCORING_COMMAND
-            else:
-                # File doesn't exist - use legacy commands
-                logger.info("Using legacy scoring commands (scoring_runner.py not found)")
-                from opik_backend.scoring_commands_old import PYTHON_SCORING_COMMAND
-                self.python_scoring_command = PYTHON_SCORING_COMMAND
-                
-        except Exception as e:
-            logger.warning(f"Failed to detect scoring commands, falling back to legacy: {e}")
-            # Fall back to legacy commands on any error
-            from opik_backend.scoring_commands_old import PYTHON_SCORING_COMMAND
-            self.python_scoring_command = PYTHON_SCORING_COMMAND
 
     def _start_pool_monitor(self):
         """Start a background thread that periodically checks and fills the container pool."""
@@ -155,7 +109,6 @@ class DockerExecutor(CodeExecutorBase):
         except Exception as e:
             logger.error(f"Error in pool monitor: {e}")
             return None  # Continue the job despite the error
-
 
     def _run_scheduler(self):
         """Run the scheduler in a background thread."""
@@ -290,15 +243,8 @@ class DockerExecutor(CodeExecutorBase):
         get_container_histogram.record(latency, attributes={"method": "get_container"})
 
         try:
-            # Handle both modern (list) and legacy (string) command formats
-            if isinstance(self.python_scoring_command, list):
-                # Modern format: direct command list
-                cmd = self.python_scoring_command + [code, json.dumps(data)]
-                if payload_type:
-                    cmd.append(payload_type)
-            else:
-                # Legacy format: string command with python -c
-                cmd = ["python", "-c", self.python_scoring_command, code, json.dumps(data), payload_type or ""]
+            # Legacy format: string command with python -c
+            cmd = ["python", "-S", "/opt/opik-python-backend/scoring_runner.py", code, json.dumps(data), payload_type or ""]
             
             future = self.scoring_executor.submit(
                 container.exec_run,
