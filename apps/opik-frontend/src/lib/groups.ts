@@ -1,5 +1,9 @@
 import uniqid from "uniqid";
-import { COLUMN_TYPE } from "@/types/shared";
+import {
+  COLUMN_DATASET_ID,
+  COLUMN_METADATA_ID,
+  COLUMN_TYPE,
+} from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
 import { FlattenGroup, Group, Groups } from "@/types/groups";
 import {
@@ -111,3 +115,16 @@ export const buildGroupFieldNameForMeta = (group: Group) =>
 
 export const buildGroupFieldId = (group: Group, value: string) =>
   `${buildGroupFieldName(group)}:${value}`;
+
+export const calculateGroupLabel = (group?: Group) => {
+  if (!group) return "";
+
+  switch (group.field) {
+    case COLUMN_DATASET_ID:
+      return "Dataset";
+    case COLUMN_METADATA_ID:
+      return `config.${group.key}`;
+    default:
+      return group.field + (group.key ? ` (${group.key})` : "");
+  }
+};

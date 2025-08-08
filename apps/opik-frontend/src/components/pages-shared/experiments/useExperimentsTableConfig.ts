@@ -16,11 +16,14 @@ import {
   ColumnData,
   DynamicColumn,
   COLUMN_TYPE,
+  COLUMN_DATASET_ID,
+  COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
   buildGroupFieldName,
   buildGroupFieldNameForMeta,
+  calculateGroupLabel,
   checkIsGroupRowType,
 } from "@/lib/groups";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -154,7 +157,7 @@ export const useExperimentsTableConfig = <
 
   const columns = useMemo(() => {
     const groupColumns = groups.map((group) => {
-      const label = group.field + (group.key ? ` (${group.key})` : "");
+      const label = calculateGroupLabel(group);
       const id = buildGroupFieldName(group);
       const metaKey = buildGroupFieldNameForMeta(group);
 
@@ -174,12 +177,10 @@ export const useExperimentsTableConfig = <
         },
       } as ColumnData<T>;
 
-      // Handle specific column types
       switch (group.field) {
-        case "dataset_id":
+        case COLUMN_DATASET_ID:
           groupCellDef = {
             ...groupCellDef,
-            label: "Dataset",
             type: COLUMN_TYPE.string,
             cell: ResourceCell.Group as never,
             customMeta: {
@@ -196,10 +197,9 @@ export const useExperimentsTableConfig = <
             },
           } as ColumnData<T>;
           break;
-        case "metadata":
+        case COLUMN_METADATA_ID:
           groupCellDef = {
             ...groupCellDef,
-            label: `config.${group.key}`,
             type: COLUMN_TYPE.dictionary,
           } as ColumnData<T>;
           break;
