@@ -83,8 +83,8 @@ public class FiltersFactory {
 
                         return false;
                     })
-                    .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
-                            filter.key() != null)
+                    .put(FieldType.DICTIONARY, filter -> filter.value() != null &&
+                            StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
                     .build());
 
