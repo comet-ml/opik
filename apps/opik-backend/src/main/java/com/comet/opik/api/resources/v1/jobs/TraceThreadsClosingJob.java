@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
@@ -54,38 +55,42 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
-        // Check for interruption before starting
-        if (Thread.currentThread().isInterrupted() || interrupted.get()) {
-            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
-            return;
+        try {
+            // Check for interruption before starting
+            if (Thread.currentThread().isInterrupted() || interrupted.get()) {
+                log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+                return;
+            }
+
+            var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
+            var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
+                    .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
+            int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
+
+            lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
+                    .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout()))
+                    .doOnSuccess(__ -> {
+                        if (!interrupted.get()) {
+                            log.info("Successfully started closing trace threads process");
+                        } else {
+                            log.info("TraceThreadsClosingJob completed but was interrupted during execution");
+                        }
+                    })
+                    .doOnError(error -> {
+                        if (Thread.currentThread().isInterrupted()
+                                || interrupted.get()
+                                || error instanceof InterruptedException
+                                || hasCause(error, InterruptedException.class)) {
+                            log.warn("TraceThreadsClosingJob was interrupted", error);
+                            Thread.currentThread().interrupt(); // Restore interrupt status
+                        } else {
+                            log.error("Error processing closing of trace threads", error);
+                        }
+                    })
+                    .block(Duration.ofSeconds(6 + jobTimeoutConfig.getTraceThreadsClosingJobTimeout()));
+        } catch (Exception exception) {
+            log.error("Wide exception caught", exception);
         }
-
-        var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
-        var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
-                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
-        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
-
-        lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
-                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout()))
-                .doOnSuccess(__ -> {
-                    if (!interrupted.get()) {
-                        log.info("Successfully started closing trace threads process");
-                    } else {
-                        log.info("TraceThreadsClosingJob completed but was interrupted during execution");
-                    }
-                })
-                .doOnError(error -> {
-                    if (Thread.currentThread().isInterrupted()
-                            || interrupted.get()
-                            || error instanceof InterruptedException
-                            || hasCause(error, InterruptedException.class)) {
-                        log.warn("TraceThreadsClosingJob was interrupted", error);
-                        Thread.currentThread().interrupt(); // Restore interrupt status
-                    } else {
-                        log.error("Error processing closing of trace threads", error);
-                    }
-                })
-                .block(Duration.ofSeconds(6 + jobTimeoutConfig.getTraceThreadsClosingJobTimeout()));
     }
 
     public static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
