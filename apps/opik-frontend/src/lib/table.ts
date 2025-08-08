@@ -99,6 +99,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
     },
     ...(columnData.size && { size: columnData.size }),
     cell: (columnData.cell ?? TextCell) as never,
+    ...(columnData.aggregatedCell && {
+      aggregatedCell: columnData.aggregatedCell as never,
+    }),
     enableSorting: columnData.sortable || false,
   };
 };

@@ -298,6 +298,14 @@
   }
 }
 
+.comet-table {
+  /* resets padding for all nested cells wrappers */
+  td [data-cell-wrapper="true"] [data-cell-wrapper="true"],
+  th [data-header-wrapper="true"] [data-header-wrapper="true"] {
+    padding: unset !important;
+  }
+}
+
 .comet-line-highlight {
   position: relative;
 

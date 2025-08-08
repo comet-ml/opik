@@ -71,6 +71,7 @@ type ResourceLinkProps = {
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
   asTag?: boolean;
+  isDeleted?: boolean;
 };
 
 const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
@@ -80,6 +81,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   search,
   params,
   asTag = false,
+  isDeleted = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
@@ -89,7 +91,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   };
   linkParams[props.param] = id;
 
-  const deleted = isUndefined(name);
+  const deleted = isUndefined(name) || isDeleted;
   const text = deleted ? props.deleted : name;
 
   return (

@@ -11,7 +11,7 @@ import { Button, ButtonProps } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Filter, FilterRowConfig, Filters } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
-import { createEmptyFilter, isFilterValid } from "@/lib/filters";
+import { createFilter, isFilterValid } from "@/lib/filters";
 import FilterRow from "@/components/shared/FiltersButton/FilterRow";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { cn } from "@/lib/utils";
@@ -52,7 +52,7 @@ const FiltersButton = <TColumnData,>({
   useEffect(() => {
     if (!open) {
       if (initialFilters.length === 0) {
-        setFilters([createEmptyFilter()]);
+        setFilters([createFilter()]);
       } else {
         setFilters(initialFilters);
       }
@@ -68,7 +68,7 @@ const FiltersButton = <TColumnData,>({
   }, []);
 
   const addHandler = useCallback(() => {
-    setFilters((state) => [...state, createEmptyFilter()]);
+    setFilters((state) => [...state, createFilter()]);
   }, []);
 
   const onRemoveRow = useCallback((id: string) => {
