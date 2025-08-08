@@ -14,6 +14,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum OpenaiModelName implements StructuredOutputSupported {
     CHATGPT_4O_LATEST("chatgpt-4o-latest", true),
+    GPT_5_CHAT("gpt-5-chat", true),
+    GPT_5_MINI("gpt-5-mini", true),
     GPT_4O("gpt-4o", true),
     GPT_4O_2024_05_13("gpt-4o-2024-05-13", false),
     GPT_4O_2024_08_06("gpt-4o-2024-08-06", true),

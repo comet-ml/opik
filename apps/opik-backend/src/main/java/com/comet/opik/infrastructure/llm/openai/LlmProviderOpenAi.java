@@ -20,6 +20,9 @@ public class LlmProviderOpenAi implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+        if (isGpt5Model(request.model())) {
+            return openAiClient.responses(request).execute();
+        }
         return openAiClient.chatCompletion(request).execute();
     }
 
@@ -30,11 +33,19 @@ public class LlmProviderOpenAi implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        openAiClient.chatCompletion(request)
-                .onPartialResponse(handleMessage)
-                .onComplete(handleClose)
-                .onError(handleError)
-                .execute();
+        if (isGpt5Model(request.model())) {
+            openAiClient.responses(request)
+                    .onPartialResponse(handleMessage)
+                    .onComplete(handleClose)
+                    .onError(handleError)
+                    .execute();
+        } else {
+            openAiClient.chatCompletion(request)
+                    .onPartialResponse(handleMessage)
+                    .onComplete(handleClose)
+                    .onError(handleError)
+                    .execute();
+        }
     }
 
     @Override
@@ -45,6 +56,10 @@ public class LlmProviderOpenAi implements LlmProviderService {
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log);
+    }
+
+    private boolean isGpt5Model(String model) {
+        return model != null && model.startsWith("gpt-5");
     }
 
 }
