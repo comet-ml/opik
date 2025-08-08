@@ -27,6 +27,7 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
+  REASONING_EFFORT: "medium" as const,
 };
 
 export const DEFAULT_ANTHROPIC_CONFIGS = {

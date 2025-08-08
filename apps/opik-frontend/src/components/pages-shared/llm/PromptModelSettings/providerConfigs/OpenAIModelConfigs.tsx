@@ -5,6 +5,13 @@ import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/Pro
 import { LLMOpenAIConfigsType } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
@@ -96,6 +103,26 @@ const OpenAIModelConfigs = ({
           }
         />
       )}
+
+      <div className="flex flex-col gap-2">
+        <label className="comet-body">Reasoning effort</label>
+        <Select
+          value={(configs.reasoningEffort ?? DEFAULT_OPEN_AI_CONFIGS.REASONING_EFFORT) as string}
+          onValueChange={(v) =>
+            onChange({ reasoningEffort: v as LLMOpenAIConfigsType["reasoningEffort"] })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={DEFAULT_OPEN_AI_CONFIGS.REASONING_EFFORT} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="minimal">minimal</SelectItem>
+            <SelectItem value="low">low</SelectItem>
+            <SelectItem value="medium">medium</SelectItem>
+            <SelectItem value="high">high</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 };

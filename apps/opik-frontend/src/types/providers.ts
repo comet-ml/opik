@@ -26,6 +26,9 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_3_5_TURBO = "gpt-3.5-turbo",
   GPT_3_5_TURBO_1106 = "gpt-3.5-turbo-1106",
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
+  GPT_5 = "gpt-5",
+  GPT_5_MINI = "gpt-5-mini",
+  GPT_5_NANO = "gpt-5-nano",
 
   //  <----- anthropic
   CLAUDE_4_SONNET = "claude-4-sonnet",
@@ -432,6 +435,7 @@ export interface LLMOpenAIConfigsType {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 }
 
 export interface LLMAnthropicConfigsType {

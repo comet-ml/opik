@@ -13,6 +13,16 @@ import java.util.Optional;
 @Slf4j
 @RequiredArgsConstructor
 public enum OpenaiModelName implements StructuredOutputSupported {
+    // GPT-5 family
+    GPT_5("gpt-5", true),
+    GPT_5_MINI("gpt-5-mini", true),
+    GPT_5_NANO("gpt-5-nano", true),
+    GPT_5_CHAT("gpt-5-chat", true),
+    GPT_5_CHAT_LATEST("gpt-5-chat-latest", true),
+    GPT_5_2025_08_07("gpt-5-2025-08-07", true),
+    GPT_5_MINI_2025_08_07("gpt-5-mini-2025-08-07", true),
+    GPT_5_NANO_2025_08_07("gpt-5-nano-2025-08-07", true),
+
     CHATGPT_4O_LATEST("chatgpt-4o-latest", true),
     GPT_4O("gpt-4o", true),
     GPT_4O_2024_05_13("gpt-4o-2024-05-13", false),
