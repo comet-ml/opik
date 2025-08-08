@@ -86,7 +86,7 @@ public class DailyUsageReportJob extends Job {
             } catch (Exception e) {
                 if (Thread.currentThread().isInterrupted() || e.getCause() instanceof InterruptedException) {
                     log.info("Daily usage report job was interrupted");
-                    Thread.currentThread().interrupt(); // Restore interrupt status
+                    //                    Thread.currentThread().interrupt(); // Restore interrupt status
                 } else {
                     log.error("Failed to generate daily usage report", e);
                 }
