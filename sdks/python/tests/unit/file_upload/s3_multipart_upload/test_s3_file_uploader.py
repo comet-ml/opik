@@ -9,7 +9,8 @@ import tenacity
 
 from opik.file_upload import file_upload_monitor
 from opik.file_upload.s3_multipart_upload import file_parts_strategy, s3_upload_error
-from opik.file_upload.s3_multipart_upload import s3_file_uploader, s3_httpx_client
+from opik.file_upload.s3_multipart_upload import s3_file_uploader
+from opik import s3_httpx_client
 from .. import conftest
 
 
