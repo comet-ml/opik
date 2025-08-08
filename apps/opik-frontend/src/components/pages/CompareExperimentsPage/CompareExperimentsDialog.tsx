@@ -54,7 +54,6 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
   const { data, isPending } = useExperimentsList(
     {
       workspaceName,
-      datasetId,
       filters: [
         createFilter({
           field: "dataset_id",

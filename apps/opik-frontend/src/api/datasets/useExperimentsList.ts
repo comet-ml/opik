@@ -11,7 +11,6 @@ const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
 export type UseExperimentsListParams = {
   workspaceName?: string;
-  datasetId?: string;
   promptId?: string;
   optimizationId?: string;
   datasetDeleted?: boolean;

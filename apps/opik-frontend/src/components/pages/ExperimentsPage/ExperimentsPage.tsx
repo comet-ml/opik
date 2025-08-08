@@ -443,7 +443,7 @@ const ExperimentsPage: React.FC = () => {
                 );
 
                 return label === DELETED_DATASET_LABEL
-                  ? "Dataset deleted"
+                  ? "Deleted dataset"
                   : label || value || "Undefined";
               }),
               experiments: groupExperiments,
