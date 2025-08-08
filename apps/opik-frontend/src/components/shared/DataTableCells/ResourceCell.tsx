@@ -15,6 +15,7 @@ type CustomMeta = {
   resource: RESOURCE_TYPE;
   getSearch?: (cellData: unknown) => Record<string, string | number>;
   getParams?: (cellData: unknown) => Record<string, string | number>;
+  getIsDeleted?: (cellData: unknown) => boolean;
 };
 
 const ResourceCell = (context: CellContext<unknown, string>) => {
@@ -26,12 +27,16 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
     idKey = "id",
     getSearch,
     getParams,
+    getIsDeleted,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined);
   const id = get(cellData, idKey, undefined);
   const search = isFunction(getSearch) ? getSearch(cellData) : undefined;
   const params = isFunction(getParams) ? getParams(cellData) : undefined;
+  const isDeleted = isFunction(getIsDeleted)
+    ? getIsDeleted(cellData)
+    : undefined;
 
   return (
     <CellWrapper
@@ -46,6 +51,7 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
           resource={resource}
           search={search}
           params={params}
+          isDeleted={isDeleted}
         />
       ) : (
         "-"
