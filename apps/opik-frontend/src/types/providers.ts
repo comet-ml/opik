@@ -16,6 +16,11 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
   GPT_4_1 = "gpt-4.1",
   GPT_4_1_MINI = "gpt-4.1-mini",
+  GPT_5 = "gpt-5",
+  GPT_5_PREVIEW = "gpt-5-preview",
+  GPT_5_2025_01_14 = "gpt-5-2025-01-14",
+  GPT_5_MINI = "gpt-5-mini",
+  GPT_5_NANO = "gpt-5-nano",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -432,6 +437,7 @@ export interface LLMOpenAIConfigsType {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 }
 
 export interface LLMAnthropicConfigsType {
