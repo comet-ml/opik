@@ -1260,6 +1260,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/groups/aggregations:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups with aggregations
+      description: Find experiments grouped by specified fields with aggregation metrics
+      operationId: findExperimentGroupsAggregations
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups with aggregations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupAggregationsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -7055,6 +7092,37 @@ components:
       properties:
         label:
           type: string
+    AggregationData:
+      type: object
+      properties:
+        experiment_count:
+          type: integer
+          format: int64
+        trace_count:
+          type: integer
+          format: int64
+        total_estimated_cost:
+          type: number
+        total_estimated_cost_avg:
+          type: number
+        duration:
+          $ref: "#/components/schemas/PercentageValues"
+        feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+    ExperimentGroupAggregationsResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContentWithAggregations"
+    GroupContentWithAggregations:
+      type: object
+      properties:
+        aggregations:
+          $ref: "#/components/schemas/AggregationData"
     ExperimentItemStreamRequest:
       required:
       - experiment_name
