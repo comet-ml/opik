@@ -140,6 +140,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                       <PromptModelConfigs
                         size="icon"
                         provider={provider}
+                        model={model}
                         configs={field.value}
                         onChange={field.onChange}
                       />

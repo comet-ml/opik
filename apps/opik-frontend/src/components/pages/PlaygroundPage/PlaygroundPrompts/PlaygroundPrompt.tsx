@@ -237,6 +237,7 @@ const PlaygroundPrompt = ({
           </div>
           <PromptModelConfigs
             provider={provider}
+            model={model}
             configs={configs}
             onChange={handleUpdateConfig}
           />
