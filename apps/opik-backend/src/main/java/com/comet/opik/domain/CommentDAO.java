@@ -1,9 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -67,7 +65,7 @@ class CommentDAOImpl implements CommentDAO {
                 text,
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             VALUES
             (
                  :id,
@@ -97,7 +95,7 @@ class CommentDAOImpl implements CommentDAO {
     private static final String UPDATE = """
             INSERT INTO comments (
             	id, entity_id, entity_type, project_id, workspace_id, text, created_at, created_by, last_updated_by
-            ) <settings_clause>
+            )
             SELECT
             	id,
             	entity_id,
@@ -132,19 +130,13 @@ class CommentDAOImpl implements CommentDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> addComment(@NonNull UUID commentId, @NonNull UUID entityId, @NonNull EntityType entityType,
             @NonNull UUID projectId,
             @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
-            ST template = new ST(INSERT_COMMENT);
-
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(INSERT_COMMENT);
 
             bindParameters(commentId, entityId, entityType, projectId, comment, statement);
 
@@ -178,12 +170,7 @@ class CommentDAOImpl implements CommentDAO {
     @Override
     public Mono<Void> updateComment(@NonNull UUID commentId, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
-            ST update = new ST(UPDATE);
-
-            ClickhouseUtils.checkAsyncConfig(update, opikConfiguration.getAsyncInsert());
-
-            var statement = connection.createStatement(update.render())
+            var statement = connection.createStatement(UPDATE)
                     .bind("text", comment.text())
                     .bind("id", commentId);
 

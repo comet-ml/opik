@@ -21,9 +21,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -149,7 +147,7 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            ) <settings_clause>
+            )
             VALUES
                 <items:{item |
                     (
@@ -199,7 +197,7 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode
-            ) <settings_clause>
+            )
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -295,7 +293,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String UPDATE = """
             INSERT INTO traces (
             	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            )  <settings_clause>
+            )
             SELECT
             	id,
             	project_id,
@@ -775,7 +773,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
                 id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
-            ) <settings_clause>
+            )
             SELECT
                 new_trace.id as id,
                 multiIf(
@@ -1593,7 +1591,6 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -1652,8 +1649,6 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         return template;
     }
@@ -1717,8 +1712,6 @@ class TraceDAOImpl implements TraceDAO {
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2168,8 +2161,6 @@ class TraceDAOImpl implements TraceDAO {
 
             var template = new ST(BATCH_INSERT)
                     .add("items", queryItems);
-
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
             Statement statement = connection.createStatement(template.render());
 

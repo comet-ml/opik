@@ -6,9 +6,7 @@ import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
 import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -20,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -62,7 +59,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
                 created_by,
                 last_updated_by,
                 last_updated_at
-            ) <settings_clause>
+            )
             VALUES
             (
                  :entity_id,
@@ -140,18 +137,13 @@ class AttachmentDAOImpl implements AttachmentDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> addAttachment(@NonNull AttachmentInfoHolder attachmentInfo,
             @NonNull String mimeType, long fileSize) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(INSERT_ATTACHMENT);
-
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(INSERT_ATTACHMENT);
 
             statement.bind("entity_id", attachmentInfo.entityId())
                     .bind("entity_type", attachmentInfo.entityType().getValue())
