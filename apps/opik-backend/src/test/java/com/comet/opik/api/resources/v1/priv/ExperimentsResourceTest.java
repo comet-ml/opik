@@ -5099,5 +5099,71 @@ class ExperimentsResourceTest {
             assertThat(actualExperimentItems.getFirst().datasetItemId()).isEqualTo(datasetItem1.id());
             assertThat(actualExperimentItems.getFirst().traceId()).isEqualTo(trace1.id());
         }
+
+        @Test
+        @DisplayName("Should fail when using same experiment ID with a different experiment name")
+        void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentName__thenReturnConflict() {
+            // given - Create first dataset and experiment
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Generate a UUID v7 for the experiment
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var trace = createTrace();
+            var span = creatrSpan();
+            var feedbackScore = createScore();
+
+            var bulkRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .trace(trace)
+                    .spans(List.of(span))
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the generated experiment ID
+                    .items(List.of(bulkRecord))
+                    .build();
+
+            // when - upload first batch successfully
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+
+            // then - second upload should fail with conflict
+            var anotherExperimentName = "Another Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload.toBuilder()
+                    .experimentName(anotherExperimentName)
+                    .build(), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+
+                var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).contains(
+                        "Experiment '" + experimentId + "' has name '" +
+                                experimentName + "', but request specifies a different name '" +
+                                anotherExperimentName + "'");
+            }
+
+            // Verify only the first experiment items were created
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperimentItems).hasSize(1);
+            assertThat(actualExperimentItems.getFirst().experimentId()).isEqualTo(experimentId);
+            assertThat(actualExperimentItems.getFirst().datasetItemId()).isEqualTo(datasetItem.id());
+            assertThat(actualExperimentItems.getFirst().traceId()).isEqualTo(trace.id());
+        }
     }
 }
