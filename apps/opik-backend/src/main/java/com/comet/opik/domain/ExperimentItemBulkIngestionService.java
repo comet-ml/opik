@@ -123,6 +123,12 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                 experiment.datasetName() + "'";
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
+                    if (!experiment.name().equals(existingExperiment.name())) {
+                        String errorMessage = "Experiment '" + experiment.id() + "' has name '" +
+                                existingExperiment.name() + "', but request specifies a different name '" +
+                                experiment.name() + "'";
+                        return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                    }
                     return Mono.<Void>empty();
                 });
     }
