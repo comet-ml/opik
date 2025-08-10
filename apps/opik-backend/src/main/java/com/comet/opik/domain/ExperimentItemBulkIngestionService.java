@@ -14,7 +14,6 @@ import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -71,9 +70,22 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return resolveExperiment(experiment, workspaceId)
+            return experimentService.create(experiment)
                     .retryWhen(AsyncUtils.handleConnectionError())
                     .flatMap(experimentId -> {
+                        // Validate dataset consistency if experiment ID was provided in the request
+                        if (experiment.id() != null) {
+                            return validateDatasetConsistency(experiment, workspaceId)
+                                    .thenReturn(experimentId);
+                        } else {
+                            // New experiment created, no validation needed
+                            return Mono.just(experimentId);
+                        }
+                    })
+                    .flatMap(experimentId -> {
+                        log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                                experimentId, experiment.name(), experiment.datasetName(), workspaceId);
+
                         Set<ExperimentItem> experimentItems = new HashSet<>();
                         List<Trace> traces = new ArrayList<>();
                         List<Span> spans = new ArrayList<>();
@@ -102,41 +114,16 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private Mono<UUID> resolveExperiment(Experiment experiment, String workspaceId) {
-        if (experiment.id() != null) {
-            log.info("Using existing experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
-                    experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
-            return validateExistingExperiment(experiment, workspaceId)
-                    .thenReturn(experiment.id());
-        } else {
-            log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
-                    experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
-            return experimentService.create(experiment);
-        }
-    }
-
-    /**
-     * Validates that an existing experiment belongs to the workspace and has matching dataset.
-     */
-    private Mono<Void> validateExistingExperiment(Experiment experiment, String workspaceId) {
-        // First validate workspace ownership using the existing method
-        return experimentService.validateExperimentWorkspace(workspaceId, Set.of(experiment.id()))
-                .flatMap(isValid -> {
-                    if (Boolean.FALSE.equals(isValid)) {
-                        return Mono.error(new NotFoundException("Experiment not found: '" + experiment.id() + "'"));
+    private Mono<Void> validateDatasetConsistency(Experiment experiment, String workspaceId) {
+        return experimentService.getById(experiment.id())
+                .flatMap(existingExperiment -> {
+                    if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
+                        String errorMessage = "Experiment '" + experiment.id() + "' belongs to dataset '" +
+                                existingExperiment.datasetName() + "', but request specifies dataset '" +
+                                experiment.datasetName() + "'";
+                        return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
-
-                    // Then validate dataset consistency by getting the experiment
-                    return experimentService.getById(experiment.id())
-                            .flatMap(existingExperiment -> {
-                                if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
-                                    String errorMessage = "Experiment '" + experiment.id() + "' belongs to dataset '" +
-                                            existingExperiment.datasetName() + "', but request specifies dataset '" +
-                                            experiment.datasetName() + "'";
-                                    return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
-                                }
-                                return Mono.<Void>empty();
-                            });
+                    return Mono.<Void>empty();
                 });
     }
 
