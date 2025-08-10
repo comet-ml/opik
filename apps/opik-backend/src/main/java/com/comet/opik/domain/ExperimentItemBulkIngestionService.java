@@ -13,6 +13,9 @@ import com.comet.opik.utils.AsyncUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ public interface ExperimentItemBulkIngestionService {
     /**
      * Ingests a batch of experiment items.
      *
+     * @param experiment the experiment to add items to (may have null ID for new experiments)
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
@@ -56,6 +60,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     /**
      * Ingests a batch of experiment items.
      *
+     * @param experiment the experiment to add items to (may have null ID for new experiments)
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
@@ -66,13 +71,9 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return experimentService.create(experiment)
+            return resolveExperiment(experiment, workspaceId)
                     .retryWhen(AsyncUtils.handleConnectionError())
                     .flatMap(experimentId -> {
-
-                        log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
-                                experimentId, experiment.name(), experiment.datasetName(), workspaceId);
-
                         Set<ExperimentItem> experimentItems = new HashSet<>();
                         List<Trace> traces = new ArrayList<>();
                         List<Span> spans = new ArrayList<>();
@@ -99,6 +100,44 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                 .then();
                     });
         });
+    }
+
+    private Mono<UUID> resolveExperiment(Experiment experiment, String workspaceId) {
+        if (experiment.id() != null) {
+            log.info("Using existing experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                    experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
+            return validateExistingExperiment(experiment, workspaceId)
+                    .thenReturn(experiment.id());
+        } else {
+            log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                    experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
+            return experimentService.create(experiment);
+        }
+    }
+
+    /**
+     * Validates that an existing experiment belongs to the workspace and has matching dataset.
+     */
+    private Mono<Void> validateExistingExperiment(Experiment experiment, String workspaceId) {
+        // First validate workspace ownership using the existing method
+        return experimentService.validateExperimentWorkspace(workspaceId, Set.of(experiment.id()))
+                .flatMap(isValid -> {
+                    if (Boolean.FALSE.equals(isValid)) {
+                        return Mono.error(new NotFoundException("Experiment not found: '" + experiment.id() + "'"));
+                    }
+
+                    // Then validate dataset consistency by getting the experiment
+                    return experimentService.getById(experiment.id())
+                            .flatMap(existingExperiment -> {
+                                if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
+                                    String errorMessage = "Experiment '" + experiment.id() + "' belongs to dataset '" +
+                                            existingExperiment.datasetName() + "', but request specifies dataset '" +
+                                            experiment.datasetName() + "'";
+                                    return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                                }
+                                return Mono.<Void>empty();
+                            });
+                });
     }
 
     private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
