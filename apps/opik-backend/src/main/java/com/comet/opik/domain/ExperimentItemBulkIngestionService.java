@@ -37,7 +37,7 @@ public interface ExperimentItemBulkIngestionService {
     /**
      * Ingests a batch of experiment items.
      *
-     * @param experiment the experiment to add items to (may have null ID for new experiments)
+     * @param experiment the experiment to add items to
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
@@ -59,7 +59,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     /**
      * Ingests a batch of experiment items.
      *
-     * @param experiment the experiment to add items to (may have null ID for new experiments)
+     * @param experiment the experiment to add items to
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */

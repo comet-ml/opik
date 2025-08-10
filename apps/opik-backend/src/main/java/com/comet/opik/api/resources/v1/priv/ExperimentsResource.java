@@ -418,7 +418,6 @@ public class ExperimentsResource {
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
                     @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(responseCode = "404", description = "Experiment not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "409", description = "Experiment dataset mismatch", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
@@ -443,7 +442,7 @@ public class ExperimentsResource {
                 .toList();
 
         Experiment experiment = Experiment.builder()
-                .id(request.experimentId()) // May be null for new experiments
+                .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
                 .build();
