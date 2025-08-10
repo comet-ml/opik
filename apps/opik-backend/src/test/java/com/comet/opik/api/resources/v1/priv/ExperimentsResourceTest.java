@@ -5027,11 +5027,15 @@ class ExperimentsResourceTest {
             var experimentId = podamFactory.manufacturePojo(UUID.class);
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
 
-            // Create first bulk upload with the experiment ID
             var trace1 = createTrace();
+            var span1 = creatrSpan();
+            var feedbackScore1 = createScore();
+
             var bulkRecord1 = ExperimentItemBulkRecord.builder()
                     .datasetItemId(datasetItem1.id())
                     .trace(trace1)
+                    .spans(List.of(span1))
+                    .feedbackScores(List.of(feedbackScore1))
                     .build();
 
             var bulkUpload1 = ExperimentItemBulkUpload.builder()
@@ -5056,9 +5060,13 @@ class ExperimentsResourceTest {
 
             // Create second bulk upload with the same experiment ID but different dataset
             var trace2 = createTrace();
+            var span2 = creatrSpan();
+            var feedbackScore2 = createScore();
             var bulkRecord2 = ExperimentItemBulkRecord.builder()
                     .datasetItemId(datasetItem2.id())
                     .trace(trace2)
+                    .spans(List.of(span2))
+                    .feedbackScores(List.of(feedbackScore2))
                     .build();
 
             var bulkUpload2 = ExperimentItemBulkUpload.builder()
