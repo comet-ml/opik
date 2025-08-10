@@ -14,6 +14,7 @@ import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -70,18 +71,9 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return experimentService.create(experiment)
+            return validateExperimentConsistency(experiment, workspaceId)
+                    .then(experimentService.create(experiment))
                     .retryWhen(AsyncUtils.handleConnectionError())
-                    .flatMap(experimentId -> {
-                        // Validate dataset consistency if experiment ID was provided in the request
-                        if (experiment.id() != null) {
-                            return validateDatasetConsistency(experiment, workspaceId)
-                                    .thenReturn(experimentId);
-                        } else {
-                            // New experiment created, no validation needed
-                            return Mono.just(experimentId);
-                        }
-                    })
                     .flatMap(experimentId -> {
                         log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                                 experimentId, experiment.name(), experiment.datasetName(), workspaceId);
@@ -114,22 +106,34 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private Mono<Void> validateDatasetConsistency(Experiment experiment, String workspaceId) {
+    private Mono<Void> validateExperimentConsistency(Experiment experiment, String workspaceId) {
+        if (experiment.id() == null) {
+            return Mono.empty(); // New experiment, no validation needed
+        }
+
         return experimentService.getById(experiment.id())
                 .flatMap(existingExperiment -> {
+                    // Validate dataset consistency
                     if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
                         String errorMessage = "Experiment '" + experiment.id() + "' belongs to dataset '" +
                                 existingExperiment.datasetName() + "', but request specifies dataset '" +
                                 experiment.datasetName() + "'";
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
+
+                    // Validate experiment name consistency
                     if (!experiment.name().equals(existingExperiment.name())) {
                         String errorMessage = "Experiment '" + experiment.id() + "' has name '" +
                                 existingExperiment.name() + "', but request specifies a different name '" +
                                 experiment.name() + "'";
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
+
                     return Mono.<Void>empty();
+                })
+                .onErrorResume(NotFoundException.class, ex -> {
+                    // Experiment doesn't exist yet, validation passes
+                    return Mono.empty();
                 });
     }
 
