@@ -14,10 +14,13 @@ import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Request object for bulk uploading experiment items.
  * The total size of the request is limited to 4MB.
+ * If experimentId is provided, items will be added to the existing experiment.
+ * If experimentId is not provided, a new experiment will be created.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -27,6 +30,8 @@ public record ExperimentItemBulkUpload(
         @JsonView( {
                 View.ExperimentItemBulkWriteView.class}) @NotBlank String experimentName,
         @JsonView({View.ExperimentItemBulkWriteView.class}) @NotBlank String datasetName,
+        @JsonView({
+                View.ExperimentItemBulkWriteView.class}) UUID experimentId,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 250) @Valid List<ExperimentItemBulkRecord> items)
         implements
