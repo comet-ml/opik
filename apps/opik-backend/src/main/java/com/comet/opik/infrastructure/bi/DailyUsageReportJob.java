@@ -194,6 +194,6 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     @Override
     public void interrupt() {
         interrupted.set(true);
-        log.info("Daily usage job interruption completed");
+        log.info("Daily usage job successfully called interruption");
     }
 }
