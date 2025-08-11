@@ -1,11 +1,30 @@
+# Multi-stage build to reduce final image size
+FROM docker:27.5.1 AS builder
+
+# Build dependencies (only needed during pip install)
+RUN apk add --no-cache tini python3 py3-pip curl build-base && \
+    apk add --no-cache rust cargo --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+
+WORKDIR /opt/opik-python-backend
+COPY requirements.txt .
+
+# Install Python packages in virtual environment for easy copying
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
+
+##############################################################
+# Runtime stage - minimal packages only
 FROM docker:27.5.1
 
-RUN apk add --no-cache tini python3 py3-pip rust cargo
+# Only runtime dependencies needed
+RUN apk add --no-cache tini python3
 
 WORKDIR /opt/opik-python-backend
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+# Copy the virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 ENV PYTHON_CODE_EXECUTOR_ASSET_NAME="opik-sandbox-executor-python"
 # Optionally copies the file. It's built ok without it, as it'll be pulled before running anyway.
@@ -31,5 +50,8 @@ ENV PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS=3
 ENV PYTHON_CODE_EXECUTOR_STRATEGY="docker"
 ENV PYTHON_CODE_EXECUTOR_ALLOW_NETWORK=false
 
+ENV OPIK_VERSION=${OPIK_VERSION}
+
 ENTRYPOINT ["tini", "--"]
-CMD ./entrypoint.sh
+
+CMD ["./entrypoint.sh"]
