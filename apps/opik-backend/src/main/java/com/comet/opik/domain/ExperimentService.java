@@ -3,15 +3,20 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
+import com.comet.opik.api.ExperimentGroupCriteria;
+import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
+import com.comet.opik.api.ExperimentGroupItem;
+import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
@@ -35,6 +40,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -44,6 +50,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @Singleton
@@ -59,6 +66,7 @@ public class ExperimentService {
     private final @NonNull EventBus eventBus;
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull ExperimentResponseBuilder responseBuilder;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -219,6 +227,60 @@ public class ExperimentService {
         Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
         log.info("Finding experiments by name '{}'", name);
         return experimentDAO.findByName(name);
+    }
+
+    @WithSpan
+    public Mono<ExperimentGroupResponse> findGroups(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups by criteria '{}'", criteria);
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return experimentDAO.findGroups(criteria)
+                    .collectList()
+                    .flatMap(groupItems -> {
+
+                        // fetch datasets using the IDs
+                        return getEnrichInfoHolder(groupItems, criteria.groups(), workspaceId)
+                                .map(enrichInfoHolder -> responseBuilder.buildGroupResponse(groupItems,
+                                        enrichInfoHolder,
+                                        criteria.groups()));
+                    });
+        });
+    }
+
+    @WithSpan
+    public Mono<ExperimentGroupAggregationsResponse> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
+
+        return experimentDAO.findGroupsAggregations(criteria)
+                .collectList()
+                .map(responseBuilder::buildGroupAggregationsResponse);
+    }
+
+    private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<ExperimentGroupItem> groupItems,
+            List<GroupBy> groups, String workspaceId) {
+        // Check if we group by dataset, and if yes, get nesting level
+        int nestingIdx = groups.stream().filter(g -> DATASET_ID.equals(g.field()))
+                .findFirst()
+                .map(groups::indexOf)
+                .orElse(-1);
+
+        // extract IDs from groupItems
+        Set<UUID> datasetIds = nestingIdx == -1
+                ? Set.of()
+                : groupItems.stream()
+                        .map(experimentGroupItem -> experimentGroupItem.groupValues().get(nestingIdx))
+                        .filter(Objects::nonNull)
+                        .map(UUID::fromString)
+                        .collect(Collectors.toSet());
+
+        return Mono.fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(this::getDatasetMap)
+                .map(datasetMap -> ExperimentGroupEnrichInfoHolder.builder()
+                        .datasetMap(datasetMap)
+                        .build());
     }
 
     @WithSpan

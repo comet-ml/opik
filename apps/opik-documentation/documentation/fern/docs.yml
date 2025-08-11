@@ -21,6 +21,10 @@ js:
     strategy: lazyOnload
 css: ./styles.css
 
+analytics:
+  segment:
+    write-key: ${SEGMENT_WRITE_KEY}
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -103,6 +107,9 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
+          - page: Debug Mode & Environment Variables
+            path: docs/tracing/debug_mode.mdx
+            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
@@ -256,6 +263,9 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
+          - page: Evaluate threads
+            path: docs/evaluation/evaluate_threads.mdx
+            slug: evaluate_threads
           - page: Log experiments with REST API
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -295,6 +305,9 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
+              - page: Conversational metrics
+                path: docs/evaluation/metrics/conversation_threads_metrics.mdx
+                slug: conversation_threads_metrics
               - page: Custom model
                 path: docs/evaluation/metrics/custom_model.mdx
                 slug: custom_model
@@ -364,10 +377,10 @@ navigation:
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: LiteLLM Model Support
+          - page: Models for Optimization
             icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
-            slug: litellm_support
+            path: docs/agent_optimization/opik_optimizer/models.mdx
+            slug: models
           - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
@@ -450,12 +463,18 @@ navigation:
           - page: Quickstart notebook
             path: docs/cookbook/quickstart_notebook.mdx
             slug: quickstart_notebook
+          - page: Dynamic Tracing Control
+            path: docs/cookbook/dynamic_tracing_cookbook.mdx
+            slug: dynamic_tracing_cookbook
       - section: Integrations
         slug: /
         contents:
           - page: OpenAI
             path: docs/cookbook/openai.mdx
             slug: openai
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: LiteLLM
             path: docs/cookbook/litellm.mdx
             slug: litellm
@@ -480,6 +499,12 @@ navigation:
           - page: Gemini
             path: docs/cookbook/gemini.mdx
             slug: gemini
+          - page: Google ADK
+            path: docs/cookbook/google_adk_integration.mdx
+            slug: google_adk_integration
+          - page: Gretel
+            path: docs/cookbook/gretel_opik_integration_cookbook.mdx
+            slug: gretel
           - page: Groq
             path: docs/cookbook/groq.mdx
             slug: groq
@@ -501,6 +526,9 @@ navigation:
           - page: Ollama
             path: docs/cookbook/ollama.mdx
             slug: ollama
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
@@ -513,6 +541,9 @@ navigation:
           - page: Smolagents
             path: docs/cookbook/smolagents.mdx
             slug: smolagents
+          - page: Vertex AI
+            path: docs/cookbook/vertexai.mdx
+            slug: vertexai
           - page: WatsonX
             path: docs/cookbook/watsonx.mdx
             slug: watsonx
@@ -535,6 +566,9 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - page: REST API Client
+            path: docs/reference/python-sdk/rest-api.mdx
+            slug: rest-api
       - section: Typescript SDK
         slug: typescript-sdk
         contents:
@@ -669,4 +703,7 @@ redirects:
     permanent: true
   - source: "docs/agent_optimization/best-practices/prompt_engineering"
     destination: "/docs/agent_optimization/best_practices/prompt_engineering"
+    permanent: true
+  - source: "docs/agent_optimization/opik_optimizer/litellm_support"
+    destination: "/docs/agent_optimization/opik_optimizer/models"
     permanent: true

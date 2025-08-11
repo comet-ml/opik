@@ -17,8 +17,10 @@ import com.comet.opik.infrastructure.events.EventListenerRegistrar;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
+import com.comet.opik.infrastructure.job.JobModule;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
@@ -28,6 +30,7 @@ import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
+import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -46,6 +49,7 @@ import ru.vyarus.dropwizard.guice.GuiceBundle;
 import ru.vyarus.guicey.jdbi3.JdbiBundle;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME;
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_ANALYTICS_NAME;
@@ -85,9 +89,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new CacheModule(), new AnthropicModule(),
+                        new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
-                        new AwsModule(), new UsageLimitModule(), new VertexAIModule())
+                        new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
@@ -106,11 +110,13 @@ public class OpikApplication extends Application<OpikConfiguration> {
         // However, it does not apply to OpenAPI documentation.
         environment.getObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
         environment.getObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        environment.getObjectMapper().configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
         environment.getObjectMapper().enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
         environment.getObjectMapper()
                 .registerModule(new SimpleModule()
                         .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
-                        .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));
+                        .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
+                        .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

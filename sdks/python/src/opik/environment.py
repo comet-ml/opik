@@ -11,7 +11,7 @@ import tqdm
 from tqdm.utils import Comparable
 
 import opik.config
-from opik import url_helpers
+import opik.url_helpers as url_helpers
 
 LOGGER = logging.getLogger(__name__)
 

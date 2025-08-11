@@ -22,7 +22,10 @@ export async function validateCsvFile(
 
   try {
     const text = await file.text();
-    const parsed = await csv2json(text, {
+
+    const normalizedText = text.replace(/\r\n|\r/g, "\n");
+
+    const parsed = await csv2json(normalizedText, {
       excelBOM: true,
       trimHeaderFields: true,
       trimFieldValues: true,
@@ -39,20 +42,6 @@ export async function validateCsvFile(
     if (parsed.length > maxItems) {
       return {
         error: `File is too large (max. ${maxItems.toLocaleString()} rows)`,
-      };
-    }
-
-    const headers = Object.keys(parsed[0] as object);
-    if (
-      headers.length !== 2 ||
-      !headers.includes("input") ||
-      !headers.includes("output")
-    ) {
-      return {
-        error: `File must have only two columns named 'input' and 'output'. Instead, the file has the following columns: ${headers
-          .slice(0, 5)
-          .map((h) => `"${h}"`)
-          .join(",")}`,
       };
     }
 

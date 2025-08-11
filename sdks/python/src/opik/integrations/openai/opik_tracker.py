@@ -8,6 +8,7 @@ from . import (
     openai_chat_completions_decorator,
     speech_chunks_aggregator,
 )
+import opik.semantic_version as semantic_version
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -16,7 +17,12 @@ def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
 ) -> OpenAIClient:
-    """Adds Opik tracking to an OpenAI client.
+    """Adds Opik tracking wrappers to an OpenAI client.
+
+    The client is always patched; however every wrapped call checks
+    `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
+    any telemetry. If tracing is disabled at call time, the wrapped function
+    executes normally but no span/trace is sent.
 
     Tracks calls to:
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
@@ -99,17 +105,39 @@ def _patch_openai_chat_completions(
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
+    completions_stream_decorator = chat_completions_decorator_factory.track(
+        type="llm",
+        name="chat_completion_stream",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
 
-    # OpenAI implemented beta.chat.completions.stream() in a way that it
-    # calls chat.completions.create(stream=True) under the hood.
-    # So decorating `create` will automatically work for tracking `stream`.
     openai_client.chat.completions.create = completions_create_decorator(
         openai_client.chat.completions.create
     )
+    if semantic_version.SemanticVersion.parse(openai.__version__) < "1.92.0":  # type: ignore
+        # beta.chat.completions.stream() calls chat.completions.create(stream=True)
+        # under the hood.
+        # So decorating `create` will automatically work for tracking `stream`.
+        openai_client.beta.chat.completions.parse = completions_parse_decorator(
+            openai_client.beta.chat.completions.parse
+        )
+    else:
+        # OpenAI reworked beta API.
+        # * chat.completion.stream calls chat.completion.create under the hood, so
+        #   it doesn't need to be decorated again.
+        # * But beta.chat.completion.stream does not call chat.completion.create, so
+        #   it needs to be decorated!
+        openai_client.beta.chat.completions.stream = completions_stream_decorator(
+            openai_client.beta.chat.completions.stream
+        )
 
-    openai_client.beta.chat.completions.parse = completions_parse_decorator(
-        openai_client.beta.chat.completions.parse
-    )
+        openai_client.chat.completions.parse = completions_parse_decorator(
+            openai_client.chat.completions.parse
+        )
+        openai_client.beta.chat.completions.parse = completions_parse_decorator(
+            openai_client.beta.chat.completions.parse
+        )
 
 
 def _patch_openai_responses(

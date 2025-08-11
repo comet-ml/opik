@@ -2,7 +2,7 @@ import abc
 from typing import Any, List, Union, Optional
 
 import opik
-from opik import config as opik_config
+import opik.config as opik_config
 from ..metrics import score_result
 
 
@@ -12,7 +12,7 @@ class BaseMetric(abc.ABC):
     from this class and implement the abstract methods.
 
     Args:
-        name: The name of the metric.
+        name: The name of the metric. If not provided, uses the class name as default.
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there is no parent span/trace to inherit project name from.
@@ -22,11 +22,10 @@ class BaseMetric(abc.ABC):
         >>>
         >>> class MyCustomMetric(base_metric.BaseMetric):
         >>>     def __init__(self, name: str, track: bool = True):
-        >>>         self.name = name
-        >>>         self.track = track
+        >>>         super().__init__(name=name, track=track)
         >>>
         >>>     def score(self, input: str, output: str, **ignored_kwargs: Any):
-        >>>         # Add you logic here
+        >>>         # Add your logic here
         >>>
         >>>         return score_result.ScoreResult(
         >>>             value=0,
@@ -36,9 +35,12 @@ class BaseMetric(abc.ABC):
     """
 
     def __init__(
-        self, name: str, track: bool = True, project_name: Optional[str] = None
+        self,
+        name: Optional[str] = None,
+        track: bool = True,
+        project_name: Optional[str] = None,
     ) -> None:
-        self.name = name
+        self.name = name if name is not None else self.__class__.__name__
         self.track = track
 
         config = opik_config.OpikConfig()

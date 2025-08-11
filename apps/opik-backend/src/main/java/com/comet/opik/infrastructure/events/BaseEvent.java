@@ -3,12 +3,14 @@ package com.comet.opik.infrastructure.events;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
-import lombok.Getter;
+import lombok.Data;
 import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.TRACER_NAME;
 
-@Getter
+@SuperBuilder(toBuilder = true)
+@Data
 @Accessors(fluent = true)
 public abstract class BaseEvent {
 

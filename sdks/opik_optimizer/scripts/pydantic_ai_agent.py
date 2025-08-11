@@ -4,6 +4,7 @@ from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
 )
+from opik import track
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
@@ -41,7 +42,7 @@ class PydanticAIAgent(OptimizableAgent):
             output_type=str,
             system_prompt="",  # We'll use the chat-prompt
         )
-        self.agent.tool(search_wikipedia)
+        self.agent.tool(track(type="tool")(search_wikipedia))
 
     def invoke(self, messages: List[Dict[str, str]], seed: Optional[int] = None) -> str:
         message_history = []

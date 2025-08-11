@@ -11,6 +11,9 @@ import CommitsTab from "@/components/pages/PromptPage/CommitsTab/CommitsTab";
 import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import PromptTagsList from "@/components/pages/PromptPage/PromptTagsList";
+import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -34,41 +37,59 @@ const PromptPage: React.FunctionComponent = () => {
   }, [tab, setTab]);
 
   return (
-    <div className="pt-6">
-      <div className="pb-4">
-        <div className="mb-4 flex min-h-8 items-center justify-between">
-          <h1 className="comet-title-l truncate break-words">{promptName}</h1>
-        </div>
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="mb-4 mt-6 flex min-h-8 items-center justify-between"
+        direction="horizontal"
+      >
+        <h1 className="comet-title-l truncate break-words">{promptName}</h1>
+      </PageBodyStickyContainer>
 
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
         {prompt?.created_at && (
-          <div className="mb-1 flex gap-4 overflow-x-auto">
+          <div className="mb-2 flex gap-4 overflow-x-auto">
             <DateTag date={prompt?.created_at} />
           </div>
         )}
-      </div>
-
-      <Tabs defaultValue="prompt" value={tab as string} onValueChange={setTab}>
-        <TabsList variant="underline">
-          <TabsTrigger variant="underline" value="prompt">
-            Prompt
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="experiments">
-            Experiments
-            <ExplainerIcon
-              className="ml-1"
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
-              ]}
-            />
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="commits">
-            Commits
-            <ExplainerIcon
-              className="ml-1"
-              {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
-            />
-          </TabsTrigger>
-        </TabsList>
+        <PromptTagsList
+          tags={prompt?.tags ?? []}
+          promptId={promptId}
+          prompt={prompt}
+        />
+      </PageBodyStickyContainer>
+      <Tabs
+        defaultValue="prompt"
+        value={tab as string}
+        onValueChange={setTab}
+        className="min-w-min"
+      >
+        <PageBodyStickyContainer direction="horizontal" limitWidth>
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value="prompt">
+              Prompt
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="experiments">
+              Experiments
+              <ExplainerIcon
+                className="ml-1"
+                {...EXPLAINERS_MAP[
+                  EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
+                ]}
+              />
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="commits">
+              Commits
+              <ExplainerIcon
+                className="ml-1"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
+              />
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
         <TabsContent value="prompt">
           <PromptTab prompt={prompt} />
         </TabsContent>
@@ -79,7 +100,7 @@ const PromptPage: React.FunctionComponent = () => {
           <CommitsTab prompt={prompt} />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageBodyScrollContainer>
   );
 };
 

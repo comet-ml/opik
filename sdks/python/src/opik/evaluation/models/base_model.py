@@ -1,5 +1,6 @@
 import abc
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional, Type
+import pydantic
 
 
 class OpikBaseModel(abc.ABC):
@@ -20,7 +21,12 @@ class OpikBaseModel(abc.ABC):
         self.model_name = model_name
 
     @abc.abstractmethod
-    def generate_string(self, input: str, **kwargs: Any) -> str:
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model.
 
@@ -50,7 +56,12 @@ class OpikBaseModel(abc.ABC):
         """
         pass
 
-    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
+    async def agenerate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model. Async version.
 

@@ -13,13 +13,20 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 demoDataJob: true
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
 component:
   backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-backend
     metrics:
@@ -50,7 +57,6 @@ component:
       path: /health-check?name=all&type=ready
       port:  8080
       initialDelaySeconds: 20
-
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
@@ -79,7 +85,6 @@ component:
     envFrom:
       - configMapRef:
           name: opik-backend
-
     service:
       type: ClusterIP
       ports:
@@ -87,11 +92,10 @@ component:
         port:  8080
         protocol: TCP
         targetPort:  8080
-      - name: backend
+      - name: swagger
         port:  3003
         protocol: TCP
         targetPort:  3003
-
     ingress:
       enabled: false
       ingressClassName: ""
@@ -105,7 +109,6 @@ component:
   python-backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-python-backend
     metrics:
@@ -172,7 +175,6 @@ component:
   frontend:
     enabled: true
     serviceAccount:
-      enabled: true
       create: true
       name: opik-frontend
     metrics:
@@ -333,6 +335,7 @@ altinity-clickhouse-operator:
     enabled: false
   serviceMonitor:
     enabled: false
+    interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
 clickhouse:
   enabled: true
@@ -341,13 +344,26 @@ clickhouse:
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
   storage: 50Gi
   logsLevel: information
+  # deprecated: use templates instead
   service:
     serviceTemplate: clickhouse-cluster-svc-template
+  templates:
+    podTemplate: clickhouse-cluster-pod-template
+    replicaServiceTemplate: clickhouse-replica-svc-template
+    serviceTemplate: clickhouse-cluster-svc-template
+    volumeClaimTemplate: storage-vc-template
+  extraServiceTemplates: []
+  extraPodTemplates: []
+  extraVolumeClaimTemplates: []
   adminUser:
     useSecret:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
@@ -357,10 +373,8 @@ clickhouse:
       annotations: {}
       create: false
       name: ""
-    # bucketURL: ""
-    # secretName: ""
-    # schedule: ""
-    # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
+    extraEnv: {}
     command:
       - /bin/bash
       - '-cx'
@@ -368,16 +382,70 @@ clickhouse:
         export backupname=backup$(date +'%Y%m%d%H%M')
         echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+  backupServer:
+    enabled: false
+    image: altinity/clickhouse-backup:2.6.23
+    port: 7171
+    monitoring:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      service:
+        type: ClusterIP
+        ports:
+          - name: ch-backup-rest
+            port: 80
+            targetPort: 7171
+      serviceMonitor:
+        enabled: false
+        additionalLabels: {}
+        annotations: {}
+        namespace: ""
+        portName: ""
+        interval: "60s"
+        scrapeTimeout: "30s"
+        relabelings: []
+        metricRelabelings: []
+        podTargetLabels: []
+        honorLabels: false
+    env:
+      LOG_LEVEL: info
+      ALLOW_EMPTY_BACKUPS: true
+      API_LISTEN: 0.0.0.0:7171
+      API_CREATE_INTEGRATION_TABLES: true
   monitoring:
     enabled: false
     username: opikmon # readonly user
     password: opikmon
+    useSecret:
+      enabled: false
     # resources:
     #   requests:
     #     cpu: 300m
     #     memory: 1Gi
     #   limits:
     #     memory: 1Gi
+    additionalLabels: {}
+    annotations: {}
+    port: 9363
+    service:
+      type: ClusterIP
+      ports:
+        - name: prometheus-metrics
+          port: 80
+          targetPort: 9363
+    serviceMonitor:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      namespace: ""
+      portName: ""
+      interval: "60s"
+      scrapeTimeout: "30s"
+      relabelings: []
+      metricRelabelings: []
+      podTargetLabels: []
+      honorLabels: false
 
 zookeeper:
     enabled: true

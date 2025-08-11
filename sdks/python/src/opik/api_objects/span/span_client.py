@@ -2,7 +2,10 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from opik import datetime_helpers, id_helpers, llm_usage, Attachment
+import opik.datetime_helpers as datetime_helpers
+import opik.id_helpers as id_helpers
+import opik.llm_usage as llm_usage
+import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
 
 from ..attachment import converters as attachment_converters
@@ -130,32 +133,24 @@ class Span:
         Returns:
             None
         """
-        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
-            usage=usage,
-            logger=LOGGER,
-            provider=provider,
-        )
-
-        if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
-
-        end_span_message = messages.UpdateSpanMessage(
-            span_id=self.id,
+        update_span(
+            id=self.id,
             trace_id=self.trace_id,
             parent_span_id=self.parent_span_id,
+            url_override=self._url_override,
+            message_streamer=self._streamer,
             project_name=self._project_name,
             end_time=end_time,
             metadata=metadata,
             input=input,
             output=output,
             tags=tags,
-            usage=backend_compatible_usage,
+            usage=usage,
             model=model,
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
         )
-        self._streamer.put(end_span_message)
 
     def span(
         self,
@@ -173,7 +168,7 @@ class Span:
         provider: LLMProvider = LLMProvider.OPENAI,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        attachments: Optional[List[attachment.Attachment]] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -289,7 +284,7 @@ def create_span(
     provider: Optional[Union[LLMProvider, str]] = None,
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
-    attachments: Optional[List[Attachment]] = None,
+    attachments: Optional[List[attachment.Attachment]] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -346,3 +341,62 @@ def create_span(
         project_name=project_name,
         url_override=url_override,
     )
+
+
+def update_span(
+    id: str,
+    trace_id: str,
+    parent_span_id: Optional[str],
+    project_name: str,
+    url_override: str,
+    message_streamer: streamer.Streamer,
+    end_time: Optional[datetime.datetime] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    input: Optional[Dict[str, Any]] = None,
+    output: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[str]] = None,
+    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+    model: Optional[str] = None,
+    provider: Optional[Union[LLMProvider, str]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
+    total_cost: Optional[float] = None,
+    attachments: Optional[List[attachment.Attachment]] = None,
+) -> None:
+    backend_compatible_usage = validation_helpers.validate_and_parse_usage(
+        usage=usage,
+        logger=LOGGER,
+        provider=provider,
+    )
+
+    if backend_compatible_usage is not None:
+        metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
+
+    update_span_message = messages.UpdateSpanMessage(
+        span_id=id,
+        trace_id=trace_id,
+        parent_span_id=parent_span_id,
+        project_name=project_name,
+        end_time=end_time,
+        metadata=metadata,
+        input=input,
+        output=output,
+        tags=tags,
+        usage=backend_compatible_usage,
+        model=model,
+        provider=provider,
+        error_info=error_info,
+        total_cost=total_cost,
+    )
+
+    if attachments is not None:
+        for attachment_data in attachments:
+            create_attachment_message = attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type="span",
+                entity_id=id,
+                project_name=project_name,
+                url_override=url_override,
+            )
+            message_streamer.put(create_attachment_message)
+
+    message_streamer.put(update_span_message)

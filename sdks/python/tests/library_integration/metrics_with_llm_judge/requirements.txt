@@ -1,2 +1,6 @@
 openai
 openai-agents
+langchain
+langchain_openai
+ragas
+pillow # for ragas 0.3.0 to work

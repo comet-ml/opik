@@ -5,6 +5,7 @@ import last from "lodash/last";
 import get from "lodash/get";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
@@ -193,6 +194,30 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
 
+export const formatNumberInK = (value: number, precision = 1): string => {
+  const ranges = [
+    { threshold: 1000000000, suffix: "B", divider: 1000000000 },
+    { threshold: 1000000, suffix: "M", divider: 1000000 },
+    { threshold: 1000, suffix: "K", divider: 1000 },
+  ];
+
+  const range = ranges.find((r) => value >= r.threshold);
+
+  return range
+    ? `${(value / range.divider).toFixed(precision)}${range.suffix}`
+    : value.toString();
+};
+
+export const calculatePercentageChange = (
+  baseValue: number | null | undefined,
+  newValue: number | null | undefined,
+): number | undefined => {
+  if (!isNumber(baseValue) || !isNumber(newValue)) return undefined;
+  if (baseValue === 0 && newValue === 0) return 0;
+  if (baseValue === 0) return undefined;
+  return ((newValue - baseValue) / Math.abs(baseValue)) * 100;
+};
+
 export const updateTextAreaHeight = (
   textarea: HTMLTextAreaElement | null,
   minHeight: number = 80,
@@ -206,3 +231,6 @@ export const updateTextAreaHeight = (
 
   textarea.style.height = scrollHeight + "px";
 };
+
+export const capitalizeFirstLetter = (str?: string | null) =>
+  str ? str.charAt(0).toUpperCase() + str.slice(1) : "";

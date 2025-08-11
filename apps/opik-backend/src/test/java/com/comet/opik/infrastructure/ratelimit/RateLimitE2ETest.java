@@ -4,12 +4,12 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -73,6 +73,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -81,7 +83,6 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static java.util.stream.Collectors.counting;
 import static java.util.stream.Collectors.groupingBy;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Rate limit Resource Test")
@@ -91,9 +92,12 @@ class RateLimitE2ETest {
     private static final String BASE_RESOURCE_URI = "%s/v1/private/traces";
     private static final String CUSTOM_LIMIT = "customLimit";
     private static final String GET_SPAN_ID_LIMIT = "getSpanById";
+    private static final String SINGLE_TRACING_OPS_LIMIT = RateLimited.SINGLE_TRACING_OPS;
     private static final long LIMIT = 4L;
     private static final long WORKSPACE_LIMIT = 6L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
+    private static final long SINGLE_TRACING_OPS_LIMIT_VALUE = 3L;
+    private static final long SINGLE_TRACING_OPS_DURATION_IN_SECONDS = 1L;
     public static final String TOO_MANY_REQUESTS_MESSAGEE = "Too Many Requests: %s";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -107,6 +111,7 @@ class RateLimitE2ETest {
 
     private LimitConfig customLimit;
     private LimitConfig getSpanIdLimit;
+    private LimitConfig singleTracingOpsLimit;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -140,6 +145,10 @@ class RateLimitE2ETest {
 
         getSpanIdLimit = new LimitConfig("Get-Span-Id", GET_SPAN_ID_LIMIT, 3, 1, "get span id");
 
+        singleTracingOpsLimit = new LimitConfig("Single-Tracing-Ops", SINGLE_TRACING_OPS_LIMIT,
+                SINGLE_TRACING_OPS_LIMIT_VALUE, SINGLE_TRACING_OPS_DURATION_IN_SECONDS,
+                "You have exceeded the rate limit for single tracing operations. Please try again later.");
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -150,7 +159,8 @@ class RateLimitE2ETest {
                         .limit(LIMIT)
                         .workspaceLimit(WORKSPACE_LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
-                        .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit))
+                        .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit,
+                                SINGLE_TRACING_OPS_LIMIT, singleTracingOpsLimit))
                         .build());
     }
 
@@ -198,28 +208,18 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(LIMIT * 2, projectName, apiKey, workspaceName);
+        Map<Integer, Long> responseMap = triggerBatchCallsWithApiKey(LIMIT * 2, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(LIMIT);
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .queryParam("project_name", projectName)
-                .queryParam("size", LIMIT * 2)
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
+        // Verify that traces created are equal to the limit
+        TracePage page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                List.of(), List.of(), (int) (LIMIT * 2), Map.of());
 
-            // Verify that traces created are equal to the limit
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
-            TracePage page = response.readEntity(TracePage.class);
-
-            assertEquals(LIMIT, page.content().size());
-            assertEquals(LIMIT, page.total());
-            assertEquals(LIMIT, page.size());
-        }
+        assertThat(page.content().size()).isEqualTo(LIMIT);
+        assertThat(page.total()).isEqualTo(LIMIT);
+        assertThat(page.size()).isEqualTo(LIMIT);
 
     }
 
@@ -236,32 +236,22 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
+        Map<Integer, Long> responseMap = triggerBatchCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         SingleDelay.timer(LIMIT_DURATION_IN_SECONDS, TimeUnit.SECONDS).blockingGet();
 
-        responseMap = triggerCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
+        responseMap = triggerBatchCallsWithApiKey(LIMIT, projectName, apiKey, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .queryParam("project_name", projectName)
-                .queryParam("size", LIMIT * 2)
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
+        TracePage page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                List.of(), List.of(), (int) (LIMIT * 2), Map.of());
 
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
-            TracePage page = response.readEntity(TracePage.class);
-
-            assertEquals(LIMIT * 2, page.content().size());
-            assertEquals(LIMIT * 2, page.total());
-            assertEquals(LIMIT * 2, page.size());
-        }
+        assertThat(page.content().size()).isEqualTo(LIMIT * 2);
+        assertThat(page.total()).isEqualTo(LIMIT * 2);
+        assertThat(page.size()).isEqualTo(LIMIT * 2);
 
     }
 
@@ -278,10 +268,11 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithCookie(LIMIT * 2, projectName, sessionToken, workspaceName);
+        Map<Integer, Long> responseMap = triggerBatchCallsWithCookie(LIMIT * 2, projectName, sessionToken,
+                workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(LIMIT);
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .queryParam("project_name", projectName)
@@ -292,12 +283,12 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             TracePage page = response.readEntity(TracePage.class);
 
-            assertEquals(LIMIT, page.content().size());
-            assertEquals(LIMIT, page.total());
-            assertEquals(LIMIT, page.size());
+            assertThat(page.content().size()).isEqualTo(LIMIT);
+            assertThat(page.total()).isEqualTo(LIMIT);
+            assertThat(page.size()).isEqualTo(LIMIT);
         }
 
     }
@@ -315,15 +306,15 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
+        Map<Integer, Long> responseMap = triggerBatchCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         SingleDelay.timer(LIMIT_DURATION_IN_SECONDS, TimeUnit.SECONDS).blockingGet();
 
-        responseMap = triggerCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
+        responseMap = triggerBatchCallsWithCookie(LIMIT, projectName, sessionToken, workspaceName);
 
-        assertEquals(LIMIT, responseMap.get(HttpStatus.SC_CREATED));
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(LIMIT);
 
         try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .queryParam("project_name", projectName)
@@ -335,12 +326,12 @@ class RateLimitE2ETest {
                 .get()) {
 
             // Verify that traces created are equal to the limit
-            assertEquals(HttpStatus.SC_OK, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             TracePage page = response.readEntity(TracePage.class);
 
-            assertEquals(LIMIT * 2, page.content().size());
-            assertEquals(LIMIT * 2, page.total());
-            assertEquals(LIMIT * 2, page.size());
+            assertThat(page.content().size()).isEqualTo(LIMIT * 2);
+            assertThat(page.total()).isEqualTo(LIMIT * 2);
+            assertThat(page.size()).isEqualTo(LIMIT * 2);
         }
 
     }
@@ -359,9 +350,15 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(1, projectName, apiKey, workspaceName);
+        // Use batch endpoint to consume 1 permit from the general rate limit
+        List<Trace> initialTrace = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .projectId(null)
+                .build());
 
-        assertEquals(1, responseMap.get(HttpStatus.SC_CREATED));
+        try (var response = traceResourceClient.callBatchCreateTraces(initialTrace, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
 
         List<Trace> traces = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -370,14 +367,7 @@ class RateLimitE2ETest {
                         .build())
                 .toList();
 
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .path("batch")
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new TraceBatch(traces)))) {
-
+        try (var response = traceResourceClient.callBatchCreateTraces(traces, apiKey, workspaceName)) {
             assertLimitExceeded(response, opikConfiguration.getRateLimit().getGeneralLimit());
         }
     }
@@ -402,12 +392,13 @@ class RateLimitE2ETest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
         mockTargetWorkspace(apiKey, workspaceName2, workspaceId2, user);
 
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+        // Use a batch operation to consume 1 permit from the general rate limit
+        var initialTrace = factory.manufacturePojo(Trace.class).toBuilder()
                 .feedbackScores(null)
                 .comments(null)
                 .build();
 
-        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        traceResourceClient.batchCreateTraces(List.of(initialTrace), apiKey, workspaceName);
 
         List<Trace> traces = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -448,7 +439,7 @@ class RateLimitE2ETest {
 
         try (var response = request.method(method, Entity.json(batch))) {
 
-            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
 
         try (var response = request.method(method, Entity.json(batch2))) {
@@ -473,17 +464,14 @@ class RateLimitE2ETest {
         IntStream.range(0, (int) LIMIT + 1).forEach(i -> {
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
+                    .feedbackScores(null)
+                    .comments(null)
                     .build();
 
-            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(trace))) {
+            try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey, workspaceName)) {
 
                 if (i < LIMIT) {
-                    assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
                     assertLimitHeaders(response, LIMIT - i - 1, RateLimited.GENERAL_EVENTS,
                             (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getGeneralLimit());
@@ -495,7 +483,7 @@ class RateLimitE2ETest {
     }
 
     private void assertLimitExceeded(Response response, @Valid LimitConfig limitConfig) {
-        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_TOO_MANY_REQUESTS);
         assertRateLimitResetHeader(response, limitConfig);
         ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
         assertThat(errorMessage.getMessage())
@@ -519,7 +507,7 @@ class RateLimitE2ETest {
 
                     long expectedTTLInSec = Math.max(Duration.ofMillis(Long.parseLong(limitInMillis)).getSeconds(), 1);
 
-                    assertEquals(expectedTTLInSec, rateLimitResetValue);
+                    assertThat(rateLimitResetValue).isEqualTo(expectedTTLInSec);
                 });
 
     }
@@ -545,19 +533,17 @@ class RateLimitE2ETest {
         IntStream.range(0, (int) WORKSPACE_LIMIT + 1).forEach(i -> {
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
+                    .feedbackScores(null)
+                    .comments(null)
                     .build();
 
             var currentApiKey = i % 2 == 0 ? apiKey : apiKey2;
 
-            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, currentApiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(trace))) {
+            try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), currentApiKey,
+                    workspaceName)) {
 
                 if (i < WORKSPACE_LIMIT) {
-                    assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
                     assertLimitHeaders(response, WORKSPACE_LIMIT - i - 1, RateLimited.WORKSPACE_EVENTS,
                             (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getWorkspaceLimit());
@@ -593,17 +579,17 @@ class RateLimitE2ETest {
                         .build())
                 .toList();
 
-        var tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
+        List<FeedbackScoreBatchItem> tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
-                .toList();
+                .collect(Collectors.toList());
 
-        var spansFeedbackScores = IntStream.range(0, (int) LIMIT)
+        List<FeedbackScoreBatchItem> spansFeedbackScores = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
-                .toList();
+                .collect(Collectors.toList());
 
         var experimentItems = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -619,11 +605,11 @@ class RateLimitE2ETest {
                 Arguments.of(new DatasetItemBatch(projectName, null, datasetItems),
                         new DatasetItemBatch(projectName, null, List.of(datasetItems.getFirst())),
                         "%s/v1/private/datasets".formatted(baseURI) + "/items", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(tracesFeedbackScores),
-                        new FeedbackScoreBatch(List.of(tracesFeedbackScores.getFirst())),
+                Arguments.of(FeedbackScoreBatch.builder().scores(tracesFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(tracesFeedbackScores.getFirst())).build(),
                         BASE_RESOURCE_URI.formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(spansFeedbackScores),
-                        new FeedbackScoreBatch(List.of(spansFeedbackScores.getFirst())),
+                Arguments.of(FeedbackScoreBatch.builder().scores(spansFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(spansFeedbackScores.getFirst())).build(),
                         "%s/v1/private/spans".formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
                 Arguments.of(new ExperimentItemsBatch(experimentItems),
                         new ExperimentItemsBatch(Set.of(experimentItems.stream().findFirst().orElseThrow())),
@@ -647,7 +633,7 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""))) {
 
-            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1, customLimit);
         }
@@ -682,7 +668,7 @@ class RateLimitE2ETest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""))) {
 
-            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1, customLimit);
         }
@@ -700,7 +686,7 @@ class RateLimitE2ETest {
                 .availableEvents(apiKey, new LimitConfig(generalLimit, generalLimit, limit, 1, "general limit"))
                 .block();
 
-        assertEquals(limit, availableEvents);
+        assertThat(availableEvents).isEqualTo(limit);
     }
 
     @Test
@@ -741,26 +727,21 @@ class RateLimitE2ETest {
         String remainingTtl = response
                 .getHeaderString(RequestContext.LIMIT_REMAINING_TTL.formatted(limitConfig.headerName()));
 
-        assertEquals(expected, Long.parseLong(remainingLimit));
-        assertEquals(limitBucket, userLimit);
+        assertThat(Long.parseLong(remainingLimit)).isEqualTo(expected);
+        assertThat(userLimit).isEqualTo(limitBucket);
         assertThat(Long.parseLong(remainingTtl)).isBetween(0L, Duration.ofSeconds(limitDuration).toMillis());
     }
 
-    private Map<Integer, Long> triggerCallsWithCookie(long limit, String projectName, String sessionToken,
+    private Map<Integer, Long> triggerBatchCallsWithCookie(long limit, String projectName, String sessionToken,
             String workspaceName) {
         return Flux.range(0, ((int) limit))
                 .flatMap(i -> {
                     Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
+                            .projectId(null)
                             .build();
-
-                    try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON_TYPE)
-                            .cookie(RequestContext.SESSION_COOKIE, sessionToken)
-                            .header(WORKSPACE_HEADER, workspaceName)
-                            .post(Entity.json(trace))) {
-
+                    try (var response = traceResourceClient.callBatchCreateTracesWithCookie(List.of(trace),
+                            sessionToken, workspaceName)) {
                         return Flux.just(response);
                     }
                 }, 5)
@@ -768,7 +749,41 @@ class RateLimitE2ETest {
                 .collect(groupingBy(Response::getStatus, counting()));
     }
 
-    private Map<Integer, Long> triggerCallsWithApiKey(long limit, String projectName, String apiKey,
+    private Map<Integer, Long> triggerBatchCallsWithApiKey(long limit, String projectName, String apiKey,
+            String workspaceName) {
+        return Flux.range(0, ((int) limit))
+                .flatMap(i -> {
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .projectId(null)
+                            .build();
+
+                    try (Response data = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey,
+                            workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    private Map<Integer, Long> triggerCreateSpansCalls(long limit, String projectName, String apiKey,
+            String workspaceName) {
+        return Flux.range(0, ((int) limit))
+                .flatMap(i -> {
+                    Span span = factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .build();
+
+                    try (Response data = spanResourceClient.callCreateSpan(span, apiKey, workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    private Map<Integer, Long> triggerCreateTracesCalls(long limit, String projectName, String apiKey,
             String workspaceName) {
         return Flux.range(0, ((int) limit))
                 .flatMap(i -> {
@@ -782,6 +797,157 @@ class RateLimitE2ETest {
                 }, 5)
                 .toStream()
                 .collect(groupingBy(Response::getStatus, counting()));
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps limit is exceeded on createSpans, Then block remaining calls")
+    void rateLimit__whenSingleTracingOpsLimitIsExceededOnCreateSpans__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        Map<Integer, Long> responseMap = triggerCreateSpansCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
+                apiKey, workspaceName);
+
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+        assertThat(responseMap.get(HttpStatus.SC_CREATED)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps limit is exceeded on createTraces, Then block remaining calls")
+    void rateLimit__whenSingleTracingOpsLimitIsExceededOnCreateTraces__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        Map<Integer, Long> responseMap = triggerCreateTracesCalls(SINGLE_TRACING_OPS_LIMIT_VALUE * 2, projectName,
+                apiKey, workspaceName);
+
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+        assertThat(responseMap.get(HttpStatus.SC_CREATED)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE);
+    }
+
+    @Test
+    @DisplayName("Rate limit: When singleTracingOps rate limit is applied, Then it doesn't affect workspace limits")
+    void rateLimit__whenSingleTracingOpsRateLimitIsApplied__thenItDoesNotAffectWorkspaceLimits() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // Exhaust singleTracingOps limit with createSpans
+        triggerCreateSpansCalls(SINGLE_TRACING_OPS_LIMIT_VALUE, projectName, apiKey, workspaceName);
+
+        // Verify that batch trace creation (which uses workspace limit) still works
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .feedbackScores(null)
+                .comments(null)
+                .build();
+
+        try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    @Test
+    @DisplayName("Rate limit: When updateSpan is called and singleTracingOps limit is exceeded, Then block remaining calls")
+    void rateLimit__whenUpdateSpanCalledAndSingleTracingOpsLimitExceeded__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // First create a span to update
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+        // Create a simple span update with required fields from original span
+        SpanUpdate fullUpdate = factory.manufacturePojo(SpanUpdate.class);
+        SpanUpdate spanUpdate = SpanUpdate.builder()
+                .traceId(span.traceId()) // Required field - use original span's traceId
+                .projectName(span.projectName()) // Required field - use original span's project
+                .parentSpanId(span.parentSpanId()) // Required field - use original span's parentSpanId
+                .name(fullUpdate.name())
+                .endTime(fullUpdate.endTime())
+                .build();
+
+        // Test rate limiting on span updates by making direct HTTP calls
+        // Note: span creation already consumed 1 slot, so only 2 updates can succeed
+        Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
+                .flatMap(i -> {
+                    try (Response data = spanResourceClient.callUpdateSpan(span.id(), spanUpdate, apiKey,
+                            workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE + 1); // 4 failures
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE - 1); // 2 successes
+    }
+
+    @Test
+    @DisplayName("Rate limit: When updateTrace is called and singleTracingOps limit is exceeded, Then block remaining calls")
+    void rateLimit__whenUpdateTraceCalledAndSingleTracingOpsLimitExceeded__shouldBlockRemainingCalls() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        // First create a trace to update
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        // Create a simple trace update with required fields from original trace
+        TraceUpdate fullUpdate = factory.manufacturePojo(TraceUpdate.class);
+        TraceUpdate traceUpdate = TraceUpdate.builder()
+                .projectName(trace.projectName()) // Required field - use original trace's project
+                .name(fullUpdate.name())
+                .endTime(fullUpdate.endTime())
+                .build();
+
+        // Test rate limiting on trace updates by making direct HTTP calls
+        // Note: trace creation already consumed 1 slot, so only 2 updates can succeed
+        Map<Integer, Long> responseMap = Flux.range(0, (int) SINGLE_TRACING_OPS_LIMIT_VALUE * 2)
+                .flatMap(i -> {
+                    try (Response data = traceResourceClient.callUpdateTrace(trace.id(), traceUpdate, apiKey,
+                            workspaceName)) {
+                        return Flux.just(data);
+                    }
+                }, 5)
+                .toStream()
+                .collect(groupingBy(Response::getStatus, counting()));
+
+        assertThat(responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE + 1); // 4 failures
+        assertThat(responseMap.get(HttpStatus.SC_NO_CONTENT)).isEqualTo(SINGLE_TRACING_OPS_LIMIT_VALUE - 1); // 2 successes
     }
 
 }

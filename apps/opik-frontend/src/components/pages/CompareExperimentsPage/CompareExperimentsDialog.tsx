@@ -21,6 +21,7 @@ import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { createFilter } from "@/lib/filters";
 
 const DEFAULT_SIZE = 5;
 
@@ -53,7 +54,13 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
   const { data, isPending } = useExperimentsList(
     {
       workspaceName,
-      datasetId,
+      filters: [
+        createFilter({
+          field: "dataset_id",
+          operator: "=",
+          value: datasetId,
+        }),
+      ],
       search,
       page,
       size,

@@ -102,7 +102,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         mutation_rate: float = DEFAULT_MUTATION_RATE,
         crossover_rate: float = DEFAULT_CROSSOVER_RATE,
         tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        num_threads: int = DEFAULT_NUM_THREADS,
+        num_threads: Optional[int] = None,
         elitism_size: int = DEFAULT_ELITISM_SIZE,
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
@@ -111,6 +111,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         output_style_guidance: Optional[str] = None,
         infer_output_style: bool = False,
         verbose: int = 1,
+        n_threads: int = DEFAULT_NUM_THREADS,
         **model_kwargs: Any,
     ) -> None:
         """
@@ -121,7 +122,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             mutation_rate: Mutation rate for genetic operations
             crossover_rate: Crossover rate for genetic operations
             tournament_size: Tournament size for selection
-            num_threads: Number of threads for parallel evaluation
+            n_threads: Number of threads for parallel evaluation
             elitism_size: Number of elitism prompts
             adaptive_mutation: Whether to use adaptive mutation
             enable_moo: Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt
@@ -133,13 +134,22 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             **model_kwargs: Additional model parameters
         """
         # Initialize base class first
+        if "project_name" in model_kwargs:
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            )
+            del model_kwargs["project_name"]
+
         super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
-        self.num_threads = num_threads
+        if num_threads is not None:
+            print("num_threads is deprecated; use n_threads instead")
+            n_threads = num_threads
+        self.num_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
@@ -1523,26 +1533,26 @@ Return only the new prompt list object.
         """
         total_items = len(dataset.get_items())
 
+        new_prompt = prompt.copy()
+        new_prompt.set_messages(messages)
+
         experiment_config = experiment_config or {}
         experiment_config["project_name"] = self.agent_class.project_name
         experiment_config = {
             **experiment_config,
             "optimizer": self.__class__.__name__,
             "agent_class": self.agent_class.__name__,
-            "agent_config": prompt.to_dict(),
+            "agent_config": new_prompt.to_dict(),
             "metric": metric.__name__,
             "dataset": dataset.name,
             "configuration": {
-                "prompt": prompt.get_messages(),
+                "prompt": new_prompt.get_messages(),
                 "n_samples_for_eval": (
                     len(dataset_item_ids) if dataset_item_ids is not None else n_samples
                 ),
                 "total_dataset_items": total_items,
             },
         }
-
-        new_prompt = prompt.copy()
-        new_prompt.set_messages(messages)
         try:
             agent = self.agent_class(new_prompt)
         except Exception:

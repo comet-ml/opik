@@ -1,7 +1,9 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -30,7 +32,8 @@ public interface CommentDAO {
     @RequiredArgsConstructor
     enum EntityType {
         TRACE("trace", "traces"),
-        SPAN("span", "spans");
+        SPAN("span", "spans"),
+        THREAD("thread", "trace_threads");
 
         private final String type;
         private final String tableName;
@@ -64,7 +67,7 @@ class CommentDAOImpl implements CommentDAO {
                 text,
                 created_by,
                 last_updated_by
-            )
+            ) <settings_clause>
             VALUES
             (
                  :id,
@@ -94,7 +97,8 @@ class CommentDAOImpl implements CommentDAO {
     private static final String UPDATE = """
             INSERT INTO comments (
             	id, entity_id, entity_type, project_id, workspace_id, text, created_at, created_by, last_updated_by
-            ) SELECT
+            ) <settings_clause>
+            SELECT
             	id,
             	entity_id,
             	entity_type,
@@ -128,6 +132,7 @@ class CommentDAOImpl implements CommentDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> addComment(@NonNull UUID commentId, @NonNull UUID entityId, @NonNull EntityType entityType,
@@ -135,7 +140,11 @@ class CommentDAOImpl implements CommentDAO {
             @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(INSERT_COMMENT);
+            ST template = new ST(INSERT_COMMENT);
+
+            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+            var statement = connection.createStatement(template.render());
 
             bindParameters(commentId, entityId, entityType, projectId, comment, statement);
 
@@ -170,7 +179,11 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Void> updateComment(@NonNull UUID commentId, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(UPDATE)
+            ST update = new ST(UPDATE);
+
+            ClickhouseUtils.checkAsyncConfig(update, opikConfiguration.getAsyncInsert());
+
+            var statement = connection.createStatement(update.render())
                     .bind("text", comment.text())
                     .bind("id", commentId);
 
@@ -184,7 +197,7 @@ class CommentDAOImpl implements CommentDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(DELETE_COMMENT_BY_ID)
-                    .bind("ids", commentIds);
+                    .bind("ids", commentIds.toArray(UUID[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)

@@ -1,0 +1,72 @@
+---
+# Model Configuration for End-to-End Tests
+# This file defines models that will be tested in playground and online scoring tests
+# To add a new model: just add it to the appropriate provider section below
+
+providers:
+  openai:
+    display_name: "OpenAI"
+    api_key_env_var: "OPENAI_API_KEY"
+    models:
+      - name: "GPT 4o Mini"
+        ui_selector: "GPT 4o Mini"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "GPT 4o"
+        ui_selector: "GPT 4o"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "GPT 4.1"
+        ui_selector: "GPT 4.1"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "GPT 4.1 Mini"
+        ui_selector: "GPT 4.1 Mini"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+
+  anthropic:
+    display_name: "Anthropic"
+    api_key_env_var: "ANTHROPIC_API_KEY"
+    models:
+      - name: "Claude 3.5 Sonnet Latest"
+        ui_selector: "Claude 3.5 Sonnet Latest"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "Claude 3.5 Haiku Latest"
+        ui_selector: "Claude 3.5 Haiku Latest"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "Claude 4 Sonnet"
+        ui_selector: "Claude 4 Sonnet"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+
+  # openrouter:
+  #   display_name: "OpenRouter"
+  #   api_key_env_var: "OPENROUTER_API_KEY"
+  #   models:
+  #     - name: "phi4"
+  #       ui_selector: "microsoft/phi-4"
+  #       enabled: true
+  #       test_playground: true
+  #       test_online_scoring: true
+
+
+# Test configuration
+test_config:
+  # Skip models that don't have required API keys set
+  skip_missing_api_keys: true
+  # Default timeout for model responses (in seconds)
+  response_timeout: 30
+  # Test prompt for playground tests
+  test_prompt: "Explain what is an LLM in one paragraph."
+  # Only test models that are explicitly enabled
+  only_test_enabled: true

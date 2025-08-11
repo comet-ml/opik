@@ -1,0 +1,59 @@
+name: 🏷️ Auto Assign PR
+
+on:
+  workflow_call:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  assign_pr_creator_or_pusher:
+    name: Assign PR Creator or Pusher
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Determine user to assign
+        id: get_assignee_user
+        run: |
+          ASSIGN_USER=""
+          EVENT_ACTOR=""
+          if [[ "${{ github.event.action }}" == "synchronize" ]]; then
+            EVENT_ACTOR="${{ github.event.sender.login }}"
+          else
+            EVENT_ACTOR="${{ github.event.pull_request.user.login }}"
+          fi
+
+          KNOWN_BOTS=("dependabot[bot]" "github-actions[bot]" "github-copilot[bot]" "copilot-bot[bot]")
+
+          IS_KNOWN_BOT=false
+          for BOT in "${KNOWN_BOTS[@]}"; do
+            if [[ "$EVENT_ACTOR" == "$BOT" ]]; then
+              IS_KNOWN_BOT=true
+              break
+            fi
+          done
+
+          if $IS_KNOWN_BOT || [[ "$EVENT_ACTOR" =~ \[bot\]$ ]]; then
+            echo "Skipping bot user: $EVENT_ACTOR"
+            ASSIGN_USER=""
+          else
+            ASSIGN_USER="$EVENT_ACTOR"
+            echo "Determined user: $ASSIGN_USER"
+          fi
+        
+          echo "assigned_user=$ASSIGN_USER" >> "$GITHUB_OUTPUT"
+
+      - name: Assign PR to determined user
+        if: steps.get_assignee_user.outputs.assigned_user != ''
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          ASSIGN_USER_LOGIN="${{ steps.get_assignee_user.outputs.assigned_user }}"
+
+          echo "Attempting to assign PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"
+          # Note: If the user is already assigned, this command will succeed without error.
+          gh pr edit "$PR_NUMBER" --add-assignee "$ASSIGN_USER_LOGIN" --repo "${{ github.repository }}"
+          echo "Successfully assigned PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"

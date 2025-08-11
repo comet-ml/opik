@@ -2,9 +2,9 @@ export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
-  OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  CUSTOM = "custom-llm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -14,6 +14,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
+  GPT_4_1 = "gpt-4.1",
+  GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -26,6 +28,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
 
   //  <----- anthropic
+  CLAUDE_4_SONNET = "claude-4-sonnet",
   CLAUDE_3_5_SONNET_LATEST = "claude-3-5-sonnet-latest",
   CLAUDE_3_5_SONNET_20241022 = "claude-3-5-sonnet-20241022",
   CLAUDE_3_5_HAIKU_LATEST = "claude-3-5-haiku-latest",
@@ -97,8 +100,10 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_CHAT = "deepseek/deepseek-chat",
   DEEPSEEK_DEEPSEEK_CHAT_FREE = "deepseek/deepseek-chat:free",
   DEEPSEEK_DEEPSEEK_CHAT_V2_5 = "deepseek/deepseek-chat-v2.5",
+  DEEPSEEK_DEEPSEEK_CHAT_V3_0324 = "deepseek/deepseek-chat-v3-0324",
   DEEPSEEK_DEEPSEEK_CODER = "deepseek/deepseek-coder",
   DEEPSEEK_DEEPSEEK_R1 = "deepseek/deepseek-r1",
+  DEEPSEEK_DEEPSEEK_R1_0528 = "deepseek/deepseek-r1-0528",
   DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B = "deepseek/deepseek-r1-distill-llama-70b",
   DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE = "deepseek/deepseek-r1-distill-llama-70b:free",
   DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_8B = "deepseek/deepseek-r1-distill-llama-8b",
@@ -131,6 +136,9 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_2_9B_IT_FREE = "google/gemma-2-9b-it:free",
+  GOOGLE_GEMMA_3N_E4B_IT = "google/gemma-3n-e4b-it",
+  GOOGLE_GEMMA_3N_E2B_IT_FREE = "google/gemma-3n-e2b-it:free",
+  GOOGLE_GEMMA_3_4B_IT = "google/gemma-3-4b-it",
   GOOGLE_GEMMA_7B_IT = "google/gemma-7b-it",
   GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE = "google/learnlm-1.5-pro-experimental:free",
   GOOGLE_PALM_2_CHAT_BISON = "google/palm-2-chat-bison",
@@ -223,6 +231,7 @@ export enum PROVIDER_MODEL_TYPE {
   MISTRALAI_MIXTRAL_8X7B_INSTRUCT = "mistralai/mixtral-8x7b-instruct",
   MISTRALAI_PIXTRAL_12B = "mistralai/pixtral-12b",
   MISTRALAI_PIXTRAL_LARGE_2411 = "mistralai/pixtral-large-2411",
+  MOONSHOTAI_KIMI_K2 = "moonshotai/kimi-k2",
   NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B = "neversleep/llama-3.1-lumimaid-70b",
   NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B = "neversleep/llama-3.1-lumimaid-8b",
   NEVERSLEEP_LLAMA_3_LUMIMAID_70B = "neversleep/llama-3-lumimaid-70b",
@@ -272,6 +281,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_4_TURBO = "openai/gpt-4-turbo",
   OPENAI_GPT_4_TURBO_PREVIEW = "openai/gpt-4-turbo-preview",
   OPENAI_GPT_4_VISION_PREVIEW = "openai/gpt-4-vision-preview",
+  OPENAI_GPT_4_1 = "openai/gpt-4.1",
+  OPENAI_GPT_4_1_MINI = "openai/gpt-4.1-mini",
   OPENAI_O1 = "openai/o1",
   OPENAI_O1_MINI = "openai/o1-mini",
   OPENAI_O1_MINI_2024_09_12 = "openai/o1-mini-2024-09-12",
@@ -300,6 +311,7 @@ export enum PROVIDER_MODEL_TYPE {
   PHIND_PHIND_CODELLAMA_34B = "phind/phind-codellama-34b",
   PYGMALIONAI_MYTHALION_13B = "pygmalionai/mythalion-13b",
   QWEN_QVQ_72B_PREVIEW = "qwen/qvq-72b-preview",
+  QWEN_QWEN_2_5_VL_7B_INSTRUCT = "qwen/qwen-2.5-vl-7b-instruct",
   QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE = "qwen/qwen2.5-vl-72b-instruct:free",
   QWEN_QWEN_110B_CHAT = "qwen/qwen-110b-chat",
   QWEN_QWEN_14B_CHAT = "qwen/qwen-14b-chat",
@@ -318,6 +330,12 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN_PLUS = "qwen/qwen-plus",
   QWEN_QWEN_TURBO = "qwen/qwen-turbo",
   QWEN_QWEN_VL_PLUS_FREE = "qwen/qwen-vl-plus:free",
+  QWEN_QWEN3_CODER = "qwen/qwen3-coder",
+  QWEN_QWEN3_8B = "qwen/qwen3-8b",
+  QWEN_QWEN3_30B_A3B_INSTRUCT_2507 = "qwen/qwen3-30b-a3b-instruct-2507",
+  QWEN_QWEN3_30B_A3B = "qwen/qwen3-30b-a3b",
+  QWEN_QWEN3_235B_A22B_THINKING_2507 = "qwen/qwen3-235b-a22b-thinking-2507",
+  QWEN_QWEN3_235B_A22B_2507 = "qwen/qwen3-235b-a22b-2507",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   QWEN_QWQ_32B_PREVIEW = "qwen/qwq-32b-preview",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
@@ -350,6 +368,8 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_2_VISION_1212 = "x-ai/grok-2-vision-1212",
   X_AI_GROK_BETA = "x-ai/grok-beta",
   X_AI_GROK_VISION_BETA = "x-ai/grok-vision-beta",
+  Z_AI_GLM_4_5_AIR = "z-ai/glm-4.5-air",
+  Z_AI_GLM_4_5 = "z-ai/glm-4.5",
   ZERO_ONE_AI_YI_1_5_34B_CHAT = "01-ai/yi-1.5-34b-chat",
   ZERO_ONE_AI_YI_34B = "01-ai/yi-34b",
   ZERO_ONE_AI_YI_34B_200K = "01-ai/yi-34b-200k",
@@ -365,6 +385,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_5_PRO = "gemini-2.5-pro",
+  GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
@@ -373,25 +396,21 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
+  VERTEX_AI_GEMINI_2_5_PRO = "vertex_ai/gemini-2.5-pro",
+  VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash",
+  VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
 }
 
 export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
-    structuredOutput?: boolean;
   }[];
 };
 
-export enum PROVIDER_LOCATION_TYPE {
-  cloud = "cloud",
-  local = "local",
-}
-
-export interface LocalAIProviderData {
-  url: string;
-  models: string;
-  created_at: string;
+export interface ProviderKeyConfiguration {
+  location?: string;
+  models?: string;
 }
 
 export interface ProviderKey {
@@ -399,11 +418,12 @@ export interface ProviderKey {
   keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
+  base_url?: string;
+  configuration: ProviderKeyConfiguration;
 }
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
-  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -444,10 +464,19 @@ export interface LLMVertexAIConfigsType {
   topP: number;
 }
 
+export interface LLMCustomConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexAIConfigsType;
+  | LLMVertexAIConfigsType
+  | LLMCustomConfigsType;

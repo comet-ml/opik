@@ -1,0 +1,16 @@
+---
+description: Structured logging patterns and best practices
+globs:
+alwaysApply: true
+---
+
+## Logger Configuration
+- Use structured logging with proper logger hierarchies
+- Configure logging with customizable formatters
+- Create module-level loggers consistently with the variable name `LOGGER`
+
+## Log Content and Levels
+- Use appropriate log levels: DEBUG for detailed info, INFO and WARNING for user messages, ERROR for problems
+- Implement log-once patterns for repeated messages
+- Include relevant context without exposing sensitive information
+- Include timing information for API calls and processing

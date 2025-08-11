@@ -9,15 +9,16 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
-import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -25,9 +26,11 @@ import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
+import io.r2dbc.spi.Connection;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -41,6 +44,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,7 +55,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
-import static com.comet.opik.api.attachment.EntityType.TRACE;
+import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -69,9 +73,7 @@ public interface TraceService {
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
-    Mono<Void> delete(UUID id);
-
-    Mono<Void> delete(Set<UUID> ids);
+    Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -96,6 +98,8 @@ public interface TraceService {
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
     Mono<Long> countTraces(Set<UUID> projectIds);
+
+    Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -106,15 +110,13 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
-    private final @NonNull SpanService spanService;
-    private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
-    private final @NonNull CommentDAO commentDAO;
-    private final @NonNull AttachmentService attachmentService;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull TraceSortingFactory traceSortingFactory;
 
     @Override
     @WithSpan
@@ -292,11 +294,11 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private TraceSearchCriteria findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
-        return criteria.toBuilder()
-                .projectId(projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(),
-                        criteria.projectName()))
-                .build();
+    private Mono<TraceSearchCriteria> findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
+        return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
+                .map(projectId -> criteria.toBuilder()
+                        .projectId(projectId)
+                        .build());
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -319,34 +321,38 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(@NonNull UUID id) {
-        log.info("Deleting trace by id '{}'", id);
-        return feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id)
-                .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, Set.of(id))))
-                .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
-                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))));
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Void> delete(Set<UUID> ids) {
+    public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
-        return template
-                .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
-                .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, ids)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, ids)))
-                .then(Mono.defer(() -> spanService.deleteByTraceIds(ids)))
-                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
+        return template.nonTransaction(connection -> delete(ids, projectId, connection));
+    }
+
+    private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
+        return Mono.deferContextual(
+                ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
+                        .flatMap(batch -> dao.delete(Set.copyOf(batch), projectId, connection)
+                                .doOnSuccess(__ -> {
+                                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                                    String userName = ctx.get(RequestContext.USER_NAME);
+                                    eventBus.post(TracesDeleted.builder()
+                                            .traceIds(Set.copyOf(batch))
+                                            .projectId(projectId)
+                                            .workspaceId(workspaceId)
+                                            .userName(userName)
+                                            .build());
+                                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
+                                            batch.size(), workspaceId);
+                                }))
+                        .then());
     }
 
     @Override
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
-        TraceSearchCriteria resolvedCriteria = findProjectAndVerifyVisibility(criteria);
-
-        return template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection));
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection)))
+                .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
     }
 
     @Override
@@ -390,9 +396,8 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.getStats(criteria)
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(dao::getStats)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
@@ -417,9 +422,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.findThreads(size, page, criteria);
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(it -> dao.findThreads(size, page, it))
+                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields())));
     }
 
     @Override
@@ -430,13 +435,28 @@ class TraceServiceImpl implements TraceService {
         }
 
         if (traceThreads.projectId() != null) {
-            return dao.deleteThreads(traceThreads.projectId(), traceThreads.threadIds())
-                    .then();
+            return deleteTraceThreadsByProjectId(traceThreads.projectId(), traceThreads.threadIds());
         }
 
         return getProjectByName(traceThreads.projectName())
-                .flatMap(project -> dao.deleteThreads(project.id(), traceThreads.threadIds()))
-                .then();
+                .flatMap(project -> deleteTraceThreadsByProjectId(project.id(), traceThreads.threadIds()));
+    }
+
+    private Mono<Void> deleteTraceThreadsByProjectId(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        log.info("Deleting trace threads by project id '{}' and thread ids count '{}'", projectId, threadIds.size());
+
+        return Mono.deferContextual(ctx -> template.nonTransaction(connection ->
+        // First get all trace IDs for the thread IDs
+        dao.getTraceIdsByThreadIds(projectId, threadIds, connection)
+                .flatMap(traceIds -> {
+                    if (traceIds.isEmpty()) {
+                        log.info("No traces found for thread IDs, skipping deletion");
+                        return Mono.empty();
+                    }
+                    log.info("Found '{}' traces for thread IDs, proceeding with deletion", traceIds.size());
+
+                    return delete(traceIds, projectId, connection);
+                })));
     }
 
     @Override
@@ -447,14 +467,19 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.search(limit, criteria);
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMapMany(it -> dao.search(limit, it));
     }
 
     @Override
     public Mono<Long> countTraces(@NonNull Set<UUID> projectIds) {
         return dao.countTraces(projectIds);
+    }
+
+    @Override
+    public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMapMany(it -> dao.threadsSearch(limit, it));
     }
 
 }

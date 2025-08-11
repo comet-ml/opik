@@ -82,7 +82,8 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100}
+
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -214,7 +215,20 @@ rateLimit:
       # Description: User facing bucket name
       userFacingBucketName: get_span_by_id
       # Description: Rate limit error message
-      errorMessage: "You have exceeded the rate limit for this operation Please try again later."
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    singleTracingOps:
+        # Default: 800
+        # Description: how many events are allowed in the specified time bucket
+        limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-800}
+        # Default: 60
+        # Description: Time bucket size in seconds
+        durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+        # Description: Header name to use for rate limiting
+        headerName: Single-Tracing-Ops
+        # Description: User facing bucket name
+        userFacingBucketName: single_tracing_ops
+        # Description: Rate limit error message
+        errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -270,6 +284,12 @@ onlineScoring:
       codec: java
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
+      codec: java
+    - scorer: trace_thread_llm_as_judge
+      streamName: stream_scoring_trace_thread_llm_as_judge
+      codec: java
+    - scorer: trace_thread_user_defined_metric_python
+      streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
 
 # LLM providers client configuration
@@ -380,12 +400,15 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not to enable the trace thread Python evaluator
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
-  # Default: 10min
+  # Default: 15min
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
-  timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE_IN_MIN:-10m}
+  timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
   # Default: trace_thread_closing
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_GROUP_NAME:-'trace_thread_closing'}
@@ -410,3 +433,21 @@ traceThreadConfig:
   # Default: 1000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+
+# Job timeout configuration
+jobTimeout:
+  # Default: 30s
+  # Description: Timeout for the daily usage report job execution
+  dailyUsageReportJobTimeout: ${OPIK_DAILY_USAGE_REPORT_JOB_TIMEOUT:-30}
+  # Default: 30s
+  # Description: Timeout for the trace threads closing job execution
+  traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
+
+# Configuration for ClickHouse async insert functionality
+asyncInsert:
+  # Default: false
+  # Description: Enable async insert for individual write operations to ClickHouse.
+  # When enabled, individual inserts (not batch operations) will use async_insert=1,
+  # wait_for_async_insert=1, and async_insert_use_adaptive_busy_timeout=1 settings
+  # to reduce IO overhead for concurrent requests.
+  enabled: ${OPIK_CLICKHOUSE_ASYNC_INSERT_ENABLED:-false}

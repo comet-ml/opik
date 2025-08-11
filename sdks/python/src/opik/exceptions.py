@@ -1,4 +1,4 @@
-from typing import Set, List, TYPE_CHECKING, Dict, Any
+from typing import Set, List, TYPE_CHECKING, Dict, Any, Optional, Sequence
 
 if TYPE_CHECKING:
     from opik.guardrails import schemas
@@ -21,11 +21,39 @@ class ConfigurationError(OpikException):
 
 
 class ScoreMethodMissingArguments(OpikException):
-    pass
+    def __init__(
+        self,
+        score_name: str,
+        missing_required_arguments: Sequence[str],
+        available_keys: Sequence[str],
+        unused_mapping_arguments: Optional[Sequence[str]] = None,
+    ):
+        self.score_name = score_name
+        self.missing_required_arguments = missing_required_arguments
+        self.available_keys = available_keys
+        self.unused_mapping_arguments = unused_mapping_arguments
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        message = (
+            f"The scoring method {self.score_name} is missing arguments: {self.missing_required_arguments}. "
+            f"These keys were not present in either the dataset item or the dictionary returned by the evaluation task. "
+            f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments. "
+            f"The available keys found in the dataset item and evaluation task output are: {self.available_keys}. "
+        )
+        if self.unused_mapping_arguments:
+            message += f" Some keys in `scoring_key_mapping` didn't match anything: {self.unused_mapping_arguments}"
+        return message
 
 
 class MetricComputationError(OpikException):
     """Exception raised when a metric cannot be computed."""
+
+    pass
+
+
+class EvaluationError(OpikException):
+    """Exception raised when an evaluation fails."""
 
     pass
 

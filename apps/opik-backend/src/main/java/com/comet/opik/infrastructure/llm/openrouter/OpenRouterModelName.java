@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * This information is taken from <a href="https://openrouter.ai/models">OpenRouter docs</a>
@@ -14,7 +16,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RequiredArgsConstructor
-public enum OpenRouterModelName {
+public enum OpenRouterModelName implements StructuredOutputSupported {
     AETHERWIING_MN_STARCANNON_12B("aetherwiing/mn-starcannon-12b"),
     AI21_JAMBA_1_5_LARGE("ai21/jamba-1-5-large"),
     AI21_JAMBA_1_5_MINI("ai21/jamba-1-5-mini"),
@@ -75,8 +77,10 @@ public enum OpenRouterModelName {
     DEEPSEEK_DEEPSEEK_CHAT("deepseek/deepseek-chat"),
     DEEPSEEK_DEEPSEEK_CHAT_FREE("deepseek/deepseek-chat:free"),
     DEEPSEEK_DEEPSEEK_CHAT_V2_5("deepseek/deepseek-chat-v2.5"),
+    DEEPSEEK_DEEPSEEK_CHAT_V3_0324("deepseek/deepseek-chat-v3-0324"),
     DEEPSEEK_DEEPSEEK_CODER("deepseek/deepseek-coder"),
     DEEPSEEK_DEEPSEEK_R1("deepseek/deepseek-r1"),
+    DEEPSEEK_DEEPSEEK_R1_0528("deepseek/deepseek-r1-0528"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B("deepseek/deepseek-r1-distill-llama-70b"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE("deepseek/deepseek-r1-distill-llama-70b:free"),
     DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_8B("deepseek/deepseek-r1-distill-llama-8b"),
@@ -109,6 +113,9 @@ public enum OpenRouterModelName {
     GOOGLE_GEMMA_2_27B_IT("google/gemma-2-27b-it"),
     GOOGLE_GEMMA_2_9B_IT("google/gemma-2-9b-it"),
     GOOGLE_GEMMA_2_9B_IT_FREE("google/gemma-2-9b-it:free"),
+    GOOGLE_GEMMA_3N_E4B_IT("google/gemma-3n-e4b-it"),
+    GOOGLE_GEMMA_3N_E2B_IT_FREE("google/gemma-3n-e2b-it:free"),
+    GOOGLE_GEMMA_3_4B_IT("google/gemma-3-4b-it"),
     GOOGLE_GEMMA_7B_IT("google/gemma-7b-it"),
     GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE("google/learnlm-1.5-pro-experimental:free"),
     GOOGLE_PALM_2_CHAT_BISON("google/palm-2-chat-bison"),
@@ -201,6 +208,7 @@ public enum OpenRouterModelName {
     MISTRALAI_MIXTRAL_8X7B_INSTRUCT("mistralai/mixtral-8x7b-instruct"),
     MISTRALAI_PIXTRAL_12B("mistralai/pixtral-12b"),
     MISTRALAI_PIXTRAL_LARGE_2411("mistralai/pixtral-large-2411"),
+    MOONSHOTAI_KIMI_K2("moonshotai/kimi-k2"),
     NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B("neversleep/llama-3.1-lumimaid-70b"),
     NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B("neversleep/llama-3.1-lumimaid-8b"),
     NEVERSLEEP_LLAMA_3_LUMIMAID_70B("neversleep/llama-3-lumimaid-70b"),
@@ -250,6 +258,8 @@ public enum OpenRouterModelName {
     OPENAI_GPT_4_TURBO("openai/gpt-4-turbo"),
     OPENAI_GPT_4_TURBO_PREVIEW("openai/gpt-4-turbo-preview"),
     OPENAI_GPT_4_VISION_PREVIEW("openai/gpt-4-vision-preview"),
+    OPENAI_GPT_4_1("openai/gpt-4.1"),
+    OPENAI_GPT_4_1_MINI("openai/gpt-4.1-mini"),
     OPENAI_O1("openai/o1"),
     OPENAI_O1_MINI("openai/o1-mini"),
     OPENAI_O1_MINI_2024_09_12("openai/o1-mini-2024-09-12"),
@@ -278,6 +288,7 @@ public enum OpenRouterModelName {
     PHIND_PHIND_CODELLAMA_34B("phind/phind-codellama-34b"),
     PYGMALIONAI_MYTHALION_13B("pygmalionai/mythalion-13b"),
     QWEN_QVQ_72B_PREVIEW("qwen/qvq-72b-preview"),
+    QWEN_QWEN_2_5_VL_7B_INSTRUCT("qwen/qwen-2.5-vl-7b-instruct"),
     QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE("qwen/qwen2.5-vl-72b-instruct:free"),
     QWEN_QWEN_110B_CHAT("qwen/qwen-110b-chat"),
     QWEN_QWEN_14B_CHAT("qwen/qwen-14b-chat"),
@@ -296,6 +307,12 @@ public enum OpenRouterModelName {
     QWEN_QWEN_PLUS("qwen/qwen-plus"),
     QWEN_QWEN_TURBO("qwen/qwen-turbo"),
     QWEN_QWEN_VL_PLUS_FREE("qwen/qwen-vl-plus:free"),
+    QWEN_QWEN3_CODER("qwen/qwen3-coder"),
+    QWEN_QWEN3_8B("qwen/qwen3-8b"),
+    QWEN_QWEN3_30B_A3B_INSTRUCT_2507("qwen/qwen3-30b-a3b-instruct-2507"),
+    QWEN_QWEN3_30B_A3B("qwen/qwen3-30b-a3b"),
+    QWEN_QWEN3_235B_A22B_THINKING_2507("qwen/qwen3-235b-a22b-thinking-2507"),
+    QWEN_QWEN3_235B_A22B_2507("qwen/qwen3-235b-a22b-2507"),
     QWEN_QWQ_32B_PREVIEW("qwen/qwq-32b-preview"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
     RAIFLE_SORCERERLM_8X22B("raifle/sorcererlm-8x22b"),
@@ -328,6 +345,8 @@ public enum OpenRouterModelName {
     X_AI_GROK_2_VISION_1212("x-ai/grok-2-vision-1212"),
     X_AI_GROK_BETA("x-ai/grok-beta"),
     X_AI_GROK_VISION_BETA("x-ai/grok-vision-beta"),
+    Z_AI_GLM_4_5_AIR("z-ai/glm-4.5-air"),
+    Z_AI_GLM_4_5("z-ai/glm-4.5"),
     ZERO_ONE_AI_YI_1_5_34B_CHAT("01-ai/yi-1.5-34b-chat"),
     ZERO_ONE_AI_YI_34B("01-ai/yi-34b"),
     ZERO_ONE_AI_YI_34B_200K("01-ai/yi-34b-200k"),
@@ -341,7 +360,77 @@ public enum OpenRouterModelName {
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
+    private static final Set<OpenRouterModelName> STRUCTURED_OUTPUT_SUPPORTED_MODELS = Set.of(
+            COHERE_COMMAND,
+            COHERE_COMMAND_R,
+            COHERE_COMMAND_R7B_12_2024,
+            COHERE_COMMAND_R_03_2024,
+            COHERE_COMMAND_R_08_2024,
+            COHERE_COMMAND_R_PLUS,
+            COHERE_COMMAND_R_PLUS_04_2024,
+            COHERE_COMMAND_R_PLUS_08_2024,
+            DEEPSEEK_DEEPSEEK_CHAT,
+            DEEPSEEK_DEEPSEEK_R1,
+            GOOGLE_GEMINI_2_0_FLASH_001,
+            GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
+            GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE,
+            GOOGLE_GEMINI_2_0_PRO_EXP_02_05_FREE,
+            GOOGLE_GEMINI_FLASH_1_5,
+            GOOGLE_GEMINI_FLASH_1_5_8B,
+            GOOGLE_GEMINI_FLASH_1_5_8B_EXP,
+            GOOGLE_GEMINI_FLASH_1_5_EXP,
+            GOOGLE_GEMINI_PRO_1_5,
+            GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE,
+            GRYPHE_MYTHOMAX_L2_13B,
+            META_LLAMA_LLAMA_3_1_405B_INSTRUCT,
+            META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+            META_LLAMA_LLAMA_3_2_3B_INSTRUCT,
+            META_LLAMA_LLAMA_3_2_11B_VISION_INSTRUCT,
+            META_LLAMA_LLAMA_3_2_90B_VISION_INSTRUCT,
+            META_LLAMA_LLAMA_3_3_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_8B_INSTRUCT,
+            MISTRALAI_CODESTRAL_2501,
+            MISTRALAI_MINISTRAL_3B,
+            MISTRALAI_MINISTRAL_8B,
+            MISTRALAI_MISTRAL_LARGE,
+            MISTRALAI_MISTRAL_LARGE_2407,
+            MISTRALAI_MISTRAL_LARGE_2411,
+            MISTRALAI_MISTRAL_MEDIUM,
+            MISTRALAI_MISTRAL_NEMO,
+            MISTRALAI_MISTRAL_SABA,
+            MISTRALAI_MISTRAL_SMALL,
+            MISTRALAI_MISTRAL_SMALL_24B_INSTRUCT_2501,
+            MISTRALAI_MISTRAL_TINY,
+            MISTRALAI_MIXTRAL_8X22B_INSTRUCT,
+            MISTRALAI_MIXTRAL_8X7B_INSTRUCT,
+            MISTRALAI_PIXTRAL_12B,
+            MISTRALAI_PIXTRAL_LARGE_2411,
+            OPENAI_GPT_4O,
+            OPENAI_GPT_4O_ONLINE,
+            OPENAI_GPT_4O_2024_05_13,
+            OPENAI_GPT_4O_2024_08_06,
+            OPENAI_GPT_4O_2024_11_20,
+            OPENAI_GPT_4O_EXTENDED,
+            OPENAI_GPT_4O_MINI,
+            OPENAI_GPT_4O_MINI_2024_07_18,
+            OPENAI_GPT_4_1,
+            OPENAI_GPT_4_1_MINI,
+            OPENAI_O1,
+            OPENAI_O3_MINI,
+            OPENAI_O3_MINI_HIGH,
+            QWEN_QWEN_2_5_72B_INSTRUCT,
+            QWEN_QWEN_2_5_CODER_32B_INSTRUCT,
+            QWEN_QWQ_32B_PREVIEW,
+            ZERO_ONE_AI_YI_LARGE);
+
     private final String value;
+
+    @Override
+    public boolean isStructuredOutputSupported() {
+        return STRUCTURED_OUTPUT_SUPPORTED_MODELS.contains(this);
+    }
 
     public static Optional<OpenRouterModelName> byValue(String value) {
         var response = Arrays.stream(OpenRouterModelName.values())

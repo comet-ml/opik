@@ -3,10 +3,11 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -68,257 +69,257 @@ public interface DatasetItemDAO {
 class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String INSERT_DATASET_ITEM = """
-                INSERT INTO dataset_items (
-                    id,
-                    dataset_id,
-                    source,
-                    trace_id,
-                    span_id,
-                    data,
-                    created_at,
-                    workspace_id,
-                    created_by,
-                    last_updated_by
-                )
-                VALUES
-                    <items:{item |
-                        (
-                             :id<item.index>,
-                             :datasetId<item.index>,
-                             :source<item.index>,
-                             :traceId<item.index>,
-                             :spanId<item.index>,
-                             :data<item.index>,
-                             now64(9),
-                             :workspace_id,
-                             :createdBy<item.index>,
-                             :lastUpdatedBy<item.index>
-                         )
-                         <if(item.hasNext)>
-                            ,
-                         <endif>
-                    }>
-                ;
+            INSERT INTO dataset_items (
+                id,
+                dataset_id,
+                source,
+                trace_id,
+                span_id,
+                data,
+                created_at,
+                workspace_id,
+                created_by,
+                last_updated_by
+            ) <settings_clause>
+            VALUES
+                <items:{item |
+                    (
+                         :id<item.index>,
+                         :datasetId<item.index>,
+                         :source<item.index>,
+                         :traceId<item.index>,
+                         :spanId<item.index>,
+                         :data<item.index>,
+                         now64(9),
+                         :workspace_id,
+                         :createdBy<item.index>,
+                         :lastUpdatedBy<item.index>
+                     )
+                     <if(item.hasNext)>
+                        ,
+                     <endif>
+                }>
+            ;
             """;
 
     private static final String SELECT_DATASET_ITEM = """
-                SELECT
-                    *,
-                    null AS experiment_items_array
-                FROM dataset_items
-                WHERE id = :id
-                AND workspace_id = :workspace_id
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
-                ;
+            SELECT
+                *,
+                null AS experiment_items_array
+            FROM dataset_items
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1 BY id
+            ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_STREAM = """
-                SELECT
-                    *,
-                    null AS experiment_items_array
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-                LIMIT :limit
-                ;
+            SELECT
+                *,
+                null AS experiment_items_array
+            FROM dataset_items
+            WHERE dataset_id = :datasetId
+            AND workspace_id = :workspace_id
+            <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            LIMIT :limit
+            ;
             """;
 
     private static final String DELETE_DATASET_ITEM = """
-                DELETE FROM dataset_items
-                WHERE id IN :ids
-                AND workspace_id = :workspace_id
-                ;
+            DELETE FROM dataset_items
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ;
             """;
 
     private static final String SELECT_DATASET_ITEMS = """
-                SELECT
-                    id,
-                    dataset_id,
-                    <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), data) as data <else> data <endif>,
-                    trace_id,
-                    span_id,
-                    source,
-                    created_at,
-                    last_updated_at,
-                    created_by,
-                    last_updated_by,
-                    null AS experiment_items_array
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-                LIMIT :limit OFFSET :offset
-                ;
+            SELECT
+                id,
+                dataset_id,
+                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), data) as data <else> data <endif>,
+                trace_id,
+                span_id,
+                source,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                null AS experiment_items_array
+            FROM dataset_items
+            WHERE dataset_id = :datasetId
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            LIMIT :limit OFFSET :offset
+            ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_COUNT = """
-                SELECT
-                    count(id) AS count,
-                    arrayFold(
-                        (acc, x) -> mapFromArrays(
-                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                            arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                        ),
-                        arrayDistinct(
-                            arrayFlatten(
-                                groupArray(
-                                    arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                                )
+            SELECT
+                count(id) AS count,
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
                             )
-                        ),
-                        CAST(map(), 'Map(String, Array(String))')
-                    ) AS columns
-                FROM (
-                    SELECT
-                        id,
-                        data
-                    FROM dataset_items
-                    WHERE dataset_id = :datasetId
-                    AND workspace_id = :workspace_id
-                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS lastRows
-                ;
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM (
+                SELECT
+                    id,
+                    data
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS lastRows
+            ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID = """
-                SELECT
-                    arrayFold(
-                        (acc, x) -> mapFromArrays(
-                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                            arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                        ),
-                        arrayDistinct(
-                            arrayFlatten(
-                                groupArray(
-                                    arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                                )
+            SELECT
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
                             )
-                        ),
-                        CAST(map(), 'Map(String, Array(String))')
-                    ) AS columns
-                FROM (
-                    SELECT
-                        id,
-                        data
-                    FROM dataset_items
-                    WHERE dataset_id = :datasetId
-                    AND workspace_id = :workspace_id
-                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                ;
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM (
+                SELECT
+                    id,
+                    data
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            ;
             """;
 
     private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
-                        SELECT
-                            dataset_id,
-                            count(id) AS count
-                        FROM (
-                                 SELECT
-                                     id,
-                                     dataset_id
-                                 FROM dataset_items
-                                 WHERE dataset_id IN :dataset_ids
-                                   AND workspace_id = :workspace_id
-                                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                                 LIMIT 1 BY id
-                                 ) AS lastRows
-                        GROUP BY dataset_id
-                        ;
+            SELECT
+                dataset_id,
+                count(id) AS count
+            FROM (
+                     SELECT
+                         id,
+                         dataset_id
+                     FROM dataset_items
+                     WHERE dataset_id IN :dataset_ids
+                       AND workspace_id = :workspace_id
+                     ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                     LIMIT 1 BY id
+                     ) AS lastRows
+            GROUP BY dataset_id
+            ;
             """;
 
     /**
      * Counts dataset items only if there's a matching experiment item.
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
-                <if(feedback_scores_empty_filters)>
-                WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores
-                        WHERE entity_type = 'trace'
-                        AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                     )
-                     GROUP BY entity_id
-                     HAVING <feedback_scores_empty_filters>
-                )
-                <endif>
-                SELECT
-                   COUNT(DISTINCT di.id) AS count
+            <if(feedback_scores_empty_filters)>
+            WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                 FROM (
-                    SELECT
-                        id
-                    FROM dataset_items
-                    WHERE dataset_id = :datasetId
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
-                    <if(dataset_item_filters)>
-                    AND <dataset_item_filters>
-                    <endif>
-                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS di
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            SELECT
+               COUNT(DISTINCT di.id) AS count
+            FROM (
+                SELECT
+                    id
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                <if(dataset_item_filters)>
+                AND <dataset_item_filters>
+                <endif>
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS di
+            INNER JOIN (
+                SELECT
+                    dataset_item_id,
+                    trace_id
+                FROM experiment_items ei
+                <if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
                 INNER JOIN (
                     SELECT
-                        dataset_item_id,
-                        trace_id
-                    FROM experiment_items ei
-                    <if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
-                    INNER JOIN (
-                        SELECT
-                            id
-                        FROM traces
-                        <if(feedback_scores_empty_filters)>
-                            LEFT JOIN fsc ON fsc.entity_id = traces.id
-                        <endif>
-                        WHERE workspace_id = :workspace_id
-                        <if(experiment_item_filters)>
-                        AND <experiment_item_filters>
-                        <endif>
-                        <if(feedback_scores_filters)>
-                        AND id in (
-                            SELECT
-                                entity_id
-                            FROM (
-                                SELECT *
-                                FROM feedback_scores
-                                WHERE entity_type = 'trace'
-                                AND workspace_id = :workspace_id
-                                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
-                            )
-                            GROUP BY entity_id
-                            HAVING <feedback_scores_filters>
-                        )
-                        <endif>
-                        <if(feedback_scores_empty_filters)>
-                        AND fsc.feedback_scores_count = 0
-                        <endif>
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS tfs ON ei.trace_id = tfs.id
+                        id
+                    FROM traces
+                    <if(feedback_scores_empty_filters)>
+                        LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
-                    WHERE experiment_id in :experimentIds
-                    AND workspace_id = :workspace_id
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    WHERE workspace_id = :workspace_id
+                    <if(experiment_item_filters)>
+                    AND <experiment_item_filters>
+                    <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND fsc.feedback_scores_count = 0
+                    <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) AS ei ON di.id = ei.dataset_item_id
-                ;
+                ) AS tfs ON ei.trace_id = tfs.id
+                <endif>
+                WHERE experiment_id in :experimentIds
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS ei ON di.id = ei.dataset_item_id
+            ;
             """;
 
     private static final String SELECT_DATASET_WORKSPACE_ITEMS = """
-                SELECT
-                    DISTINCT id, workspace_id
-                FROM dataset_items
-                WHERE id IN :datasetItemIds
-                ;
+            SELECT
+                DISTINCT id, workspace_id
+            FROM dataset_items
+            WHERE id IN :datasetItemIds
+            ;
             """;
 
     /**
@@ -537,65 +538,67 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             LIMIT :limit OFFSET :offset
             ;
             """;
+
     public static final String DATASET_ITEMS = "dataset_items";
     public static final String CLICKHOUSE = "Clickhouse";
 
     private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
-                WITH dataset_item_final AS (
-                    SELECT
-                        id
-                    FROM dataset_items
-                    WHERE workspace_id = :workspace_id
-                    AND dataset_id = :dataset_id
-                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ), experiment_items_final AS (
-                    SELECT DISTINCT
-                        ei.trace_id,
-                        ei.dataset_item_id
-                    FROM experiment_items ei
-                    WHERE workspace_id = :workspace_id
-                    AND ei.dataset_item_id IN (SELECT id FROM dataset_item_final)
-                    <if(experiment_ids)> AND ei.experiment_id IN :experiment_ids <endif>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
+            WITH dataset_item_final AS (
                 SELECT
-                    arrayFold(
-                        (acc, x) -> mapFromArrays(
-                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                            arrayMap(
-                                key -> arrayDistinct(arrayConcat(acc[key], x[key])),
-                                arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
-                            )
-                        ),
-                        arrayDistinct(
-                            arrayFlatten(
-                                groupArray(
-                                    arrayMap(
-                                        key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                        JSONExtractKeys(output)
-                                    )
+                    id
+                FROM dataset_items
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :dataset_id
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_items_final AS (
+                SELECT DISTINCT
+                    ei.trace_id,
+                    ei.dataset_item_id
+                FROM experiment_items ei
+                WHERE workspace_id = :workspace_id
+                AND ei.dataset_item_id IN (SELECT id FROM dataset_item_final)
+                <if(experiment_ids)> AND ei.experiment_id IN :experiment_ids <endif>
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(
+                            key -> arrayDistinct(arrayConcat(acc[key], x[key])),
+                            arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
+                        )
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(
+                                    key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
+                                    JSONExtractKeys(output)
                                 )
                             )
-                        ),
-                        CAST(map(), 'Map(String, Array(String))')
-                    ) AS columns
-                FROM dataset_item_final as di
-                INNER JOIN experiment_items_final as ei ON ei.dataset_item_id = di.id
-                INNER JOIN (
-                    SELECT
-                        id,
-                        output
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
-                ) as t ON t.id = ei.trace_id
-                ;
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM dataset_item_final as di
+            INNER JOIN experiment_items_final as ei ON ei.dataset_item_id = di.id
+            INNER JOIN (
+                SELECT
+                    id,
+                    output
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT trace_id FROM experiment_items_final)
+            ) as t ON t.id = ei.trace_id
+            ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -616,6 +619,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         var template = new ST(sqlTemplate)
                 .add("items", queryItems);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
 

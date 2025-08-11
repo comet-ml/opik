@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add the source directory to the Python path so Sphinx can find our extensions
+sys.path.insert(0, os.path.abspath("."))
+
 # Configuration file for the Sphinx documentation builder.
 #
 # Full list of options can be found in the Sphinx documentation:
@@ -20,6 +26,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
     "sphinx_click.ext",
+    # Custom extensions
+    "docstring_override",
 ]
 
 # -- Options for Autodoc --------------------------------------------------------------

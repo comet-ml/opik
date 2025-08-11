@@ -708,6 +708,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dataset resource
@@ -1219,6 +1223,43 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/experiments/groups:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups
+      description: Find experiments grouped by specified fields
+      operationId: findExperimentGroups
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -2098,6 +2139,14 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -2841,6 +2890,35 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/traces/threads/{id}/comments:
+    post:
+      tags:
+      - Traces
+      summary: Add thread comment
+      description: Add thread comment
+      operationId: addThreadComment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/threads/{threadId}/comments/{commentId}"
   /v1/private/traces/{id}/comments:
     post:
       tags:
@@ -2907,6 +2985,12 @@ paths:
       responses:
         "204":
           description: No Content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces:
     get:
       tags:
@@ -3056,6 +3140,36 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/comments/delete:
+    post:
+      tags:
+      - Traces
+      summary: Delete thread comments
+      description: Delete thread comments
+      operationId: deleteThreadComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/threads/feedback-scores/delete:
+    post:
+      tags:
+      - Traces
+      summary: Delete thread feedback scores
+      description: Delete thread feedback scores
+      operationId: deleteThreadFeedbackScores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteThreadFeedbackScores"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/comments/delete:
     post:
       tags:
@@ -3145,6 +3259,29 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/traces/threads/feedback-scores/names:
+    get:
+      tags:
+      - Traces
+      summary: Find Trace Threads Feedback Score names
+      description: Find Trace Threads Feedback Score names
+      operationId: findTraceThreadsFeedbackScoreNames
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Find Trace Threads Feedback Score names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/traces/stats:
     get:
       tags:
@@ -3173,6 +3310,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/traces/threads/{threadId}/comments/{commentId}:
+    get:
+      tags:
+      - Traces
+      summary: Get thread comment
+      description: Get thread comment
+      operationId: getThreadComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: threadId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/{traceId}/comments/{commentId}:
     get:
       tags:
@@ -3297,6 +3467,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/feedback-scores:
+    put:
+      tags:
+      - Traces
+      summary: Batch feedback scoring for threads
+      description: Batch feedback scoring for threads
+      operationId: scoreBatchOfThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScoreBatchThread"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -3312,6 +3497,37 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/search:
+    post:
+      tags:
+      - Traces
+      summary: Search trace threads
+      description: Search trace threads
+      operationId: searchTraceThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadSearchStreamRequest"
+      responses:
+        "200":
+          description: Trace threads stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/TraceThread"
+                  - $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/search:
     post:
       tags:
@@ -3349,6 +3565,54 @@ paths:
             application/octet-stream:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/traces/threads/{threadModelId}:
+    patch:
+      tags:
+      - Traces
+      summary: Update thread
+      description: Update thread
+      operationId: updateThread
+      parameters:
+      - name: threadModelId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+  /v1/private/traces/threads/comments/{commentId}:
+    patch:
+      tags:
+      - Traces
+      summary: Update thread comment by id
+      description: Update thread comment by id
+      operationId: updateThreadComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
   /v1/private/traces/comments/{commentId}:
     patch:
       tags:
@@ -3373,6 +3637,146 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/workspaces/costs/summaries:
+    post:
+      tags:
+      - Workspaces
+      summary: Get costs summary
+      description: Get costs summary
+      operationId: costsSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/configurations:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace configuration
+      description: Get workspace configuration
+      operationId: getWorkspaceConfiguration
+      responses:
+        "200":
+          description: Workspace Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Workspaces
+      summary: Upsert workspace configuration
+      description: Upsert workspace configuration
+      operationId: upsertWorkspaceConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceConfiguration"
+      responses:
+        "200":
+          description: Configuration Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfiguration"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Workspaces
+      summary: Delete workspace configuration
+      description: Delete workspace configuration
+      operationId: deleteWorkspaceConfiguration
+      responses:
+        "204":
+          description: Configuration Deleted
+        "404":
+          description: Configuration Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/costs:
+    post:
+      tags:
+      - Workspaces
+      summary: Get cost daily data
+      description: Get cost daily data
+      operationId: getCost
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace cost data by days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/metrics:
+    post:
+      tags:
+      - Workspaces
+      summary: Get metric daily data
+      description: Get metric daily data
+      operationId: getMetric
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace metric data by days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -3808,7 +4212,9 @@ components:
           type: string
     AutomationRuleEvaluator:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -3828,6 +4234,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -3847,6 +4255,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -3856,10 +4266,14 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -3868,10 +4282,40 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
-    AutomationRuleEvaluatorUserDefinedMetricPython:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
+    AutomationRuleEvaluatorUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -3946,6 +4390,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+    TraceThreadUserDefinedMetricPythonCode:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode:
       required:
       - arguments
@@ -3961,8 +4429,10 @@ components:
             type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -3971,10 +4441,40 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Write"
-    AutomationRuleEvaluatorUserDefinedMetricPython_Write:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Write"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Write"
+    AutomationRuleEvaluatorUserDefinedMetricPython_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -3985,7 +4485,9 @@ components:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -3998,11 +4500,15 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4012,6 +4518,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Write"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
     LlmAsJudgeCode_Write:
       required:
       - messages
@@ -4078,6 +4586,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode_Write:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Write"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Write"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    TraceThreadUserDefinedMetricPythonCode_Write:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode_Write:
       required:
       - arguments
@@ -4106,8 +4638,10 @@ components:
             format: uuid
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
+      - action
       - code
       - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4118,7 +4652,9 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeCode_Public"
     AutomationRuleEvaluatorObject_Public:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4138,6 +4674,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -4157,6 +4695,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4166,6 +4706,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
     AutomationRuleEvaluatorPage_Public:
       type: object
       properties:
@@ -4182,10 +4724,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
-    AutomationRuleEvaluatorUserDefinedMetricPython_Public:
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
+      - action
       - code
       - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Public"
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Public"
+    AutomationRuleEvaluatorUserDefinedMetricPython_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       - type
       type: object
       allOf:
@@ -4260,6 +4832,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceThreadLlmAsJudgeCode_Public:
+      required:
+      - messages
+      - model
+      - schema
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Public"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Public"
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    TraceThreadUserDefinedMetricPythonCode_Public:
+      required:
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
     UserDefinedMetricPythonCode_Public:
       required:
       - arguments
@@ -4275,7 +4871,9 @@ components:
             type: string
     AutomationRuleEvaluator_Public:
       required:
+      - action
       - name
+      - project_id
       - type
       type: object
       properties:
@@ -4295,6 +4893,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -4314,6 +4914,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4323,6 +4925,8 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
     LogItem:
       type: object
       properties:
@@ -4370,7 +4974,9 @@ components:
           format: int64
     AutomationRuleEvaluatorUpdate:
       required:
+      - action
       - name
+      - project_id
       type: object
       properties:
         name:
@@ -4379,6 +4985,8 @@ components:
         sampling_rate:
           type: number
           format: float
+        enabled:
+          type: boolean
         project_id:
           type: string
           format: uuid
@@ -4387,6 +4995,8 @@ components:
           enum:
           - llm_as_judge
           - user_defined_metric_python
+          - trace_thread_llm_as_judge
+          - trace_thread_user_defined_metric_python
         action:
           type: string
           enum:
@@ -4396,10 +5006,14 @@ components:
         mapping:
           llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateLlmAsJudge"
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateUserDefinedMetricPython"
+          trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge"
+          trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -4407,10 +5021,38 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
-    AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
+    AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge:
       required:
+      - action
       - code
       - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
+    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          code:
+            $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
+    AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -4431,6 +5073,8 @@ components:
           - function
         content:
           type: string
+        reasoning_content:
+          type: string
         name:
           type: string
         tool_calls:
@@ -4438,7 +5082,7 @@ components:
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
-          type: boolean
+          type: string
         function_call:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
@@ -4485,6 +5129,8 @@ components:
         role:
           type: string
         content:
+          type: string
+        reasoning_content:
           type: string
         tool_calls:
           type: array
@@ -4676,6 +5322,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4737,6 +5388,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4939,7 +5595,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-      readOnly: true
     JsonListString:
       type: object
       anyOf:
@@ -5263,6 +5918,10 @@ components:
         total:
           type: integer
           format: int64
+        sortableBy:
+          type: array
+          items:
+            type: string
     Dataset_Public:
       required:
       - name
@@ -5279,6 +5938,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5534,6 +6198,11 @@ components:
           enum:
           - private
           - public
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     Experiment:
       required:
       - dataset_name
@@ -6374,6 +7043,18 @@ components:
           type: string
         details:
           type: string
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContent"
+    GroupContent:
+      type: object
+      properties:
+        label:
+          type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -6938,7 +7619,6 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -6954,8 +7634,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -6988,7 +7668,6 @@ components:
           readOnly: true
     ProviderApiKey:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7004,8 +7683,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7038,7 +7717,6 @@ components:
           readOnly: true
     ProviderApiKey_Write:
       required:
-      - api_key
       - provider
       type: object
       properties:
@@ -7050,8 +7728,8 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - custom-llm
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7069,16 +7747,23 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProviderApiKeyUpdate:
-      required:
-      - api_key
       type: object
       properties:
         api_key:
-          minLength: 1
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
           type: string
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
@@ -7436,6 +8121,9 @@ components:
           - DURATION
           - COST
           - GUARDRAILS_FAILED_COUNT
+          - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -7467,6 +8155,9 @@ components:
           - DURATION
           - COST
           - GUARDRAILS_FAILED_COUNT
+          - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
         interval:
           type: string
           enum:
@@ -7675,6 +8366,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -7766,6 +8462,11 @@ components:
           enum:
           - mustache
           - jinja2
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     JsonNode_Detail:
       type: object
     PromptVersion_Detail:
@@ -7847,6 +8548,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -7936,6 +8642,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Prompt_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Prompt_Public:
       required:
       - name
@@ -7950,6 +8660,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -7989,13 +8704,21 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
       - pythonEvaluatorEnabled
+      - traceThreadPythonEvaluatorEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
+          type: boolean
+        traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean
@@ -8578,6 +9301,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Trace_Write"
+    DeleteThreadFeedbackScores:
+      required:
+      - names
+      - project_name
+      - thread_id
+      type: object
+      properties:
+        project_name:
+          minLength: 1
+          type: string
+        thread_id:
+          minLength: 1
+          type: string
+        names:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -8598,6 +9342,22 @@ components:
           items:
             minLength: 1
             type: string
+    BatchDeleteByProject:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        project_id:
+          type: string
+          format: uuid
     Check_Public:
       type: object
       properties:
@@ -8723,6 +9483,9 @@ components:
         project_id:
           type: string
           format: uuid
+        thread_model_id:
+          type: string
+          format: uuid
         start_time:
           type: string
           format: date-time
@@ -8733,9 +9496,18 @@ components:
           type: number
           format: double
         first_message:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         last_message:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
+        feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
         number_of_messages:
           type: integer
           format: int64
@@ -8746,9 +9518,20 @@ components:
           additionalProperties:
             type: integer
             format: int64
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         last_updated_at:
           type: string
           format: date-time
+        last_updated_by:
+          type: string
         created_by:
           type: string
         created_at:
@@ -8794,6 +9577,101 @@ components:
           type: array
           items:
             type: string
+    FeedbackScoreBatchItemThread:
+      required:
+      - name
+      - source
+      - thread_id
+      - value
+      type: object
+      properties:
+        thread_id:
+          minLength: 1
+          type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          minLength: 1
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+    FeedbackScoreBatchThread:
+      required:
+      - scores
+      type: object
+      properties:
+        scores:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
+    TraceThreadFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadSearchStreamRequest:
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceThreadFilter"
+        last_retrieved_thread_model_id:
+          type: string
+          format: uuid
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          description: Max number of trace thread to be streamed
+          format: int32
+          default: 500
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     TraceFilter_Public:
       type: object
       properties:
@@ -8876,6 +9754,14 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+    TraceThreadUpdate:
+      type: object
+      properties:
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     Result:
       type: object
       properties:
@@ -8887,13 +9773,6 @@ components:
         previous:
           type: number
           format: double
-    WorkspaceMetricsSummaryResponse:
-      type: object
-      properties:
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/Result"
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end
@@ -8912,3 +9791,61 @@ components:
         interval_end:
           type: string
           format: date-time
+        start_before_end:
+          type: boolean
+    DataPointDouble:
+      required:
+      - time
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+    WorkspaceMetricResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+    WorkspaceMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        start_before_end:
+          type: boolean
+    WorkspaceConfiguration:
+      type: object
+      properties:
+        timeout_to_mark_thread_as_inactive:
+          type: string
+          description: "Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H\
+            \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
+            \ please use a duration with seconds precision or higher. Also, the max\
+            \ duration allowed is 7 days."
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"

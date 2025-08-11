@@ -5,9 +5,7 @@ from opik.types import LLMProvider
 from . import opik_usage
 
 
-# One provider can have multiple formats of usage dicts, so it could be many build functions
-# if provider's name specified as string and not as LLMProvider enum value -
-# it means that we do not support cost tracking for this provider (but support usage info)
+# One provider can have multiple formats of usage dicts, so it can have more than 1 build function
 _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     Union[str, LLMProvider],
     List[Callable[[Dict[str, Any]], opik_usage.OpikUsage]],
@@ -20,7 +18,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     LLMProvider.GOOGLE_VERTEXAI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.GOOGLE_AI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.ANTHROPIC: [opik_usage.OpikUsage.from_anthropic_dict],
-    "_bedrock": [opik_usage.OpikUsage.from_bedrock_dict],
+    LLMProvider.BEDROCK: [opik_usage.OpikUsage.from_bedrock_dict],
 }
 
 

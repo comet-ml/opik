@@ -62,7 +62,7 @@ export class Prompts {
         request: OpikApi.GetPromptsRequest = {},
         requestOptions?: Prompts.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.PromptPagePublic>> {
-        const { page, size, name } = request;
+        const { page, size, name, sorting, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -74,6 +74,14 @@ export class Prompts {
 
         if (name != null) {
             _queryParams["name"] = name;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
         }
 
         const _response = await core.fetcher({

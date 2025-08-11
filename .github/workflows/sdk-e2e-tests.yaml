@@ -15,10 +15,13 @@ on:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
 jobs:
     run-e2e:
         name: SDK E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest   
+        runs-on: ubuntu-latest
+        timeout-minutes: 30   
         strategy:
             fail-fast: false
             matrix:

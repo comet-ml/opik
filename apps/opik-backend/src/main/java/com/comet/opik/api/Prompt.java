@@ -13,6 +13,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.PromptType.MUSTACHE;
@@ -35,6 +36,10 @@ public record Prompt(
         @JsonView({Prompt.View.Write.class}) @Nullable JsonNode metadata,
         @JsonView({Prompt.View.Write.class}) @Nullable String changeDescription,
         @JsonView({Prompt.View.Write.class}) @Nullable PromptType type,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Write.class,
+                Prompt.View.Detail.class,
+                Prompt.View.Updatable.class}) @Nullable Set<String> tags,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Public.class,
@@ -68,12 +73,13 @@ public record Prompt(
                     Prompt.View.Public.class}) int page,
             @JsonView({Prompt.View.Public.class}) int size,
             @JsonView({Prompt.View.Public.class}) long total,
-            @JsonView({Prompt.View.Public.class}) List<Prompt> content)
+            @JsonView({Prompt.View.Public.class}) List<Prompt> content,
+            @JsonView({Prompt.View.Public.class}) List<String> sortableBy)
             implements
                 Page<Prompt>{
 
-        public static Prompt.PromptPage empty(int page) {
-            return new Prompt.PromptPage(page, 0, 0, List.of());
+        public static Prompt.PromptPage empty(int page, List<String> sortableBy) {
+            return new Prompt.PromptPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

@@ -6,7 +6,9 @@ import * as OpikApi from "../index";
 
 export type AutomationRuleEvaluatorPublic =
     | OpikApi.AutomationRuleEvaluatorPublic.LlmAsJudge
-    | OpikApi.AutomationRuleEvaluatorPublic.UserDefinedMetricPython;
+    | OpikApi.AutomationRuleEvaluatorPublic.UserDefinedMetricPython
+    | OpikApi.AutomationRuleEvaluatorPublic.TraceThreadLlmAsJudge
+    | OpikApi.AutomationRuleEvaluatorPublic.TraceThreadUserDefinedMetricPython;
 
 export namespace AutomationRuleEvaluatorPublic {
     export interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorLlmAsJudgePublic, _Base {
@@ -19,16 +21,27 @@ export namespace AutomationRuleEvaluatorPublic {
         type: "user_defined_metric_python";
     }
 
+    export interface TraceThreadLlmAsJudge extends OpikApi.AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic, _Base {
+        type: "trace_thread_llm_as_judge";
+    }
+
+    export interface TraceThreadUserDefinedMetricPython
+        extends OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic,
+            _Base {
+        type: "trace_thread_user_defined_metric_python";
+    }
+
     export interface _Base {
         id?: string;
-        projectId?: string;
+        projectId: string;
         projectName?: string;
         name: string;
         samplingRate?: number;
+        enabled?: boolean;
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;
         lastUpdatedBy?: string;
-        action?: "evaluator";
+        action: "evaluator";
     }
 }

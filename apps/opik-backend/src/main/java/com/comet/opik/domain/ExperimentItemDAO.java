@@ -1,7 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemSearchCriteria;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -57,7 +58,7 @@ class ExperimentItemDAO {
                 workspace_id,
                 created_by,
                 last_updated_by
-            )
+            ) <settings_clause>
             VALUES
                   <items:{item |
                      (
@@ -229,6 +230,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -272,6 +274,8 @@ class ExperimentItemDAO {
 
         var template = new ST(INSERT)
                 .add("items", queryItems);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
 

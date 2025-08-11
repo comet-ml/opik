@@ -6,6 +6,7 @@ export interface PromptPublic {
     id?: string;
     name: string;
     description?: string;
+    tags?: string[];
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

@@ -2,9 +2,10 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -83,7 +84,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_by,
                 last_updated_by,
                 last_updated_at
-            )
+            ) <settings_clause>
             VALUES (
                 :id,
                 :dataset_id,
@@ -211,7 +212,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
-            ) SELECT
+            ) <settings_clause>
+            SELECT
                 id,
                 dataset_id,
                 <if(name)> :name <else> name <endif> as name,
@@ -233,7 +235,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
-            ) SELECT
+            ) <settings_clause>
+            SELECT
                 id,
                 dataset_id,
                 name as name,
@@ -294,6 +297,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Void> upsert(@NonNull Optimization optimization) {
@@ -497,7 +501,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Publisher<? extends Result> upsert(Optimization optimization, Connection connection) {
-        var statement = connection.createStatement(UPSERT)
+        ST template = new ST(UPSERT);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+        var statement = connection.createStatement(template.render())
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
@@ -553,20 +561,26 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
-                .bind("ids", ids);
+                .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
         ST template = buildUpdateTemplate(update);
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
         var statement = createUpdateStatement(id, update, connection, template.render());
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
     }
 
     private Flux<? extends Result> updateDatasetDeleted(Set<UUID> datasetIds, Connection connection) {
-        Statement statement = connection.createStatement(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
+        ST template = new ST(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+        Statement statement = connection.createStatement(template.render());
         statement.bind("dataset_ids", datasetIds);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));

@@ -1,9 +1,10 @@
-import React from "react";
-
+import React, { useCallback } from "react";
 import { X } from "lucide-react";
+import isFunction from "lodash/isFunction";
+
 import { Filter, FilterRowConfig } from "@/types/filters";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import ColumnSelector from "@/components/shared/FiltersButton/ColumnSelector";
+import ColumnSelector from "@/components/shared/ColumnSelector/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
 import StringRow from "@/components/shared/FiltersButton/rows/StringRow";
@@ -12,8 +13,8 @@ import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
 import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
 import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
-import { createEmptyFilter } from "@/lib/filters";
-import GuardrailsRow from "./rows/GuardrailsRow";
+import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
+import { createFilter } from "@/lib/filters";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -32,8 +33,24 @@ export const FilterRow = <TColumnData,>({
   getConfig,
   disabledColumns,
   onRemove,
-  onChange,
+  onChange: onFilterChange,
 }: FilterRowProps<TColumnData>) => {
+  const onChange = useCallback(
+    (newFilter: Filter) => {
+      const config = getConfig?.(newFilter.field);
+
+      if (isFunction(config?.validateFilter)) {
+        return onFilterChange({
+          ...newFilter,
+          error: config.validateFilter(newFilter),
+        });
+      }
+
+      return onFilterChange(newFilter);
+    },
+    [getConfig, onFilterChange],
+  );
+
   const renderByType = () => {
     const config = getConfig?.(filter.field);
 
@@ -56,8 +73,10 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
-      case COLUMN_TYPE.guardrails:
-        return <GuardrailsRow filter={filter} onChange={onChange} />;
+      case COLUMN_TYPE.category:
+        return (
+          <CategoryRow filter={filter} onChange={onChange} config={config} />
+        );
       case "":
       default:
         return <DefaultRow filter={filter} />;
@@ -65,39 +84,51 @@ export const FilterRow = <TColumnData,>({
   };
 
   return (
-    <tr>
-      <td className="comet-body-s p-1">{prefix}</td>
-      <td className="p-1">
-        <ColumnSelector
-          columns={columns}
-          field={filter.field}
-          onSelect={(column) =>
-            onChange({
-              ...createEmptyFilter(),
-              id: filter.id,
-              field: column.id,
-              type: column.type as COLUMN_TYPE,
-              operator:
-                getConfig?.(column.id)?.defaultOperator ??
-                DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
-                OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
-                "",
-            })
-          }
-          disabledColumns={disabledColumns}
-        ></ColumnSelector>
-      </td>
-      {renderByType()}
-      <td>
-        <Button
-          variant="minimal"
-          size="icon-xs"
-          onClick={() => onRemove(filter.id)}
-        >
-          <X />
-        </Button>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td className="comet-body-s p-1">{prefix}</td>
+        <td className="p-1">
+          <ColumnSelector
+            columns={columns}
+            field={filter.field}
+            onSelect={(column) =>
+              onChange({
+                ...createFilter(),
+                id: filter.id,
+                field: column.id,
+                type: column.type as COLUMN_TYPE,
+                operator:
+                  getConfig?.(column.id)?.defaultOperator ??
+                  DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
+                  OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
+                  "",
+              })
+            }
+            disabledColumns={disabledColumns}
+          ></ColumnSelector>
+        </td>
+        {renderByType()}
+        <td>
+          <Button
+            variant="minimal"
+            size="icon-xs"
+            onClick={() => onRemove(filter.id)}
+          >
+            <X />
+          </Button>
+        </td>
+      </tr>
+      {filter.error && (
+        <tr>
+          <td
+            colSpan={5}
+            className="comet-body-xs max-w-56 p-1 text-destructive"
+          >
+            {filter.error}
+          </td>
+        </tr>
+      )}
+    </>
   );
 };
 

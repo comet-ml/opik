@@ -5,6 +5,9 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.result import Result
+from ..types.workspace_configuration import WorkspaceConfiguration
+from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .raw_client import AsyncRawWorkspacesClient, RawWorkspacesClient
 
@@ -27,12 +30,231 @@ class WorkspacesClient:
         """
         return self._raw_client
 
+    def costs_summary(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Result:
+        """
+        Get costs summary
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Result
+            Workspace Metrics
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.costs_summary(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.costs_summary(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_workspace_configuration(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceConfiguration:
+        """
+        Get workspace configuration
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceConfiguration
+            Workspace Configuration
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_workspace_configuration()
+        """
+        _response = self._raw_client.get_workspace_configuration(request_options=request_options)
+        return _response.data
+
+    def upsert_workspace_configuration(
+        self,
+        *,
+        timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceConfiguration:
+        """
+        Upsert workspace configuration
+
+        Parameters
+        ----------
+        timeout_to_mark_thread_as_inactive : typing.Optional[str]
+            Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceConfiguration
+            Configuration Updated
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.upsert_workspace_configuration()
+        """
+        _response = self._raw_client.upsert_workspace_configuration(
+            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
+        )
+        return _response.data
+
+    def delete_workspace_configuration(self, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+        """
+        Delete workspace configuration
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.delete_workspace_configuration()
+        """
+        _response = self._raw_client.delete_workspace_configuration(request_options=request_options)
+        return _response.data
+
+    def get_cost(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get cost daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace cost data by days
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_cost(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_cost(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace metric data by days
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_metric(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
     def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceMetricsSummaryResponse:
         """
@@ -45,6 +267,8 @@ class WorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -65,6 +289,7 @@ class WorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
             request_options=request_options,
         )
         return _response.data
@@ -85,12 +310,249 @@ class AsyncWorkspacesClient:
         """
         return self._raw_client
 
+    async def costs_summary(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Result:
+        """
+        Get costs summary
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Result
+            Workspace Metrics
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.costs_summary(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.costs_summary(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_workspace_configuration(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceConfiguration:
+        """
+        Get workspace configuration
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceConfiguration
+            Workspace Configuration
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_workspace_configuration()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_workspace_configuration(request_options=request_options)
+        return _response.data
+
+    async def upsert_workspace_configuration(
+        self,
+        *,
+        timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceConfiguration:
+        """
+        Upsert workspace configuration
+
+        Parameters
+        ----------
+        timeout_to_mark_thread_as_inactive : typing.Optional[str]
+            Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceConfiguration
+            Configuration Updated
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.upsert_workspace_configuration()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.upsert_workspace_configuration(
+            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
+        )
+        return _response.data
+
+    async def delete_workspace_configuration(self, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+        """
+        Delete workspace configuration
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.delete_workspace_configuration()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_workspace_configuration(request_options=request_options)
+        return _response.data
+
+    async def get_cost(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get cost daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace cost data by days
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_cost(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_cost(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace metric data by days
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_metric(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
     async def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceMetricsSummaryResponse:
         """
@@ -103,6 +565,8 @@ class AsyncWorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -126,6 +590,7 @@ class AsyncWorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
             request_options=request_options,
         )
         return _response.data

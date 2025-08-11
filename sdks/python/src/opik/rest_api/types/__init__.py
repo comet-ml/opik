@@ -10,6 +10,8 @@ from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
@@ -18,20 +20,46 @@ from .automation_rule_evaluator_llm_as_judge_write import AutomationRuleEvaluato
 from .automation_rule_evaluator_object_public import (
     AutomationRuleEvaluatorObjectPublic,
     AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_trace_thread_llm_as_judge import AutomationRuleEvaluatorTraceThreadLlmAsJudge
+from .automation_rule_evaluator_trace_thread_llm_as_judge_public import (
+    AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic,
+)
+from .automation_rule_evaluator_trace_thread_llm_as_judge_write import AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python_public import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic,
+)
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
 )
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
+from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
+    AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
+)
+from .automation_rule_evaluator_update_trace_thread_user_defined_metric_python import (
+    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
 )
@@ -45,10 +73,13 @@ from .automation_rule_evaluator_user_defined_metric_python_write import (
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
+from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
@@ -84,6 +115,7 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
 from .dataset_item import DatasetItem
@@ -117,6 +149,7 @@ from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
+from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -149,6 +182,8 @@ from .feedback_score_average_public import FeedbackScoreAveragePublic
 from .feedback_score_batch import FeedbackScoreBatch
 from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
+from .feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from .feedback_score_batch_item_thread_source import FeedbackScoreBatchItemThreadSource
 from .feedback_score_compare import FeedbackScoreCompare
 from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
@@ -160,6 +195,7 @@ from .feedback_score_source import FeedbackScoreSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
+from .group_content import GroupContent
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -296,14 +332,28 @@ from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
 from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
+from .trace_thread_filter import TraceThreadFilter
+from .trace_thread_filter_operator import TraceThreadFilterOperator
 from .trace_thread_identifier import TraceThreadIdentifier
+from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
+from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
+from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_page import TraceThreadPage
+from .trace_thread_status import TraceThreadStatus
+from .trace_thread_update import TraceThreadUpdate
+from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
+from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
+from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_configuration import WorkspaceConfiguration
+from .workspace_metric_request import WorkspaceMetricRequest
+from .workspace_metric_response import WorkspaceMetricResponse
+from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
@@ -321,26 +371,45 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectPublic",
     "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
+    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "CategoricalFeedbackDefinition",
@@ -376,6 +445,7 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
     "DatasetItem",
@@ -409,6 +479,7 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -441,6 +512,8 @@ __all__ = [
     "FeedbackScoreBatch",
     "FeedbackScoreBatchItem",
     "FeedbackScoreBatchItemSource",
+    "FeedbackScoreBatchItemThread",
+    "FeedbackScoreBatchItemThreadSource",
     "FeedbackScoreCompare",
     "FeedbackScoreCompareSource",
     "FeedbackScoreExperimentItemBulkWriteView",
@@ -456,6 +529,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GroupContent",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
@@ -590,14 +664,28 @@ __all__ = [
     "TracePublic",
     "TracePublicVisibilityMode",
     "TraceThread",
+    "TraceThreadFilter",
+    "TraceThreadFilterOperator",
     "TraceThreadIdentifier",
+    "TraceThreadLlmAsJudgeCode",
+    "TraceThreadLlmAsJudgeCodePublic",
+    "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
+    "TraceThreadStatus",
+    "TraceThreadUpdate",
+    "TraceThreadUserDefinedMetricPythonCode",
+    "TraceThreadUserDefinedMetricPythonCodePublic",
+    "TraceThreadUserDefinedMetricPythonCodeWrite",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceConfiguration",
+    "WorkspaceMetricRequest",
+    "WorkspaceMetricResponse",
+    "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",

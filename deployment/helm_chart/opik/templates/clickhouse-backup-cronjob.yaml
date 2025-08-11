@@ -7,6 +7,7 @@ metadata:
     {{- include "opik.labels" $  | nindent 4 }}
 spec:
   schedule: "{{ .Values.clickhouse.backup.schedule }}"
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
@@ -18,20 +19,16 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
         spec:
-          {{- if or .Values.clickhouse.backup.serviceAccount.create .Values.clickhouse.backup.serviceAccount.name }}
           serviceAccountName: {{ include "clickhouse.backup.serviceAccountName" . }}
-          {{- end }}
           containers:
           - name: clickhouse-backup-job
-            image: {{ .Values.clickhouse.image }}
+            image: {{ .Values.clickhouse.backup.image | default .Values.clickhouse.image }}
             {{- with .Values.clickhouse.imagePullSecrets }}
             imagePullSecrets:
               {{- toYaml . | nindent 8 }}
             {{- end }}
             command:
-            {{- range .Values.clickhouse.backup.command}}
-              - {{- . | contains "\n" | ternary (. | toYaml | nindent 16) ( . | indent 1 ) }}
-            {{- end }}
+            {{- .Values.clickhouse.backup.command | toYaml | nindent 14 }}
             {{- with .Values.clickhouse.backup.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
@@ -67,15 +64,22 @@ spec:
             - name: SECRET_KEY
               value: ""
             {{- end }}
-
-          {{- with .Values.clickhouse.nodeSelector }}
+            {{- range $key, $value := .Values.clickhouse.backup.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.clickhouse.tolerations }}
+          {{- with ( default .Values.clickhouse.affinity .Values.clickhouse.backup.affinity ) }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with ( default .Values.clickhouse.tolerations .Values.clickhouse.backup.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           restartPolicy: Never
-      backoffLimit:
+      backoffLimit: 0
 {{- end }}

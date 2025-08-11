@@ -3,10 +3,12 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
+import com.comet.opik.api.ExperimentGroupCriteria;
+import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.ExperimentItemBulkUpload;
-import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
@@ -17,12 +19,15 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.grouping.ExperimentGroupingFactory;
+import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.v1.priv.validate.ExperimentItemBulkValidator;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentItemBulkIngestionService;
+import com.comet.opik.domain.ExperimentItemSearchCriteria;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -96,6 +101,7 @@ public class ExperimentsResource {
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull ExperimentGroupingFactory groupingFactory;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -157,6 +163,83 @@ public class ExperimentsResource {
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
                 experimentSearchCriteria, experiments.size(), page, size);
         return Response.ok().entity(experiments).build();
+    }
+
+    @GET
+    @Path("/groups")
+    @Operation(operationId = "findExperimentGroups", summary = "Find experiment groups", description = "Find experiments grouped by specified fields", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment groups", content = @Content(schema = @Schema(implementation = ExperimentGroupResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response findGroups(
+            @QueryParam("groups") String groupsQueryParam,
+            @QueryParam("types") String typesQueryParam,
+            @QueryParam("name") String name,
+            @QueryParam("filters") String filters) {
+
+        // Parse and validate groups parameter using GroupingFactory
+        List<GroupBy> groups = groupingFactory.newGrouping(groupsQueryParam);
+
+        // Parse optional parameters
+        var types = Optional.ofNullable(typesQueryParam)
+                .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
+        var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
+
+        var experimentGroupCriteria = ExperimentGroupCriteria.builder()
+                .groups(groups)
+                .name(name)
+                .types(types)
+                .filters(experimentFilters)
+                .build();
+
+        log.info("Finding experiment groups by criteria '{}'", experimentGroupCriteria);
+        var groupResponse = experimentService.findGroups(experimentGroupCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found experiment groups, total top-level groups: {}", groupResponse.content().size());
+
+        return Response.ok().entity(groupResponse).build();
+    }
+
+    @GET
+    @Path("/groups/aggregations")
+    @Operation(operationId = "findExperimentGroupsAggregations", summary = "Find experiment groups with aggregations", description = "Find experiments grouped by specified fields with aggregation metrics", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment groups with aggregations", content = @Content(schema = @Schema(implementation = ExperimentGroupAggregationsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response findGroupsAggregations(
+            @QueryParam("groups") String groupsQueryParam,
+            @QueryParam("types") String typesQueryParam,
+            @QueryParam("name") String name,
+            @QueryParam("filters") String filters) {
+
+        // Parse and validate groups parameter using GroupingFactory
+        List<GroupBy> groups = groupingFactory.newGrouping(groupsQueryParam);
+
+        // Parse optional parameters
+        var types = Optional.ofNullable(typesQueryParam)
+                .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
+        var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
+
+        var experimentGroupCriteria = ExperimentGroupCriteria.builder()
+                .groups(groups)
+                .name(name)
+                .types(types)
+                .filters(experimentFilters)
+                .build();
+
+        log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);
+        var groupAggregationsResponse = experimentService.findGroupsAggregations(experimentGroupCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found experiment groups aggregations, total top-level groups: {}",
+                groupAggregationsResponse.content().size());
+
+        return Response.ok().entity(groupAggregationsResponse).build();
     }
 
     @GET

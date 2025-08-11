@@ -27,15 +27,18 @@ import {
   COLUMN_GUARDRAIL_STATISTIC_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
+  COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
   ColumnsStatistic,
+  DropdownOption,
   DynamicColumn,
+  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   isColumnSortable,
@@ -67,11 +70,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
-import TraceDetailsPanel, {
-  LastSection,
-  LastSectionParam,
-  LastSectionValue,
-} from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -84,6 +83,17 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import {
+  DetailsActionSection,
+  DetailsActionSectionParam,
+  DetailsActionSectionValue,
+} from "@/components/pages-shared/traces/DetailsActionSection";
+import { GuardrailResult } from "@/types/guardrails";
+import { SelectItem } from "@/components/ui/select";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
+import { Filter } from "@/types/filters";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -250,9 +260,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [, setLastSection] = useQueryParam("lastSection", LastSectionParam, {
-    updateType: "replaceIn",
-  });
+  const [, setLastSection] = useQueryParam(
+    "lastSection",
+    DetailsActionSectionParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -287,6 +301,48 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
+        type: {
+          keyComponentProps: {
+            options: [
+              {
+                value: SPAN_TYPE.general,
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
+              },
+              {
+                value: SPAN_TYPE.tool,
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
+              },
+              {
+                value: SPAN_TYPE.llm,
+                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
+              },
+              ...(isGuardrailsEnabled
+                ? [
+                    {
+                      value: SPAN_TYPE.guardrail,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
+                    },
+                  ]
+                : []),
+            ],
+            placeholder: "Select type",
+            renderOption: (option: DropdownOption<SPAN_TYPE>) => {
+              return (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  withoutCheck
+                  wrapperAsChild={true}
+                >
+                  <div className="flex w-full items-center gap-1.5">
+                    <BaseTraceDataTypeIcon type={option.value} />
+                    {option.label}
+                  </div>
+                </SelectItem>
+              );
+            },
+          },
+        },
         [COLUMN_METADATA_ID]: {
           keyComponent: TracesOrSpansPathsAutocomplete,
           keyComponentProps: {
@@ -297,6 +353,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             excludeRoot: true,
           },
         },
+        [COLUMN_CUSTOM_ID]: {
+          keyComponent: TracesOrSpansPathsAutocomplete,
+          keyComponentProps: {
+            rootKeys: ["input", "output"],
+            projectId,
+            type,
+            placeholder: "key",
+            excludeRoot: false,
+          },
+          validateFilter: (filter: Filter) => {
+            if (
+              filter.key &&
+              filter.value &&
+              !/^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/.test(
+                filter.key,
+              )
+            ) {
+              return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
+            }
+          },
+        },
         [COLUMN_FEEDBACK_SCORES_ID]: {
           keyComponent: TracesOrSpansFeedbackScoresSelect,
           keyComponentProps: {
@@ -305,12 +382,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder: "Select score",
           },
         },
+        [COLUMN_GUARDRAILS_ID]: {
+          keyComponentProps: {
+            options: [
+              { value: GuardrailResult.FAILED, label: "Failed" },
+              { value: GuardrailResult.PASSED, label: "Passed" },
+            ],
+            placeholder: "Status",
+          },
+        },
       },
     }),
-    [projectId, type],
+    [projectId, type, isGuardrailsEnabled],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const clearRowSelection = useCallback(() => {
+    setRowSelection({});
+  }, []);
 
   const { data, isPending, refetch } = useTracesOrSpansList(
     {
@@ -354,9 +444,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? `There are no ${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-      } yet`
+    ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
     : "No search results";
 
   const rows: Array<Span | Trace> = useMemo(
@@ -444,7 +532,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [rowSelection, rows]);
 
   const handleRowClick = useCallback(
-    (row?: Trace | Span, lastSection?: LastSectionValue) => {
+    (row?: Trace | Span, lastSection?: DetailsActionSectionValue) => {
       if (!row) return;
       if (type === TRACE_DATA_TYPE.traces) {
         setTraceId((state) => (row.id === state ? "" : row.id));
@@ -464,7 +552,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const meta = useMemo(
     () => ({
       onCommentsReply: (row?: Trace | Span) => {
-        handleRowClick(row, LastSection.Comments);
+        handleRowClick(row, DetailsActionSection.Comments);
       },
     }),
     [handleRowClick],
@@ -510,6 +598,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      ...(type === TRACE_DATA_TYPE.spans
+        ? [
+            {
+              id: "type",
+              label: "Type",
+              type: COLUMN_TYPE.category,
+              cell: SpanTypeCell as never,
+            },
+          ]
+        : []),
       {
         id: "error_info",
         label: "Errors",
@@ -534,7 +632,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
+              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
@@ -560,6 +659,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Thread ID",
               type: COLUMN_TYPE.string,
             },
+            {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+            },
+          ]
+        : []),
+      ...(type === TRACE_DATA_TYPE.spans
+        ? [
+            {
+              id: "type",
+              label: "Type",
+              type: COLUMN_TYPE.category,
+            },
           ]
         : []),
       {
@@ -572,12 +685,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
       },
+      {
+        id: COLUMN_CUSTOM_ID,
+        label: "Custom filter",
+        type: COLUMN_TYPE.dictionary,
+      },
       ...(isGuardrailsEnabled
         ? [
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.guardrails,
+              type: COLUMN_TYPE.category,
             },
           ]
         : []),
@@ -694,7 +812,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           className="mb-4"
           {...(type === TRACE_DATA_TYPE.traces
             ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
-            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}
+            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_spans])}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -724,11 +842,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             rows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
+            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
             content={`Refresh ${
-              type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
             } list`}
           >
             <Button
@@ -805,6 +924,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       />
       <ThreadDetailsPanel
         projectId={projectId}
+        projectName={projectName}
         traceId={traceId!}
         setTraceId={setTraceId}
         threadId={threadId!}

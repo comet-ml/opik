@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationItem;
+import com.comet.opik.api.ExperimentGroupCriteria;
+import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
@@ -13,6 +15,8 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -44,6 +48,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
@@ -81,7 +86,7 @@ class ExperimentDAO {
                 prompt_versions,
                 type,
                 optimization_id
-            )
+            ) <settings_clause>
             SELECT
                 if(
                     LENGTH(CAST(old.id AS Nullable(String))) > 0,
@@ -129,7 +134,7 @@ class ExperimentDAO {
     private static final String FIND = """
             WITH experiments_final AS (
                 SELECT
-                    *
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -157,7 +162,10 @@ class ExperimentDAO {
             ), experiment_durations AS (
                 SELECT
                     experiment_id,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                    ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
@@ -292,7 +300,7 @@ class ExperimentDAO {
             SELECT count(id) as count
             FROM
             (
-                SELECT id
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -305,6 +313,140 @@ class ExperimentDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
+            ;
+            """;
+
+    private static final String FIND_GROUPS = """
+            WITH experiments_filtered AS (
+                SELECT
+                    dataset_id,
+                    metadata,
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                FROM experiments final
+                WHERE workspace_id = :workspace_id
+                <if(types)> AND type IN :types <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND <filters> <endif>
+            )
+            SELECT <groupSelects>
+            FROM experiments_filtered
+            GROUP BY <groupBy>
+            ;
+            """;
+
+    private static final String FIND_GROUPS_AGGREGATIONS = """
+            WITH experiments_final AS (
+                SELECT
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                FROM experiments final
+                WHERE workspace_id = :workspace_id
+                <if(types)> AND type IN :types <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND <filters> <endif>
+            ), experiment_items_final AS (
+                SELECT
+                    id, experiment_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_final)
+            ), experiment_durations AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                    ) AS duration_values,
+                    count(DISTINCT trace_id) as trace_count,
+                    sum(total_estimated_cost) as total_estimated_cost_sum,
+                    avg(total_estimated_cost) as total_estimated_cost_avg
+                FROM (
+                    SELECT DISTINCT
+                        ei.experiment_id,
+                        ei.trace_id as trace_id,
+                        t.duration as duration,
+                        total_estimated_cost
+                    FROM experiment_items_final ei
+                    LEFT JOIN (
+                        SELECT
+                            id,
+                            if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                NULL) as duration
+                        FROM traces final
+                        WHERE workspace_id = :workspace_id
+                        AND id IN (SELECT trace_id FROM experiment_items_final)
+                    ) AS t ON ei.trace_id = t.id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sum(total_estimated_cost) as total_estimated_cost
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        GROUP BY workspace_id, project_id, trace_id
+                    ) AS s ON ei.trace_id = s.trace_id
+                )
+                GROUP BY experiment_id
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        et.experiment_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM (
+                        SELECT
+                            DISTINCT
+                                experiment_id,
+                                trace_id
+                        FROM experiment_items_final
+                    ) as et
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id AS trace_id,
+                            value
+                        FROM feedback_scores final
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = 'trace'
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ) fs ON fs.trace_id = et.trace_id
+                    GROUP BY et.experiment_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY experiment_id
+            ),
+            experiments_full AS (
+                SELECT
+                    e.id as id,
+                    e.dataset_id AS dataset_id,
+                    e.metadata AS metadata,
+                    fs.feedback_scores as feedback_scores,
+                    ed.trace_count as trace_count,
+                    ed.duration_values AS duration,
+                    ed.total_estimated_cost_sum as total_estimated_cost,
+                    ed.total_estimated_cost_avg as total_estimated_cost_avg
+                FROM experiments_final AS e
+                LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
+                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            )
+            SELECT
+                count(DISTINCT id) as experiment_count,
+                sum(trace_count) as trace_count,
+                sum(total_estimated_cost) as total_estimated_cost,
+                avg(total_estimated_cost_avg) as total_estimated_cost_avg,
+                avgMap(feedback_scores) as feedback_scores,
+                avgMap(duration) as duration,
+                <groupSelects>
+            FROM experiments_full
+            GROUP BY <groupBy>
             ;
             """;
 
@@ -391,6 +533,8 @@ class ExperimentDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -400,7 +544,11 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> insert(Experiment experiment, Connection connection) {
-        var statement = connection.createStatement(INSERT)
+        ST template = new ST(INSERT);
+
+        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+
+        var statement = connection.createStatement(template.render())
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
@@ -524,14 +672,23 @@ class ExperimentDAO {
     }
 
     private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", List.class))
-                .filter(value -> !value.isEmpty()
-                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+        return Optional.ofNullable(row.get("duration", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        getP(durations, 0),
-                        getP(durations, 1),
-                        getP(durations, 2)))
+                        convertToBigDecimal(durations.get("p50")),
+                        convertToBigDecimal(durations.get("p90")),
+                        convertToBigDecimal(durations.get("p99"))))
                 .orElse(null);
+    }
+
+    private static BigDecimal convertToBigDecimal(Number value) {
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        } else if (value instanceof Double) {
+            return BigDecimal.valueOf((Double) value);
+        } else {
+            return BigDecimal.ZERO;
+        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
@@ -829,5 +986,99 @@ class ExperimentDAO {
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
                 .reduce(0L, Long::sum);
+    }
+
+    @WithSpan
+    public Flux<ExperimentGroupItem> findGroups(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups by criteria '{}'", criteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = newGroupTemplate(FIND_GROUPS, criteria);
+                    var statement = connection.createStatement(template.render());
+                    bindGroupCriteria(statement, criteria);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> mapExperimentGroupItem(result, criteria.groups().size()));
+    }
+
+    @WithSpan
+    public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria);
+                    var statement = connection.createStatement(template.render());
+                    bindGroupCriteria(statement, criteria);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> mapExperimentGroupAggregationItem(result, criteria.groups().size()));
+    }
+
+    private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
+        var template = new ST(query);
+
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
+                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
+
+        groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
+
+        return template;
+    }
+
+    private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.filters())
+                .ifPresent(filters -> {
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
+                });
+    }
+
+    private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
+        return result.map((row, rowMetadata) -> {
+
+            var groupValues = IntStream.range(0, groupsCount)
+                    .mapToObj(i -> "group_" + i)
+                    .map(columnName -> row.get(columnName, String.class))
+                    .toList();
+
+            return ExperimentGroupItem.builder()
+                    .groupValues(groupValues)
+                    .build();
+        });
+    }
+
+    private Publisher<ExperimentGroupAggregationItem> mapExperimentGroupAggregationItem(Result result,
+            int groupsCount) {
+        return result.map((row, rowMetadata) -> {
+
+            var groupValues = IntStream.range(0, groupsCount)
+                    .mapToObj(i -> "group_" + i)
+                    .map(columnName -> row.get(columnName, String.class))
+                    .toList();
+
+            return ExperimentGroupAggregationItem.builder()
+                    .groupValues(groupValues)
+                    .experimentCount(row.get("experiment_count", Long.class))
+                    .traceCount(row.get("trace_count", Long.class))
+                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .duration(getDuration(row))
+                    .feedbackScores(getFeedbackScores(row))
+                    .build();
+        });
     }
 }

@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from opik import config
+import opik.config as config
 from opik.config import OpikConfig
 
 DEFAULT_KEY_COLOR = "green"

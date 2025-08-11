@@ -1,22 +1,28 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
+import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
@@ -29,6 +35,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
@@ -166,4 +174,68 @@ public class ExperimentResourceClient {
                 .put(Entity.json(bulkUpload));
     }
 
+    public ExperimentGroupResponse findGroups(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, String apiKey,
+            String workspaceName, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("groups")
+                .queryParam("name", name);
+
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(groups)) {
+            webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(ExperimentGroupResponse.class);
+            }
+            return null;
+        }
+    }
+
+    public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, String apiKey,
+            String workspaceName, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("groups")
+                .path("aggregations")
+                .queryParam("name", name);
+
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(groups)) {
+            webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(ExperimentGroupAggregationsResponse.class);
+            }
+            return null;
+        }
+    }
 }
