@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,6 +15,7 @@ import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Request object for bulk uploading experiment items.
@@ -27,6 +29,10 @@ public record ExperimentItemBulkUpload(
         @JsonView( {
                 View.ExperimentItemBulkWriteView.class}) @NotBlank String experimentName,
         @JsonView({View.ExperimentItemBulkWriteView.class}) @NotBlank String datasetName,
+        @JsonView({View.ExperimentItemBulkWriteView.class}) @Schema(description = "Optional experiment ID. If " +
+                "provided, items will be added to the existing experiment and experimentName will be ignored. If not " +
+                "provided or experiment with that ID doesn't exist, a new experiment will be created with the given " +
+                "experimentName") UUID experimentId,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 250) @Valid List<ExperimentItemBulkRecord> items)
         implements
