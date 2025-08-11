@@ -3,6 +3,7 @@
 # isort: skip_file
 
 from .types import (
+    AggregationData,
     AssistantMessage,
     AssistantMessageRole,
     Attachment,
@@ -122,6 +123,7 @@ from .types import (
     ErrorMessageDetailed,
     ErrorMessagePublic,
     Experiment,
+    ExperimentGroupAggregationsResponse,
     ExperimentGroupResponse,
     ExperimentItem,
     ExperimentItemBulkRecord,
@@ -173,6 +175,7 @@ from .types import (
     Function,
     FunctionCall,
     GroupContent,
+    GroupContentWithAggregations,
     Guardrail,
     GuardrailBatch,
     GuardrailName,
@@ -393,6 +396,7 @@ from .spans import (
 )
 
 __all__ = [
+    "AggregationData",
     "AssistantMessage",
     "AssistantMessageRole",
     "AsyncOpikApi",
@@ -519,6 +523,7 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
@@ -576,6 +581,7 @@ __all__ = [
     "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
     "GroupContent",
+    "GroupContentWithAggregations",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
