@@ -26,6 +26,9 @@ public class TraceThreadConfig implements StreamConfiguration {
     private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
             new JsonJacksonCodec(JsonUtils.MAPPER));
 
+    @Valid @JsonProperty
+    private boolean enabled = true;
+
     @Valid @NotBlank @JsonProperty
     private String streamName;
 
