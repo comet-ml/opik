@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
@@ -14,16 +13,9 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @Singleton
 @Slf4j
