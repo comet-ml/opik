@@ -55,7 +55,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
     public void doJob(JobExecutionContext jobExecutionContext) {
         // Check for interruption before starting
         if (interrupted.get()) {
-            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+            log.info("Trace threads closing job interrupted before execution, skipping");
             return;
         }
 
@@ -87,7 +87,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
     @Override
     public void interrupt() {
         interrupted.set(true);
-        log.info("Successfully called job interruption");
+        log.info("Successfully called closing trace threads job interruption");
     }
 
     private Mono<Void> lockAndProcessJob(Lock lock, Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
@@ -109,7 +109,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                                             limit));
                 }),
                 Mono.fromCallable(() -> {
-                    log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
+                    log.info("Could not acquire lock for trace threads closing job, skipping execution");
                     return null;
                 }),
                 traceThreadConfig.getCloseTraceThreadJobLockTime().toJavaDuration(), // Timeout to release the lock

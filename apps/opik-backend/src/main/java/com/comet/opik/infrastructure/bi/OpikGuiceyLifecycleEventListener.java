@@ -77,6 +77,11 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getTraceThreadConfig();
 
+        if (!traceThreadConfig.isEnabled()) {
+            log.info("Trace thread closing job is disabled, skipping job setup");
+            return;
+        }
+
         Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
 
         var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
