@@ -2,16 +2,6 @@ FROM python:3.12.9-slim
 
 WORKDIR /opt/opik-sandbox-executor-python
 
-# Install system dependencies including Rust for tiktoken compilation
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Rust using rustup to get the latest stable version that supports edition2024
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
 # Step 1: Install dependencies
 COPY requirements.txt .
 COPY scoring_runner.py .

@@ -2,10 +2,6 @@ FROM docker:27.5.1
 
 RUN apk add --no-cache tini python3 py3-pip curl build-base
 
-# Install Rust using rustup to get the latest stable version that supports edition2024
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
 WORKDIR /opt/opik-python-backend
 
 COPY requirements.txt .
