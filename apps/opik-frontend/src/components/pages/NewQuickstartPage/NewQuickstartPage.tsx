@@ -74,9 +74,8 @@ const NewQuickstartPage: React.FunctionComponent = () => {
       });
 
   return (
-    <div className="size-full overflow-auto">
+    <div className="size-full overflow-auto pb-10">
       <div className="mx-auto max-w-[1040px]">
-        {/* Header Section */}
         <div className="mb-3 mt-10 flex items-center justify-between">
           <h1 className="comet-title-xl">Get started with Opik</h1>
           {/* <LoggedDataStatus status="waiting" /> */}
@@ -87,7 +86,6 @@ const NewQuickstartPage: React.FunctionComponent = () => {
           and debugging.
         </div>
 
-        {/* Search and Actions Section */}
         <div className="mb-8 flex items-center justify-between gap-6">
           <SearchInput
             searchText={searchText}

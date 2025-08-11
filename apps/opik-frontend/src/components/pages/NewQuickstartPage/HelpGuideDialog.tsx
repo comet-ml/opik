@@ -122,7 +122,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Watch our guided tutorial */}
             <div className="rounded-lg border bg-card p-4">
               <div className="mb-4 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-2">
@@ -138,7 +137,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                 </div>
               </div>
 
-              {/* Video Placeholder */}
               <div className="relative flex aspect-video items-center justify-center rounded-lg border border-muted-foreground/25 bg-muted">
                 <div className="text-center">
                   <PlayCircle className="mx-auto mb-2 size-16 text-muted-foreground/50" />
@@ -149,7 +147,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
               </div>
             </div>
 
-            {/* Explore our documentation */}
             <div className="rounded-lg border bg-card p-4">
               <div className="mb-2 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-2">
@@ -204,7 +201,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
             </div>
           </div>
 
-          {/* Invite a team member */}
           <div className="rounded-lg border bg-card p-4">
             <div className="mb-4 flex flex-col items-start gap-1.5">
               <div className="flex items-center gap-2">
@@ -263,7 +259,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 
           <Separator className="my-6" />
 
-          {/* Not ready to integrate yet section */}
           <div>
             <h3 className="comet-title-s mb-2">Not ready to integrate yet?</h3>
             <p className="comet-body-s mb-4 py-2 text-muted-slate">
