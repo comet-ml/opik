@@ -81,7 +81,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                             log.error("Error processing closing of trace threads", error);
                         }
                     })
-                    .block(Duration.ofSeconds(6 + jobTimeoutConfig.getTraceThreadsClosingJobTimeout()));
+                    .block();
         } catch (Exception exception) {
             log.error("Failed to run trace threads closing job", exception);
         }
@@ -121,6 +121,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {
         var stream = redisClient.getStream(traceThreadConfig.getStreamName(), traceThreadConfig.getCodec());
+        int perOpTimeoutSec = 10;
 
         return flux.takeWhile(message -> !interrupted.get()) // Stop processing if interrupted
                 .flatMap(message -> {
@@ -131,30 +132,22 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     }
 
                     return traceThreadService.addToPendingQueue(message.projectId())
+                            .timeout(Duration.ofSeconds(perOpTimeoutSec)).checkpoint("addToPendingQueue")
                             .flatMap(pending -> {
                                 if (Boolean.TRUE.equals(pending)) {
-                                    return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message));
+                                    return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message))
+                                            .timeout(Duration.ofSeconds(perOpTimeoutSec))
+                                            .checkpoint("redisStream.add")
+                                            .then(Mono.empty()); // we don't need the id downstream
                                 } else {
                                     log.info("Project {} is already in the pending closure list, skipping enqueue",
                                             message.projectId());
                                     return Mono.empty();
                                 }
                             });
-                })
+                }, /*concurrency*/ traceThreadConfig.getCloseTraceThreadMaxItemPerRun()) // optional cap
                 .doOnError(this::errorLog)
-                .collectList()
-                .doOnSuccess(ids -> {
-                    if (interrupted.get()) {
-                        log.info("TraceThreadsClosingJob interrupted, processed '{}' messages before stopping",
-                                ids.size());
-                    } else if (ids.isEmpty()) {
-                        log.info("No messages to enqueue in stream {}", traceThreadConfig.getStreamName());
-                    } else {
-                        log.info("A total of '{}' messages enqueued successfully in stream {}", ids.size(),
-                                traceThreadConfig.getStreamName());
-                    }
-                })
-                .then();
+                .then(); // no collectList() needed if you don't use the IDs
     }
 
     private void errorLog(Throwable throwable) {
