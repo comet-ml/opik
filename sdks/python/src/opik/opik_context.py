@@ -67,6 +67,7 @@ def update_current_span(
     provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[Attachment]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -88,6 +89,7 @@ def update_current_span(
             If your provider is not in the list, you can still specify it, but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
+        error_info: The error information of the span.
     """
     if not tracing_runtime_config.is_tracing_active():
         return
@@ -104,6 +106,7 @@ def update_current_span(
         "provider": provider,
         "total_cost": total_cost,
         "attachments": attachments,
+        "error_info": error_info,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:

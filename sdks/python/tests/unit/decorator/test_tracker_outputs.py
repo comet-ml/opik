@@ -1304,6 +1304,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
             total_cost=0.42,
             model="gpt-3.5-turbo",
             provider="openai",
+            error_info={
+                "exception_type": "CustomError",
+                "message": "custom error message",
+                "traceback": "custom traceback",
+            },
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1339,6 +1344,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 spans=[],
                 model="gpt-3.5-turbo",
                 provider="openai",
+                error_info={
+                    "exception_type": "CustomError",
+                    "message": "custom error message",
+                    "traceback": "custom traceback",
+                },
             )
         ],
     )
@@ -1435,6 +1445,62 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
                         id=ANY_BUT_NONE, name="span-score-name", value=0.5
                     )
                 ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__update_current_span_with_error_info_then_exception_raised__exception_error_info_overrides_update_error_info(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            error_info={
+                "exception_type": "ManualError",
+                "message": "manually set error",
+                "traceback": "manual traceback",
+            }
+        )
+        # After setting error_info manually, raise an exception
+        raise ValueError("actual exception message")
+
+    with pytest.raises(ValueError):
+        f("the-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "the-input"},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "ValueError",
+            "message": "actual exception message",
+            "traceback": ANY_STRING,
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "the-input"},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "ValueError",
+                    "message": "actual exception message",
+                    "traceback": ANY_STRING,
+                },
+                spans=[],
             )
         ],
     )
