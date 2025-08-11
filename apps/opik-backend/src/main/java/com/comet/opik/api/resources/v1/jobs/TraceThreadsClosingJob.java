@@ -53,7 +53,35 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
-        log.info("Do nothing job, context '{}'", jobExecutionContext);
+        // Check for interruption before starting
+        if (interrupted.get()) {
+            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+            return;
+        }
+
+        var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
+        var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
+                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
+        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
+
+        lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
+                .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
+                .subscribe(
+                        __ -> {
+                            if (!interrupted.get()) {
+                                log.info("Successfully started closing trace threads process");
+                            } else {
+                                log.info(
+                                        "Closing trace threads process completed but was interrupted during execution");
+                            }
+                        },
+                        error -> {
+                            if (interrupted.get()) {
+                                log.warn("Closing of trace threads was interrupted", error);
+                            } else {
+                                log.error("Error processing closing of trace threads", error);
+                            }
+                        });
     }
 
     @Override
@@ -71,14 +99,8 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                         log.info("Closing trace threads process interrupted before processing, skipping");
                         return Mono.empty();
                     }
-
-                    var now = Instant.now();
-                    return enqueueInRedis(
-                            traceThreadService
-                                    .getProjectsWithPendingClosureThreads(
-                                            now,
-                                            defaultTimeoutToMarkThreadAsInactive,
-                                            limit));
+                    log.info("Acquired lock but not doing anything");
+                    return Mono.empty();
                 }),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
