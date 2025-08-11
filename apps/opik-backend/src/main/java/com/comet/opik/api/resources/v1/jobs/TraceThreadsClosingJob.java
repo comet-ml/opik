@@ -14,7 +14,6 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -99,8 +98,14 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                         log.info("Closing trace threads process interrupted before processing, skipping");
                         return Mono.empty();
                     }
-                    log.info("Acquired lock but not doing anything");
-                    return Mono.empty();
+
+                    var now = Instant.now();
+                    return enqueueInRedis(
+                            traceThreadService
+                                    .getProjectsWithPendingClosureThreads(
+                                            now,
+                                            defaultTimeoutToMarkThreadAsInactive,
+                                            limit));
                 }),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
@@ -120,17 +125,8 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                         log.info("Closing trace threads process interrupted during message processing, stopping");
                         return Mono.empty();
                     }
-
-                    return traceThreadService.addToPendingQueue(message.projectId())
-                            .flatMap(pending -> {
-                                if (Boolean.TRUE.equals(pending)) {
-                                    return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message));
-                                } else {
-                                    log.info("Project {} is already in the pending closure list, skipping enqueue",
-                                            message.projectId());
-                                    return Mono.empty();
-                                }
-                            });
+                    log.info("Enqueuing message not doing anything");
+                    return Mono.empty();
                 })
                 .doOnError(this::errorLog)
                 .collectList()
