@@ -5,5 +5,6 @@ export { type ExperimentItemsDelete } from "./ExperimentItemsDelete";
 export { type ExperimentItemBulkUploadExperimentItemBulkWriteView } from "./ExperimentItemBulkUploadExperimentItemBulkWriteView";
 export { type FindFeedbackScoreNamesRequest } from "./FindFeedbackScoreNamesRequest";
 export { type FindExperimentGroupsRequest } from "./FindExperimentGroupsRequest";
+export { type FindExperimentGroupsAggregationsRequest } from "./FindExperimentGroupsAggregationsRequest";
 export { type ExperimentItemStreamRequest } from "./ExperimentItemStreamRequest";
 export { type ExperimentStreamRequestPublic } from "./ExperimentStreamRequestPublic";
