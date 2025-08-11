@@ -2,6 +2,7 @@
 
 # isort: skip_file
 
+from .aggregation_data import AggregationData
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
@@ -149,6 +150,7 @@ from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
+from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
@@ -196,6 +198,7 @@ from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, Feedbac
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
+from .group_content_with_aggregations import GroupContentWithAggregations
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -360,6 +363,7 @@ from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
+    "AggregationData",
     "AssistantMessage",
     "AssistantMessageRole",
     "Attachment",
@@ -479,6 +483,7 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
@@ -530,6 +535,7 @@ __all__ = [
     "Function",
     "FunctionCall",
     "GroupContent",
+    "GroupContentWithAggregations",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
