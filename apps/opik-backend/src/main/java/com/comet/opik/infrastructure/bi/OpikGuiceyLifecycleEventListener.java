@@ -76,6 +76,12 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setTraceThreadsClosingJob() {
         TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getTraceThreadConfig();
+
+        if (!traceThreadConfig.isEnabled()) {
+            log.info("Trace thread closing job is disabled, skipping job setup");
+            return;
+        }
+
         Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
 
         var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
@@ -95,6 +101,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             var scheduler = getScheduler();
             scheduler.addJob(jobDetail, false);
             scheduler.scheduleJob(trigger);
+            log.info("Trace thread closing job scheduled successfully");
         } catch (SchedulerException e) {
             log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
         }
