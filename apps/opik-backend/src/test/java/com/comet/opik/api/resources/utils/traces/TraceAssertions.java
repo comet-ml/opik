@@ -6,6 +6,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import jakarta.ws.rs.core.Response;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,10 +23,12 @@ public class TraceAssertions {
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
             "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations"};
 
-    private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+    private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+            "valueByAuthor"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
+            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
+            "feedbackScores.valueByAuthor"};
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
@@ -106,12 +109,17 @@ public class TraceAssertions {
             assertThat(actualTrace.duration()).isEqualTo(expectedTrace.duration(), within(0.001));
         }
 
-        assertThat(actualTrace.feedbackScores())
-                .usingRecursiveComparison()
-                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                .ignoringFields(IGNORED_FIELDS_SCORES)
-                .ignoringCollectionOrder()
-                .isEqualTo(expectedTrace.feedbackScores());
+        RecursiveComparisonConfiguration config = new RecursiveComparisonConfiguration();
+        config.ignoreFields(IGNORED_FIELDS_SCORES);
+        config.registerComparatorForType(BigDecimal::compareTo, BigDecimal.class);
+
+        if (expectedTrace.feedbackScores() == null) {
+            assertThat(actualTrace.feedbackScores()).isNull();
+        } else {
+            assertThat(actualTrace.feedbackScores())
+                    .usingRecursiveFieldByFieldElementComparator(config)
+                    .containsExactlyInAnyOrderElementsOf(expectedTrace.feedbackScores());
+        }
 
         if (expectedTrace.feedbackScores() != null) {
             Instant lastUpdatedAt = expectedTrace.lastUpdatedAt();
