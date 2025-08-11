@@ -418,6 +418,7 @@ public class ExperimentsResource {
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
                     @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "409", description = "Experiment dataset mismatch", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
     @RateLimited
@@ -428,7 +429,8 @@ public class ExperimentsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Recording experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recording experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         List<ExperimentItemBulkRecord> items = request.items()
                 .stream()
@@ -440,6 +442,7 @@ public class ExperimentsResource {
                 .toList();
 
         Experiment experiment = Experiment.builder()
+                .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
                 .build();
@@ -450,7 +453,8 @@ public class ExperimentsResource {
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
 
-        log.info("Recorded experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         return Response.noContent().build();
     }
