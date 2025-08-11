@@ -872,7 +872,7 @@ class SpanDAO {
                     project_id,
                     entity_id,
                     name,
-                    toDecimal64(avg(value), 9) AS value,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at)
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
