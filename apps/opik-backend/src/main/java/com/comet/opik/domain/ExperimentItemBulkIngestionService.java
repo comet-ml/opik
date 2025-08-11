@@ -115,17 +115,15 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 .flatMap(existingExperiment -> {
                     // Validate dataset consistency
                     if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
-                        String errorMessage = "Experiment '" + experiment.id() + "' belongs to dataset '" +
-                                existingExperiment.datasetName() + "', but request specifies dataset '" +
-                                experiment.datasetName() + "'";
+                        String errorMessage = "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
+                                .formatted(experiment.id(), existingExperiment.datasetName(), experiment.datasetName());
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
 
                     // Validate experiment name consistency
                     if (!experiment.name().equals(existingExperiment.name())) {
-                        String errorMessage = "Experiment '" + experiment.id() + "' has name '" +
-                                existingExperiment.name() + "', but request specifies a different name '" +
-                                experiment.name() + "'";
+                        String errorMessage = "Experiment '%s' has name '%s', but request specifies a different name '%s'"
+                                .formatted(experiment.id(), existingExperiment.name(), experiment.name());
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
 

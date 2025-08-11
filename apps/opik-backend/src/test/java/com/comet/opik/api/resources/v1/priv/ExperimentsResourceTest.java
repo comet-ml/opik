@@ -5086,8 +5086,8 @@ class ExperimentsResourceTest {
 
                 var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorMessage.getMessage()).contains(
-                        "Experiment '" + experimentId + "' belongs to dataset '" + dataset1.name() +
-                                "', but request specifies dataset '" + dataset2.name() + "'");
+                        "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
+                                .formatted(experimentId, dataset1.name(), dataset2.name()));
             }
 
             // Verify only the first experiment items were created
@@ -5151,9 +5151,8 @@ class ExperimentsResourceTest {
 
                 var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorMessage.getMessage()).contains(
-                        "Experiment '" + experimentId + "' has name '" +
-                                experimentName + "', but request specifies a different name '" +
-                                anotherExperimentName + "'");
+                        "Experiment '%s' has name '%s', but request specifies a different name '%s'"
+                                .formatted(experimentId, experimentName, anotherExperimentName));
             }
 
             // Verify only the first experiment items were created
