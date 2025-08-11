@@ -126,7 +126,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                         return Mono.empty();
                     }
                     log.info("Enqueuing message not doing anything");
-                    return Mono.empty();
+                    return traceThreadService.addToPendingQueue(message.projectId());
                 })
                 .doOnError(this::errorLog)
                 .collectList()
