@@ -176,12 +176,4 @@ class OpikGuiceyLifecycleEventListenerTest {
             wireMock.server().stop();
         }
     }
-
-    @AfterAll
-    void tearDown() {
-        MYSQL_CONTAINER.stop();
-        CLICK_HOUSE_CONTAINER.stop();
-        ZOOKEEPER_CONTAINER.stop();
-        network.close();
-    }
 }

@@ -5,7 +5,6 @@ import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.google.common.base.Throwables;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -54,18 +53,18 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
+        // Check for interruption before starting
+        if (interrupted.get()) {
+            log.info("TraceThreadsClosingJob interrupted before execution, skipping");
+            return;
+        }
+
+        var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
+        var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
+                .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
+        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
+
         try {
-            // Check for interruption before starting
-            if (Thread.currentThread().isInterrupted() || interrupted.get()) {
-                log.info("TraceThreadsClosingJob interrupted before execution, skipping");
-                return;
-            }
-
-            var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
-            var defaultTimeoutToMarkThreadAsInactive = traceThreadConfig
-                    .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the default timeout to mark threads as inactive when workspace config is not set
-            int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
-
             lockAndProcessJob(lock, defaultTimeoutToMarkThreadAsInactive, limit)
                     .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout()))
                     .doOnSuccess(__ -> {
@@ -76,31 +75,21 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                         }
                     })
                     .doOnError(error -> {
-                        if (Thread.currentThread().isInterrupted()
-                                || interrupted.get()
-                                || error instanceof InterruptedException
-                                || hasCause(error, InterruptedException.class)) {
+                        if (interrupted.get()) {
                             log.warn("TraceThreadsClosingJob was interrupted", error);
-                            //                            Thread.currentThread().interrupt(); // Restore interrupt status
                         } else {
                             log.error("Error processing closing of trace threads", error);
                         }
                     })
                     .block(Duration.ofSeconds(6 + jobTimeoutConfig.getTraceThreadsClosingJobTimeout()));
         } catch (Exception exception) {
-            log.error("Wide exception caught", exception);
+            log.error("Failed to run trace threads closing job", exception);
         }
-    }
-
-    public static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
-        return Throwables.getCausalChain(throwable).stream().anyMatch(type::isInstance);
     }
 
     @Override
     public void interrupt() {
-        log.info("TraceThreadsClosingJob interruption requested");
         interrupted.set(true);
-        //        Thread.currentThread().interrupt();
         log.info("TraceThreadsClosingJob interruption completed");
     }
 

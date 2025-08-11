@@ -270,11 +270,6 @@ class DailyUsageReportJobTest {
         @AfterAll
         void tearDownAll() {
             wireMock.server().stop();
-            MYSQL.stop();
-            CLICKHOUSE.stop();
-            ZOOKEEPER_CONTAINER.stop();
-            NETWORK.close();
-            ZOOKEEPER_CONTAINER.stop();
         }
 
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -415,10 +410,6 @@ class DailyUsageReportJobTest {
         @AfterAll
         void tearDownAll() {
             wireMock.server().stop();
-            MYSQL.stop();
-            CLICKHOUSE.stop();
-            ZOOKEEPER_CONTAINER.stop();
-            NETWORK.close();
         }
 
         @Test
