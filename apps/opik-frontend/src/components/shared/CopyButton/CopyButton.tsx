@@ -60,6 +60,7 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
           variant={variant}
           className={className}
           onClick={copyClickHandler}
+          tabIndex={-1}
         >
           <Copy />
         </Button>
