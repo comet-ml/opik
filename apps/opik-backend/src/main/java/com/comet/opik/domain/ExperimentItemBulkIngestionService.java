@@ -120,13 +120,6 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
 
-                    // Validate experiment name consistency
-                    if (!experiment.name().equals(existingExperiment.name())) {
-                        String errorMessage = "Experiment '%s' has name '%s', but request specifies a different name '%s'"
-                                .formatted(experiment.id(), existingExperiment.name(), experiment.name());
-                        return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
-                    }
-
                     return Mono.<Void>empty();
                 })
                 .onErrorResume(NotFoundException.class, ex -> {

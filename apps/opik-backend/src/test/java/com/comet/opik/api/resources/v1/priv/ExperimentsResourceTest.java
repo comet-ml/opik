@@ -5101,18 +5101,22 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("Should fail when using same experiment ID with a different experiment name")
-        void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentName__thenReturnConflict() {
-            // given - Create first dataset and experiment
+        @DisplayName("Should ignore different name when using same experiment ID with a different experiment name")
+        void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentName__ignoreTheNewName() {
+            // given
             var dataset = podamFactory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
-            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+            // Create multiple dataset items for the test
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5120,49 +5124,73 @@ class ExperimentsResourceTest {
             var experimentId = podamFactory.manufacturePojo(UUID.class);
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
 
-            var trace = createTrace();
-            var span = creatrSpan();
-            var feedbackScore = createScore();
+            // Create first bulk upload with the experiment ID
+            var trace1 = createTrace();
+            var span1 = creatrSpan();
+            var feedbackScore1 = createScore();
 
-            var bulkRecord = ExperimentItemBulkRecord.builder()
-                    .datasetItemId(datasetItem.id())
-                    .trace(trace)
-                    .spans(List.of(span))
-                    .feedbackScores(List.of(feedbackScore))
+            var bulkRecord1 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem1.id())
+                    .trace(trace1)
+                    .spans(List.of(span1))
+                    .feedbackScores(List.of(feedbackScore1))
                     .build();
 
-            var bulkUpload = ExperimentItemBulkUpload.builder()
+            var bulkUpload1 = ExperimentItemBulkUpload.builder()
                     .experimentName(experimentName)
                     .datasetName(dataset.name())
                     .experimentId(experimentId) // Use the generated experiment ID
-                    .items(List.of(bulkRecord))
+                    .items(List.of(bulkRecord1))
                     .build();
 
-            // when - upload first batch successfully
-            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+            // Create second bulk upload with the same experiment ID
+            var trace2 = createTrace();
+            var span2 = creatrSpan();
+            var feedbackScore2 = createScore();
 
-            // then - second upload should fail with conflict
-            var anotherExperimentName = "Another Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
-            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload.toBuilder()
+            var bulkRecord2 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem2.id())
+                    .trace(trace2)
+                    .spans(List.of(span2))
+                    .feedbackScores(List.of(feedbackScore2))
+                    .build();
+
+            var anotherExperimentName = "Another Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkUpload2 = ExperimentItemBulkUpload.builder()
                     .experimentName(anotherExperimentName)
-                    .build(), API_KEY,
-                    TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the same experiment ID
+                    .items(List.of(bulkRecord2))
+                    .build();
 
-                var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(errorMessage.getMessage()).contains(
-                        "Experiment '%s' has name '%s', but request specifies a different name '%s'"
-                                .formatted(experimentId, experimentName, anotherExperimentName));
-            }
+            // when - upload both batches
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload1, API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload2, API_KEY, TEST_WORKSPACE);
 
-            // Verify only the first experiment items were created
+            // then - verify both items were added to the same experiment
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualExperimentItems).hasSize(1);
-            assertThat(actualExperimentItems.getFirst().experimentId()).isEqualTo(experimentId);
-            assertThat(actualExperimentItems.getFirst().datasetItemId()).isEqualTo(datasetItem.id());
-            assertThat(actualExperimentItems.getFirst().traceId()).isEqualTo(trace.id());
+            assertThat(actualExperimentItems).hasSize(2);
+
+            // Verify all items belong to the same experiment
+            assertThat(actualExperimentItems)
+                    .allSatisfy(item -> assertThat(item.experimentId()).isEqualTo(experimentId));
+
+            // Verify the correct dataset items are present
+            var datasetItemIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::datasetItemId)
+                    .collect(Collectors.toSet());
+            assertThat(datasetItemIds).containsExactlyInAnyOrder(datasetItem1.id(), datasetItem2.id());
+
+            // Verify the correct traces are present
+            var traceIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::traceId)
+                    .collect(Collectors.toSet());
+            assertThat(traceIds).containsExactlyInAnyOrder(trace1.id(), trace2.id());
+
+            assertThat(experimentResourceClient.getExperimentItems(anotherExperimentName, API_KEY, TEST_WORKSPACE))
+                    .isEmpty();
         }
     }
 }
