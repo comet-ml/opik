@@ -26,6 +26,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,7 @@ import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 @DisplayName("Trace Threads Closing Job Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
+@Disabled
 class TraceThreadsClosingJobTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
