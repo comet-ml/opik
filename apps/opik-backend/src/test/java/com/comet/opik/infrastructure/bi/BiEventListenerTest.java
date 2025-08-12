@@ -112,7 +112,11 @@ class BiEventListenerTest {
 
     @AfterAll
     void tearDownAll() {
+        MYSQL.stop();
         wireMock.server().stop();
+        CLICKHOUSE.stop();
+        ZOOKEEPER_CONTAINER.stop();
+        network.close();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
