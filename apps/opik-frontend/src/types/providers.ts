@@ -17,8 +17,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4_1 = "gpt-4.1",
   GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_5 = "gpt-5",
-  GPT_5_PREVIEW = "gpt-5-preview",
-  GPT_5_2025_01_14 = "gpt-5-2025-01-14",
   GPT_5_MINI = "gpt-5-mini",
   GPT_5_NANO = "gpt-5-nano",
   GPT_4_TURBO = "gpt-4-turbo",

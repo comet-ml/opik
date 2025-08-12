@@ -41,8 +41,6 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12", false),
     GPT_O3_MINI("o3-mini", false),
     GPT_5("gpt-5", true),
-    GPT_5_PREVIEW("gpt-5-preview", true),
-    GPT_5_2025_01_14("gpt-5-2025-01-14", true),
     GPT_5_MINI("gpt-5-mini", true),
     GPT_5_NANO("gpt-5-nano", true),
     ;

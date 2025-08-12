@@ -30,8 +30,6 @@ const OpenAIModelConfigs = ({
     model &&
     [
       PROVIDER_MODEL_TYPE.GPT_5,
-      PROVIDER_MODEL_TYPE.GPT_5_PREVIEW,
-      PROVIDER_MODEL_TYPE.GPT_5_2025_01_14,
       PROVIDER_MODEL_TYPE.GPT_5_MINI,
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
     ].includes(model as PROVIDER_MODEL_TYPE);

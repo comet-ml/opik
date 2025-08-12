@@ -27,14 +27,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GPT_5_PREVIEW,
-      label: "GPT 5 Preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_5_2025_01_14,
-      label: "GPT 5 2025-01-14",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GPT_5_MINI,
       label: "GPT 5 Mini",
     },
