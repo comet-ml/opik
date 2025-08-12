@@ -104,7 +104,7 @@ export const checkIsGroupRowType = (id: string) =>
   id.startsWith(GROUPING_ROW_PREFIX);
 
 export const buildGroupFieldName = (group: Group) =>
-  `${GROUPING_KEY}_${group.field}_${group.key}`.replace(".", "_");
+  `${GROUPING_KEY}_${group.field}_${group.key}`.replaceAll(".", "_");
 
 export const buildGroupFieldNameForMeta = (group: Group) =>
   `${buildGroupFieldName(group)}_meta`;
