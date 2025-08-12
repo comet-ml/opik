@@ -57,7 +57,7 @@ git checkout -b username/OPIK-1234-some-task
 
 # 5. Stage and commit your changes
 git add .
-git commit -m "[OPIK-1234] Add project custom metrics UI dashboard"
+git commit -m "[OPIK-1234] [FE] Add project custom metrics UI dashboard"
 
 # 6. Push your branch to remote
 git push origin username/OPIK-1234-some-task
@@ -77,7 +77,7 @@ git commit -m "Revision 2: Add comprehensive tests for the project metrics endpo
 git push origin username/OPIK-1234-some-task
 
 # 10. Create Pull Request
-# Title: "[OPIK-1234]: Add project custom metrics UI dashboard"
+# Title: "[OPIK-1234] [FE] Add project custom metrics UI dashboard"
 # Description should follow the PR template.
 ```
 
@@ -95,10 +95,24 @@ git branch -d username/OPIK-1234-some-task
 
 ## **Commit Message Standards**
 
+### **Component Types**
+Use component types to categorize changes (optional but recommended):
+- `[DOCS]` - Documentation updates, README changes, comments, swagger/OpenAPI documentation etc.
+- `[FE]` - Frontend changes (React, TypeScript, UI components)
+- `[BE]` - Backend changes (Java, API endpoints, services)
+- `[SDK]` - SDK changes (Python, TypeScript SDKs)
+
 ### **Initial Task Commits**
 ```bash
-# ✅ DO: Use ticket number in commit messages
+# ✅ DO: Use ticket number and component type in commit messages (recommended)
+git commit -m "[OPIK-1234] [FE] Add project custom metrics UI dashboard"
+git commit -m "[OPIK-1234] [BE] Add create trace endpoint"
+git commit -m "[OPIK-1234] [DOCS] Update API documentation"
+git commit -m "[OPIK-1234] [SDK] Add new Python SDK method"
+
+# ✅ DO: Use ticket number without component type (also acceptable)
 git commit -m "[OPIK-1234] Add project custom metrics UI dashboard"
+git commit -m "[OPIK-1234] Add create trace endpoint"
 
 # ❌ DON'T: Vague or inconsistent commits
 git commit -m "fixed stuff"
@@ -154,12 +168,17 @@ git rebase --continue
 
 ### **PR Title Format**
 ```
-[{TICKET-NUMBER}] {TASK-SUMMARY}
+[{TICKET-NUMBER}] [{COMPONENT}] {TASK-SUMMARY}
 
 Examples:
-[OPIK-1234] Add create trace endpoint
-[issue-4567] Fix missing cost bug in get span endpoint
-[NA] Fix null pointer exception in get trace endpoint hotfix
+[OPIK-1234] [BE] Add create trace endpoint
+[OPIK-1234] [FE] Add project custom metrics UI dashboard
+[OPIK-1234] [DOCS] Update API documentation
+[OPIK-1234] [SDK] Add new Python SDK method
+[issue-4567] [BE] Fix missing cost bug in get span endpoint
+[NA] [BE] Fix null pointer exception in get trace endpoint hotfix
+
+Note: Component type is optional but recommended for better categorization.
 ```
 
 ### **PR Description Template**
@@ -168,10 +187,15 @@ Always follow the template from [pull_request_template.md](/.github/pull_request
 ## Details
 What the change does, why it was made, and any design decisions
 
+## Change checklist
+<!-- Please check the type of changes made -->
+- [ ] User facing
+- [ ] Documentation update
+
 ## Issues
-URL of the Jira ticket (e.g: `https://your-org.atlassian.net/browse/OPIK-1234`) 
-or the GitHub issue this PR fixes (e.g. `https://github.com/org/repo/issues/123`), 
-or `NA` if no ticket, such as hotfixes
+- Resolves # <!-- the GitHub issue this PR resolves (e.g. `#1234`) -->
+- OPIK- <!-- The Jira ticket (e.g. `OPIK-1234`) -->
+- NA <!-- If no ticket, such as hotfixes etc. -->
 
 ## Testing
 Scenarios covered by tests and steps to reproduce
@@ -217,7 +241,7 @@ git pull origin main
 git checkout -b username/NA-some-hotfix-urgent-issue
 
 # Make minimal fix
-git commit -m "[NA]: Fix some critical production issue"
+git commit -m "[NA] [BE] Fix some critical production issue"
 
 git push origin username/NA-some-hotfix-urgent-issue
 # Create emergency PR for immediate review
