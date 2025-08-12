@@ -506,6 +506,7 @@ export class Experiments {
      * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ConflictError}
      * @throws {@link OpikApi.UnprocessableEntityError}
      *
      * @example
@@ -565,6 +566,8 @@ export class Experiments {
             switch (_response.error.statusCode) {
                 case 400:
                     throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 case 422:
                     throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
