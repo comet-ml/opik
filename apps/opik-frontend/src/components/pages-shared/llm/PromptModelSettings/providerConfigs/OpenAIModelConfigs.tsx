@@ -2,7 +2,7 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMOpenAIConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLMOpenAIConfigsType, PROVIDER_MODEL_TYPE, ReasoningEffort } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
@@ -122,14 +123,12 @@ const OpenAIModelConfigs = ({
               Reasoning effort
             </Label>
             <TooltipWrapper content="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses.">
-              <div className="flex size-4 cursor-help items-center justify-center rounded-full border border-muted-foreground/20 text-xs">
-                ?
-              </div>
+              <ExplainerIcon />
             </TooltipWrapper>
           </div>
           <Select
             value={configs.reasoningEffort || "medium"}
-            onValueChange={(value: "minimal" | "low" | "medium" | "high") =>
+            onValueChange={(value: ReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
           >

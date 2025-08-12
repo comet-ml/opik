@@ -429,13 +429,15 @@ export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
 }
 
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+
 export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
-  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface LLMAnthropicConfigsType {
