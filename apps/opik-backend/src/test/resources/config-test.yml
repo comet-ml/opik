@@ -298,7 +298,7 @@ serviceToggles:
 traceThreadConfig:
   # Default: false for testing. Should be enabled for specific test scenarios when needed.
   # Description: Whether the trace thread closing job is enabled
-  enabled: true
+  enabled: false
   # Default: 1s
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: 1s

@@ -139,16 +139,11 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                             });
                 })
                 .doOnError(this::errorLog)
-                .collectList()
-                .doOnSuccess(ids -> {
+                .doOnComplete(() -> {
                     if (interrupted.get()) {
-                        log.info("Closing trace threads process interrupted, processed '{}' messages before stopping",
-                                ids.size());
-                    } else if (ids.isEmpty()) {
-                        log.info("No messages to enqueue in stream {}", traceThreadConfig.getStreamName());
+                        log.info("Closing trace threads process interrupted");
                     } else {
-                        log.info("A total of '{}' messages enqueued successfully in stream {}", ids.size(),
-                                traceThreadConfig.getStreamName());
+                        log.info("Messages enqueued successfully in stream {}", traceThreadConfig.getStreamName());
                     }
                 })
                 .then();
