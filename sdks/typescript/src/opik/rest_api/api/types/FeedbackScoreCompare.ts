@@ -14,4 +14,5 @@ export interface FeedbackScoreCompare {
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
+    valueByAuthor?: Record<string, OpikApi.ValueEntryCompare>;
 }

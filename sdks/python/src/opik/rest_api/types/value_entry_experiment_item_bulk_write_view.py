@@ -5,21 +5,15 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_public_source import FeedbackScorePublicSource
-from .value_entry_public import ValueEntryPublic
+from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperimentItemBulkWriteViewSource
 
 
-class FeedbackScorePublic(UniversalBaseModel):
-    name: str
-    category_name: typing.Optional[str] = None
-    value: float
+class ValueEntryExperimentItemBulkWriteView(UniversalBaseModel):
+    value: typing.Optional[float] = None
     reason: typing.Optional[str] = None
-    source: FeedbackScorePublicSource
-    created_at: typing.Optional[dt.datetime] = None
+    category_name: typing.Optional[str] = None
+    source: typing.Optional[ValueEntryExperimentItemBulkWriteViewSource] = None
     last_updated_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
-    last_updated_by: typing.Optional[str] = None
-    value_by_author: typing.Optional[typing.Dict[str, ValueEntryPublic]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

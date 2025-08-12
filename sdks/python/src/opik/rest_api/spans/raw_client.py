@@ -31,6 +31,7 @@ from ..types.span_page_public import SpanPagePublic
 from ..types.span_public import SpanPublic
 from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
+from ..types.value_entry import ValueEntry
 from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
@@ -121,6 +122,7 @@ class RawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -148,6 +150,8 @@ class RawSpansClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -168,6 +172,9 @@ class RawSpansClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1171,6 +1178,7 @@ class AsyncRawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1198,6 +1206,8 @@ class AsyncRawSpansClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1218,6 +1228,9 @@ class AsyncRawSpansClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

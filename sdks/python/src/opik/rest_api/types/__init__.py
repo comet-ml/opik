@@ -353,6 +353,14 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .value_entry import ValueEntry
+from .value_entry_compare import ValueEntryCompare
+from .value_entry_compare_source import ValueEntryCompareSource
+from .value_entry_experiment_item_bulk_write_view import ValueEntryExperimentItemBulkWriteView
+from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperimentItemBulkWriteViewSource
+from .value_entry_public import ValueEntryPublic
+from .value_entry_public_source import ValueEntryPublicSource
+from .value_entry_source import ValueEntrySource
 from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
@@ -688,6 +696,14 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "ValueEntry",
+    "ValueEntryCompare",
+    "ValueEntryCompareSource",
+    "ValueEntryExperimentItemBulkWriteView",
+    "ValueEntryExperimentItemBulkWriteViewSource",
+    "ValueEntryPublic",
+    "ValueEntryPublicSource",
+    "ValueEntrySource",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",

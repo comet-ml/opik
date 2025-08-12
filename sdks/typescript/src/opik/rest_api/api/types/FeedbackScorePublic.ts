@@ -14,4 +14,5 @@ export interface FeedbackScorePublic {
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
+    valueByAuthor?: Record<string, OpikApi.ValueEntryPublic>;
 }
