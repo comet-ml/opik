@@ -2,7 +2,11 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMOpenAIConfigsType, PROVIDER_MODEL_TYPE, ReasoningEffort } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
 import {
@@ -121,9 +125,7 @@ const OpenAIModelConfigs = ({
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
               Reasoning effort
             </Label>
-            <ExplainerIcon 
-              description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." 
-            />
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
           </div>
           <Select
             value={configs.reasoningEffort || "medium"}
