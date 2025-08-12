@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkUpload;
@@ -200,6 +201,39 @@ public class ExperimentResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_OK) {
                 return response.readEntity(ExperimentGroupResponse.class);
+            }
+            return null;
+        }
+    }
+
+    public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, String apiKey,
+            String workspaceName, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("groups")
+                .path("aggregations")
+                .queryParam("name", name);
+
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(groups)) {
+            webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(ExperimentGroupAggregationsResponse.class);
             }
             return null;
         }

@@ -4,6 +4,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -255,6 +256,7 @@ class ExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -267,6 +269,9 @@ class ExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -283,7 +288,11 @@ class ExperimentsClient:
         client.experiments.experiment_items_bulk(experiment_name='experiment_name', dataset_name='dataset_name', items=[ExperimentItemBulkRecordExperimentItemBulkWriteView(dataset_item_id='dataset_item_id', )], )
         """
         _response = self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            experiment_id=experiment_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -353,6 +362,47 @@ class ExperimentsClient:
         client.experiments.find_experiment_groups()
         """
         _response = self._raw_client.find_experiment_groups(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+        )
+        return _response.data
+
+    def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupAggregationsResponse:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupAggregationsResponse
+            Experiment groups with aggregations
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.find_experiment_groups_aggregations()
+        """
+        _response = self._raw_client.find_experiment_groups_aggregations(
             groups=groups, types=types, name=name, filters=filters, request_options=request_options
         )
         return _response.data
@@ -733,6 +783,7 @@ class AsyncExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -745,6 +796,9 @@ class AsyncExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -764,7 +818,11 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            experiment_id=experiment_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -840,6 +898,50 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_experiment_groups(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+        )
+        return _response.data
+
+    async def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupAggregationsResponse:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupAggregationsResponse
+            Experiment groups with aggregations
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.find_experiment_groups_aggregations()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_experiment_groups_aggregations(
             groups=groups, types=types, name=name, filters=filters, request_options=request_options
         )
         return _response.data

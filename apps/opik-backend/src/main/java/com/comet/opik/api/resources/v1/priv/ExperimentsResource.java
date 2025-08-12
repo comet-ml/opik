@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
@@ -203,6 +204,45 @@ public class ExperimentsResource {
     }
 
     @GET
+    @Path("/groups/aggregations")
+    @Operation(operationId = "findExperimentGroupsAggregations", summary = "Find experiment groups with aggregations", description = "Find experiments grouped by specified fields with aggregation metrics", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment groups with aggregations", content = @Content(schema = @Schema(implementation = ExperimentGroupAggregationsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response findGroupsAggregations(
+            @QueryParam("groups") String groupsQueryParam,
+            @QueryParam("types") String typesQueryParam,
+            @QueryParam("name") String name,
+            @QueryParam("filters") String filters) {
+
+        // Parse and validate groups parameter using GroupingFactory
+        List<GroupBy> groups = groupingFactory.newGrouping(groupsQueryParam);
+
+        // Parse optional parameters
+        var types = Optional.ofNullable(typesQueryParam)
+                .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
+        var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
+
+        var experimentGroupCriteria = ExperimentGroupCriteria.builder()
+                .groups(groups)
+                .name(name)
+                .types(types)
+                .filters(experimentFilters)
+                .build();
+
+        log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);
+        var groupAggregationsResponse = experimentService.findGroupsAggregations(experimentGroupCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found experiment groups aggregations, total top-level groups: {}",
+                groupAggregationsResponse.content().size());
+
+        return Response.ok().entity(groupAggregationsResponse).build();
+    }
+
+    @GET
     @Path("/{id}")
     @Operation(operationId = "getExperimentById", summary = "Get experiment by id", description = "Get experiment by id", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment resource", content = @Content(schema = @Schema(implementation = Experiment.class))),
@@ -378,6 +418,7 @@ public class ExperimentsResource {
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
                     @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "409", description = "Experiment dataset mismatch", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
     @RateLimited
@@ -388,7 +429,8 @@ public class ExperimentsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Recording experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recording experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         List<ExperimentItemBulkRecord> items = request.items()
                 .stream()
@@ -400,6 +442,7 @@ public class ExperimentsResource {
                 .toList();
 
         Experiment experiment = Experiment.builder()
+                .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
                 .build();
@@ -410,7 +453,8 @@ public class ExperimentsResource {
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
 
-        log.info("Recorded experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         return Response.noContent().build();
     }

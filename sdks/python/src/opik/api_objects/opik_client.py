@@ -41,6 +41,7 @@ from . import (
 )
 from .attachment import converters as attachment_converters
 from .attachment import Attachment
+from .attachment import client as attachment_client
 from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
@@ -158,6 +159,7 @@ class Opik:
             check_tls_certificate=check_tls_certificate,
             compress_json_requests=enable_json_request_compression,
         )
+        self._httpx_client = httpx_client_
         self._rest_client = rest_api_client.OpikApi(
             base_url=url_override,
             httpx_client=httpx_client_,
@@ -1107,6 +1109,23 @@ class Opik:
         """
         return threads_client.ThreadsClient(self)
 
+    def get_attachment_client(self) -> attachment_client.AttachmentClient:
+        """
+        Creates and provides an instance of the ``AttachmentClient`` tied to the current context.
+
+        The ``AttachmentClient`` can be used to interact with the attachments API to retrieve
+        attachment lists, download attachments, and upload attachments for traces and spans.
+
+        Returns:
+            AttachmentClient: An instance of ``attachment.client.AttachmentClient``
+        """
+        return attachment_client.AttachmentClient(
+            rest_client=self._rest_client,
+            url_override=self._config.url_override,
+            workspace_name=self._workspace,
+            rest_httpx_client=self._httpx_client,
+        )
+
     def create_prompt(
         self,
         name: str,
@@ -1130,9 +1149,10 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(
+        prompt_version = prompt_client.create_prompt(
             name=name, prompt=prompt, metadata=metadata, type=type
         )
+        return Prompt.from_fern_prompt_version(name, prompt_version)
 
     def get_prompt(
         self,
@@ -1150,7 +1170,11 @@ class Opik:
             Prompt: The details of the specified prompt.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_prompt(name=name, commit=commit)
+        fern_prompt_version = prompt_client.get_prompt(name=name, commit=commit)
+        if fern_prompt_version is None:
+            return None
+
+        return Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
     def get_all_prompts(self, name: str) -> List[Prompt]:
         """
@@ -1163,7 +1187,12 @@ class Opik:
             List[Prompt]: A list of prompts for the given name.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_all_prompts(name=name)
+        fern_prompt_versions = prompt_client.get_all_prompts(name=name)
+        result = [
+            Prompt.from_fern_prompt_version(name, version)
+            for version in fern_prompt_versions
+        ]
+        return result
 
     def create_optimization(
         self,

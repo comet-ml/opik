@@ -296,6 +296,9 @@ serviceToggles:
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: false for testing. Should be enabled for specific test scenarios when needed.
+  # Description: Whether the trace thread closing job is enabled
+  enabled: false
   # Default: 1s
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: 1s
@@ -323,3 +326,12 @@ traceThreadConfig:
   # Default: 1000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
+
+# Job timeout configuration
+jobTimeout:
+  # Default: 30s
+  # Description: Timeout for the daily usage report job execution
+  dailyUsageReportJobTimeout: 30
+  # Default: 30s
+  # Description: Timeout for the trace threads closing job execution
+  traceThreadsClosingJobTimeout: 30

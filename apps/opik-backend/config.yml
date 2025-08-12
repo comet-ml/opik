@@ -406,6 +406,9 @@ serviceToggles:
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: true
+  # Description: Whether the trace thread closing job is enabled
+  enabled: ${OPIK_TRACE_THREAD_CLOSING_JOB_ENABLED:-true}
   # Default: 15min
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
@@ -433,6 +436,15 @@ traceThreadConfig:
   # Default: 1000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+
+# Job timeout configuration
+jobTimeout:
+  # Default: 30s
+  # Description: Timeout for the daily usage report job execution
+  dailyUsageReportJobTimeout: ${OPIK_DAILY_USAGE_REPORT_JOB_TIMEOUT:-30}
+  # Default: 30s
+  # Description: Timeout for the trace threads closing job execution
+  traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
 
 # Configuration for ClickHouse async insert functionality
 asyncInsert:
