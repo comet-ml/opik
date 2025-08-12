@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface OpenAIModelSettingsProps {
@@ -122,9 +121,9 @@ const OpenAIModelConfigs = ({
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
               Reasoning effort
             </Label>
-            <TooltipWrapper content="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses.">
-              <ExplainerIcon />
-            </TooltipWrapper>
+            <ExplainerIcon 
+              description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." 
+            />
           </div>
           <Select
             value={configs.reasoningEffort || "medium"}
