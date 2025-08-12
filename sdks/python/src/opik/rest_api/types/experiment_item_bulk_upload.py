@@ -10,6 +10,11 @@ from .experiment_item_bulk_record import ExperimentItemBulkRecord
 class ExperimentItemBulkUpload(UniversalBaseModel):
     experiment_name: str
     dataset_name: str
+    experiment_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
+    """
+
     items: typing.List[ExperimentItemBulkRecord]
 
     if IS_PYDANTIC_V2:

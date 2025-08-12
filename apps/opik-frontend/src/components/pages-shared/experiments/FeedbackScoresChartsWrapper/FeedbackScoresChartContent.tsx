@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Dot, LineChart } from "recharts";
+
+import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -27,7 +29,7 @@ export type DataRecord = {
 
 export type ChartData = {
   id: string;
-  name: string | string[];
+  name: string | DropdownOption<string>[];
   data: DataRecord[];
   lines: string[];
 };
