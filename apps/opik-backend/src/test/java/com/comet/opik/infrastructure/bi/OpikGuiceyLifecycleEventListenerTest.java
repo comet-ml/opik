@@ -116,6 +116,12 @@ class OpikGuiceyLifecycleEventListenerTest {
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
         }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
+        }
+
     }
 
     @Nested
@@ -163,6 +169,11 @@ class OpikGuiceyLifecycleEventListenerTest {
 
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
+        }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
         }
     }
 
