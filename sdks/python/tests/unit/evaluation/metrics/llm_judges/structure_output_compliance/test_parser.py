@@ -99,4 +99,3 @@ def test_parse_missing_reason_field():
     with pytest.raises(exceptions.MetricComputationError) as exc_info:
         parser.parse_model_output(content, "test_metric")
     assert str(exc_info.value) == logging_messages.STRUCTURED_OUTPUT_COMPLIANCE_FAILED
-
