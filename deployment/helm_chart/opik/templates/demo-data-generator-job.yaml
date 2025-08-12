@@ -19,6 +19,14 @@ spec:
       name:  {{ include "opik.name" $ }}-demo-data-generator
     spec:
       restartPolicy: Never
+      {{- with (default $.Values.nodeSelector $.Values.demoDataJob.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (default $.Values.tolerations $.Values.demoDataJob.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:          
       - name: wait-for-python-backend-service
         image: curlimages/curl:8.12.1

@@ -355,6 +355,7 @@ clickhouse:
   extraServiceTemplates: []
   extraPodTemplates: []
   extraVolumeClaimTemplates: []
+  disableFinalizer: false
   adminUser:
     useSecret:
       enabled: false

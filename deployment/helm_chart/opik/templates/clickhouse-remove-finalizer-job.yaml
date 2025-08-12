@@ -1,0 +1,42 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.disableFinalizer }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.name" $ }}-clickhouse-remove-finalizer
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: clickhouse-finalizer-cleanup
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "opik.labels" $  | nindent 8 }}
+        component: clickhouse-finalizer-cleanup
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: remove-finalizer
+          image: bitnami/kubectl:1.28
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+              echo "Removing CHI finalizers if present..."
+              kubectl -n {{ .Release.Namespace }} patch chi {{ include "opik.name" $ }}-clickhouse --type='merge' -p '{"metadata":{"finalizers":[]}}' || true
+      {{- with (default $.Values.nodeSelector $.Values.clickhouse.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (default $.Values.tolerations $.Values.clickhouse.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+
