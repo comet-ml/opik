@@ -62,7 +62,7 @@ import {
   getRowId,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
-import { isGroupFullyExpanded } from "@/lib/groups";
+import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
@@ -429,7 +429,7 @@ const ExperimentsPage: React.FC = () => {
             });
             return {
               id: group.id,
-              name: group.metadataPath.map((metadataPath) => {
+              name: group.metadataPath.map((metadataPath, index) => {
                 const label = get(
                   groupExperiments[0],
                   `${metadataPath}.label`.split("."),
@@ -442,9 +442,13 @@ const ExperimentsPage: React.FC = () => {
                   undefined,
                 );
 
-                return label === DELETED_DATASET_LABEL
-                  ? "Deleted dataset"
-                  : label || value || "Undefined";
+                return {
+                  label: calculateGroupLabel(groups[index]),
+                  value:
+                    label === DELETED_DATASET_LABEL
+                      ? "Deleted dataset"
+                      : label || value || "Undefined",
+                };
               }),
               experiments: groupExperiments,
             };
@@ -489,7 +493,7 @@ const ExperimentsPage: React.FC = () => {
     hasGroups,
     experiments,
     flattenGroups,
-    groups.length,
+    groups,
     expandingConfig.expanded,
     groupFieldNames,
   ]);
