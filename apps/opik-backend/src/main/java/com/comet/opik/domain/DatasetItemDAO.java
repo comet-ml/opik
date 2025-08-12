@@ -5,9 +5,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -80,7 +78,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 workspace_id,
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             VALUES
                 <items:{item |
                     (
@@ -598,7 +596,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -619,8 +616,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         var template = new ST(sqlTemplate)
                 .add("items", queryItems);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
 

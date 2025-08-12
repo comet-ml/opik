@@ -4,10 +4,8 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -74,7 +72,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String INSERT_THREADS_SQL = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
-            <settings_clause>
             VALUES
                 <items:{item |
                     (
@@ -101,7 +98,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
             	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at
-            ) <settings_clause>
+            )
             SELECT
                 workspace_id,
                 project_id,
@@ -149,7 +146,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
-            <settings_clause>
             SELECT
                 workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL
             FROM trace_threads tt final
@@ -171,7 +167,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
-            <settings_clause>
             SELECT
                 new_tt.workspace_id,
                 new_tt.project_id,
@@ -231,7 +226,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SCORED_AT = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
-            <settings_clause>
             SELECT
                 workspace_id,
                 project_id,
@@ -263,7 +257,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> save(@NonNull List<TraceThreadModel> traceThreads) {
@@ -278,8 +271,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
         var template = new ST(sqlTemplate).add("items", queryItems);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
         var statement = connection.createStatement(sql);
@@ -379,8 +370,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             List<String> threadIds = List.of(threadId);
 
-            ClickhouseUtils.checkAsyncConfig(openThreadsSql, opikConfiguration.getAsyncInsert());
-
             openThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(openThreadsSql.render())
@@ -402,8 +391,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             closureThreadsSql.add("thread_ids", threadIds);
-
-            ClickhouseUtils.checkAsyncConfig(closureThreadsSql, opikConfiguration.getAsyncInsert());
 
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
@@ -463,8 +450,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             updateSamplingSql.add("items", queryItems);
 
-            ClickhouseUtils.checkAsyncConfig(updateSamplingSql, opikConfiguration.getAsyncInsert());
-
             var statement = connection.createStatement(updateSamplingSql.render())
                     .bind("project_id", projectId)
                     .bind("ids", threadSamplingPerRules.stream().map(TraceThreadSampling::threadModelId).toList());
@@ -513,8 +498,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             var template = new ST(UPDATE_THREAD_SQL);
 
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
             Optional.ofNullable(threadUpdate.tags())
                     .ifPresent(tags -> template.add("tags", tags.toString()));
 
@@ -536,12 +519,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             return Mono.just(0L);
         }
 
-        ST template = new ST(UPDATE_THREAD_SCORED_AT);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(template.render())
+            var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
                     .bind("project_id", projectId)
                     .bind("thread_ids", threadIds)
                     .bind("scored_at", scoredAt.toString());

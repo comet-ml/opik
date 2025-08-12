@@ -1,16 +1,13 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.WorkspaceConfiguration;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -43,7 +40,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 last_updated_at,
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             SELECT
                 new_config.workspace_id,
                 new_config.timeout_mark_thread_as_inactive,
@@ -75,18 +72,13 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> upsertConfiguration(@NonNull String workspaceId,
             @NonNull WorkspaceConfiguration configuration) {
 
-        ST template = new ST(UPSERT_CONFIGURATION_SQL);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(template.render())
+            var statement = connection.createStatement(UPSERT_CONFIGURATION_SQL)
                     .bind("workspace_id", workspaceId);
 
             if (configuration.timeoutToMarkThreadAsInactive() != null) {
