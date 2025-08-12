@@ -1,10 +1,9 @@
-import os
 from typing import Optional, TypedDict
 from langgraph.graph import END, StateGraph
 from opik.integrations.langchain import OpikTracer # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
-
+configure()
 
 def classify(question: str) -> str:
     return "greeting" if question.startswith("Hello") else "search"

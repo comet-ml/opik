@@ -1,8 +1,9 @@
 import os
 
 os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true" # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 from haystack import Pipeline
 from haystack.components.builders import ChatPromptBuilder

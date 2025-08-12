@@ -14,8 +14,8 @@ import { useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
-
-const CODE_BLOCK_1 = "pip install opik";
+import { ExternalLink } from "lucide-react";
+import { IntegrationStep } from "./IntegrationStep";
 
 type IntegrationDetailsDialogProps = {
   selectedIntegration: Integration | null;
@@ -55,46 +55,49 @@ const IntegrationDetailsDialog: React.FunctionComponent<
 
   return (
     <Dialog open={!!selectedIntegration} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[920px]">
+      <DialogContent className="max-w-[920px] gap-2">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <img
-              src={selectedIntegration.icon}
-              alt={selectedIntegration.title}
-              className="size-8"
-            />
             {selectedIntegration.title} Integration
           </DialogTitle>
         </DialogHeader>
 
         <DialogAutoScrollBody className="border-0">
           <div className="comet-body-s mb-6 text-muted-slate">
-            Follow these steps to integrate {selectedIntegration.title} with
-            Opik and start logging your LLM calls for analysis and performance
-            monitoring.
+            It all starts with a trace. Follow these quick steps to log your
+            first set of LLM calls so you can use Opik to analyze them and
+            improve performance.{" "}
+            <a
+              href="https://www.comet.com/docs/opik/quickstart"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Read full guide
+              <ExternalLink className="size-3" />
+            </a>{" "}
+            in our docs.
           </div>
 
-          <div className="mb-6 flex flex-col gap-6 rounded-md border bg-white p-6">
-            <div>
-              <div className="comet-body-s mb-3">
-                1. Install Opik using pip from the command line.
-              </div>
-              <div className="min-h-7">
-                <CodeHighlighter data={CODE_BLOCK_1} />
-              </div>
+          <IntegrationStep
+            title="1. Install Opik using pip from the command line."
+            description="Install Opik from the command line using pip."
+            className="mb-6"
+          >
+            <div className="min-h-7">
+              <CodeHighlighter data={selectedIntegration.installCommand} />
             </div>
-            <div>
-              <div className="comet-body-s mb-3">
-                2. Run the following code to get started with{" "}
-                {selectedIntegration.title}
-              </div>
-              <CodeHighlighter
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                highlightedLines={lines}
-              />
-            </div>
-          </div>
+          </IntegrationStep>
+          <IntegrationStep
+            title={`2. Run the following code to get started with ${selectedIntegration.title}`}
+            className="mb-6"
+          >
+            <CodeHighlighter
+              data={codeWithConfig}
+              copyData={codeWithConfigToCopy}
+              highlightedLines={lines}
+            />
+          </IntegrationStep>
 
           <Separator className="my-6" />
 

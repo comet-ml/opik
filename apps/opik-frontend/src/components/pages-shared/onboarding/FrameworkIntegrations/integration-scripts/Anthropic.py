@@ -1,8 +1,11 @@
 import anthropic
 from opik.integrations.anthropic import track_anthropic # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 import os
 
-# INJECT_OPIK_CONFIGURATION
+configure()
+
+os.environ["ANTHROPIC_API_KEY"] = "your-api-key-here"
 
 anthropic_client = anthropic.Anthropic()
 anthropic_client = track_anthropic(anthropic_client) # HIGHLIGHTED_LINE

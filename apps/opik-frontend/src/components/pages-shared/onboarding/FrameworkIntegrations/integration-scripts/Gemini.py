@@ -1,7 +1,10 @@
 import os, google.genai
 from opik.integrations.genai import track_genai # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
+
+os.environ["GEMINI_API_KEY"] = "your-api-key-here"
 
 client = google.genai.Client()
 gemini_client = track_genai(client) # HIGHLIGHTED_LINE

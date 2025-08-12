@@ -97,6 +97,8 @@ const InviteDevButton: React.FC = () => {
           workspaceName,
           `&initialInviteId=${workspace?.workspaceId}`,
         )}
+        target="_blank"
+        rel="noopener noreferrer"
       >
         <UserPlus className="mr-2 size-4" />
         <span>Invite a developer</span>
@@ -109,7 +111,7 @@ InviteDevButton.displayName = "HelpLinks.InviteDev";
 const SlackButton: React.FC = () => {
   return (
     <Button className="w-full" variant="outline" asChild>
-      <a href={SLACK_LINK}>
+      <a href={SLACK_LINK} target="_blank" rel="noopener noreferrer">
         <Slack className="mr-2 size-4" />
         <span>Get help in Slack</span>
       </a>

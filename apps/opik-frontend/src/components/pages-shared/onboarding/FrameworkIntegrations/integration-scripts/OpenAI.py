@@ -1,8 +1,11 @@
 import os
 from openai import OpenAI
 from opik.integrations.openai import track_openai # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
+
+os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
 openai_client = track_openai(OpenAI()) # HIGHLIGHTED_LINE
 prompt = "Write a haiku about AI engineering."

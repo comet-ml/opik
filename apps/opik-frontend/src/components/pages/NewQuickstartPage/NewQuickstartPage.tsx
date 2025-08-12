@@ -68,13 +68,13 @@ const NewQuickstartPage: React.FunctionComponent = () => {
     ? integrations
     : integrations.filter((integration) => {
         const title = integration.title.toLowerCase();
-        const description = integration.description.toLowerCase();
+        const description = (integration.description || "").toLowerCase();
         const query = searchText.toLowerCase();
         return title.includes(query) || description.includes(query);
       });
 
   return (
-    <div className="size-full overflow-auto pb-10">
+    <div className="w-full pb-10">
       <div className="mx-auto max-w-[1040px]">
         <div className="mb-3 mt-10 flex items-center justify-between">
           <h1 className="comet-title-xl">Get started with Opik</h1>
@@ -184,10 +184,6 @@ const NewQuickstartPage: React.FunctionComponent = () => {
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 {filteredIntegrations.map((integration) => {
-                  if (integration.isHidden) {
-                    return null;
-                  }
-
                   return (
                     <IntegrationCard
                       key={integration.id}
@@ -200,7 +196,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
                           className="size-[40px] shrink-0"
                         />
                       }
-                      tag={integration.tag}
+                      tag={integration.isHidden ? "new" : integration.tag}
                       onClick={() => handleIntegrationClick(integration.id)}
                     />
                   );
@@ -208,7 +204,9 @@ const NewQuickstartPage: React.FunctionComponent = () => {
 
                 <IntegrationCard
                   title="Request integration"
-                  icon={<Plus className="size-6 text-muted-slate" />}
+                  iconClassName="min-w-0"
+                  className="justify-center"
+                  icon={<Plus className="size-4" />}
                   onClick={handleRequestIntegration}
                 />
               </div>
