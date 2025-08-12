@@ -113,6 +113,7 @@ const ChatModelSettings: React.FC<ChatModelSettingsProps> = ({
       </div>
       <PromptModelConfigs
         provider={provider}
+        model={model}
         configs={configs}
         onChange={handleUpdateConfig}
       />

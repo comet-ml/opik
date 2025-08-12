@@ -2,19 +2,41 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMOpenAIConfigsType } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
+  model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
 }
 
 const OpenAIModelConfigs = ({
   configs,
+  model,
   onChange,
 }: OpenAIModelSettingsProps) => {
+  const isGpt5Model =
+    model &&
+    [
+      PROVIDER_MODEL_TYPE.GPT_5,
+      PROVIDER_MODEL_TYPE.GPT_5_MINI,
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+    ].includes(model as PROVIDER_MODEL_TYPE);
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -95,6 +117,33 @@ const OpenAIModelConfigs = ({
             <PromptModelSettingsTooltipContent text="How much to penalize new tokens based on whether they appear in the text so far. Increases the model's likelihood to talk about new topics" />
           }
         />
+      )}
+
+      {isGpt5Model && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="reasoningEffort" className="text-sm font-medium">
+              Reasoning effort
+            </Label>
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
+          </div>
+          <Select
+            value={configs.reasoningEffort || "medium"}
+            onValueChange={(value: ReasoningEffort) =>
+              onChange({ reasoningEffort: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select reasoning effort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="minimal">Minimal</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       )}
     </div>
   );

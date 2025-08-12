@@ -21,6 +21,20 @@ export type ModelResolver = (
 
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OPEN_AI]: [
+    // GPT-5 Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5,
+      label: "GPT 5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_MINI,
+      label: "GPT 5 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      label: "GPT 5 Nano",
+    },
+
     // GPT-4.0 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O,
