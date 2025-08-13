@@ -65,7 +65,9 @@ async function inviteUsersRequest(variables: InviteUsersVariables) {
   ];
 
   const results = await Promise.allSettled(allRequests);
-  const firstError = results.find((result) => result.status === "rejected");
+  const firstError = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
 
   if (!firstError) {
     return {
