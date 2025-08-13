@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberk:000035_test_migration
+--changeset idoberk:000036_test_migration
 
 SELECT 1;
 
