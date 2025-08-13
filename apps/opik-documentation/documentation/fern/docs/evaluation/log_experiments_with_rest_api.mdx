@@ -276,6 +276,40 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
   smaller batches.
 </Warning>
 
+If you wish to divide the data into smaller batches, just add the `experiment_id` to the payload 
+so experiment items can be added to an existing experiment.
+Below is an example of splitting the `evaluation_items` into two batches which will both be added
+to the same experiment:
+```python
+experiment_id = str(uuid6.uuid7())
+experiment_name = "Bulk experiment upload"
+# Split evaluation_items into two batches
+mid = len(evaluation_items) // 2
+
+halves = [
+    evaluation_items[:mid],
+    evaluation_items[mid:]
+]
+
+for half in halves:
+    client.rest_client.experiments.experiment_items_bulk(
+        experiment_id=experiment_id,
+        experiment_name=experiment_name,
+        dataset_name="geography-questions",
+        items=[
+            {
+                "dataset_item_id": item["dataset_item_id"],
+                "evaluate_task_result": item["evaluate_task_result"],
+                "feedback_scores": [
+                    {**score, "source": "sdk"} 
+                    for score in item["feedback_scores"]
+                ]
+            } 
+            for item in half
+        ]
+    )
+```
+
 ## Complete Example
 
 Here's a complete example that puts all the steps together:
