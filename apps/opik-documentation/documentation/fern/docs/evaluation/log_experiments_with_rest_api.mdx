@@ -276,7 +276,10 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
   smaller batches.
 </Warning>
 
-If you wish to divide the data into smaller batches, you can do as follows:
+If you wish to divide the data into smaller batches, just add the `experiment_id` to the payload 
+so experiment items can be added to an existing experiment.
+Below is an example of splitting the `evaluation_items` into two batches which will both be added
+to the same experiment:
 ```python
 experiment_id = str(uuid6.uuid7())
 experiment_name = "Bulk experiment upload"
