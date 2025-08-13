@@ -53,10 +53,10 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
                 return llm_usage.OpikUsage.from_anthropic_dict(anthropic_usage_dict)
 
         opik_logging.log_once_at_level(
-            logging_level=logging.WARNING,
-            message="Failed to extract token usage from presumably Anthropic LLM langchain run. Run dict: %s"
-            % run_dict,
-            logger=LOGGER,
+            logging.WARNING,
+            "Failed to extract token usage from presumably Anthropic LLM langchain run. Run dict: %s",
+            LOGGER,
+            run_dict,
         )
 
         opik_logging.log_once_at_level(
