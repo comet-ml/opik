@@ -90,7 +90,6 @@ class InstallationReportServiceImpl implements InstallationReportService {
         var anonymousId = config.getUsageReport().getAnonymousId();
 
         if (StringUtils.isNotBlank(anonymousId)) {
-            log.info("Using anonymous ID from config: {}", anonymousId);
             usageReport.saveAnonymousId(anonymousId);
             return anonymousId;
         }
