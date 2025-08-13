@@ -2,7 +2,7 @@
 FROM docker:27.5.1 AS builder
 
 # Build dependencies (only needed during pip install)
-RUN apk add --no-cache tini python3 py3-pip build-base && \
+RUN apk add --no-cache tini python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev && \
     apk add --no-cache rust cargo
 
 WORKDIR /opt/opik-python-backend

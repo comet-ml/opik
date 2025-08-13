@@ -18,7 +18,8 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: true
+demoDataJob: 
+  enabled: true
 nodeSelector: {}
 tolerations: []
 affinity: {}

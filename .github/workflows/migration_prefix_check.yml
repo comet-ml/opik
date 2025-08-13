@@ -1,0 +1,27 @@
+name: "Database Migration Prefix Check"
+run-name: "Backend Database Migration Prefix Check on ${{ github.ref_name }} by @${{ github.actor }}"
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths: 
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/**"
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
+  workflow_dispatch:
+
+jobs:
+  check-migration-prefix-conflicts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 0  # Fetch full history to compare with main
+      
+      - name: Check for migration prefix conflicts
+        shell: bash
+        run: ./scripts/check_backend_migration_conflicts.sh
