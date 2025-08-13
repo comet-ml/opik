@@ -61,6 +61,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
+            run_dict,
             exc_info=True,
         )
         return None
