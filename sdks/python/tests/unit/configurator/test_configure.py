@@ -1097,7 +1097,6 @@ class TestConfigureLocal:
         assert configurator.api_key is None
         assert configurator.base_url == "http://custom-local-instance.com/"
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
-    
 
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_local__use_local_is_True__url_not_provided__use_default_localhost_url(
@@ -1106,9 +1105,7 @@ class TestConfigureLocal:
         """
         Test that the function configures the default localhost URL if use_local is True and url is not provided.
         """
-        configurator = OpikConfigurator(
-            use_local=True, force=False
-        )
+        configurator = OpikConfigurator(use_local=True, force=False)
         configurator._configure_local()
 
         mock_update_config.assert_called_once()
