@@ -15,9 +15,7 @@ EXCEPTION_RAISED_FROM_TRACKED_FUNCTION = (
 
 FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN = "Failed to extract token usage from presumably OpenAI LLM langchain run. The run dictionary: %s"
 
-FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN = (
-    "Failed to extract token usage from presumably Groq LLM langchain run."
-)
+FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN = "Failed to extract token usage from presumably Groq LLM langchain run. The run dictionary: %s"
 
 FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN = "Failed to extract token usage from presumably Google LLM langchain run. The run dictionary: %s"
 
