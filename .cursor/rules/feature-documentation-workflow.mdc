@@ -185,20 +185,6 @@ Configure Cursor to check for:
 - Undocumented breaking changes
 - Missing migration guides
 
-### **3. Template Integration**
-
-## Release Notes Entry
-```markdown
-### [FEATURE_TYPE] - [FEATURE_NAME]
-[Brief description for release notes]
-
-## Breaking Changes
-[Document any breaking changes and migration steps]
-
-## Migration Guide
-[If breaking changes exist, provide step-by-step migration guide]
-```
-
 ## Automation Workflows
 
 ### **1. Release Notes Generation**
