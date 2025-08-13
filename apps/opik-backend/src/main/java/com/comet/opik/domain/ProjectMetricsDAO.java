@@ -121,11 +121,42 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String GET_FEEDBACK_SCORES = """
-            WITH feedback_scores_deduplication AS (
+            WITH feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND project_id = :project_id
+                  AND workspace_id = :workspace_id
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND project_id = :project_id
+                  AND workspace_id = :workspace_id
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_deduplication AS (
                 SELECT t.start_time,
                         fs.name,
                         fs.value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         id,
@@ -136,9 +167,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
                 ) t ON t.id = fs.entity_id
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND entity_type = 'trace'
             )
             SELECT <bucket> AS bucket,
                     name,
@@ -153,11 +181,40 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
-            WITH thread_feedback_scores AS (
+            WITH feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                  AND project_id = :project_id
+                  AND workspace_id = :workspace_id
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                  AND project_id = :project_id
+                  AND workspace_id = :workspace_id
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), thread_feedback_scores AS (
                 SELECT t.start_time,
                         fs.name,
                         fs.value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         tt.id,
@@ -173,9 +230,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND tt.status = 'inactive'
                     GROUP BY tt.id
                 ) t ON t.id = fs.entity_id
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND entity_type = 'thread'
             )
             SELECT <bucket> AS bucket,
                     name,

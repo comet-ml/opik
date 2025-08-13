@@ -39,6 +39,7 @@ public class FeedbackScoreAssertionUtils {
                                 .lastUpdatedBy(null)
                                 .createdAt(null)
                                 .lastUpdatedAt(null)
+                                .valueByAuthor(null)
                                 .build())
                         .toList())
                 .build();
