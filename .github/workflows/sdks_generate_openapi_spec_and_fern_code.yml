@@ -65,8 +65,8 @@ jobs:
             Automated update of OpenAPI spec and Fern code after running `./scripts/generate_openapi.sh`.
           
             ## Change checklist
-            - [x] User facing changes
-            - [x] Documentation updated
+            - [] User facing changes
+            - [X] Documentation updated
           
             ## Issues
             N/A

@@ -46,7 +46,7 @@ jobs:
             Automated update of `model_prices_and_context_window.json` file, including span prices from the LiteLLM repo.
           
             ## Change checklist
-            - [x] User facing change
+            - [X] User facing change
             - [ ] Documentation update
           
             ## Issues
