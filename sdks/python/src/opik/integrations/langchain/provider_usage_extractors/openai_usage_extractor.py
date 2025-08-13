@@ -79,11 +79,17 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
                 )
 
         opik_logging.log_once_at_level(
+            logging.WARNING,
+            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN,
+            LOGGER,
+            run_dict,
+        )
+
+        opik_logging.log_once_at_level(
             logging_level=logging.WARNING,
             message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
             logger=LOGGER,
         )
-        return None
 
     except Exception:
         LOGGER.warning(
@@ -91,7 +97,8 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
             run_dict,
             exc_info=True,
         )
-        return None
+
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
