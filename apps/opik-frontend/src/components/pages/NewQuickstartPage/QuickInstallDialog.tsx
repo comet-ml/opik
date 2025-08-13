@@ -14,6 +14,7 @@ import windsurfLogo from "/images/integrations/windsurf.png";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import HelpLinks from "./HelpLinks";
 import { Separator } from "@/components/ui/separator";
+import { IntegrationStep } from "./IntegrationStep";
 
 const AI_ASSISTANT_PROMPT = `# OPIK Agentic Onboarding
 
@@ -145,7 +146,7 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[720px]">
+      <DialogContent className="max-w-[720px] gap-2">
         <DialogHeader>
           <DialogTitle className="flex flex-col gap-0.5">
             <div className="-ml-1 flex gap-1 pr-2">
@@ -186,13 +187,11 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
               in our docs.
             </div>
 
-            <div>
-              <h3 className="comet-title-s mb-3">Set up Opik</h3>
-              <div className="comet-body-s mb-4 text-muted-slate">
-                Use this prompt with your AI coding assistant of choice to
-                integrate Opik with you application.
-              </div>
-
+            <IntegrationStep
+              title="Set up Opik"
+              description="Use this prompt with your AI coding assistant of choice to integrate Opik with you application."
+              className="mb-6"
+            >
               <div className="relative overflow-hidden rounded-md bg-primary-foreground">
                 <div className="absolute right-2 top-0.5 z-10">
                   <CopyButton
@@ -202,11 +201,11 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
                     className="mr-2 text-muted-slate"
                   />
                 </div>
-                <pre className="max-h-[300px] select-all overflow-auto whitespace-pre-wrap p-4 font-mono text-sm">
+                <pre className="max-h-[300px] select-all overflow-auto whitespace-pre-wrap p-4 font-code text-sm">
                   {AI_ASSISTANT_PROMPT}
                 </pre>
               </div>
-            </div>
+            </IntegrationStep>
 
             {/* <div>
               <h3 className="comet-title-s mb-3">

@@ -1,8 +1,8 @@
 import boto3
 from opik.integrations.bedrock import track_bedrock # HIGHLIGHTED_LINE
-import os
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 bedrock = boto3.client(
     service_name="bedrock-runtime",

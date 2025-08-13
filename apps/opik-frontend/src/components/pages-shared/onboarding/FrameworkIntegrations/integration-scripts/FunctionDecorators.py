@@ -1,7 +1,9 @@
 import os, openai
-from opik import track # HIGHLIGHTED_LINE
+from opik import track, configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
+
+os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
 client = openai.OpenAI()
 

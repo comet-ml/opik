@@ -1,7 +1,10 @@
 import os, litellm
 from litellm.integrations.opik.opik import OpikLogger # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
+
+os.environ["GROQ_API_KEY"] = "your-api-key-here"
 
 litellm.callbacks = [OpikLogger()] # HIGHLIGHTED_LINE
 response = litellm.completion(

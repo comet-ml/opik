@@ -8,6 +8,7 @@ type IntegrationCardProps = {
   tag?: string;
   icon: React.ReactNode;
   className?: string;
+  iconClassName?: string;
   onClick?: () => void;
 };
 
@@ -17,6 +18,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
   tag,
   icon,
   className,
+  iconClassName,
   onClick,
 }) => {
   return (
@@ -27,15 +29,22 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
       )}
       onClick={onClick}
     >
-      <div className="flex min-w-12 items-center justify-center">{icon}</div>
+      <div
+        className={cn(
+          "flex min-w-12 items-center justify-center",
+          iconClassName,
+        )}
+      >
+        {icon}
+      </div>
 
       <div>
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <h3 className="comet-body-s-accented text-foreground transition-colors">
             {title}
           </h3>
           {tag && (
-            <Tag variant="green" size="sm" className="h-5 leading-5">
+            <Tag variant="green" size="sm" className="h-5 shrink-0 leading-5">
               {tag}
             </Tag>
           )}

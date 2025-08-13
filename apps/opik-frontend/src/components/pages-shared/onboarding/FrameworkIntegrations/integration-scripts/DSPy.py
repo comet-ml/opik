@@ -1,8 +1,8 @@
 import dspy
 from opik.integrations.dspy.callback import OpikCallback # HIGHLIGHTED_LINE
-import os
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 lm = dspy.LM(model="openai/gpt-4o-mini")
 dspy.configure(lm=lm)

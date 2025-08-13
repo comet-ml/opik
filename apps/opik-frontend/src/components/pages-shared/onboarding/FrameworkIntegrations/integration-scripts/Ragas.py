@@ -1,4 +1,4 @@
-import asyncio, os
+import asyncio
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 from ragas.dataset_schema import SingleTurnSample
@@ -6,8 +6,9 @@ from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.integrations.opik import OpikTracer # HIGHLIGHTED_LINE
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import AnswerRelevancy
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())

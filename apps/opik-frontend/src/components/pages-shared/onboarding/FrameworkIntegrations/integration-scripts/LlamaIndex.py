@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import requests
 from llama_index.core import (
@@ -7,8 +6,9 @@ from llama_index.core import (
     global_handler,
     set_global_handler,
 )
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 set_global_handler("opik") # HIGHLIGHTED_LINE
 opik_callback_handler = global_handler # HIGHLIGHTED_LINE

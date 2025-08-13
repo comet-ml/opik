@@ -1,7 +1,8 @@
-import os, litellm
+import litellm
 from litellm.integrations.opik.opik import OpikLogger # HIGHLIGHTED_LINE
+from opik import configure # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()
 
 litellm.callbacks = [OpikLogger()] # HIGHLIGHTED_LINE
 response = litellm.completion(
