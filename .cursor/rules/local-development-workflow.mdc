@@ -1,0 +1,327 @@
+# Local Development Workflow
+
+## Overview
+
+This workflow provides seamless build and run experience within Cursor for the Opik platform. The goal is to enable any engineer to spin up the entire application stack without leaving the IDE.
+
+## Quick Start Commands
+
+### **Full Stack Operations**
+
+```bash
+# Start entire Opik platform (recommended for most development)
+./opik.sh
+
+# Start with build (rebuilds containers)
+./opik.sh --build
+
+# Start with debug mode (verbose output)
+./opik.sh --debug
+
+# Start with port mapping (exposes all container ports)
+./opik.sh --port-mapping
+
+# Start with guardrails (includes AI guardrails backend)
+./opik.sh --guardrails
+
+# Combine multiple options
+./opik.sh --build --debug --port-mapping
+```
+
+### **Health and Status**
+
+```bash
+# Check if all containers are healthy
+./opik.sh --verify
+
+# Display system status (only if all containers running)
+./opik.sh --info
+
+# Stop all containers and clean up
+./opik.sh --stop
+```
+
+## Individual Application Development
+
+### **Backend (Java) Development**
+
+```bash
+# Navigate to backend directory
+cd apps/opik-backend
+
+# Build backend application
+mvn clean compile
+
+# Run backend tests
+mvn test
+
+# Build and run backend locally (requires databases)
+mvn exec:java -Dexec.mainClass="com.comet.opik.OpikApplication" -Dexec.args="server config.yml"
+
+# Build JAR file
+mvn clean package
+
+# Run from JAR
+java -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
+```
+
+### **Frontend (React/TypeScript) Development**
+
+```bash
+# Navigate to frontend directory
+cd apps/opik-frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm start
+
+# Build for production
+npm run build
+
+# Run tests
+npm test
+
+# Run type checking
+npm run typecheck
+
+# Run linting
+npm run lint
+
+# Run e2e tests
+npm run e2e
+```
+
+### **Python SDK Development**
+
+```bash
+# Navigate to Python SDK directory
+cd sdks/python
+
+# Install in development mode
+pip install -e .
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=opik
+
+# Build package
+python setup.py sdist bdist_wheel
+```
+
+### **TypeScript SDK Development**
+
+```bash
+# Navigate to TypeScript SDK directory
+cd sdks/typescript
+
+# Install dependencies
+npm install
+
+# Build package
+npm run build
+
+# Run tests
+npm test
+
+# Run type checking
+npm run typecheck
+```
+
+## Docker-Based Development
+
+### **Full Stack with Docker Compose**
+
+```bash
+# Start all services
+docker compose -f deployment/docker-compose/docker-compose.yaml up -d
+
+# Start with override (port mapping)
+docker compose -f deployment/docker-compose/docker-compose.yaml -f deployment/docker-compose/docker-compose.override.yaml up -d
+
+# Start with guardrails profile
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile guardrails up -d
+
+# View logs
+docker compose -f deployment/docker-compose/docker-compose.yaml logs -f
+
+# Stop all services
+docker compose -f deployment/docker-compose/docker-compose.yaml down
+```
+
+### **Individual Service Development**
+
+```bash
+# Backend service only
+docker compose -f deployment/docker-compose/docker-compose.yaml up -d mysql redis clickhouse
+cd apps/opik-backend
+mvn exec:java -Dexec.mainClass="com.comet.opik.OpikApplication" -Dexec.args="server config.yml"
+
+# Frontend service only
+docker compose -f deployment/docker-compose/docker-compose.yaml up -d
+cd apps/opik-frontend
+npm start
+```
+
+## Development Workflows
+
+### **Backend-Focused Development**
+
+1. **Start databases only:**
+   ```bash
+   docker compose -f deployment/docker-compose/docker-compose.yaml up -d mysql redis clickhouse
+   ```
+
+2. **Run backend locally:**
+   ```bash
+   cd apps/opik-backend
+   mvn exec:java -Dexec.mainClass="com.comet.opik.OpikApplication" -Dexec.args="server config.yml"
+   ```
+
+3. **Access backend API:**
+   - URL: `http://localhost:8080`
+   - Health check: `http://localhost:8080/health`
+   - API docs: `http://localhost:8080/swagger`
+
+### **Frontend-Focused Development**
+
+1. **Start backend services:**
+   ```bash
+   ./opik.sh --port-mapping
+   ```
+
+2. **Run frontend locally:**
+   ```bash
+   cd apps/opik-frontend
+   npm start
+   ```
+
+3. **Access frontend:**
+   - URL: `http://localhost:5173`
+   - Hot reload enabled
+
+### **Full Stack Development**
+
+1. **Start everything:**
+   ```bash
+   ./opik.sh --build --debug
+   ```
+
+2. **Access applications:**
+   - Frontend: `http://localhost:5173`
+   - Backend API: `http://localhost:8080`
+   - MinIO Console: `http://localhost:9090`
+
+## Environment Configuration
+
+### **Local Configuration File**
+
+The `./opik.sh` script automatically creates `~/.opik.config`:
+
+```ini
+[opik]
+url_override = http://localhost:5173/api/
+workspace = default
+```
+
+## Troubleshooting
+
+### **Common Issues**
+
+1. **Port conflicts:**
+   ```bash
+   # Check what's using ports
+   lsof -i :8080
+   lsof -i :5173
+   
+   # Kill processes if needed
+   kill -9 <PID>
+   ```
+
+2. **Docker issues:**
+   ```bash
+   # Restart Docker
+   docker system prune -a
+   ./opik.sh --build
+   ```
+
+3. **Database connection issues:**
+   ```bash
+   # Check container health
+   ./opik.sh --verify
+   
+   # Restart databases
+   docker compose -f deployment/docker-compose/docker-compose.yaml restart mysql clickhouse
+   ```
+
+### **Development Tips**
+
+1. **Use `--debug` flag** for verbose output during troubleshooting
+2. **Use `--port-mapping`** when you need to access individual services directly
+3. **Use `--build`** when you've made changes to Dockerfiles or dependencies
+4. **Check container logs** for specific service issues:
+   ```bash
+   docker logs opik-backend-1
+   docker logs opik-frontend-1
+   ```
+
+## Integration with Cursor
+
+### **Recommended Cursor Setup**
+
+1. **Terminal Integration:**
+   - Use Cursor's integrated terminal for all commands
+   - Split terminals for different services (backend, frontend, databases)
+
+2. **Task Configuration:**
+   - Create `.vscode/tasks.json` for common development tasks
+   - Use Cursor's task runner for quick access to commands
+
+3. **Debugging:**
+   - Configure debug configurations for Java backend
+   - Use browser dev tools for frontend debugging
+   - Set breakpoints in both backend and frontend code
+
+### **Workflow Automation**
+
+```bash
+# Quick development start (add to Cursor tasks)
+./opik.sh --build --debug --port-mapping
+
+# Quick test run
+cd apps/opik-backend && mvn test
+cd apps/opik-frontend && npm test
+
+# Quick build check
+cd apps/opik-backend && mvn compile -DskipTests
+cd apps/opik-frontend && npm run build
+```
+
+## Performance Optimization
+
+### **Development Performance**
+
+1. **Use volume mounts** for faster file changes
+2. **Enable hot reload** for frontend development
+3. **Use incremental compilation** for backend development
+4. **Skip tests** during development: `mvn compile -DskipTests`
+
+### **Resource Management**
+
+1. **Monitor Docker resources:**
+   ```bash
+   docker stats
+   ```
+
+2. **Clean up unused resources:**
+   ```bash
+   docker system prune
+   docker volume prune
+   ```
+
+3. **Limit resource usage** in Docker Compose if needed
+
+This workflow ensures that any engineer can quickly spin up the entire Opik application stack within Cursor for seamless development experience.
