@@ -97,8 +97,14 @@ class OpikConnector:
             return
 
         self.name = name
+        # Create Opik client with the specific project name if provided
+        if project_name:
+            opik_client = opik.Opik(project_name=project_name, _use_batching=True)
+        else:
+            opik_client = opik.api_objects.opik_client.get_client_cached()
+        
         self.tracer = opik_tracer.OpikTracer(
-            opik_client=opik.Opik(project_name=project_name), name=name
+            opik_client=opik_client, name=name
         )
         tracing.enable_tracing(self.tracer)
 

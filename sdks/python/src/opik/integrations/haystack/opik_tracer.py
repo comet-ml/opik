@@ -1,5 +1,4 @@
 import contextlib
-import contextvars
 import os
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -7,11 +6,10 @@ from haystack import dataclasses as haystack_dataclasses
 from haystack import logging, tracing
 from haystack.tracing import utils as tracing_utils
 
-import opik
 import opik.url_helpers as url_helpers
-from opik.api_objects import span as opik_span
-from opik.api_objects import trace as opik_trace
+from opik.api_objects import opik_client, span, trace
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
+import opik.context_storage as context_storage
 
 from . import converters
 
@@ -44,11 +42,7 @@ _COMPONENT_NAME_KEY = "haystack.component.name"
 _COMPONENT_TYPE_KEY = "haystack.component.type"
 _COMPONENT_OUTPUT_KEY = "haystack.component.output"
 
-# Context var used to keep track of tracing related info.
-# This mainly useful for parents spans.
-tracing_context_var: contextvars.ContextVar[Dict[Any, Any]] = contextvars.ContextVar(
-    "tracing_context"
-)
+# Removed custom context storage - now using opik.context_storage
 
 
 class OpikSpanBridge(tracing.Span):
@@ -56,14 +50,14 @@ class OpikSpanBridge(tracing.Span):
     Internal class representing a bridge between the Haystack span tracing API and Opik.
     """
 
-    def __init__(self, span: Union[opik_span.Span, opik_trace.Trace]) -> None:
+    def __init__(self, span_or_trace_data: Union[span.SpanData, trace.TraceData]) -> None:
         """
         Initialize a OpikSpan instance.
 
         Args:
-            span: The span instance managed by Opik.
+            span_or_trace_data: The SpanData or TraceData instance managed by Opik.
         """
-        self._span = span
+        self._span_or_trace_data = span_or_trace_data
         # locally cache tags
         self._data: Dict[str, Any] = {}
 
@@ -76,7 +70,7 @@ class OpikSpanBridge(tracing.Span):
             value: The tag value.
         """
         coerced_value = tracing_utils.coerce_tag_value(value)
-        self._span.update(metadata={key: coerced_value, "created_from": "haystack"})
+        self._span_or_trace_data.update(metadata={key: coerced_value, "created_from": "haystack"})
         self._data[key] = value
 
     def set_content_tag(self, key: str, value: Any) -> None:
@@ -95,9 +89,9 @@ class OpikSpanBridge(tracing.Span):
                     converters.convert_message_to_openai_format(message)
                     for message in value["messages"]
                 ]
-                self._span.update(input={"input": messages})
+                self._span_or_trace_data.update(input={"input": messages})
             else:
-                self._span.update(input={"input": value})
+                self._span_or_trace_data.update(input={"input": value})
         elif key.endswith(".output"):
             if "replies" in value:
                 if all(
@@ -110,22 +104,32 @@ class OpikSpanBridge(tracing.Span):
                     ]
                 else:
                     replies = value["replies"]
-                self._span.update(output={"replies": replies})
+                self._span_or_trace_data.update(output={"replies": replies})
             else:
-                self._span.update(output={"output": value})
+                self._span_or_trace_data.update(output={"output": value})
 
         self._data[key] = value
 
-    def raw_span(self) -> Union[opik_span.Span, opik_trace.Trace]:
+    def raw_span(self) -> Union[span.SpanData, trace.TraceData]:
         """
-        Return the underlying span instance.
+        Return the underlying span or trace data instance.
 
-        :return: The Opik span instance.
+        :return: The Opik SpanData or TraceData instance.
         """
-        return self._span
+        return self._span_or_trace_data
 
     def get_correlation_data_for_logs(self) -> Dict[str, Any]:
         return {}
+    
+    def set_tags(self, tags: Dict[str, Any]) -> None:
+        """
+        Set multiple tags on this span.
+
+        Args:
+            tags: Dictionary of tag keys and values.
+        """
+        for key, value in tags.items():
+            self.set_tag(key, value)
 
 
 class OpikTracer(tracing.Tracer):
@@ -133,12 +137,12 @@ class OpikTracer(tracing.Tracer):
     Internal class representing a bridge between the Haystack tracer and Opik.
     """
 
-    def __init__(self, opik_client: opik.Opik, name: str = "Haystack") -> None:
+    def __init__(self, opik_client: opik_client.Opik, name: str = "Haystack") -> None:
         """
         Initialize a OpikTracer instance.
 
         Args:
-            tracer: The Opik tracer instance.
+            opik_client: The Opik client instance.
             name: The name of the pipeline or component. This name will be used to identify the tracing run on the
                 Opik dashboard.
         """
@@ -154,6 +158,7 @@ class OpikTracer(tracing.Tracer):
         self.enforce_flush = (
             os.getenv(HAYSTACK_OPIK_ENFORCE_FLUSH_ENV_VAR, "true").lower() == "true"
         )
+        self._opik_context_storage = context_storage.get_current_context_instance()
 
     @contextlib.contextmanager
     def trace(
@@ -164,78 +169,162 @@ class OpikTracer(tracing.Tracer):
     ) -> Iterator[tracing.Span]:
         tags = tags or {}
         span_name = tags.get(_COMPONENT_NAME_KEY, operation_name)
-
-        # Create new span depending whether there's a parent span or not
+        
+        # Check if we need to create a new trace or attach to existing context
         if not parent_span:
-            if operation_name != _PIPELINE_RUN_KEY:
+            if operation_name == _PIPELINE_RUN_KEY:
+                # This is a pipeline run - check if there's an existing trace or span context
+                existing_trace_data = self._opik_context_storage.get_trace_data()
+                existing_span_data = self._opik_context_storage.top_span_data()
+                
+                if existing_trace_data is not None:
+                    # Attach as a span to the existing trace
+                    span_data = existing_trace_data.create_child_span_data(
+                        name=self._name,
+                        type="general",
+                        metadata={"created_from": "haystack", "operation": operation_name}
+                    )
+                    self._opik_context_storage.add_span_data(span_data)
+                    
+                    if (
+                        self._opik_client.config.log_start_trace_span
+                        and tracing_runtime_config.is_tracing_active()
+                    ):
+                        self._opik_client.span(**span_data.as_start_parameters)
+                    
+                    span = OpikSpanBridge(span_data)
+                elif existing_span_data is not None:
+                    # Attach as a child span to the existing span
+                    span_data = existing_span_data.create_child_span_data(
+                        name=self._name,
+                        type="general",
+                        metadata={"created_from": "haystack", "operation": operation_name}
+                    )
+                    self._opik_context_storage.add_span_data(span_data)
+                    
+                    if (
+                        self._opik_client.config.log_start_trace_span
+                        and tracing_runtime_config.is_tracing_active()
+                    ):
+                        self._opik_client.span(**span_data.as_start_parameters)
+                    
+                    span = OpikSpanBridge(span_data)
+                else:
+                    # Create a new trace for the pipeline
+                    trace_data = trace.TraceData(
+                        name=self._name,
+                        metadata={"created_from": "haystack", "operation": operation_name},
+                        project_name=self._opik_client.config.project_name,
+                    )
+                    self._opik_context_storage.set_trace_data(trace_data)
+                    
+                    if (
+                        self._opik_client.config.log_start_trace_span
+                        and tracing_runtime_config.is_tracing_active()
+                    ):
+                        self._opik_client.trace(**trace_data.as_start_parameters)
+                    
+                    span = OpikSpanBridge(trace_data)
+            else:
                 logger.warning(
-                    "Creating a new trace without a parent span is not recommended for operation '{operation_name}'.",
-                    operation_name=operation_name,
+                    "Creating a new trace without a parent span is not recommended for operation '%s'.",
+                    operation_name,
                 )
-            # Create a new trace if no parent span is provided
-            context = tracing_context_var.get({})
-
-            trace = None
-            if tracing_runtime_config.is_tracing_active():
-                trace = self._opik_client.trace(
-                    id=context.get("trace_id"),
-                    name=self._name,
-                    tags=context.get("tags"),
+                # Create a new trace for non-pipeline operations
+                trace_data = trace.TraceData(
+                    name=span_name,
+                    metadata={"created_from": "haystack", "operation": operation_name},
+                    project_name=self._opik_client.config.project_name,
                 )
-            assert trace is not None
-            span = OpikSpanBridge(trace)
-        elif tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS:
-            span = OpikSpanBridge(
-                parent_span.raw_span().span(name=span_name, type="llm")
-                if tracing_runtime_config.is_tracing_active()
-                else parent_span.raw_span()
-            )
+                self._opik_context_storage.set_trace_data(trace_data)
+                
+                if (
+                    self._opik_client.config.log_start_trace_span
+                    and tracing_runtime_config.is_tracing_active()
+                ):
+                    self._opik_client.trace(**trace_data.as_start_parameters)
+                
+                span = OpikSpanBridge(trace_data)
         else:
-            span = (
-                OpikSpanBridge(parent_span.raw_span().span(name=span_name))
-                if tracing_runtime_config.is_tracing_active()
-                else parent_span
-            )
+            # Create a child span
+            parent_data = parent_span.raw_span()
+            if isinstance(parent_data, trace.TraceData):
+                span_data = parent_data.create_child_span_data(
+                    name=span_name,
+                    type="llm" if tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS else "general",
+                    metadata={"created_from": "haystack", "operation": operation_name}
+                )
+            else:
+                span_data = parent_data.create_child_span_data(
+                    name=span_name,
+                    type="llm" if tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS else "general",
+                    metadata={"created_from": "haystack", "operation": operation_name}
+                )
+            
+            self._opik_context_storage.add_span_data(span_data)
+            
+            if (
+                self._opik_client.config.log_start_trace_span
+                and tracing_runtime_config.is_tracing_active()
+            ):
+                self._opik_client.span(**span_data.as_start_parameters)
+            
+            span = OpikSpanBridge(span_data)
 
         self._context.append(span)
-        span.set_tags(tags)
+        
+        # Set tags on the span data
+        if tags:
+            span.set_tags(tags)
 
-        yield span
-
-        raw_span = span.raw_span()
-        # Update span metadata based on component type
-        if tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_GENERATORS:
-            # Haystack returns one meta dict for each message, but the 'usage' value
-            # is always the same, let's just pick the first item
-            meta = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("meta")
-            if meta:
-                m = meta[0]
-                if isinstance(raw_span, opik.Span):
-                    raw_span.update(usage=m.get("usage") or None, model=m.get("model"))
-        elif tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_CHAT_GENERATORS:
-            replies = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("replies")
-            if replies:
-                meta = replies[0].meta
-                if isinstance(raw_span, opik.Span):
-                    raw_span.update(
+        try:
+            yield span
+        finally:
+            # Update span metadata based on component type
+            span_or_trace_data = span.raw_span()
+            
+            if tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_GENERATORS:
+                # Haystack returns one meta dict for each message, but the 'usage' value
+                # is always the same, let's just pick the first item
+                meta = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("meta")
+                if meta:
+                    m = meta[0]
+                    span_or_trace_data.update(usage=m.get("usage") or None, model=m.get("model"))
+            elif tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_CHAT_GENERATORS:
+                replies = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("replies")
+                if replies:
+                    meta = replies[0].meta
+                    span_or_trace_data.update(
                         usage=meta.get("usage") or None,
                         model=meta.get("model"),
                     )
+            elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
+                input_data = tags.get("haystack.pipeline.input_data", {})
+                output_data = tags.get("haystack.pipeline.output_data", {})
+                span_or_trace_data.update(
+                    input=input_data,
+                    output=output_data,
+                )
 
-        elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
-            input_data = tags.get("haystack.pipeline.input_data", {})
-            output_data = tags.get("haystack.pipeline.output_data", {})
+            # End the span/trace
+            span_or_trace_data.init_end_time()
+            
+            if tracing_runtime_config.is_tracing_active():
+                if isinstance(span_or_trace_data, trace.TraceData):
+                    self._opik_client.trace(**span_or_trace_data.as_parameters)
+                    # Remove from context storage for traces
+                    self._opik_context_storage.set_trace_data(None)
+                else:
+                    self._opik_client.span(**span_or_trace_data.as_parameters)
+                    # Remove from context storage for spans
+                    current_span = self._opik_context_storage.top_span_data()
+                    if current_span and current_span.id == span_or_trace_data.id:
+                        self._opik_context_storage.pop_span_data()
+            
+            self._context.pop()
 
-            raw_span.update(
-                input=input_data,
-                output=output_data,
-            )
-
-        raw_span.end()
-        self._context.pop()
-
-        if self.enforce_flush:
-            self.flush()
+            if self.enforce_flush:
+                self.flush()
 
     def flush(self) -> None:
         self._opik_client.flush()
@@ -261,11 +350,11 @@ class OpikTracer(tracing.Tracer):
         if last_span is None:
             return ""
 
-        opik_span_or_trace = last_span.raw_span()
+        span_or_trace_data = last_span.raw_span()
         trace_id = (
-            opik_span_or_trace.id
-            if isinstance(opik_span_or_trace, opik.Trace)
-            else opik_span_or_trace.id
+            span_or_trace_data.id
+            if isinstance(span_or_trace_data, trace.TraceData)
+            else span_or_trace_data.trace_id
         )
 
         return url_helpers.get_project_url_by_trace_id(
@@ -284,9 +373,9 @@ class OpikTracer(tracing.Tracer):
         if last_span is None:
             return None
 
-        raw_span = last_span.raw_span()
+        span_or_trace_data = last_span.raw_span()
 
-        if isinstance(raw_span, opik_trace.Trace):
-            return raw_span.id
+        if isinstance(span_or_trace_data, trace.TraceData):
+            return span_or_trace_data.id
 
-        return raw_span.trace_id
+        return span_or_trace_data.trace_id
