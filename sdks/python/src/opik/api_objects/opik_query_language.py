@@ -27,6 +27,8 @@ COLUMNS = {
     "thread_id": "string",
     "total_estimated_cost": "number",
     "type": "string",
+    "model": "string",
+    "provider": "string",
 }
 
 SUPPORTED_OPERATORS = {
@@ -49,6 +51,8 @@ SUPPORTED_OPERATORS = {
     "thread_id": ["=", "contains", "not_contains"],
     "total_estimated_cost": ["=", "!=", ">", "<", ">=", "<="],
     "type": ["=", "contains", "not_contains"],
+    "model": ["=", "contains", "not_contains"],
+    "provider": ["=", "contains", "not_contains"],
 }
 
 
