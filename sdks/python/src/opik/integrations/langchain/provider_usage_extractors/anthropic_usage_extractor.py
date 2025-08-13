@@ -4,6 +4,7 @@ import opik
 from opik import llm_usage
 from . import provider_usage_extractor_protocol
 from . import langchain_run_helpers
+from .langchain_run_helpers import langchain_usage
 
 if TYPE_CHECKING:
     pass
@@ -44,17 +45,19 @@ class AnthropicUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        langchain_usage = langchain_run_helpers.try_get_token_usage(run_dict)
-        anthropic_usage_dict = langchain_usage.map_to_anthropic_usage()
+        if token_usage := langchain_run_helpers.try_to_get_usage(
+            run_dict, candidate_keys=None
+        ):
+            if isinstance(token_usage, langchain_usage.LangChainUsage):
+                anthropic_usage_dict = token_usage.map_to_anthropic_usage()
+                return llm_usage.OpikUsage.from_anthropic_dict(anthropic_usage_dict)
 
-        opik_usage = llm_usage.OpikUsage.from_anthropic_dict(anthropic_usage_dict)
-        return opik_usage
     except Exception:
         LOGGER.warning(
             "Failed to extract token usage from presumably Anthropic LLM langchain run.",
             exc_info=True,
         )
-        return None
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
