@@ -54,7 +54,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
             run_dict, candidate_keys=None
         ):
             if isinstance(token_usage, langchain_usage.LangChainUsage):
-                bedrock_usage_dict = token_usage.map_to_anthropic_usage()
+                bedrock_usage_dict = token_usage.map_to_bedrock_usage()
                 return llm_usage.OpikUsage.from_bedrock_dict(bedrock_usage_dict)
 
         opik_logging.log_once_at_level(
@@ -72,7 +72,8 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
     except Exception:
         LOGGER.warning(
-            "Failed to extract token usage from presumably Bedrock LLM langchain run.",
+            "Failed to extract token usage from presumably Bedrock LLM langchain run. Run dict: %s",
+            run_dict,
             exc_info=True,
         )
 
