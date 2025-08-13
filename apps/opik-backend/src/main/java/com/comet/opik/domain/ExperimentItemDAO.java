@@ -97,23 +97,83 @@ class ExperimentItemDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
                 LIMIT :limit
-            ), feedback_scores_final AS (
-            	SELECT
-                	entity_id,
+            ), feedback_scores_combined AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
                     name,
                     category_name,
                     value,
                     reason,
                     source,
+                    created_by,
+                    last_updated_by,
                     created_at,
                     last_updated_at,
+                    feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
                     created_by,
-                    last_updated_by
-                FROM feedback_scores
-                WHERE workspace_id = :workspace_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM feedback_scores_combined_grouped
             ), comments_final AS (
                 SELECT
                     id AS comment_id,
@@ -156,7 +216,19 @@ class ExperimentItemDAO {
                     t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage,
-                    groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
+                    groupUniqArray(tuple(
+                        fs.entity_id,
+                        fs.name,
+                        fs.category_name,
+                        fs.value,
+                        fs.reason,
+                        fs.source,
+                        fs.created_at,
+                        fs.last_updated_at,
+                        fs.created_by,
+                        fs.last_updated_by,
+                        fs.value_by_author
+                    )) AS feedback_scores_array,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT

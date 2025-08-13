@@ -150,6 +150,7 @@ public interface FeedbackScoreMapper {
                             .lastUpdatedAt(Instant.parse(feedbackScore.get(7).toString()))
                             .createdBy(feedbackScore.get(8).toString())
                             .lastUpdatedBy(feedbackScore.get(9).toString())
+                            .valueByAuthor(parseValueByAuthor(feedbackScore.get(10)))
                             .build())
                     .toList();
             return feedbackScores.isEmpty() ? null : feedbackScores;
