@@ -1,5 +1,5 @@
 name: "Database Migration Prefix Check"
-run-name: "Database Migration Prefix Check on ${{ github.ref_name }} by @${{ github.actor }}"
+run-name: "Backend Database Migration Prefix Check on ${{ github.ref_name }} by @${{ github.actor }}"
 
 permissions:
   contents: read
