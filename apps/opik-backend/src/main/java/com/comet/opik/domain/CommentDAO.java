@@ -95,7 +95,8 @@ class CommentDAOImpl implements CommentDAO {
     private static final String UPDATE = """
             INSERT INTO comments (
             	id, entity_id, entity_type, project_id, workspace_id, text, created_at, created_by, last_updated_by
-            ) SELECT
+            )
+            SELECT
             	id,
             	entity_id,
             	entity_type,
@@ -135,7 +136,6 @@ class CommentDAOImpl implements CommentDAO {
             @NonNull UUID projectId,
             @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
             var statement = connection.createStatement(INSERT_COMMENT);
 
             bindParameters(commentId, entityId, entityType, projectId, comment, statement);
@@ -170,7 +170,6 @@ class CommentDAOImpl implements CommentDAO {
     @Override
     public Mono<Void> updateComment(@NonNull UUID commentId, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
             var statement = connection.createStatement(UPDATE)
                     .bind("text", comment.text())
                     .bind("id", commentId);

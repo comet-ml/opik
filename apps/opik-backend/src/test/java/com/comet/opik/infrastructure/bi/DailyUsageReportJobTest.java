@@ -21,10 +21,10 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.JobManagerUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jobs.GuiceJobManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
@@ -247,15 +247,17 @@ class DailyUsageReportJobTest {
         private ProjectResourceClient projectResourceClient;
         private TransactionTemplateAsync templateAsync;
         private TransactionTemplate transactionTemplate;
+        private GuiceJobManager guiceJobManager;
 
         @BeforeAll
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
-                TransactionTemplateAsync templateAsync) {
+                TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
 
             this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;
             this.templateAsync = templateAsync;
             this.transactionTemplate = transactionTemplate;
+            this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
 
@@ -272,9 +274,7 @@ class DailyUsageReportJobTest {
             CLICKHOUSE.stop();
             ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
-            ZOOKEEPER_CONTAINER.stop();
         }
-
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
         }
@@ -296,7 +296,7 @@ class DailyUsageReportJobTest {
 
             var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
-            JobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
+            guiceJobManager.getScheduler().scheduleJob(trigger);
 
             Awaitility
                     .await()
@@ -390,15 +390,17 @@ class DailyUsageReportJobTest {
         private ProjectResourceClient projectResourceClient;
         private TransactionTemplateAsync templateAsync;
         private TransactionTemplate transactionTemplate;
+        private GuiceJobManager guiceJobManager;
 
         @BeforeAll
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
-                TransactionTemplateAsync templateAsync) {
+                TransactionTemplateAsync templateAsync, GuiceJobManager guiceJobManager) {
 
             this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;
             this.templateAsync = templateAsync;
             this.transactionTemplate = transactionTemplate;
+            this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
 
@@ -431,7 +433,7 @@ class DailyUsageReportJobTest {
 
             var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
-            JobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
+            guiceJobManager.getScheduler().scheduleJob(trigger);
 
             Awaitility
                     .await()

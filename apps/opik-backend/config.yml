@@ -82,7 +82,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
 
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
@@ -217,9 +217,9 @@ rateLimit:
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     singleTracingOps:
-        # Default: 600
+        # Default: 800
         # Description: how many events are allowed in the specified time bucket
-        limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-600}
+        limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-800}
         # Default: 60
         # Description: Time bucket size in seconds
         durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
@@ -402,10 +402,13 @@ serviceToggles:
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
-  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: true
+  # Description: Whether the trace thread closing job is enabled
+  enabled: ${OPIK_TRACE_THREAD_CLOSING_JOB_ENABLED:-true}
   # Default: 15min
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
@@ -433,3 +436,21 @@ traceThreadConfig:
   # Default: 1000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+
+# Job timeout configuration
+jobTimeout:
+  # Default: 30s
+  # Description: Timeout for the daily usage report job execution
+  dailyUsageReportJobTimeout: ${OPIK_DAILY_USAGE_REPORT_JOB_TIMEOUT:-30}
+  # Default: 30s
+  # Description: Timeout for the trace threads closing job execution
+  traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
+
+# Configuration for ClickHouse async insert functionality
+asyncInsert:
+  # Default: false
+  # Description: Enable async insert for individual write operations to ClickHouse.
+  # When enabled, individual inserts (not batch operations) will use async_insert=1,
+  # wait_for_async_insert=1, and async_insert_use_adaptive_busy_timeout=1 settings
+  # to reduce IO overhead for concurrent requests.
+  enabled: ${OPIK_CLICKHOUSE_ASYNC_INSERT_ENABLED:-false}

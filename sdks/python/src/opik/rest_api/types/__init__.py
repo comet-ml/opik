@@ -2,6 +2,7 @@
 
 # isort: skip_file
 
+from .aggregation_data import AggregationData
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
@@ -149,6 +150,8 @@ from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
+from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
+from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -194,6 +197,8 @@ from .feedback_score_source import FeedbackScoreSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
+from .group_content import GroupContent
+from .group_content_with_aggregations import GroupContentWithAggregations
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -348,6 +353,14 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .value_entry import ValueEntry
+from .value_entry_compare import ValueEntryCompare
+from .value_entry_compare_source import ValueEntryCompareSource
+from .value_entry_experiment_item_bulk_write_view import ValueEntryExperimentItemBulkWriteView
+from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperimentItemBulkWriteViewSource
+from .value_entry_public import ValueEntryPublic
+from .value_entry_public_source import ValueEntryPublicSource
+from .value_entry_source import ValueEntrySource
 from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
@@ -358,6 +371,7 @@ from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
+    "AggregationData",
     "AssistantMessage",
     "AssistantMessageRole",
     "Attachment",
@@ -477,6 +491,8 @@ __all__ = [
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
+    "ExperimentGroupAggregationsResponse",
+    "ExperimentGroupResponse",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -526,6 +542,8 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GroupContent",
+    "GroupContentWithAggregations",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
@@ -678,6 +696,14 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "ValueEntry",
+    "ValueEntryCompare",
+    "ValueEntryCompareSource",
+    "ValueEntryExperimentItemBulkWriteView",
+    "ValueEntryExperimentItemBulkWriteViewSource",
+    "ValueEntryPublic",
+    "ValueEntryPublicSource",
+    "ValueEntrySource",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",

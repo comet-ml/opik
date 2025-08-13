@@ -40,6 +40,9 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_O1_PREVIEW("o1-preview", false),
     GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12", false),
     GPT_O3_MINI("o3-mini", false),
+    GPT_5("gpt-5", true),
+    GPT_5_MINI("gpt-5-mini", true),
+    GPT_5_NANO("gpt-5-nano", true),
     ;
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";

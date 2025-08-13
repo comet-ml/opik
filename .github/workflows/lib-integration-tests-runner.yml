@@ -47,6 +47,7 @@ jobs:
   init_environment:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       LIBS: ${{ steps.init.outputs.LIBS }}
 

@@ -21,6 +21,20 @@ export type ModelResolver = (
 
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OPEN_AI]: [
+    // GPT-5 Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5,
+      label: "GPT 5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_MINI,
+      label: "GPT 5 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      label: "GPT 5 Nano",
+    },
+
     // GPT-4.0 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O,
@@ -376,6 +390,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
       label: "deepseek/deepseek-chat",
     },
+
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_0324,
+      label: "deepseek/deepseek-chat-v3-0324",
+    },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_FREE,
       label: "deepseek/deepseek-chat:free",
@@ -391,6 +410,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1,
       label: "deepseek/deepseek-r1",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528,
+      label: "deepseek/deepseek-r1-0528",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B,
@@ -520,6 +544,21 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_9B_IT_FREE,
       label: "google/gemma-2-9b-it:free",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT,
+      label: "google/gemma-3n-e4b-it",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E2B_IT_FREE,
+      label: "google/gemma-3n-e2b-it:free",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_4B_IT,
+      label: "google/gemma-3-4b-it",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_7B_IT,
@@ -889,6 +928,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_PIXTRAL_LARGE_2411,
       label: "mistralai/pixtral-large-2411",
     },
+
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
+      label: "moonshotai/kimi-k2",
+    },
     {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B,
       label: "neversleep/llama-3.1-lumimaid-70b",
@@ -1205,6 +1249,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.QWEN_QVQ_72B_PREVIEW,
       label: "qwen/qvq-72b-preview",
     },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_VL_7B_INSTRUCT,
+      label: "qwen/qwen-2.5-vl-7b-instruct",
+    },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE,
       label: "qwen/qwen2.5-vl-72b-instruct:free",
@@ -1276,6 +1325,36 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_VL_PLUS_FREE,
       label: "qwen/qwen-vl-plus:free",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
+      label: "qwen/qwen3-coder",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
+      label: "qwen/qwen3-8b",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
+      label: "qwen/qwen3-30b-a3b-instruct-2507",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
+      label: "qwen/qwen3-30b-a3b",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
+      label: "qwen/qwen3-235b-a22b-thinking-2507",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
+      label: "qwen/qwen3-235b-a22b-2507",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
@@ -1440,6 +1519,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_VISION,
       label: "01-ai/yi-vision",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5_AIR,
+      label: "z-ai/glm-4.5-air",
+    },
+
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5,
+      label: "z-ai/glm-4.5",
     },
   ],
 

@@ -21,10 +21,12 @@ export const isFilterValid = (filter: Filter) => {
       ? filter.key !== ""
       : true;
 
-  return hasValue && hasKey;
+  const hasError = filter.error && filter.error.length > 0;
+
+  return hasValue && hasKey && !hasError;
 };
 
-export const createEmptyFilter = () => {
+export const createFilter = (filter?: Partial<Filter>) => {
   return {
     id: uniqid(),
     field: "",
@@ -32,6 +34,7 @@ export const createEmptyFilter = () => {
     operator: "",
     key: "",
     value: "",
+    ...filter,
   } as Filter;
 };
 
@@ -59,6 +62,21 @@ export const generateVisibilityFilters = () => {
       operator: "=",
       key: "",
       value: TRACE_VISIBILITY_MODE.default,
+    },
+  ] as Filter[];
+};
+
+export const generatePromptFilters = (promptId?: string) => {
+  if (!promptId) return undefined;
+
+  return [
+    {
+      id: uniqid(),
+      field: "prompt_ids",
+      type: COLUMN_TYPE.string,
+      operator: "contains",
+      key: "",
+      value: promptId,
     },
   ] as Filter[];
 };
