@@ -48,7 +48,9 @@ class OpikConfigurator:
         # It's possible that the URL will be extracted from the smart api key on the later stage.
         # In that case `self.base_url` field will be updated.
         if url is None:
-            self.base_url = OPIK_BASE_URL_LOCAL if self.use_local else OPIK_BASE_URL_CLOUD
+            self.base_url = (
+                OPIK_BASE_URL_LOCAL if self.use_local else OPIK_BASE_URL_CLOUD
+            )
         else:
             self.base_url = url_helpers.get_base_url(url)
 
