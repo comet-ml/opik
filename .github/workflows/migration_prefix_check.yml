@@ -1,0 +1,131 @@
+name: "Database Migration Prefix Check"
+run-name: "Database Migration Prefix Check on ${{ github.ref_name }} by @${{ github.actor }}"
+
+on:
+  pull_request:
+    paths: 
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/**"
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
+  workflow_dispatch:
+
+jobs:
+  check-migration-prefix-conflicts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 0  # Fetch full history to compare with main
+      
+      - name: Check for migration prefix conflicts
+        shell: bash
+        run: |
+          set -e
+          
+          echo "🔍 Checking for migration file prefix conflicts..."
+          
+          # Define migration directories
+          DB_STATE_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations"
+          DB_ANALYTICS_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations"
+          
+          # Function to extract prefixes from migration files
+          extract_prefixes() {
+            local dir=$1
+            if [ -d "$dir" ]; then
+              find "$dir" -name "*.sql" -type f | sed 's/.*\/\([0-9]\{6\}\)_.*/\1/' | sort
+            fi
+          }
+          
+          # Function to get new migration files in PR
+          get_new_migrations() {
+            local dir=$1
+            git diff --name-only origin/main...HEAD -- "$dir" | grep '\.sql$' || true
+          }
+          
+          # Function to extract prefix from filename
+          get_prefix() {
+            local filename=$1
+            basename "$filename" | sed 's/^\([0-9]\{6\}\)_.*/\1/'
+          }
+          
+          # Function to check migrations for a specific directory
+          check_migrations() {
+            local dir=$1
+            local dir_name=$2
+            
+            if [ ! -d "$dir" ]; then
+              echo "ℹ️  Directory $dir does not exist, skipping..."
+              return 0
+            fi
+            
+            echo "📁 Checking $dir_name migrations..."
+            
+            # Get existing prefixes in main branch
+            git checkout origin/main -- "$dir" 2>/dev/null || true
+            MAIN_PREFIXES=$(extract_prefixes "$dir" 2>/dev/null || echo "")
+            
+            # Switch back to PR branch
+            git checkout HEAD -- "$dir" 2>/dev/null || true
+            
+            # Get new migration files in this PR
+            NEW_MIGRATIONS=$(get_new_migrations "$dir")
+            
+            if [ -n "$NEW_MIGRATIONS" ]; then
+              echo "🆕 New migration files in $dir_name:"
+              echo "$NEW_MIGRATIONS" | while read -r file; do
+                echo "  - $file"
+              done
+              
+              # Check each new migration for prefix conflicts
+              CONFLICT_FOUND=false
+              while IFS= read -r file; do
+                if [ -n "$file" ]; then
+                  PREFIX=$(get_prefix "$file")
+                  if echo "$MAIN_PREFIXES" | grep -q "^$PREFIX$"; then
+                    echo "❌ CONFLICT DETECTED: Migration prefix '$PREFIX' from file '$file' already exists in main branch"
+                    echo "   Please update the migration file prefix to a number not yet used in main."
+                    CONFLICT_FOUND=true
+                  else
+                    echo "✅ Migration prefix '$PREFIX' is available"
+                  fi
+                fi
+              done <<< "$NEW_MIGRATIONS"
+              
+              if [ "$CONFLICT_FOUND" = true ]; then
+                return 1
+              fi
+            else
+              echo "ℹ️  No new $dir_name migration files found"
+            fi
+            
+            return 0
+          }
+          
+          # Check both migration directories
+          OVERALL_SUCCESS=true
+          
+          if ! check_migrations "$DB_STATE_DIR" "db-app-state"; then
+            OVERALL_SUCCESS=false
+          fi
+          
+          echo ""
+          
+          if ! check_migrations "$DB_ANALYTICS_DIR" "db-app-analytics"; then
+            OVERALL_SUCCESS=false
+          fi
+          
+          if [ "$OVERALL_SUCCESS" = false ]; then
+            echo ""
+            echo "💥 Migration prefix conflicts detected! Please resolve conflicts before merging."
+            echo ""
+            echo "ℹ️  To fix this issue:"
+            echo "   1. Check the highest prefix number used in main branch for the respective database"
+            echo "   2. Update your migration file(s) to use the next available prefix number"
+            echo "   3. Commit and push the changes"
+            exit 1
+          fi
+          
+          echo ""
+          echo "🎉 All migration prefixes are unique - no conflicts detected!"
