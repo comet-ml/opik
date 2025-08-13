@@ -45,7 +45,7 @@ class TestStructuredOutputComplianceTemplate:
                 "output": '{"name": "Bob", age: 30}',
                 "schema": "User(name: str, age: int)",
                 "score": False,
-                "reason": "Missing quotes around age value",
+                "reason": "Missing quotes around age key",
             },
         ]
 
