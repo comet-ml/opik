@@ -442,23 +442,15 @@ class ExperimentDAO {
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_combined_grouped
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
             ),
             feedback_scores_agg AS (
                 SELECT
