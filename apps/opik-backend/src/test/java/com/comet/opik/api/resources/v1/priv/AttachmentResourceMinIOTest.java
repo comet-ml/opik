@@ -179,6 +179,14 @@ class AttachmentResourceMinIOTest {
         attachmentResourceClient.downloadFile(downloadLink, API_KEY, 404);
     }
 
+    @Test
+    @DisplayName("Invalid base URL format returns error for MinIO attachment upload")
+    void invalidBaseUrlFormatReturnsError() {
+        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest("https://www.comet.com/");
+        attachmentResourceClient
+                .startMultiPartUpload(startUploadRequest, API_KEY, TEST_WORKSPACE, 400);
+    }
+
     @ParameterizedTest
     @MethodSource
     void deleteTraceDeletesTraceAndSpanAttachments(Consumer<UUID> deleteTrace) throws IOException {
@@ -249,7 +257,7 @@ class AttachmentResourceMinIOTest {
     Pair<StartMultipartUploadRequest, byte[]> uploadFile(String projectName, EntityType type, UUID entityId)
             throws IOException {
         // Initiate upload
-        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest();
+        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest(baseURIEncoded);
         if (projectName != null) {
             startUploadRequest = startUploadRequest.toBuilder()
                     .projectName(projectName)
@@ -278,7 +286,7 @@ class AttachmentResourceMinIOTest {
         return Pair.of(startUploadRequest, fileData);
     }
 
-    private StartMultipartUploadRequest prepareStartUploadRequest() {
+    private StartMultipartUploadRequest prepareStartUploadRequest(String baseURIEncoded) {
         return factory.manufacturePojo(StartMultipartUploadRequest.class)
                 .toBuilder()
                 .path(baseURIEncoded)
