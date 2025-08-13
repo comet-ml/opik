@@ -1,12 +1,6 @@
-from typing import List, TypedDict, Optional
+from typing import List, Optional
 
-
-class FewShotExampleStructuredOutputCompliance(TypedDict):
-    title: str
-    output: str
-    schema: Optional[str]  # Could be JSON schema or Pydantic model in string format
-    score: bool
-    reason: str
+from .schema import FewShotExampleStructuredOutputCompliance
 
 
 structured_output_compliance_template = """You are an expert in structured data validation. Your task is to determine whether the given OUTPUT complies with the expected STRUCTURE. The structure may be described as a JSON schema, a Pydantic model, or simply implied to be valid JSON.
@@ -17,6 +11,7 @@ Guidelines:
 4. Common formatting issues (missing quotes, incorrect brackets, etc.) should be flagged.
 5. Partial compliance is considered non-compliant.
 6. Respond only in the specified JSON format.
+7. Score should be true if output fully complies, false otherwise.
 {examples_str}
 EXPECTED STRUCTURE (optional):
 {schema}
@@ -24,7 +19,7 @@ OUTPUT:
 {output}
 Respond in the following JSON format:
 {{
-    "score": true or false,  // true if output fully complies, false otherwise
+    "score": <true or false>,
     "reason": ["list of reasons for failure or confirmation"]
 }}
 """
@@ -42,8 +37,8 @@ def generate_query(
         if few_shot_examples:
             examples_str = "\n\nEXAMPLES:\n\n" + "\n\n".join(
                 [
-                    f"<example>\nTitle: {example['title']}\nExpected Schema: {example.get('schema', 'None')}\nOutput: {example['output']}\n\n"
-                    f"{{\"score\": {str(example['score']).lower()}, \"reason\": [\"{example['reason']}\"]}}\n</example>"
+                    f"<example>\nTitle: {example.title}\nExpected Schema: {example.schema or 'None'}\nOutput: {example.output}\n\n"
+                    f'{{"score": {str(example.score).lower()}, "reason": ["{example.reason}"]}}\n</example>'
                     for example in few_shot_examples
                 ]
             )

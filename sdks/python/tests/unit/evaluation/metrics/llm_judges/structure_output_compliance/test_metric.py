@@ -4,6 +4,9 @@ from unittest.mock import Mock, patch
 from opik.evaluation.metrics.llm_judges.structure_output_compliance.metric import (
     StructuredOutputCompliance,
 )
+from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema import (
+    FewShotExampleStructuredOutputCompliance,
+)
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model
 from opik import exceptions
@@ -74,13 +77,13 @@ class TestStructuredOutputComplianceMetric:
     def test_score_with_few_shot_examples(self, mock_model):
         """Test structured output compliance scoring with few-shot examples."""
         few_shot_examples = [
-            {
-                "title": "Valid Example",
-                "output": '{"name": "Alice", "age": 25}',
-                "schema": "User(name: str, age: int)",
-                "score": True,
-                "reason": "Valid format",
-            }
+            FewShotExampleStructuredOutputCompliance(
+                title="Valid Example",
+                output='{"name": "Alice", "age": 25}',
+                schema="User(name: str, age: int)",
+                score=True,
+                reason="Valid format",
+            )
         ]
 
         metric = StructuredOutputCompliance(

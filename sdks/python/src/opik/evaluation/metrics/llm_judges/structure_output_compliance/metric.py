@@ -6,6 +6,7 @@ from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 from opik import exceptions
 from . import template, parser
+from .schema import FewShotExampleStructuredOutputCompliance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,16 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
     Metric to evaluate whether an LLM's output complies with a specified structured format.
     This includes checking for valid JSON, JSON-LD compatibility, or adherence to a provided
     Pydantic/JSON schema.
+
+    Score Range:
+    - Minimum score: 0.0 (complete non-compliance)
+    - Maximum score: 1.0 (complete compliance)
+
+    Score Meaning:
+    - 0.0: Output does not comply with the expected structure at all (e.g., invalid JSON, missing required fields)
+    - 0.5: Partial compliance (e.g., valid JSON but missing some required fields)
+    - 1.0: Complete compliance with the expected structure (valid JSON and all required fields present)
+
     Args:
         model: LLM to use for evaluation. Can be a string or an OpikBaseModel instance.
         name: Metric name.
@@ -33,7 +44,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "structured_output_compliance",
         few_shot_examples: Optional[
-            List[template.FewShotExampleStructuredOutputCompliance]
+            List[FewShotExampleStructuredOutputCompliance]
         ] = None,
         track: bool = True,
         project_name: Optional[str] = None,

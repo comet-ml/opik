@@ -1,4 +1,7 @@
 from opik.evaluation.metrics.llm_judges.structure_output_compliance import template
+from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema import (
+    FewShotExampleStructuredOutputCompliance,
+)
 
 
 class TestStructuredOutputComplianceTemplate:
@@ -33,20 +36,20 @@ class TestStructuredOutputComplianceTemplate:
         """Test query generation with few-shot examples."""
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
-            {
-                "title": "Valid JSON",
-                "output": '{"name": "Alice", "age": 25}',
-                "schema": "User(name: str, age: int)",
-                "score": True,
-                "reason": "Valid JSON format",
-            },
-            {
-                "title": "Invalid JSON",
-                "output": '{"name": "Bob", age: 30}',
-                "schema": "User(name: str, age: int)",
-                "score": False,
-                "reason": "Missing quotes around age value",
-            },
+            FewShotExampleStructuredOutputCompliance(
+                title="Valid JSON",
+                output='{"name": "Alice", "age": 25}',
+                schema="User(name: str, age: int)",
+                score=True,
+                reason="Valid JSON format",
+            ),
+            FewShotExampleStructuredOutputCompliance(
+                title="Invalid JSON",
+                output='{"name": "Bob", age: 30}',
+                schema="User(name: str, age: int)",
+                score=False,
+                reason="Missing quotes around age value",
+            ),
         ]
 
         query = template.generate_query(
@@ -71,13 +74,13 @@ class TestStructuredOutputComplianceTemplate:
         output = '{"name": "John", "age": 30}'
         schema = "User(name: str, age: int)"
         few_shot_examples = [
-            {
-                "title": "Valid Example",
-                "output": '{"name": "Alice", "age": 25}',
-                "schema": "User(name: str, age: int)",
-                "score": True,
-                "reason": "Valid format",
-            }
+            FewShotExampleStructuredOutputCompliance(
+                title="Valid Example",
+                output='{"name": "Alice", "age": 25}',
+                schema="User(name: str, age: int)",
+                score=True,
+                reason="Valid format",
+            )
         ]
 
         query = template.generate_query(
@@ -105,12 +108,12 @@ class TestStructuredOutputComplianceTemplate:
         """Test query generation with examples that don't have schema."""
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
-            {
-                "title": "Valid JSON",
-                "output": '{"name": "Alice"}',
-                "score": True,
-                "reason": "Valid JSON format",
-            }
+            FewShotExampleStructuredOutputCompliance(
+                title="Valid JSON",
+                output='{"name": "Alice"}',
+                score=True,
+                reason="Valid JSON format",
+            )
         ]
 
         query = template.generate_query(
@@ -135,7 +138,10 @@ class TestStructuredOutputComplianceTemplate:
         assert "4. Common formatting issues" in query
         assert "5. Partial compliance is considered non-compliant" in query
         assert "6. Respond only in the specified JSON format" in query
+        assert (
+            "7. Score should be true if output fully complies, false otherwise" in query
+        )
         assert "EXPECTED STRUCTURE (optional):" in query
         assert "OUTPUT:" in query
-        assert '"score": true or false' in query
+        assert '"score": <true or false>' in query
         assert '"reason": ["list of reasons' in query
