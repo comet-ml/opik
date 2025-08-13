@@ -67,7 +67,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     token usage info might be in different places, different formats, or completely missing.
     """
     try:
-        if token_usage := langchain_run_helpers.try_to_get_usage(
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
             run_dict, OPENAI_CANDIDATE_USAGE_KEYS
         ):
             if isinstance(token_usage, dict):

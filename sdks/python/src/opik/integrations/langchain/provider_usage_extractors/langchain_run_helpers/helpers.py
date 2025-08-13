@@ -46,7 +46,7 @@ def try_get_ls_metadata(run_dict: Dict[str, Any]) -> Optional[LSMetadata]:
     return None
 
 
-def try_to_get_usage(
+def try_to_get_usage_by_search(
     run_dict: Dict[str, Any], candidate_keys: Optional[Set[str]]
 ) -> Optional[Union[Dict[str, Any], langchain_usage.LangChainUsage]]:
     """
@@ -70,10 +70,13 @@ def try_to_get_usage(
         or None if no usage data is found.
     """
     if candidate_keys is None:
+        all_keys_should_match = True
         candidate_keys = set()
+    else:
+        all_keys_should_match = False
     candidate_keys.update(langchain_usage.LANGCHAIN_USAGE_KEYS)
 
-    usage_dict = find_token_usage_dict(run_dict, candidate_keys)
+    usage_dict = find_token_usage_dict(run_dict, candidate_keys, all_keys_should_match)
     if usage_dict is None:
         return None
 
@@ -84,7 +87,9 @@ def try_to_get_usage(
 
 
 def find_token_usage_dict(
-    data: Union[Dict[str, Any], List[Any]], candidate_keys: Set[str]
+    data: Union[Dict[str, Any], List[Any]],
+    candidate_keys: Set[str],
+    all_keys_should_match: bool,
 ) -> Optional[Dict[str, Any]]:
     """
     Find the first dictionary containing any of the specified candidate keys within a nested data structure.
@@ -95,6 +100,7 @@ def find_token_usage_dict(
     If no such dictionary is found, the function returns None.
 
     Args:
+        all_keys_should_match: if True, all candidate keys must be present in the dictionary.
         data: A nested data structure containing dictionaries, lists, or tuples to search through.
         candidate_keys: A set of strings representing the keys to look for in the dictionaries.
 
@@ -104,20 +110,23 @@ def find_token_usage_dict(
     """
     # Handle dictionary case
     if isinstance(data, dict):
-        # Check if the current dictionary contains any of the candidate keys
-        if any(key in data for key in candidate_keys):
+        # Check if the current dictionary contains any or all of the candidate keys
+        matched_keys = candidate_keys.intersection(data.keys())
+        if all_keys_should_match and len(matched_keys) == len(candidate_keys):
+            return data
+        elif not all_keys_should_match and len(matched_keys) > 0:
             return data
 
         # Recursively search through dictionary values
         for value in data.values():
-            result = find_token_usage_dict(value, candidate_keys)
+            result = find_token_usage_dict(value, candidate_keys, all_keys_should_match)
             if result is not None:
                 return result
 
     # Handle list and tuple cases
     elif isinstance(data, (list, tuple)):
         for item in data:
-            result = find_token_usage_dict(item, candidate_keys)
+            result = find_token_usage_dict(item, candidate_keys, all_keys_should_match)
             if result is not None:
                 return result
 

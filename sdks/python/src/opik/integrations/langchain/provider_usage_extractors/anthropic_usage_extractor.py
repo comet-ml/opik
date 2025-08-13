@@ -45,7 +45,7 @@ class AnthropicUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        if token_usage := langchain_run_helpers.try_to_get_usage(
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
             run_dict, candidate_keys=None
         ):
             if isinstance(token_usage, langchain_usage.LangChainUsage):
