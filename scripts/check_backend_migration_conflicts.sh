@@ -49,39 +49,41 @@ check_migrations() {
   # Get new migration files in this PR
   NEW_MIGRATIONS=$(get_new_migrations "$dir")
 
-  if [ -n "$NEW_MIGRATIONS" ]; then
-    echo "🆕 New migration files in $dir_name:"
-    echo "$NEW_MIGRATIONS" | while read -r file; do
-      echo "  - $file"
-    done
-    
-    # Debug: Show main branch prefixes
-    if [ -n "$MAIN_PREFIXES" ]; then
-      echo "🔍 Existing prefixes in main branch: $(echo "$MAIN_PREFIXES" | tr '\n' ' ')"
-    else
-      echo "🔍 No existing migration files found in main branch"
-    fi
-    
-    # Check each new migration for prefix conflicts
-    CONFLICT_FOUND=false
-    while IFS= read -r file; do
-      if [ -n "$file" ]; then
-        PREFIX=$(get_prefix "$file")
-        if [ -n "$MAIN_PREFIXES" ] && echo "$MAIN_PREFIXES" | grep -q "^$PREFIX$"; then
-          echo "❌ CONFLICT DETECTED: Migration prefix '$PREFIX' from file '$file' already exists in main branch"
-          echo "   Please update the migration file prefix to a number not yet used in main."
-          CONFLICT_FOUND=true
-        else
-          echo "✅ Migration prefix '$PREFIX' is available"
-        fi
-      fi
-    done <<< "$NEW_MIGRATIONS"
-    
-    if [ "$CONFLICT_FOUND" = true ]; then
-      return 1
-    fi
-  else
+  # Early return if no new migrations found
+  if [ -z "$NEW_MIGRATIONS" ]; then
     echo "ℹ️  No new $dir_name migration files found"
+    return 0
+  fi
+
+  echo "🆕 New migration files in $dir_name:"
+  echo "$NEW_MIGRATIONS" | while read -r file; do
+    echo "  - $file"
+  done
+  
+  # Debug: Show main branch prefixes
+  if [ -n "$MAIN_PREFIXES" ]; then
+    echo "🔍 Existing prefixes in main branch: $(echo "$MAIN_PREFIXES" | tr '\n' ' ')"
+  else
+    echo "🔍 No existing migration files found in main branch"
+  fi
+  
+  # Check each new migration for prefix conflicts
+  CONFLICT_FOUND=false
+  while IFS= read -r file; do
+    if [ -n "$file" ]; then
+      PREFIX=$(get_prefix "$file")
+      if [ -n "$MAIN_PREFIXES" ] && echo "$MAIN_PREFIXES" | grep -q "^$PREFIX$"; then
+        echo "❌ CONFLICT DETECTED: Migration prefix '$PREFIX' from file '$file' already exists in main branch"
+        echo "   Please update the migration file prefix to a number not yet used in main."
+        CONFLICT_FOUND=true
+      else
+        echo "✅ Migration prefix '$PREFIX' is available"
+      fi
+    fi
+  done <<< "$NEW_MIGRATIONS"
+  
+  if [ "$CONFLICT_FOUND" = true ]; then
+    return 1
   fi
 
   return 0
@@ -106,7 +108,7 @@ if [ "$OVERALL_SUCCESS" = false ]; then
   echo ""
   echo "ℹ️  To fix this issue:"
   echo "   1. Check the highest prefix number used in main branch for the respective database"
-  echo "   2. Update your migration file(s) to use the next available prefix number"
+  echo "   2. Update your migration file prefix to a number not yet used in main."
   echo "   3. Commit and push the changes"
   exit 1
 fi
