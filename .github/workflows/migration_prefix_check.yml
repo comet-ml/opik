@@ -30,12 +30,16 @@ jobs:
           DB_STATE_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations"
           DB_ANALYTICS_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations"
           
-          # Function to extract prefixes from migration files
-          extract_prefixes() {
+          # Function to get migration files from main branch
+          get_main_branch_migrations() {
             local dir=$1
-            if [ -d "$dir" ]; then
-              find "$dir" -name "*.sql" -type f | sed 's/.*\/\([0-9]\{6\}\)_.*/\1/' | sort
-            fi
+            git ls-tree -r --name-only origin/main -- "$dir" | grep '\.sql$' || true
+          }
+          
+          # Function to extract prefixes from file list
+          extract_prefixes_from_list() {
+            local file_list=$1
+            echo "$file_list" | sed 's/.*\/\([0-9]\{6\}\)_.*/\1/' | sort
           }
           
           # Function to get new migration files in PR
@@ -55,19 +59,14 @@ jobs:
             local dir=$1
             local dir_name=$2
             
-            if [ ! -d "$dir" ]; then
-              echo "ℹ️  Directory $dir does not exist, skipping..."
-              return 0
-            fi
-            
             echo "📁 Checking $dir_name migrations..."
             
-            # Get existing prefixes in main branch
-            git checkout origin/main -- "$dir" 2>/dev/null || true
-            MAIN_PREFIXES=$(extract_prefixes "$dir" 2>/dev/null || echo "")
-            
-            # Switch back to PR branch
-            git checkout HEAD -- "$dir" 2>/dev/null || true
+            # Get existing migration files in main branch
+            MAIN_MIGRATION_FILES=$(get_main_branch_migrations "$dir")
+            MAIN_PREFIXES=""
+            if [ -n "$MAIN_MIGRATION_FILES" ]; then
+              MAIN_PREFIXES=$(extract_prefixes_from_list "$MAIN_MIGRATION_FILES")
+            fi
             
             # Get new migration files in this PR
             NEW_MIGRATIONS=$(get_new_migrations "$dir")
@@ -78,12 +77,19 @@ jobs:
                 echo "  - $file"
               done
               
+              # Debug: Show main branch prefixes
+              if [ -n "$MAIN_PREFIXES" ]; then
+                echo "🔍 Existing prefixes in main branch: $(echo "$MAIN_PREFIXES" | tr '\n' ' ')"
+              else
+                echo "🔍 No existing migration files found in main branch"
+              fi
+              
               # Check each new migration for prefix conflicts
               CONFLICT_FOUND=false
               while IFS= read -r file; do
                 if [ -n "$file" ]; then
                   PREFIX=$(get_prefix "$file")
-                  if echo "$MAIN_PREFIXES" | grep -q "^$PREFIX$"; then
+                  if [ -n "$MAIN_PREFIXES" ] && echo "$MAIN_PREFIXES" | grep -q "^$PREFIX$"; then
                     echo "❌ CONFLICT DETECTED: Migration prefix '$PREFIX' from file '$file' already exists in main branch"
                     echo "   Please update the migration file prefix to a number not yet used in main."
                     CONFLICT_FOUND=true
