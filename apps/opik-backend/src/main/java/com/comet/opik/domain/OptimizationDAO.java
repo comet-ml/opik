@@ -185,8 +185,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             entity_id AS trace_id,
                             value
                         FROM feedback_scores_final
-                        WHERE workspace_id = :workspace_id
-                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                     ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
                     HAVING length(fs.name) > 0
