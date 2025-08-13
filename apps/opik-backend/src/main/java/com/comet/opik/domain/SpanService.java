@@ -27,6 +27,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -212,7 +214,9 @@ public class SpanService {
 
         Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
 
-        List<String> projectNames = batch.spans()
+        List<Span> dedupedSpans = dedupSpans(batch.spans());
+
+        List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
                 .map(WorkspaceUtils::getProjectName)
@@ -224,13 +228,36 @@ public class SpanService {
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                 .flatMap(projectService::getOrCreate)
                 .collectList()
-                .map(projects -> bindSpanToProjectAndId(batch, projects));
+                .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
         return resolveProjects
                 .flatMap(spanDAO::batchInsert);
     }
 
-    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+    private List<Span> dedupSpans(List<Span> initialSpans) {
+        List<Span> result = new ArrayList<>();
+
+        List<Span> dedupSpans = initialSpans.stream()
+                .peek(span -> {
+                    if (span.id() == null || span.lastUpdatedAt() == null) {
+                        result.add(span);
+                    }
+                })
+                .filter(span -> span.id() != null && span.lastUpdatedAt() != null)
+                .collect(Collectors.groupingBy(Span::id))
+                .values()
+                .stream()
+                .map(spans -> spans.stream()
+                        .max(Comparator.comparing(Span::lastUpdatedAt))
+                        .orElseThrow(() -> new IllegalStateException("No span with max lastUpdatedAt found")))
+                .toList();
+
+        result.addAll(dedupSpans);
+
+        return result;
+    }
+
+    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         Project::name,
@@ -238,7 +265,7 @@ public class SpanService {
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
-        return batch.spans()
+        return spans
                 .stream()
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
