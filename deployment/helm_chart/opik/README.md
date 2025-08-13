@@ -313,7 +313,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
-| demoDataJob | bool | `true` |  |
+| demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
