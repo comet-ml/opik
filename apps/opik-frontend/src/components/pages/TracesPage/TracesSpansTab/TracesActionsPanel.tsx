@@ -171,7 +171,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         </Button>
       </TooltipWrapper>
 
-      <TooltipWrapper content="Comment">
+      <TooltipWrapper content={type === TRACE_DATA_TYPE.traces ? "Comment" : "Batch comments supported for traces only"}>
         <Button
           variant="outline"
           size="sm"
@@ -179,7 +179,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             setOpen(5);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || type !== TRACE_DATA_TYPE.traces}
         >
           <MessageSquarePlus className="mr-2 size-4" />
           Comment
