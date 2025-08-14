@@ -8,6 +8,7 @@ import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.domain.threads.TraceThreadCriteria;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
+import com.comet.opik.infrastructure.FeedbackScoresConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -77,6 +78,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull FeedbackScoresConfig feedbackScoresConfig;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -86,7 +88,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
         return traceDAO.getProjectIdFromTrace(traceId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
-                .flatMap(projectId -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId))
+                .flatMap(projectId -> scoreEntity(EntityType.TRACE, traceId, score, projectId))
                 .then();
     }
 
@@ -95,7 +97,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
         return spanDAO.getProjectIdFromSpan(spanId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
-                .flatMap(projectId -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId))
+                .flatMap(projectId -> scoreEntity(EntityType.SPAN, spanId, score, projectId))
                 .then();
     }
 
@@ -137,7 +139,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(EntityType entityType,
             List<ProjectDto<T>> projects) {
         return Flux.fromIterable(projects)
-                .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
+                .flatMap(projectDto -> scoreBatchOf(entityType, projectDto.scores()))
                 .reduce(0L, Long::sum);
     }
 
@@ -264,6 +266,30 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
+    private Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId) {
+        if (feedbackScoresConfig.isWriteToAuthored()) {
+            return dao.scoreEntityAuthored(entityType, entityId, score, projectId);
+        } else {
+            return dao.scoreEntity(entityType, entityId, score, projectId);
+        }
+    }
+
+    private <T extends FeedbackScoreItem> Mono<Long> scoreBatchOf(EntityType entityType, List<T> scores) {
+        if (feedbackScoresConfig.isWriteToAuthored()) {
+            return dao.scoreBatchAuthored(entityType, scores);
+        } else {
+            return dao.scoreBatchOf(entityType, scores);
+        }
+    }
+
+    private Mono<Long> scoreBatchOfThreadsInternal(List<FeedbackScoreBatchItemThread> scores) {
+        if (feedbackScoresConfig.isWriteToAuthored()) {
+            return dao.scoreBatchOfThreadsAuthored(scores);
+        } else {
+            return dao.scoreBatchOfThreads(scores);
+        }
+    }
+
     private Mono<UUID> getProject(String projectName) {
         return Mono.deferContextual(context -> Mono.fromCallable(() -> {
             String workspaceId = context.get(RequestContext.WORKSPACE_ID);
@@ -320,7 +346,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // score the batch of threads with resolved thread model IDs
                             .flatMap(this::validateThreadStatus)
-                            .flatMap(score -> dao.scoreBatchOfThreads(score.scores()));
+                            .flatMap(score -> scoreBatchOfThreadsInternal(score.scores()));
                 })
                 .reduce(0L, Long::sum);
     }
