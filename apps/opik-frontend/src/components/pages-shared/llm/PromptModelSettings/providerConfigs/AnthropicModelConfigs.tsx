@@ -98,7 +98,7 @@ const AnthropicModelConfigs = ({
           }
         >
           <SliderInputControl
-            value={configs.temperature}
+            value={configs.temperature ?? (temperatureDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE)}
             onChange={handleTemperatureChange}
             id="temperature"
             min={0}
@@ -152,11 +152,7 @@ const AnthropicModelConfigs = ({
       <div className="space-y-2">
         <div className={topPDisabled ? "pointer-events-none opacity-50" : ""}>
           <SliderInputControl
-            value={
-              isOpus41Model
-                ? configs.topP
-                : configs.topP ?? DEFAULT_ANTHROPIC_CONFIGS.TOP_P
-            }
+            value={configs.topP ?? (topPDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P)}
             onChange={handleTopPChange}
             id="topP"
             min={0}
