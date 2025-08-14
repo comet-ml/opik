@@ -38,10 +38,12 @@ public interface FeedbackScoreMapper {
     List<FeedbackScore> toFeedbackScores(List<? extends FeedbackScoreItem> feedbackScoreBatchItems);
 
     @Mapping(target = "id", source = "entityId")
+    @Mapping(target = "author", ignore = true)
     FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName,
             FeedbackScore feedbackScore);
 
     @Mapping(target = "id", source = "entityId")
+    @Mapping(target = "author", ignore = true)
     FeedbackScoreBatchItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
 
     /**

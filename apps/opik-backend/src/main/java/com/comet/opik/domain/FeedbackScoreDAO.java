@@ -49,6 +49,8 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
+    Mono<Long> scoreBatchAuthored(EntityType entityType, List<? extends FeedbackScoreItem> scores);
+
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
@@ -68,7 +70,7 @@ public interface FeedbackScoreDAO {
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private static final String BULK_INSERT_FEEDBACK_SCORE = """
-            INSERT INTO feedback_scores(
+            INSERT INTO <if(author)>authored_feedback_scores<else>feedback_scores<endif>(
                 entity_type,
                 entity_id,
                 project_id,
@@ -78,6 +80,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 value,
                 reason,
                 source,
+                <if(author)>author,<endif>
                 created_by,
                 last_updated_by
             )
@@ -93,6 +96,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :value<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
+                         <if(author)>:author<item.index>,<endif>
                          :user_name,
                          :user_name
                      )
@@ -328,7 +332,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             var statement = connection.createStatement(template.render());
 
-            bindParameters(entityType, scores, statement);
+            bindParameters(entityType, scores, statement, false);
 
             return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
                     .flatMap(Result::getRowsUpdated)
@@ -344,8 +348,30 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return scoreBatchOf(EntityType.THREAD, scores);
     }
 
+    @Override
+    @WithSpan
+    public Mono<Long> scoreBatchAuthored(@NonNull EntityType entityType,
+            @NonNull List<? extends FeedbackScoreItem> scores) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            template.add("author", true);
+
+            var statement = connection.createStatement(template.render());
+
+            bindParameters(entityType, scores, statement, true);
+
+            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(Long::sum);
+        });
+    }
+
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
-            Statement statement) {
+            Statement statement, boolean isAuthored) {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -358,6 +384,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
+
+            if (isAuthored) {
+                statement.bind("author" + i, getValueOrDefault(feedbackScoreBatchItem.author()));
+            }
         }
     }
 
