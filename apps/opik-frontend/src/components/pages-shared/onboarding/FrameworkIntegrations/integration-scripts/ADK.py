@@ -14,6 +14,7 @@ configure()  # HIGHLIGHTED_LINE
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
+
 def get_weather(city: str) -> dict:
     """Get weather information for a city."""
     if city.lower() == "new york":

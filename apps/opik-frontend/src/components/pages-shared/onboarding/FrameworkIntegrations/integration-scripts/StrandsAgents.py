@@ -1,8 +1,8 @@
-import os
-
-import opik  # HIGHLIGHTED_LINE
 from strands import Agent
 from strands.models.bedrock import BedrockModel
+from strands.telemetry.config import StrandsTelemetry
+import opik  # HIGHLIGHTED_LINE
+import os
 
 opik.configure()  # HIGHLIGHTED_LINE
 
@@ -20,6 +20,8 @@ headers = (  # HIGHLIGHTED_LINE
     f"Comet-Workspace={opik_config.workspace}"  # HIGHLIGHTED_LINE
 )  # HIGHLIGHTED_LINE
 os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers  # HIGHLIGHTED_LINE
+
+StrandsTelemetry().setup_otlp_exporter()
 
 # Define the system prompt for the agent
 system_prompt = """You are "Restaurant Helper", a restaurant assistant helping customers reserving tables in 
