@@ -1,9 +1,11 @@
 from typing import Optional, TypedDict
-from langgraph.graph import END, StateGraph
-from opik.integrations.langchain import OpikTracer # HIGHLIGHTED_LINE
-from opik import configure # HIGHLIGHTED_LINE
 
-configure()
+from langgraph.graph import END, StateGraph
+from opik import configure  # HIGHLIGHTED_LINE
+from opik.integrations.langchain import OpikTracer  # HIGHLIGHTED_LINE
+
+configure()  # HIGHLIGHTED_LINE
+
 
 def classify(question: str) -> str:
     return "greeting" if question.startswith("Hello") else "search"
@@ -54,7 +56,12 @@ workflow.set_entry_point("classify_input")
 workflow.add_edge("handle_greeting", END)
 workflow.add_edge("handle_search", END)
 app = workflow.compile()
-tracer = OpikTracer(graph=app.get_graph(xray=True)) # HIGHLIGHTED_LINE
+tracer = OpikTracer(graph=app.get_graph(xray=True))  # HIGHLIGHTED_LINE
 inputs = {"question": "Hello, how are you?"}
-result = app.invoke(inputs, config={"callbacks": [tracer]}) # HIGHLIGHTED_LINE
+result = app.invoke(
+    inputs,
+    config={
+        "callbacks": [tracer],  # HIGHLIGHTED_LINE
+    },
+)
 print(result)

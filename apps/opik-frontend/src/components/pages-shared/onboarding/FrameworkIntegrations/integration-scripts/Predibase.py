@@ -1,11 +1,12 @@
 import os
+
 from langchain_community.llms import Predibase
-from opik.integrations.langchain import OpikTracer # HIGHLIGHTED_LINE
-from opik import configure
+from opik import configure  # HIGHLIGHTED_LINE
+from opik.integrations.langchain import OpikTracer  # HIGHLIGHTED_LINE
 
-configure()
+configure()  # HIGHLIGHTED_LINE
 
-os.environ["PREDIBASE_API_TOKEN"] = "your-api-key-here" # HIGHLIGHTED_LINE
+# os.environ["PREDIBASE_API_TOKEN"] = "your-api-key-here"
 
 # Create Predibase model
 model = Predibase(
@@ -14,7 +15,7 @@ model = Predibase(
 )
 
 # Create Opik tracer
-opik_tracer = OpikTracer(tags=["predibase", "mistral-7b"]) # HIGHLIGHTED_LINE
+opik_tracer = OpikTracer(tags=["predibase", "mistral-7b"])  # HIGHLIGHTED_LINE
 
 # Test the model with Opik tracing
 response = model.invoke(
@@ -22,8 +23,8 @@ response = model.invoke(
     config={
         "temperature": 0.5,
         "max_new_tokens": 1024,
-        "callbacks": [opik_tracer]
-    }
+        "callbacks": [opik_tracer],  # HIGHLIGHTED_LINE
+    },
 )
 
 print(response)

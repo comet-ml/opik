@@ -1,3 +1,6 @@
+import os
+
+import opik  # HIGHLIGHTED_LINE
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.tools.yfinance import YFinanceTools
@@ -6,24 +9,25 @@ from opentelemetry import trace as trace_api
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-import os
-import opik
 
-opik.configure()
+opik.configure()  # HIGHLIGHTED_LINE
+
+# os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
 # Configure Opik
-opik_config = opik.config.get_from_user_inputs() # HIGHLIGHTED_LINE
+opik_config = opik.config.get_from_user_inputs()  # HIGHLIGHTED_LINE
 
 # Set OpenTelemetry environment variables
-endpoint = "https://www.comet.com/opik/api/v1/private/otel" # HIGHLIGHTED_LINE
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel" # HIGHLIGHTED_LINE
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (  # HIGHLIGHTED_LINE
+    "https://www.comet.com/opik/api/v1/private/otel"  # HIGHLIGHTED_LINE
+)  # HIGHLIGHTED_LINE
 
-headers = (
-    f"Authorization={opik_config.api_key},"
-    f"projectName={opik_config.project_name},"
-    f"Comet-Workspace={opik_config.workspace}"
-)
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers # HIGHLIGHTED_LINE
+headers = (  # HIGHLIGHTED_LINE
+    f"Authorization={opik_config.api_key},"  # HIGHLIGHTED_LINE
+    f"projectName={opik_config.project_name},"  # HIGHLIGHTED_LINE
+    f"Comet-Workspace={opik_config.workspace}"  # HIGHLIGHTED_LINE
+)  # HIGHLIGHTED_LINE
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers  # HIGHLIGHTED_LINE
 
 # Configure the tracer provider
 tracer_provider = TracerProvider()

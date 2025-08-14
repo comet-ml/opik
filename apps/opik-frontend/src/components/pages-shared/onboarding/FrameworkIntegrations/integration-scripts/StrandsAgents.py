@@ -1,23 +1,25 @@
-from strands import Agent
-from strands.models.bedrock import BedrockModel
-import opik
 import os
 
-opik.configure()
+import opik  # HIGHLIGHTED_LINE
+from strands import Agent
+from strands.models.bedrock import BedrockModel
+
+opik.configure()  # HIGHLIGHTED_LINE
 
 # Configure Opik
-opik_config = opik.config.get_from_user_inputs() # HIGHLIGHTED_LINE
+opik_config = opik.config.get_from_user_inputs()  # HIGHLIGHTED_LINE
 
 # Set OpenTelemetry environment variables
-endpoint = "https://www.comet.com/opik/api/v1/private/otel" # HIGHLIGHTED_LINE
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel" # HIGHLIGHTED_LINE
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (  # HIGHLIGHTED_LINE
+    "https://www.comet.com/opik/api/v1/private/otel"  # HIGHLIGHTED_LINE
+)  # HIGHLIGHTED_LINE
 
-headers = (
-    f"Authorization={opik_config.api_key},"
-    f"projectName={opik_config.project_name},"
-    f"Comet-Workspace={opik_config.workspace}"
-)
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers # HIGHLIGHTED_LINE
+headers = (  # HIGHLIGHTED_LINE
+    f"Authorization={opik_config.api_key},"  # HIGHLIGHTED_LINE
+    f"projectName={opik_config.project_name},"  # HIGHLIGHTED_LINE
+    f"Comet-Workspace={opik_config.workspace}"  # HIGHLIGHTED_LINE
+)  # HIGHLIGHTED_LINE
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers  # HIGHLIGHTED_LINE
 
 # Define the system prompt for the agent
 system_prompt = """You are "Restaurant Helper", a restaurant assistant helping customers reserving tables in 
@@ -48,7 +50,7 @@ system_prompt = """You are "Restaurant Helper", a restaurant assistant helping c
 
 # Configure the Bedrock model to be used by the agent
 model = BedrockModel(
-    model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0", # Example model ID
+    model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",  # Example model ID
 )
 
 # Configure the agent with tracing attributes
@@ -56,9 +58,9 @@ agent = Agent(
     model=model,
     system_prompt=system_prompt,
     trace_attributes={
-        "session.id": "abc-1234", # Example session ID
-        "user.id": "user-email-example@domain.com", # Example user ID
-    }
+        "session.id": "abc-1234",  # Example session ID
+        "user.id": "user-email-example@domain.com",  # Example user ID
+    },
 )
 
 # Use the agent - this will be automatically traced to Opik

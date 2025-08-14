@@ -1,14 +1,14 @@
 # Vercel AI SDK integration with Opik is a TypeScript/JavaScript integration
-# 
+#
 # For Node.js/TypeScript setup:
-# 
+#
 # 1. Install dependencies:
 #    npm install opik ai @ai-sdk/openai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
 #
 # 2. Setup instrumentation:
 #    import { OpikExporter } from "opik/vercel";
 #    import { NodeSDK } from "@opentelemetry/sdk-node";
-#    
+#
 #    const sdk = new NodeSDK({
 #      traceExporter: new OpikExporter(),
 #      instrumentations: [getNodeAutoInstrumentations()],

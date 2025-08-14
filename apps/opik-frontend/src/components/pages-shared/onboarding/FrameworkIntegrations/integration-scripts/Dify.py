@@ -1,8 +1,8 @@
 # Dify integration with Opik is configuration-based through the Dify UI
-# 
+#
 # To set up Dify with Opik:
 # 1. In Dify, select your app and go to Monitoring
-# 2. Click "Tracing app performance" 
+# 2. Click "Tracing app performance"
 # 3. Configure Opik connection with your:
 #    - API Key (your Comet API Key)
 #    - Project name
