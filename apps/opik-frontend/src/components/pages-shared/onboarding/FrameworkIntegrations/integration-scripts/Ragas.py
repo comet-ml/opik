@@ -12,8 +12,8 @@ llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 ragas_answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 
-answer_relevancy_metric = RagasMetricWrapper(
-    ragas_answer_relevancy_metric, track=True
+answer_relevancy_metric = RagasMetricWrapper(  # HIGHLIGHTED_LINE
+    ragas_answer_relevancy_metric, track=True  # HIGHLIGHTED_LINE
 )  # HIGHLIGHTED_LINE
 
 row = {
