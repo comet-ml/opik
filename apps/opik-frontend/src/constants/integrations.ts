@@ -374,7 +374,7 @@ export const INTEGRATIONS: Integration[] = [
   //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
   //   icon: strandsAgentsLogoUrl,
   //   code: strandsAgentsCode,
-  //   installCommand: "pip install -U 'strands-agents' 'strands-agents-tools' opik",
+  //   installCommand: "pip install -U 'strands-agents' 'strands-agents-tools' opentelemetry-exporter-otlp opik",
   //   isHidden: true,
   // },
   // TODO: custom UI required
