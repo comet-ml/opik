@@ -1531,6 +1531,16 @@ class TracesResourceTest {
         var responseBlankText = traceResourceClient.callTraceCommentsBatchCreate(ids, "  ", API_KEY, TEST_WORKSPACE);
         assertThat(responseBlankText.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
     }
+
+    @Test
+    void createTraceCommentsBatch_OverLimit() {
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var ids = traces.stream().limit(11).map(Trace::id).toList();
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+    }
         @DisplayName("When filtering by thread tag, should return only threads with matching tags")
         void whenFilterByTags__thenReturnThreadsWithMatchingTags() {
 
