@@ -47,7 +47,6 @@ def setup_telemetry():
 # Define model client
 model_client = OpenAIChatCompletionClient(
     model="gpt-4o",
-    api_key="YOUR_API_KEY", # HIGHLIGHTED_LINE
 )
 
 # Define a simple function tool

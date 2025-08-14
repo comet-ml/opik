@@ -1,5 +1,5 @@
 from opik.integrations.openai import track_openai # HIGHLIGHTED_LINE
-from openai import OpenAI # HIGHLIGHTED_LINE
+from openai import OpenAI
 from opik import configure # HIGHLIGHTED_LINE
 
 configure()

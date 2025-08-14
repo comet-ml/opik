@@ -8,7 +8,6 @@ import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUser from "@/plugins/comet/useUser";
 import Slack from "@/icons/slack.svg?react";
 import { Link } from "@tanstack/react-router";
-import useDemoProject from "@/api/projects/useDemoProject";
 
 export const VIDEO_TUTORIAL_LINK =
   "https://www.youtube.com/watch?v=h1XK-dMtUJI";
@@ -142,23 +141,13 @@ PlaygroundButton.displayName = "HelpLinks.Playground";
 
 const DemoProjectButton: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: demoProject } = useDemoProject({ workspaceName });
-  const demoProjectId = demoProject?.id || "";
-
-  if (!demoProjectId) return;
 
   return (
-    <Button
-      variant="outline"
-      className="flex-1"
-      asChild
-      disabled={!demoProjectId}
-    >
+    <Button variant="outline" className="flex-1" asChild>
       <Link
-        to={"/$workspaceName/projects/$projectId/traces"}
+        to={"/$workspaceName/projects"}
         params={{
           workspaceName,
-          projectId: demoProjectId,
         }}
       >
         <MousePointerClick className="mr-2 size-4" />

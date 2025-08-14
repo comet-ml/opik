@@ -11,8 +11,6 @@ import opik
 
 opik.configure()
 
-os.environ["OPENAI_API_KEY"] = "your-api-key-here" # HIGHLIGHTED_LINE
-
 # Configure Opik
 opik_config = opik.config.get_from_user_inputs() # HIGHLIGHTED_LINE
 

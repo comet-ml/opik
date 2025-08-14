@@ -9,11 +9,8 @@ from google.adk.runners import Runner
 from google.genai import types
 from opik.integrations.adk import OpikTracer # HIGHLIGHTED_LINE
 from opik import configure
-import os
 
 configure()
-
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
 def get_weather(city: str) -> dict:
     """Get weather information for a city."""
