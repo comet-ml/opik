@@ -7262,6 +7262,58 @@ class TracesResourceTest {
                     API_KEY);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenSendingMultipleTracesWithSameId__dedupeTraces__thenReturnNoContent(
+                Function<Trace, Trace> traceModifier) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var id = generator.generate();
+            String projectName = UUID.randomUUID().toString();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .build())
+                    .toList();
+
+            var modifiedTraces = IntStream.range(0, traces.size())
+                    .mapToObj(i -> i == traces.size() - 1
+                            ? traceModifier.apply(traces.get(i)) // modify last item
+                            : traces.get(i))
+                    .toList();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(modifiedTraces, API_KEY,
+                    workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            getAndAssertPage(
+                    workspaceName,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    List.of(modifiedTraces.getLast()),
+                    List.of(),
+                    API_KEY);
+        }
+
+        Stream<Arguments> batch__whenSendingMultipleTracesWithSameId__dedupeTraces__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(
+                            (Function<Trace, Trace>) t -> t),
+                    arguments(
+                            (Function<Trace, Trace>) trace -> trace.toBuilder()
+                                    .lastUpdatedAt(null).build()));
+        }
+
         @Test
         void batch__whenMissingFields__thenReturnNoContent() {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);

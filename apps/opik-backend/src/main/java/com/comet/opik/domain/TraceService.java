@@ -45,6 +45,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -145,7 +146,9 @@ class TraceServiceImpl implements TraceService {
 
         Preconditions.checkArgument(!batch.traces().isEmpty(), "Batch traces cannot be empty");
 
-        List<String> projectNames = batch.traces()
+        List<Trace> dedupedTraces = dedupTraces(batch.traces());
+
+        List<String> projectNames = dedupedTraces
                 .stream()
                 .map(Trace::projectName)
                 .map(WorkspaceUtils::getProjectName)
@@ -156,7 +159,7 @@ class TraceServiceImpl implements TraceService {
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                     .flatMap(projectService::getOrCreate)
                     .collectList()
-                    .map(projects -> bindTraceToProjectAndId(batch, projects))
+                    .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                     .subscribeOn(Schedulers.boundedElastic());
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -168,7 +171,27 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
+    private List<Trace> dedupTraces(List<Trace> initialTraces) {
+
+        Map<Boolean, List<Trace>> shouldBeDeduped = initialTraces.stream()
+                .collect(Collectors.partitioningBy(trace -> trace.id() != null && trace.lastUpdatedAt() != null));
+
+        List<Trace> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Trace> dedupedTraces = shouldBeDeduped.get(true)
+                .stream()
+                .collect(Collectors.toMap(
+                        Trace::id,
+                        Function.identity(),
+                        (trace1, trace2) -> trace1.lastUpdatedAt().isAfter(trace2.lastUpdatedAt()) ? trace1 : trace2))
+                .values();
+
+        result.addAll(dedupedTraces);
+
+        return result;
+    }
+
+    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         Project::name,
@@ -176,7 +199,7 @@ class TraceServiceImpl implements TraceService {
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
-        return batch.traces()
+        return traces
                 .stream()
                 .map(trace -> {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
