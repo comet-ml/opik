@@ -28,7 +28,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -235,24 +235,21 @@ public class SpanService {
     }
 
     private List<Span> dedupSpans(List<Span> initialSpans) {
-        List<Span> result = new ArrayList<>();
 
-        List<Span> dedupSpans = initialSpans.stream()
-                .peek(span -> {
-                    if (span.id() == null || span.lastUpdatedAt() == null) {
-                        result.add(span);
-                    }
-                })
-                .filter(span -> span.id() != null && span.lastUpdatedAt() != null)
-                .collect(Collectors.groupingBy(Span::id))
-                .values()
+        Map<Boolean, List<Span>> shouldBeDeduped = initialSpans.stream()
+                .collect(Collectors.partitioningBy(span -> span.id() != null && span.lastUpdatedAt() != null));
+
+        List<Span> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Span> dedupedSpans = shouldBeDeduped.get(true)
                 .stream()
-                .map(spans -> spans.stream()
-                        .max(Comparator.comparing(Span::lastUpdatedAt))
-                        .orElseThrow(() -> new IllegalStateException("No span with max lastUpdatedAt found")))
-                .toList();
+                .collect(Collectors.toMap(
+                        Span::id,
+                        Function.identity(),
+                        (span1, span2) -> span1.lastUpdatedAt().isAfter(span2.lastUpdatedAt()) ? span1 : span2))
+                .values();
 
-        result.addAll(dedupSpans);
+        result.addAll(dedupedSpans);
 
         return result;
     }

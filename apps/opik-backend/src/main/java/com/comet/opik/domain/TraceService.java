@@ -45,7 +45,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -172,24 +172,21 @@ class TraceServiceImpl implements TraceService {
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {
-        List<Trace> result = new ArrayList<>();
 
-        List<Trace> dedupTraces = initialTraces.stream()
-                .peek(trace -> {
-                    if (trace.id() == null || trace.lastUpdatedAt() == null) {
-                        result.add(trace);
-                    }
-                })
-                .filter(trace -> trace.id() != null && trace.lastUpdatedAt() != null)
-                .collect(Collectors.groupingBy(Trace::id))
-                .values()
+        Map<Boolean, List<Trace>> shouldBeDeduped = initialTraces.stream()
+                .collect(Collectors.partitioningBy(trace -> trace.id() != null && trace.lastUpdatedAt() != null));
+
+        List<Trace> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Trace> dedupedTraces = shouldBeDeduped.get(true)
                 .stream()
-                .map(traces -> traces.stream()
-                        .max(Comparator.comparing(Trace::lastUpdatedAt))
-                        .orElseThrow(() -> new IllegalStateException("No trace with max lastUpdatedAt found")))
-                .toList();
+                .collect(Collectors.toMap(
+                        Trace::id,
+                        Function.identity(),
+                        (trace1, trace2) -> trace1.lastUpdatedAt().isAfter(trace2.lastUpdatedAt()) ? trace1 : trace2))
+                .values();
 
-        result.addAll(dedupTraces);
+        result.addAll(dedupedTraces);
 
         return result;
     }
