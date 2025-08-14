@@ -1,10 +1,11 @@
 from typing import Union
 
 import dspy
+from dspy import __version__ as dspy_version
 import pytest
 
 import opik
-from opik import context_storage
+from opik import context_storage, semantic_version
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
@@ -191,29 +192,33 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                             "traceback": ANY_STRING,
                         },
                     ),
-                    SpanModel(
-                        id=ANY_STRING,
-                        type="llm",
-                        name=ANY_STRING.starting_with("LM: "),
-                        provider="openai",
-                        model="gpt-3.5-turbo",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        metadata={"created_from": "dspy"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        spans=[],
-                        error_info={
-                            "exception_type": ANY_STRING,
-                            "message": ANY_STRING,
-                            "traceback": ANY_STRING,
-                        },
-                    ),
                 ],
             ),
         ],
     )
+
+    if semantic_version.SemanticVersion.parse(dspy_version) >= "3.0.0":
+        EXPECTED_TRACE_TREE.spans[0].spans.append(
+            SpanModel(
+                id=ANY_STRING,
+                type="llm",
+                name=ANY_STRING.starting_with("LM: "),
+                provider="openai",
+                model="gpt-3.5-turbo",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata={"created_from": "dspy"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                spans=[],
+                error_info={
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
+                },
+            ),
+        )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
