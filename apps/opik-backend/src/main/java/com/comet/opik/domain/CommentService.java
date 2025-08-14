@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 
 import java.util.Set;
 import java.util.UUID;
@@ -44,6 +45,7 @@ class CommentServiceImpl implements CommentService {
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
 
     @Override
     public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
@@ -93,7 +95,8 @@ class CommentServiceImpl implements CommentService {
             return Mono.just(0L);
         }
 
-        return traceDAO.getTraceWorkspace(traceIds, null)
+        return transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getTraceWorkspace(traceIds, connection))
                 .switchIfEmpty(Mono.just(java.util.List.of()))
                 .flatMap(list -> {
                     java.util.Set<String> workspaces = list.stream().map(WorkspaceAndResourceId::workspaceId).collect(java.util.stream.Collectors.toSet());
