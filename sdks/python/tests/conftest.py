@@ -272,4 +272,4 @@ def ensure_aws_bedrock_configured():
 def ensure_groq_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
     if "GROQ_API_KEY" not in os.environ:
-        raise Exception("Groq not configured!")
+        raise Exception("Groq is not configured!")
