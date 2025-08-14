@@ -52,9 +52,7 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
       }
 
       const ids = rows.map((r) => r.id);
-      const traceId = rows[0]?.id;
-
-      await batchCreateTraceComments.mutateAsync({ ids, text: commentText, traceId });
+      await batchCreateTraceComments.mutateAsync({ ids, text: commentText });
 
       if (onSuccess) onSuccess();
 
