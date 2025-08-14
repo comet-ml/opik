@@ -33,7 +33,6 @@ import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { buildDocsUrl, cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
-import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
@@ -237,7 +236,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     quickstartOpened,
     setQuickstartOpened,
   } = useAppStore();
-  const LogoComponent = usePluginsStore((state) => state.Logo);
 
   const { data: projectData } = useProjectsList(
     {
@@ -344,12 +342,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   ];
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
-  ) : (
-    <Logo expanded={expanded} />
-  );
-
   const renderItems = (items: MenuItem[]) => {
     return items.map((item) => {
       const hasCount = item.count && isNumber(countDataMap[item.count]);
@@ -435,7 +427,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             className="absolute left-[18px] z-10 block"
             params={{ workspaceName }}
           >
-            {logo}
+            <Logo expanded={expanded} />
           </Link>
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">

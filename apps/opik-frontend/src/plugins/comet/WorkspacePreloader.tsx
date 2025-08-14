@@ -13,10 +13,10 @@ import { Button } from "@/components/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAppStore from "@/store/AppStore";
 import useSegment from "./analytics/useSegment";
-import Logo from "./Logo";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import Logo from "@/components/layout/Logo/Logo";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;

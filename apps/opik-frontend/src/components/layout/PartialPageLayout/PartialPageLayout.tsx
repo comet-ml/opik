@@ -10,14 +10,7 @@ export const PartialPageLayout = ({
   children?: React.ReactNode;
 }) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
-  const LogoComponent = usePluginsStore((state) => state.Logo);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={false} />
-  ) : (
-    <Logo expanded={false} />
-  );
 
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
@@ -25,7 +18,7 @@ export const PartialPageLayout = ({
         <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
           <div className="flex-1">
             <Link to="/$workspaceName/home" params={{ workspaceName }}>
-              {logo}
+              <Logo expanded={false} />
             </Link>
           </div>
 
