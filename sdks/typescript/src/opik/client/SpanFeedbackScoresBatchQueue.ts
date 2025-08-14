@@ -13,11 +13,13 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
 > {
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number,
+    delay?: number
   ) {
     super({
       delay,
-      enableDeleteBatch: false,
+      enableCreateBatch: true,
+      enableUpdateBatch: true,
+      enableDeleteBatch: true,
       name: "SpanFeedbackScoresBatchQueue",
     });
   }
@@ -45,7 +47,7 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
         {
           name: scoreId.name,
         },
-        this.api.requestOptions,
+        this.api.requestOptions
       );
     }
   }

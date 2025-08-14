@@ -15,9 +15,15 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    */
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number,
+    delay?: number
   ) {
-    super({ delay, name: "DatasetBatchQueue" });
+    super({
+      delay,
+      enableCreateBatch: true,
+      enableUpdateBatch: true,
+      enableDeleteBatch: true,
+      name: "DatasetBatchQueue",
+    });
   }
 
   /**
@@ -52,7 +58,7 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
     try {
       const response = await this.api.datasets.getDatasetById(
         id,
-        this.api.requestOptions,
+        this.api.requestOptions
       );
       return response;
     } catch {
@@ -69,7 +75,7 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    */
   protected async updateEntity(
     id: string,
-    updates: Partial<DatasetWrite>,
+    updates: Partial<DatasetWrite>
   ): Promise<void> {
     await this.api.datasets.updateDataset(
       id,
@@ -78,7 +84,7 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
         visibility: updates.visibility,
         description: updates.description,
       },
-      this.api.requestOptions,
+      this.api.requestOptions
     );
   }
 
@@ -92,7 +98,7 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
       {
         ids,
       },
-      this.api.requestOptions,
+      this.api.requestOptions
     );
   }
 }
