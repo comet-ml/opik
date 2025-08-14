@@ -7,6 +7,7 @@ import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/G
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
+  InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
@@ -21,6 +22,7 @@ const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
   "Logo",
   "UserMenu",
+  "InviteUsersForm",
   "GetStartedPage",
   "GoogleColabCard",
   "WorkspacePreloader",
@@ -31,6 +33,7 @@ const PLUGIN_NAMES = [
 const usePluginsStore = create<PluginStore>((set) => ({
   Logo: null,
   UserMenu: null,
+  InviteUsersForm: null,
   GetStartedPage: null,
   GoogleColabCard: null,
   WorkspacePreloader: null,
