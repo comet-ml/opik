@@ -28,7 +28,14 @@ const partitionUsers = (
 ): { emails: string[]; usernames: string[] } => {
   const emails: string[] = [];
   const usernames: string[] = [];
-  for (const value of users) (isEmail(value) ? emails : usernames).push(value);
+  for (const value of users) {
+    if (isEmail(value)) {
+      emails.push(value);
+    } else {
+      usernames.push(value);
+    }
+  }
+
   return { emails, usernames };
 };
 

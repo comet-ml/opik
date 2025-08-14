@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 interface IntegrationStepProps {
   title: string;
   description?: string;
-  className: string;
+  className?: string;
   children?: React.ReactNode;
 }
 
