@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/use-toast";
 
 type UseTraceCommentsBatchCreateParams = {
   ids: string[];
-  traceId: string;
   text: string;
 };
 
@@ -43,9 +42,10 @@ const useTraceCommentsBatchCreateMutation = () => {
       });
     },
     onSettled: (data, error, variables) => {
-      const { traceId } = variables;
-      queryClient.invalidateQueries({
-        queryKey: [TRACE_KEY, { traceId }],
+      variables.ids.forEach((traceId) => {
+        queryClient.invalidateQueries({
+          queryKey: [TRACE_KEY, { traceId }],
+        });
       });
       queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
       queryClient.invalidateQueries({
