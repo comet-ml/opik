@@ -17,6 +17,7 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 on:
   workflow_call:
 

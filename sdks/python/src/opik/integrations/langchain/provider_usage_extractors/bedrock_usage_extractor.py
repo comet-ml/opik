@@ -2,9 +2,10 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, List
 
 import opik
-from opik import llm_usage
+from opik import llm_usage, _logging as opik_logging, logging_messages
 from . import provider_usage_extractor_protocol
 from . import langchain_run_helpers
+from .langchain_run_helpers import langchain_usage
 
 if TYPE_CHECKING:
     pass
@@ -49,17 +50,34 @@ class BedrockUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        langchain_usage = langchain_run_helpers.try_get_token_usage(run_dict)
-        bedrock_usage_dict = langchain_usage.map_to_bedrock_usage()
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
+            run_dict, candidate_keys=None
+        ):
+            if isinstance(token_usage, langchain_usage.LangChainUsage):
+                bedrock_usage_dict = token_usage.map_to_bedrock_usage()
+                return llm_usage.OpikUsage.from_bedrock_dict(bedrock_usage_dict)
 
-        opik_usage = llm_usage.OpikUsage.from_bedrock_dict(bedrock_usage_dict)
-        return opik_usage
+        opik_logging.log_once_at_level(
+            logging.WARNING,
+            "Failed to extract token usage from presumably Bedrock LLM langchain run. Run dict: %s",
+            LOGGER,
+            run_dict,
+        )
+
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+            logger=LOGGER,
+        )
+
     except Exception:
         LOGGER.warning(
-            "Failed to extract token usage from presumably Bedrock LLM langchain run.",
+            "Failed to extract token usage from presumably Bedrock LLM langchain run. Run dict: %s",
+            run_dict,
             exc_info=True,
         )
-        return None
+
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
