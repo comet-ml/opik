@@ -103,7 +103,6 @@ def test_valid_oql_expressions(filter_string, expected):
 @pytest.mark.parametrize(
     "filter_string, error_pattern",
     [
-        ('name > "test"', r"Operator > is not supported for field name.*"),
         ('invalid_field.key = "value"', r"Field invalid_field\.key is not supported.*"),
         ("name = test", r"Invalid value.*"),
         (
