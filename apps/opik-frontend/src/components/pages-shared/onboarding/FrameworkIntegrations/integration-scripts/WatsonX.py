@@ -3,14 +3,15 @@ import os
 import litellm
 import opik  # HIGHLIGHTED_LINE
 from litellm.integrations.opik.opik import OpikLogger  # HIGHLIGHTED_LINE
-from opik import get_current_span_data, track  # HIGHLIGHTED_LINE
+from opik import track  # HIGHLIGHTED_LINE
+from opik.opik_context import get_current_span_data  # HIGHLIGHTED_LINE
 
 opik.configure()  # HIGHLIGHTED_LINE
 
 # Configure WatsonX environment variables
-# os.environ["WATSONX_ENDPOINT_URL"] = ""  # Base URL of your WatsonX instance
-# os.environ["WATSONX_API_KEY"] = ""  # IBM cloud API key
-# os.environ["WATSONX_TOKEN"] = ""  # IAM auth token
+os.environ["WATSONX_ENDPOINT_URL"] = ""  # Base URL of your WatsonX instance
+os.environ["WATSONX_API_KEY"] = ""  # IBM cloud API key
+os.environ["WATSONX_TOKEN"] = ""  # IAM auth token
 
 # Optional
 # os.environ["WATSONX_PROJECT_ID"] = ""  # Project ID of your WatsonX instance

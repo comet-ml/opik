@@ -1,9 +1,8 @@
-
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 from opik import configure  # HIGHLIGHTED_LINE
-from ragas.embeddings import LangchainEmbeddingsWrapper
 from opik.evaluation.metrics import RagasMetricWrapper  # HIGHLIGHTED_LINE
+from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import AnswerRelevancy
 

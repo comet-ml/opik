@@ -1,8 +1,9 @@
+import os
+
+import opik  # HIGHLIGHTED_LINE
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 from strands.telemetry.config import StrandsTelemetry
-import opik  # HIGHLIGHTED_LINE
-import os
 
 opik.configure()  # HIGHLIGHTED_LINE
 
