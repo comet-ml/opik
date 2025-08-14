@@ -32,7 +32,7 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
 }) => {
     const { toast } = useToast();
     const [scoreName, setScoreName] = useState<string>("");
-    const [value, setValue] = useState<number | "">("");
+    const [value, setValue] = useState<number | undefined>(undefined);
     const [categoryName, setCategoryName] = useState<string>("");
     const [reason, setReason] = useState<string>("");
 
@@ -41,13 +41,13 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
     const handleClose = () => {
         setOpen(false);
         setScoreName("");
-        setValue("");
+        setValue(undefined);
         setCategoryName("");
         setReason("");
     };
 
     const disabled =
-        !scoreName || value === "" || rows.length > MAX_ENTITIES || batchMutation.isPending;
+        !scoreName || value === undefined || rows.length > MAX_ENTITIES || batchMutation.isPending;
 
     const handleAnnotate = async () => {
         try {
@@ -55,7 +55,7 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
                 projectId,
                 traceIds: rows.map((r) => r.id),
                 name: scoreName,
-                value: typeof value === "string" ? Number(value) : value,
+                value: value as number,
                 categoryName: categoryName || undefined,
                 reason: reason || undefined,
             });
@@ -91,10 +91,15 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
                     <Input
                         placeholder="Value"
                         type="number"
-                        value={value}
+                        value={value ?? ""}
                         onChange={(e) => {
                             const v = e.target.value;
-                            setValue(v === "" ? "" : Number(v));
+                            if (v === "") {
+                                setValue(undefined);
+                                return;
+                            }
+                            const parsed = Number(v);
+                            setValue(Number.isNaN(parsed) ? undefined : parsed);
                         }}
                         disabled={rows.length > MAX_ENTITIES}
                     />
