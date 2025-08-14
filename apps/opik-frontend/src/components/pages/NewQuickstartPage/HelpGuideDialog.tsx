@@ -1,14 +1,6 @@
 import React from "react";
-import {
-  ExternalLink,
-  Book,
-  UserPlus,
-  Blocks,
-  MousePointerClick,
-  PlayIcon,
-} from "lucide-react";
+import { ExternalLink, Book, UserPlus, PlayIcon } from "lucide-react";
 import imageTutorialUrl from "/images/tutorial-placeholder.png";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +9,9 @@ import {
   DialogAutoScrollBody,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Link } from "@tanstack/react-router";
-import useAppStore from "@/store/AppStore";
-import useDemoProject from "@/api/projects/useDemoProject";
 import usePluginsStore from "@/store/PluginsStore";
 import PlayButton from "@/icons/play-button.svg?react";
+import HelpLinks, { VIDEO_TUTORIAL_LINK } from "./HelpLinks";
 
 type HelpGuideDialogProps = {
   open: boolean;
@@ -33,9 +23,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
   setOpen,
 }) => {
   const InviteUsersForm = usePluginsStore((state) => state.InviteUsersForm);
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: demoProject } = useDemoProject({ workspaceName });
-  const demoProjectId = demoProject?.id || "";
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -80,7 +67,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
               </div>
 
               <a
-                href="https://www.youtube.com/watch?v=h1XK-dMtUJI"
+                href={VIDEO_TUTORIAL_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group relative flex aspect-video cursor-pointer items-center justify-center after:absolute after:inset-0 after:rounded-lg after:bg-black/20 after:opacity-0 after:transition-opacity after:hover:opacity-50"
@@ -176,44 +163,14 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 
           <Separator className="my-6" />
 
-          <div>
-            <h3 className="comet-title-s mb-2">Not ready to integrate yet?</h3>
-            <p className="comet-body-s mb-4 py-2 text-muted-slate">
-              Explore Opik by testing things out in the playground or browsing
-              our Demo project. No setup required.
-            </p>
-
-            <div className="mt-4 flex gap-3">
-              <Button variant="outline" className="flex-1" asChild>
-                <Link
-                  to={"/$workspaceName/playground"}
-                  params={{ workspaceName }}
-                >
-                  <Blocks className="mr-2 size-4" />
-                  Try our Playground
-                </Link>
-              </Button>
-              {demoProjectId && (
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  asChild
-                  disabled={!demoProjectId}
-                >
-                  <Link
-                    to={"/$workspaceName/projects/$projectId/traces"}
-                    params={{
-                      workspaceName,
-                      projectId: demoProjectId,
-                    }}
-                  >
-                    <MousePointerClick className="mr-2 size-4" />
-                    Explore our Demo project
-                  </Link>
-                </Button>
-              )}
-            </div>
-          </div>
+          <HelpLinks
+            onCloseParentDialog={() => setOpen(false)}
+            title="Not ready to integrate yet?"
+            description="Explore Opik by testing things out in the playground or browsing our Demo project. No setup required."
+          >
+            <HelpLinks.Playground />
+            <HelpLinks.DemoProject />
+          </HelpLinks>
         </DialogAutoScrollBody>
       </DialogContent>
     </Dialog>

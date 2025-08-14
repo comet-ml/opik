@@ -233,9 +233,14 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
           </div>
 
           <Separator className="my-6" />
-          <HelpLinks onCloseParentDialog={onClose}>
+          <HelpLinks
+            onCloseParentDialog={onClose}
+            title="Need some help?"
+            description="Get help from your team or ours. Choose the option that works best for you."
+          >
             <HelpLinks.InviteDev />
             <HelpLinks.Slack />
+            <HelpLinks.WatchTutorial />
           </HelpLinks>
         </DialogAutoScrollBody>
       </DialogContent>
