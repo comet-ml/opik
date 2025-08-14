@@ -32,12 +32,12 @@ COLUMNS = {
 }
 
 SUPPORTED_OPERATORS = {
-    "id": ["=", "contains", "not_contains"],
-    "name": ["=", "contains", "not_contains"],
+    "id": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
+    "name": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
     "status": ["=", "contains", "not_contains"],
     "start_time": ["=", ">", "<", ">=", "<="],
     "end_time": ["=", ">", "<", ">=", "<="],
-    "input": ["=", "contains", "not_contains"],
+    "input": ["=", "contains", "not_contains",],
     "output": ["=", "contains", "not_contains"],
     "metadata": ["=", "contains", ">", "<"],
     "feedback_scores": ["=", ">", "<", ">=", "<="],
@@ -47,12 +47,12 @@ SUPPORTED_OPERATORS = {
     "usage.completion_tokens": ["=", "!=", ">", "<", ">=", "<="],
     "duration": ["=", "!=", ">", "<", ">=", "<="],
     "number_of_messages": ["=", "!=", ">", "<", ">=", "<="],
-    "created_by": ["=", "contains", "not_contains"],
-    "thread_id": ["=", "contains", "not_contains"],
+    "created_by": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
+    "thread_id": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
     "total_estimated_cost": ["=", "!=", ">", "<", ">=", "<="],
-    "type": ["=", "contains", "not_contains"],
-    "model": ["=", "contains", "not_contains"],
-    "provider": ["=", "contains", "not_contains"],
+    "type": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
+    "model": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
+    "provider": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
 }
 
 
