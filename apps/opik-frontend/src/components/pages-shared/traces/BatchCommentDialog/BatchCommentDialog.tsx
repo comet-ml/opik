@@ -11,8 +11,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 
-import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
-import useCreateSpanCommentMutation from "@/api/traces/useCreateSpanCommentMutation";
+import useTraceCommentsBatchCreateMutation from "@/api/traces/useTraceCommentsBatchCreateMutation";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { Trace, Span } from "@/types/traces";
 
@@ -37,8 +36,7 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
 }) => {
   const { toast } = useToast();
 
-  const createTraceComment = useCreateTraceCommentMutation();
-  const createSpanComment = useCreateSpanCommentMutation();
+  const batchCreateTraceComments = useTraceCommentsBatchCreateMutation();
 
   const [commentText, setCommentText] = useState<string>("");
 
@@ -49,17 +47,14 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
 
   const handleAddComments = async () => {
     try {
-      const promises = rows.map((r) =>
-        type === TRACE_DATA_TYPE.traces
-          ? createTraceComment.mutateAsync({ text: commentText, traceId: r.id })
-          : createSpanComment.mutateAsync({
-              text: commentText,
-              spanId: r.id,
-              projectId,
-            }),
-      );
+      if (type !== TRACE_DATA_TYPE.traces) {
+        throw new Error("Batch comments are only supported for traces.");
+      }
 
-      await Promise.all(promises);
+      const ids = rows.map((r) => r.id);
+      const traceId = rows[0]?.id;
+
+      await batchCreateTraceComments.mutateAsync({ ids, text: commentText, traceId });
 
       if (onSuccess) onSuccess();
 
@@ -76,16 +71,13 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
   const disabled =
     !commentText.trim() ||
     rows.length > MAX_ENTITIES ||
-    createTraceComment.isPending ||
-    createSpanComment.isPending;
+    batchCreateTraceComments.isPending;
 
   return (
     <Dialog open={Boolean(open)} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>
-            Add comment to {rows.length} {type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
-          </DialogTitle>
+          <DialogTitle>Add comment to {rows.length} traces</DialogTitle>
         </DialogHeader>
 
         {rows.length > MAX_ENTITIES && (
@@ -102,11 +94,7 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
         />
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={createTraceComment.isPending || createSpanComment.isPending}
-          >
+          <Button variant="outline" onClick={handleClose} disabled={batchCreateTraceComments.isPending}>
             Cancel
           </Button>
           <Button onClick={handleAddComments} disabled={disabled}>
