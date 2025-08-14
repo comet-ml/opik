@@ -39,6 +39,9 @@ public interface FeedbackScoreDAO {
     Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
             UUID projectId);
 
+    Mono<Long> scoreEntityAuthored(EntityType entityType, UUID entityId, FeedbackScore score,
+            UUID projectId);
+
     Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name);
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
@@ -312,6 +315,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 projectId, score);
 
         return scoreBatchOf(entityType, List.of(item));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> scoreEntityAuthored(@NonNull EntityType entityType,
+            @NonNull UUID entityId,
+            @NonNull FeedbackScore score,
+            @NonNull UUID projectId) {
+
+        FeedbackScoreItem item = FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,
+                projectId, score);
+
+        return scoreBatchAuthored(entityType, List.of(item));
     }
 
     private String getValueOrDefault(String value) {
