@@ -266,3 +266,10 @@ def ensure_aws_bedrock_configured():
             raise Exception("AWS Bedrock not configured! No models available")
     except Exception as e:
         raise Exception(f"AWS Bedrock not configured! {e}")
+
+
+@pytest.fixture(scope="session")
+def ensure_groq_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+    if "GROQ_API_KEY" not in os.environ:
+        raise Exception("Groq not configured!")

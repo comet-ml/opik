@@ -75,12 +75,6 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
             run_dict,
         )
 
-        opik_logging.log_once_at_level(
-            logging_level=logging.WARNING,
-            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
-            logger=LOGGER,
-        )
-
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN,
