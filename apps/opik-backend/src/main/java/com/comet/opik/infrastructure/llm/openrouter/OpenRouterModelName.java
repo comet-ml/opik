@@ -51,7 +51,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ARLIAI_QWQ_32B_ARLIAI_RPR_V1_FREE("arliai/qwq-32b-arliai-rpr-v1:free"),
     BAIDU_ERNIE_4_5_300B_A47B("baidu/ernie-4.5-300b-a47b"),
     BYTEDANCE_UI_TARS_1_5_7B("bytedance/ui-tars-1.5-7b"),
-    COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE("cognitivecomputations/dolphin-mistral-24b-venice-edition:free"),
+    COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE(
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"),
     COGNITIVECOMPUTATIONS_DOLPHIN_MIXTRAL_8X22B("cognitivecomputations/dolphin-mixtral-8x22b"),
     COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B("cognitivecomputations/dolphin3.0-mistral-24b"),
     COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B_FREE("cognitivecomputations/dolphin3.0-mistral-24b:free"),
@@ -330,8 +331,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_4_5("z-ai/glm-4.5"),
     Z_AI_GLM_4_5_AIR("z-ai/glm-4.5-air"),
     Z_AI_GLM_4_5_AIR_FREE("z-ai/glm-4.5-air:free"),
-    Z_AI_GLM_4_5V("z-ai/glm-4.5v")
-    ;
+    Z_AI_GLM_4_5V("z-ai/glm-4.5v");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
