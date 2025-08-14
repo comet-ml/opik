@@ -68,7 +68,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
             first set of LLM calls so you can use Opik to analyze them and
             improve performance.{" "}
             <a
-              href="https://www.comet.com/docs/opik/quickstart"
+              href={selectedIntegration.docsLink}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
