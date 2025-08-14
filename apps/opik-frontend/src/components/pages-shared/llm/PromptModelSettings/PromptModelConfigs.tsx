@@ -61,6 +61,7 @@ const PromptModelConfigs = ({
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
           onChange={onChange}
+          model={model}
         />
       );
     }
