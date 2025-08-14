@@ -18,24 +18,24 @@ def ollama_llm_call(user_message: str):
     )
 
     opik_context.update_current_span(  # HIGHLIGHTED_LINE
-        metadata={  # HIGHLIGHTED_LINE
-            "model": response["model"],  # HIGHLIGHTED_LINE
-            "eval_duration": response["eval_duration"],  # HIGHLIGHTED_LINE
-            "load_duration": response["load_duration"],  # HIGHLIGHTED_LINE
+        metadata={
+            "model": response["model"],
+            "eval_duration": response["eval_duration"],
+            "load_duration": response["load_duration"],
             "prompt_eval_duration": response[
                 "prompt_eval_duration"
-            ],  # HIGHLIGHTED_LINE
-            "prompt_eval_count": response["prompt_eval_count"],  # HIGHLIGHTED_LINE
-            "done": response["done"],  # HIGHLIGHTED_LINE
-            "done_reason": response["done_reason"],  # HIGHLIGHTED_LINE
+            ],
+            "prompt_eval_count": response["prompt_eval_count"],
+            "done": response["done"],
+            "done_reason": response["done_reason"],
         },
-        usage={  # HIGHLIGHTED_LINE
-            "completion_tokens": response["eval_count"],  # HIGHLIGHTED_LINE
-            "prompt_tokens": response["prompt_eval_count"],  # HIGHLIGHTED_LINE
+        usage={
+            "completion_tokens": response["eval_count"],
+            "prompt_tokens": response["prompt_eval_count"],
             "total_tokens": response["eval_count"]
-            + response["prompt_eval_count"],  # HIGHLIGHTED_LINE
-        },  # HIGHLIGHTED_LINE
-    )  # HIGHLIGHTED_LINE
+            + response["prompt_eval_count"],
+        },
+    )
     return response["message"]
 
 
