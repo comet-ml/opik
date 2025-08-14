@@ -232,7 +232,7 @@ class OpikQueryLanguage:
                 self._cursor += 1
 
             operator = self.query_string[start : self._cursor]
-            if operator not in ["contains", "not_contains"]:
+            if operator not in SUPPORTED_OPERATORS[parsed_field]:
                 raise ValueError(
                     f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
                 )

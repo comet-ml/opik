@@ -81,6 +81,13 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
                 {"field": "provider", "operator": "=", "value": "openai"},
             ],
         ),
+        (
+            'id starts_with "123456" and id ends_with "789012"',
+            [
+                {"field": "id", "operator": "starts_with", "value": "123456"},
+                {"field": "id", "operator": "ends_with", "value": "789012"},
+            ],
+        ),
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
