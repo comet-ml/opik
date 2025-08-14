@@ -600,10 +600,10 @@ public class TracesResource {
 
     @POST
     @Path("/comments/batch")
-    @Operation(operationId = "createTraceCommentsBatch", summary = "Create comments for multiple traces", description = "Create the same comment text for multiple trace IDs", responses = {
+    @Operation(operationId = "createTraceCommentsBatch", summary = "Create comments for multiple traces", description = "Create the same comment text for multiple trace IDs (max 10 per request)", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "400", description = "Bad Request"),
-            @ApiResponse(responseCode = "404", description = "Not found")})
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     public Response createTraceCommentsBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = CommentsBatchCreate.class))) @NotNull @Valid CommentsBatchCreate payload) {
