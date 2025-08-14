@@ -65,7 +65,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
                 # streaming mode handling
                 # token usage data MAY be available at the end of streaming
                 # in async mode may not provide token usage info
-                groq_usage_dict = token_usage.map_to_openai_completions_usage()
+                groq_usage_dict = token_usage.map_to_groq_completions_usage()
                 return llm_usage.OpikUsage.from_groq_completions_dict(groq_usage_dict)
 
         opik_logging.log_once_at_level(
