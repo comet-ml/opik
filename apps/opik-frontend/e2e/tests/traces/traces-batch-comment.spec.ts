@@ -30,5 +30,33 @@ test.describe("Traces batch comment", () => {
     await tracesPage.table.getRowLocatorByCellText(span.name).locator('input[type="checkbox"]').check();
     await expect(tracesPage.page.getByRole("button", { name: "Comment" })).toBeDisabled();
   });
+
+  test("Blank text is blocked", async ({ project, trace1, tracesPage }) => {
+    await tracesPage.goto(project.id);
+    await tracesPage.table.getRowLocatorByCellText(trace1.name).locator('input[type="checkbox"]').check();
+    await tracesPage.page.getByRole("button", { name: "Comment" }).click();
+    await tracesPage.page.getByPlaceholder("Comment text").fill("   ");
+    await expect(tracesPage.page.getByRole("button", { name: "Add comments" })).toBeDisabled();
+  });
+
+  test("Selecting over 10 traces is blocked", async ({ project, tracesPage }) => {
+    await tracesPage.goto(project.id);
+
+    for (let i = 0; i < 11; i++) {
+      await tracesPage.page.getByRole("button", { name: "Add trace" }).click();
+      await tracesPage.page.getByPlaceholder("Name").fill(`t-${i}`);
+      await tracesPage.page.getByRole("button", { name: "Create" }).click();
+    }
+
+    const rows = await tracesPage.table.tBody.locator('tr').all();
+    for (let i = 0; i < 11; i++) {
+      await rows[i].locator('input[type="checkbox"]').check();
+    }
+
+    await tracesPage.page.getByRole("button", { name: "Comment" }).click();
+    await tracesPage.page.getByPlaceholder("Comment text").fill("over-limit");
+    await expect(tracesPage.page.getByRole("button", { name: "Add comments" })).toBeDisabled();
+    await expect(tracesPage.page.getByText("You can comment on up to 10 items at a time.")).toBeVisible();
+  });
 });
 
