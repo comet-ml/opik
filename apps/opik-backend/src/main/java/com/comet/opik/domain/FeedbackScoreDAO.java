@@ -49,6 +49,8 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
+    Mono<Long> scoreBatchOfThreadsAuthored(List<FeedbackScoreBatchItemThread> scores);
+
     Mono<Long> scoreBatchAuthored(EntityType entityType, List<? extends FeedbackScoreItem> scores);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
@@ -343,8 +345,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
-
         return scoreBatchOf(EntityType.THREAD, scores);
     }
 
@@ -368,6 +368,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .flatMap(Result::getRowsUpdated)
                     .reduce(Long::sum);
         });
+    }
+
+    @Override
+    public Mono<Long> scoreBatchOfThreadsAuthored(@NonNull List<FeedbackScoreBatchItemThread> scores) {
+        return scoreBatchAuthored(EntityType.THREAD, scores);
     }
 
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
