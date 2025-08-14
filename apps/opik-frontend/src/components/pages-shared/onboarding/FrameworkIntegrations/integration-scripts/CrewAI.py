@@ -1,11 +1,12 @@
-from crewai import Agent, Crew, Task, Process
-from opik.integrations.crewai import track_crewai # HIGHLIGHTED_LINE
-from opik import configure
+from crewai import Agent, Crew, Process, Task
+from opik import configure  # HIGHLIGHTED_LINE
+from opik.integrations.crewai import track_crewai  # HIGHLIGHTED_LINE
 
-configure()
+configure()  # HIGHLIGHTED_LINE
 
 # Track CrewAI runs with Opik
-track_crewai(project_name="crewai-integration-demo") # HIGHLIGHTED_LINE
+track_crewai(project_name="crewai-integration-demo")  # HIGHLIGHTED_LINE
+
 
 class CrewAIExample:
     def agent_one(self) -> Agent:
@@ -21,7 +22,7 @@ class CrewAIExample:
             role="Market Researcher",
             goal="Gather information on market dynamics",
             backstory="A diligent researcher with a keen eye for detail",
-            verbose=True
+            verbose=True,
         )
 
     def task_one(self) -> Task:
@@ -29,7 +30,7 @@ class CrewAIExample:
             name="Collect Data Task",
             description="Collect recent market data and identify trends.",
             expected_output="A report summarizing key trends in the market.",
-            agent=self.agent_one()
+            agent=self.agent_one(),
         )
 
     def task_two(self) -> Task:
@@ -37,7 +38,7 @@ class CrewAIExample:
             name="Market Research Task",
             description="Research factors affecting market dynamics.",
             expected_output="An analysis of factors influencing the market.",
-            agent=self.agent_two()
+            agent=self.agent_two(),
         )
 
     def crew(self) -> Crew:
@@ -45,8 +46,9 @@ class CrewAIExample:
             agents=[self.agent_one(), self.agent_two()],
             tasks=[self.task_one(), self.task_two()],
             process=Process.sequential,
-            verbose=True
+            verbose=True,
         )
+
 
 # Create and run the crew
 my_crew = CrewAIExample().crew()
