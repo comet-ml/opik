@@ -191,6 +191,25 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                             "traceback": ANY_STRING,
                         },
                     ),
+                    SpanModel(
+                        id=ANY_STRING,
+                        type="llm",
+                        name=ANY_STRING.starting_with("LM: "),
+                        provider="openai",
+                        model="gpt-3.5-turbo",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        spans=[],
+                        error_info={
+                            "exception_type": ANY_STRING,
+                            "message": ANY_STRING,
+                            "traceback": ANY_STRING,
+                        },
+                    ),
                 ],
             ),
         ],
@@ -202,7 +221,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
     sort_spans_by_name(EXPECTED_TRACE_TREE)
     sort_spans_by_name(fake_backend.trace_trees[0])
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
 def test_dspy_callback__used_inside_another_track_function__data_attached_to_existing_trace_tree(
