@@ -69,7 +69,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     private boolean isOpus41Model(String model) {
-        return "claude-opus-4-1-20250805".equals(model);
+        return AnthropicModelName.CLAUDE_OPUS_4_1.toString().equals(model);
     }
 
     @Override
