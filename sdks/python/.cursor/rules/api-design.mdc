@@ -146,7 +146,7 @@ class Opik:
     def create_experiment(self, name: str) -> Experiment:
         """Public API - stable interface."""
         return self._internal_create_experiment(name)
-    
+
     def _internal_create_experiment(self, name: str) -> Experiment:
         """Internal implementation - can change."""
         pass
@@ -180,7 +180,7 @@ dataset = client.create_dataset(name="my_dataset")
 
 # ✅ Good: Consistent parameter patterns
 spans = client.search_spans(project_name="my_project")
-traces = client.search_traces(project_name="my_project") 
+traces = client.search_traces(project_name="my_project")
 
 # ✅ Good: Using @opik.track decorator for tracing
 import opik
