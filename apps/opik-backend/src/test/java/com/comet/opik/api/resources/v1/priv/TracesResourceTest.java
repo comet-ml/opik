@@ -1541,6 +1541,23 @@ class TracesResourceTest {
         var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
     }
+
+    @Test
+    void createTraceCommentsBatch_MixedWorkspace_BadRequest() {
+        var trace1 = factory.manufacturePojo(Trace.class);
+        var trace2 = factory.manufacturePojo(Trace.class);
+
+        traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+
+        String otherWorkspaceName = java.util.UUID.randomUUID().toString();
+        String otherWorkspaceId = java.util.UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, otherWorkspaceName, otherWorkspaceId);
+        traceResourceClient.createTrace(trace2, API_KEY, otherWorkspaceName);
+
+        var ids = java.util.List.of(trace1.id(), trace2.id());
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+    }
         @DisplayName("When filtering by thread tag, should return only threads with matching tags")
         void whenFilterByTags__thenReturnThreadsWithMatchingTags() {
 
