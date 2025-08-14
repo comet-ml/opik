@@ -62,7 +62,6 @@ class LlmProviderAnthropic implements LlmProviderService {
 
     }
 
-
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return switch (throwable) {
