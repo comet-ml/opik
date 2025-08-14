@@ -18,11 +18,13 @@ import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 public class GroupingQueryBuilder {
 
     public static final String JSON_FIELD = "JSON_VALUE(%s, '%s')";
+    private static final String VALID_JSON_KEY_REGEXP = "^\\$(?:\\.(?:[A-Za-z0-9_]+)|\\[\\d+\\]|\\['(?:[^'\\\\]|\\\\.)*'\\])*$";
+    private static final String DUMMY_JSON_KEY = "$.__dummy__";
 
     public void addGroupingTemplateParams(@NonNull List<GroupBy> groups, @NonNull ST template) {
         List<String> groupings = groups.stream()
                 .map(group -> switch (group.type()) {
-                    case DICTIONARY -> JSON_FIELD.formatted(group.field(), getKey(group));
+                    case DICTIONARY -> JSON_FIELD.formatted(group.field(), getKeyAndValidate(group));
                     case STRING -> group.field();
                     default -> throw new BadRequestException("Unsupported grouping field type: " + group.type());
                 })
@@ -37,6 +39,12 @@ public class GroupingQueryBuilder {
         template.add("groupSelects", groupBySelect);
     }
 
+    private String getKeyAndValidate(GroupBy group) {
+
+        String key = getKey(group);
+        return isValidJsonPath(key) ? key : DUMMY_JSON_KEY;
+    }
+
     private String getKey(GroupBy group) {
 
         if (group.key().startsWith(JSONPATH_ROOT)) {
@@ -48,5 +56,10 @@ public class GroupingQueryBuilder {
         }
 
         return "%s.%s".formatted(JSONPATH_ROOT, group.key());
+    }
+
+    static boolean isValidJsonPath(String path) {
+        // must start with "$" and match allowed patterns
+        return path.matches(VALID_JSON_KEY_REGEXP);
     }
 }
