@@ -184,24 +184,22 @@ const NewQuickstartPage: React.FunctionComponent = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {filteredIntegrations.map((integration) => {
-                  return (
-                    <IntegrationCard
-                      key={integration.id}
-                      title={integration.title}
-                      description={integration.description}
-                      icon={
-                        <img
-                          alt={integration.title}
-                          src={integration.icon}
-                          className="size-[40px] shrink-0"
-                        />
-                      }
-                      tag={integration.isHidden ? "new" : integration.tag}
-                      onClick={() => handleIntegrationClick(integration.id)}
-                    />
-                  );
-                })}
+                {filteredIntegrations.map((integration) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    title={integration.title}
+                    description={integration.description}
+                    icon={
+                      <img
+                        alt={integration.title}
+                        src={integration.icon}
+                        className="size-[40px] shrink-0"
+                      />
+                    }
+                    tag={integration.tag}
+                    onClick={() => handleIntegrationClick(integration.id)}
+                  />
+                ))}
 
                 <IntegrationCard
                   title="Request integration"
