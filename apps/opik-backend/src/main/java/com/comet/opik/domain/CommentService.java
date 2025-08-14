@@ -28,6 +28,10 @@ public interface CommentService {
     Mono<Void> delete(BatchDelete batchDelete);
 
     Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds);
+
+    Mono<Long> createBatchForTraces(Set<UUID> traceIds, String text);
+
+    Mono<Long> createBatchForSpans(Set<UUID> spanIds, String text);
 }
 
 @Slf4j
@@ -81,5 +85,53 @@ class CommentServiceImpl implements CommentService {
             return Mono.just(0L);
         }
         return commentDAO.deleteByEntityIds(entityType, entityIds);
+    }
+
+    @Override
+    public Mono<Long> createBatchForTraces(@NonNull Set<UUID> traceIds, @NonNull String text) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return traceDAO.getTraceWorkspace(traceIds, null)
+                .switchIfEmpty(Mono.just(java.util.List.of()))
+                .flatMap(list -> {
+                    java.util.Set<String> workspaces = list.stream().map(WorkspaceAndResourceId::workspaceId).collect(java.util.stream.Collectors.toSet());
+                    if (workspaces.size() > 1) {
+                        return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
+                    }
+                    java.util.Set<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).collect(java.util.stream.Collectors.toSet());
+                    if (ids.isEmpty()) {
+                        return Mono.just(0L);
+                    }
+                    return traceDAO.getProjectIdFromTrace(ids.iterator().next())
+                            .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.iterator().next())))
+                            .flatMap(projectId -> commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, projectId,
+                                    Comment.builder().text(text).build()));
+                });
+    }
+
+    @Override
+    public Mono<Long> createBatchForSpans(@NonNull Set<UUID> spanIds, @NonNull String text) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return spanDAO.getSpanWorkspace(spanIds)
+                .switchIfEmpty(Mono.just(java.util.List.of()))
+                .flatMap(list -> {
+                    java.util.Set<String> workspaces = list.stream().map(WorkspaceAndResourceId::workspaceId).collect(java.util.stream.Collectors.toSet());
+                    if (workspaces.size() > 1) {
+                        return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
+                    }
+                    java.util.Set<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).collect(java.util.stream.Collectors.toSet());
+                    if (ids.isEmpty()) {
+                        return Mono.just(0L);
+                    }
+                    return spanDAO.getProjectIdFromSpan(ids.iterator().next())
+                            .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.iterator().next())))
+                            .flatMap(projectId -> commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, projectId,
+                                    Comment.builder().text(text).build()));
+                });
     }
 }
