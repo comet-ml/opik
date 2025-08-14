@@ -245,6 +245,9 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Description: Configuration for anonymous ID used to identify the installation
+  # Default: empty
+  anonymousId: ${OPIK_ANONYMOUS_ID:-}
 
 # Configuration for application metadata
 metadata:

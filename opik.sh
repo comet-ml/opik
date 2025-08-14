@@ -130,8 +130,11 @@ check_containers_status() {
 start_missing_containers() {
   check_docker_status
 
+  # Generate a run-scoped anonymous ID for this installation session
   uuid=$(generate_uuid)
   start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  # Export persistent install UUID so docker-compose and services can consume it
+  export OPIK_ANONYMOUS_ID="$uuid"
   send_install_report "$uuid" "false" "$start_time"
 
   debugLog "🔍 Checking required containers..."
@@ -291,6 +294,7 @@ send_install_report() {
   "event_properties": {
     "start_time": "$start_time",
     "end_time": "$end_time",
+    "event_ver": "1",
     "script_type": "sh"
   }
 }
@@ -304,6 +308,7 @@ EOF
   "event_type": "$event_type",
   "event_properties": {
     "start_time": "$start_time",
+    "event_ver": "1",
     "script_type": "sh"
   }
 }
