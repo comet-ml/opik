@@ -628,9 +628,15 @@ public class TracesResource {
                     .build();
         }
 
-        commentService.createBatchForTraces(Set.copyOf(payload.ids()), payload.text())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        try {
+            commentService.createBatchForTraces(Set.copyOf(payload.ids()), payload.text())
+                    .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                    .block();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), e.getMessage()))
+                    .build();
+        }
 
         log.info("Created trace comments batch with ids '{}' on workspaceId '{}'", payload.ids(), workspaceId);
 
