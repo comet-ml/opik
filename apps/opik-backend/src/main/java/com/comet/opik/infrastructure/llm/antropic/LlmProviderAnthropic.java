@@ -59,16 +59,15 @@ class LlmProviderAnthropic implements LlmProviderService {
         if (request.maxCompletionTokens() == null) {
             throw new BadRequestException(ERROR_NO_COMPLETION_TOKENS);
         }
-        
+
         // Claude Opus 4.1 validation: cannot specify both temperature and top_p
-        if (isOpus41Model(request.model()) && 
-            request.temperature() != null && request.topP() != null) {
+        if (isOpus41Model(request.model()) &&
+                request.temperature() != null && request.topP() != null) {
             throw new BadRequestException(
-                "Claude Opus 4.1 does not allow both temperature and top_p parameters to be specified. Please use only one."
-            );
+                    "Claude Opus 4.1 does not allow both temperature and top_p parameters to be specified. Please use only one.");
         }
     }
-    
+
     private boolean isOpus41Model(String model) {
         return "claude-opus-4-1-20250805".equals(model);
     }
