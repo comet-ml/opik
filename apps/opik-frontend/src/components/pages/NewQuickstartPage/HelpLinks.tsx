@@ -1,15 +1,17 @@
 import React, { createContext, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Monitor, UserPlus } from "lucide-react";
+import { Blocks, MonitorPlay, MousePointerClick, UserPlus } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { buildUrl } from "@/plugins/comet/utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUser from "@/plugins/comet/useUser";
 import Slack from "@/icons/slack.svg?react";
+import { Link } from "@tanstack/react-router";
 
-const TUTORIAL_LINK = "https://www.youtube.com/";
-const SLACK_LINK = "http://chat.comet.com";
+export const VIDEO_TUTORIAL_LINK =
+  "https://www.youtube.com/watch?v=h1XK-dMtUJI";
+export const SLACK_LINK = "http://chat.comet.com";
 
 type HelpLinksContextValue = {
   onCloseParentDialog?: () => void;
@@ -24,18 +26,24 @@ type HelpLinksProps = {
   children?: React.ReactNode;
   buttonsContainerClassName?: string;
   onCloseParentDialog?: () => void;
+  title: string;
+  description: string;
 };
 
 type HelpLinksComponent = React.FC<HelpLinksProps> & {
   InviteDev: React.FC;
   Slack: React.FC;
   WatchTutorial: React.FC;
+  Playground: React.FC;
+  DemoProject: React.FC;
 };
 
 const HelpLinks: HelpLinksComponent = ({
   className,
   buttonsContainerClassName,
   children,
+  title,
+  description,
   onCloseParentDialog,
 }) => {
   return (
@@ -45,11 +53,8 @@ const HelpLinks: HelpLinksComponent = ({
       }}
     >
       <div className={cn(className)}>
-        <h3 className="comet-title-s mb-2">Not ready to integrate yet?</h3>
-        <p className="comet-body-s mb-4 py-2 text-muted-slate">
-          Explore Opik by testing things out in the playground or browsing our
-          Demo project. No setup required.
-        </p>
+        <h3 className="comet-title-s mb-2">{title}</h3>
+        <p className="comet-body-s mb-4 py-2 text-muted-slate">{description}</p>
 
         <div className={cn("flex gap-2.5", buttonsContainerClassName)}>
           {children}
@@ -97,6 +102,8 @@ const InviteDevButton: React.FC = () => {
           workspaceName,
           `&initialInviteId=${workspace?.workspaceId}`,
         )}
+        target="_blank"
+        rel="noopener noreferrer"
       >
         <UserPlus className="mr-2 size-4" />
         <span>Invite a developer</span>
@@ -109,7 +116,7 @@ InviteDevButton.displayName = "HelpLinks.InviteDev";
 const SlackButton: React.FC = () => {
   return (
     <Button className="w-full" variant="outline" asChild>
-      <a href={SLACK_LINK}>
+      <a href={SLACK_LINK} target="_blank" rel="noopener noreferrer">
         <Slack className="mr-2 size-4" />
         <span>Get help in Slack</span>
       </a>
@@ -118,14 +125,46 @@ const SlackButton: React.FC = () => {
 };
 SlackButton.displayName = "HelpLinks.Slack";
 
-const WatchTutorialButton: React.FC = () => {
-  const handleClick = () => {
-    window.open(TUTORIAL_LINK, "_blank");
-  };
+const PlaygroundButton: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   return (
-    <Button className="w-full" variant="outline" onClick={handleClick}>
-      <Monitor className="mr-2 size-4" />
-      <span>Watch our tutorial</span>
+    <Button variant="outline" className="flex-1" asChild>
+      <Link to={"/$workspaceName/playground"} params={{ workspaceName }}>
+        <Blocks className="mr-2 size-4" />
+        Try our Playground
+      </Link>
+    </Button>
+  );
+};
+PlaygroundButton.displayName = "HelpLinks.Playground";
+
+const DemoProjectButton: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  return (
+    <Button variant="outline" className="flex-1" asChild>
+      <Link
+        to={"/$workspaceName/projects"}
+        params={{
+          workspaceName,
+        }}
+      >
+        <MousePointerClick className="mr-2 size-4" />
+        Explore our Demo project
+      </Link>
+    </Button>
+  );
+};
+DemoProjectButton.displayName = "HelpLinks.DemoProject";
+
+const WatchTutorialButton: React.FC = () => {
+  return (
+    <Button className="w-full" variant="outline" asChild>
+      <a href={VIDEO_TUTORIAL_LINK} target="_blank" rel="noopener noreferrer">
+        <MonitorPlay className="mr-2 size-4" />
+        <span>Watch our tutorial</span>
+      </a>
     </Button>
   );
 };
@@ -134,6 +173,8 @@ WatchTutorialButton.displayName = "HelpLinks.WatchTutorial";
 HelpLinks.InviteDev = InviteDevButton;
 HelpLinks.Slack = SlackButton;
 HelpLinks.WatchTutorial = WatchTutorialButton;
+HelpLinks.Playground = PlaygroundButton;
+HelpLinks.DemoProject = DemoProjectButton;
 
 HelpLinks.displayName = "HelpLinks";
 
