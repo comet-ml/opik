@@ -11,6 +11,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -36,11 +37,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
 
-    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
-            UUID projectId);
-
-    Mono<Long> scoreEntityAuthored(EntityType entityType, UUID entityId, FeedbackScore score,
-            UUID projectId);
+    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId,
+            @Nullable String author);
 
     Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name);
 
@@ -48,13 +46,9 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names);
 
-    Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores);
+    Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
-    Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
-
-    Mono<Long> scoreBatchOfThreadsAuthored(List<FeedbackScoreBatchItemThread> scores);
-
-    Mono<Long> scoreBatchAuthored(EntityType entityType, List<? extends FeedbackScoreItem> scores);
+    Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -309,25 +303,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     public Mono<Long> scoreEntity(@NonNull EntityType entityType,
             @NonNull UUID entityId,
             @NonNull FeedbackScore score,
-            @NonNull UUID projectId) {
+            @NonNull UUID projectId, @Nullable String author) {
 
         FeedbackScoreItem item = FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,
                 projectId, score);
 
-        return scoreBatchOf(entityType, List.of(item));
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Long> scoreEntityAuthored(@NonNull EntityType entityType,
-            @NonNull UUID entityId,
-            @NonNull FeedbackScore score,
-            @NonNull UUID projectId) {
-
-        FeedbackScoreItem item = FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,
-                projectId, score);
-
-        return scoreBatchAuthored(entityType, List.of(item));
+        return scoreBatchOf(entityType, List.of(item), author);
     }
 
     private String getValueOrDefault(String value) {
@@ -340,17 +321,18 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
-            @NonNull List<? extends FeedbackScoreItem> scores) {
+            @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
         return asyncTemplate.nonTransaction(connection -> {
 
             ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            template.add("author", author);
 
             var statement = connection.createStatement(template.render());
 
-            bindParameters(entityType, scores, statement, false);
+            bindParameters(entityType, scores, statement, author);
 
             return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
                     .flatMap(Result::getRowsUpdated)
@@ -360,39 +342,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
-    public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores) {
-        return scoreBatchOf(EntityType.THREAD, scores);
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Long> scoreBatchAuthored(@NonNull EntityType entityType,
-            @NonNull List<? extends FeedbackScoreItem> scores) {
-
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
-
-        return asyncTemplate.nonTransaction(connection -> {
-
-            ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
-            template.add("author", true);
-
-            var statement = connection.createStatement(template.render());
-
-            bindParameters(entityType, scores, statement, true);
-
-            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(Long::sum);
-        });
-    }
-
-    @Override
-    public Mono<Long> scoreBatchOfThreadsAuthored(@NonNull List<FeedbackScoreBatchItemThread> scores) {
-        return scoreBatchAuthored(EntityType.THREAD, scores);
+    public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores, @Nullable String author) {
+        return scoreBatchOf(EntityType.THREAD, scores, author);
     }
 
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
-            Statement statement, boolean isAuthored) {
+            Statement statement, String author) {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -406,7 +361,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
 
-            if (isAuthored) {
+            if (author != null) {
                 statement.bind("author" + i, getValueOrDefault(feedbackScoreBatchItem.author()));
             }
         }

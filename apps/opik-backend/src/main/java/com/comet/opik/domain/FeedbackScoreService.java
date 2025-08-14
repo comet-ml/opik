@@ -16,6 +16,7 @@ import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
@@ -78,6 +79,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FeedbackScoresConfig feedbackScoresConfig;
 
     @Builder(toBuilder = true)
@@ -88,7 +90,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
         return traceDAO.getProjectIdFromTrace(traceId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
-                .flatMap(projectId -> scoreEntity(EntityType.TRACE, traceId, score, projectId))
+                .flatMap(projectId -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId, getAuthor()))
                 .then();
     }
 
@@ -97,7 +99,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
         return spanDAO.getProjectIdFromSpan(spanId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
-                .flatMap(projectId -> scoreEntity(EntityType.SPAN, spanId, score, projectId))
+                .flatMap(projectId -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId, getAuthor()))
                 .then();
     }
 
@@ -139,7 +141,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(EntityType entityType,
             List<ProjectDto<T>> projects) {
         return Flux.fromIterable(projects)
-                .flatMap(projectDto -> scoreBatchOf(entityType, projectDto.scores()))
+                .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), getAuthor()))
                 .reduce(0L, Long::sum);
     }
 
@@ -266,28 +268,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId) {
-        if (feedbackScoresConfig.isWriteToAuthored()) {
-            return dao.scoreEntityAuthored(entityType, entityId, score, projectId);
-        } else {
-            return dao.scoreEntity(entityType, entityId, score, projectId);
+    private String getAuthor() {
+        if (!feedbackScoresConfig.isWriteToAuthored()) {
+            return null;
         }
-    }
 
-    private <T extends FeedbackScoreItem> Mono<Long> scoreBatchOf(EntityType entityType, List<T> scores) {
-        if (feedbackScoresConfig.isWriteToAuthored()) {
-            return dao.scoreBatchAuthored(entityType, scores);
-        } else {
-            return dao.scoreBatchOf(entityType, scores);
-        }
-    }
-
-    private Mono<Long> scoreBatchOfThreadsInternal(List<FeedbackScoreBatchItemThread> scores) {
-        if (feedbackScoresConfig.isWriteToAuthored()) {
-            return dao.scoreBatchOfThreadsAuthored(scores);
-        } else {
-            return dao.scoreBatchOfThreads(scores);
-        }
+        return requestContext.get().getUserName();
     }
 
     private Mono<UUID> getProject(String projectName) {
@@ -346,7 +332,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // score the batch of threads with resolved thread model IDs
                             .flatMap(this::validateThreadStatus)
-                            .flatMap(score -> scoreBatchOfThreadsInternal(score.scores()));
+                            .flatMap(score -> dao.scoreBatchOfThreads(score.scores(), getAuthor()));
                 })
                 .reduce(0L, Long::sum);
     }
