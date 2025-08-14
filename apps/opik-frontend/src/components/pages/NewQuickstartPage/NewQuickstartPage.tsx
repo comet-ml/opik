@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StringParam, useQueryParam } from "use-query-params";
+import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -28,7 +28,13 @@ const NewQuickstartPage: React.FunctionComponent = () => {
   );
   const [requestIntegrationDialogOpen, setRequestIntegrationDialogOpen] =
     useState(false);
-  const [helpGuideDialogOpen, setHelpGuideDialogOpen] = useState(false);
+  const [helpGuideDialogOpen, setHelpGuideDialogOpen] = useQueryParam(
+    "help",
+    BooleanParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [selectedIntegrationId, setSelectedIntegrationId] = useQueryParam(
@@ -68,13 +74,13 @@ const NewQuickstartPage: React.FunctionComponent = () => {
     ? integrations
     : integrations.filter((integration) => {
         const title = integration.title.toLowerCase();
-        const description = integration.description.toLowerCase();
+        const description = (integration.description || "").toLowerCase();
         const query = searchText.toLowerCase();
         return title.includes(query) || description.includes(query);
       });
 
   return (
-    <div className="size-full overflow-auto pb-10">
+    <div className="w-full pb-10">
       <div className="mx-auto max-w-[1040px]">
         <div className="mb-3 mt-10 flex items-center justify-between">
           <h1 className="comet-title-xl">Get started with Opik</h1>
@@ -97,12 +103,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
 
           <div className="flex items-center gap-3">
             <ApiKeyCopyButton />
-            <Button
-              className="hidden"
-              variant="outline"
-              size="sm"
-              onClick={handleGetHelp}
-            >
+            <Button variant="outline" size="sm" onClick={handleGetHelp}>
               <HelpCircle className="mr-1.5 size-3.5" />
               Get help
             </Button>
@@ -183,32 +184,28 @@ const NewQuickstartPage: React.FunctionComponent = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {filteredIntegrations.map((integration) => {
-                  if (integration.isHidden) {
-                    return null;
-                  }
-
-                  return (
-                    <IntegrationCard
-                      key={integration.id}
-                      title={integration.title}
-                      description={integration.description}
-                      icon={
-                        <img
-                          alt={integration.title}
-                          src={integration.icon}
-                          className="size-[40px] shrink-0"
-                        />
-                      }
-                      tag={integration.tag}
-                      onClick={() => handleIntegrationClick(integration.id)}
-                    />
-                  );
-                })}
+                {filteredIntegrations.map((integration) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    title={integration.title}
+                    description={integration.description}
+                    icon={
+                      <img
+                        alt={integration.title}
+                        src={integration.icon}
+                        className="size-[40px] shrink-0"
+                      />
+                    }
+                    tag={integration.tag}
+                    onClick={() => handleIntegrationClick(integration.id)}
+                  />
+                ))}
 
                 <IntegrationCard
                   title="Request integration"
-                  icon={<Plus className="size-6 text-muted-slate" />}
+                  iconClassName="min-w-0 min-h-10"
+                  className="justify-center"
+                  icon={<Plus className="size-4" />}
                   onClick={handleRequestIntegration}
                 />
               </div>
@@ -222,7 +219,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
         setOpen={setRequestIntegrationDialogOpen}
       />
       <HelpGuideDialog
-        open={helpGuideDialogOpen}
+        open={!!helpGuideDialogOpen}
         setOpen={setHelpGuideDialogOpen}
       />
       <QuickInstallDialog
