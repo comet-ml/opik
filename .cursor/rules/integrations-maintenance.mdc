@@ -1,0 +1,103 @@
+# Opik Integrations Maintenance Rule
+
+When adding, updating, or removing integrations in Opik, you must update **ALL** of the following locations to maintain consistency:
+
+## Required Update Locations
+
+### 1. Main README
+**File**: [README.md](mdc:README.md)
+**Section**: "📝 Logging Traces with Integrations"
+- Update the integrations table/list
+- Ensure all integration names are consistent
+- Update any integration-specific descriptions
+
+### 2. Integration Overview Documentation
+**File**: [apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx](mdc:apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx)
+**Section**: Main integrations table
+- Update the integrations table with consistent naming
+- Ensure all columns are populated (Integration, Description, Documentation, Try in Colab)
+- Add documentation links for new integrations
+- Add Colab badges for integrations with notebooks
+
+### 3. Cookbook Overview
+**File**: [apps/opik-documentation/documentation/fern/docs/cookbook/overview.mdx](mdc:apps/opik-documentation/documentation/fern/docs/cookbook/overview.mdx)
+**Sections**: 
+- "LLM Providers" card group
+- "Frameworks & Tools" card group
+- Only include integrations that have corresponding cookbook notebooks
+
+## Integration Information Requirements
+
+### For Each Integration, Ensure:
+- **Name**: Consistent across all locations
+- **Description**: Clear, concise explanation of what the integration does
+- **Documentation Link**: Points to the correct integration documentation
+- **Colab Badge**: Only for integrations with cookbook notebooks
+- **Category**: Properly categorized as either "LLM Provider" or "Framework & Tool"
+
+### Integration Categories:
+- **LLM Providers**: OpenAI, Anthropic, Bedrock, Gemini, Groq, Ollama, Vertex AI, watsonx, etc.
+- **Frameworks & Tools**: LangChain, LlamaIndex, Haystack, Instructor, CrewAI, DSPy, etc.
+
+## Update Checklist
+
+When modifying integrations, verify:
+
+- [ ] README.md integration list is updated
+- [ ] Integration overview table is updated
+- [ ] Cookbook overview cards are updated (if applicable)
+- [ ] Integration names are consistent across all locations
+- [ ] Documentation links are correct and functional
+- [ ] Colab badges are added for integrations with notebooks
+- [ ] Categories are properly assigned
+- [ ] Descriptions are clear and consistent
+
+## Example Integration Entry
+
+```markdown
+| Integration | Description | Documentation | Try in Colab |
+|-------------|-------------|---------------|--------------|
+| NewIntegration | Log traces for all NewIntegration LLM calls | [Documentation](/tracing/integrations/newintegration) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/newintegration.ipynb) |
+```
+
+## Cookbook Notebook Requirement
+
+- **Not Required**: Not all integrations need cookbook notebooks
+- **Optional**: Cookbook notebooks provide hands-on examples
+- **Consistent**: If a cookbook exists, ensure it's referenced in the cookbook overview
+- **Missing**: If no cookbook exists, omit the Colab badge from the integration overview
+
+## Common Mistakes to Avoid
+
+- ❌ Adding integration to README but forgetting integration overview
+- ❌ Updating integration overview but forgetting cookbook overview
+- ❌ Inconsistent naming between locations
+- ❌ Broken documentation links
+- ❌ Missing Colab badges for integrations with notebooks
+- ❌ Incorrect categorization of integrations
+
+## Integration Removal Process
+
+When removing an integration:
+1. Remove from README.md
+2. Remove from integration overview
+3. Remove from cookbook overview (if present)
+4. Remove corresponding documentation files
+5. Remove cookbook notebooks (if present)
+6. Update any cross-references
+
+## Integration Addition Process
+
+When adding a new integration:
+1. Add to README.md integration list
+2. Add to integration overview table
+3. Add to cookbook overview (if notebook exists)
+4. Create integration documentation
+5. Create cookbook notebook (optional)
+6. Update any cross-references
+
+Following this rule ensures that users always have consistent, up-to-date information about Opik integrations across all documentation locations.
+description:
+globs:
+alwaysApply: false
+---
