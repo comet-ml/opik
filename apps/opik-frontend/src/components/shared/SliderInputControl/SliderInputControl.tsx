@@ -37,9 +37,9 @@ const SliderInputControl = ({
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
 
-  const [localValue, setLocalValue] = useState((value ?? defaultValue).toString());
-
-  const numLocalValue = toNumber(localValue);
+  const [localValue, setLocalValue] = useState(
+    (value ?? defaultValue).toString(),
+  );
 
   useEffect(() => {
     setLocalValue((value ?? defaultValue).toString());
