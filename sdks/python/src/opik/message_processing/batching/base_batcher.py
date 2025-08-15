@@ -56,3 +56,31 @@ class BaseBatcher(abc.ABC):
             self._accumulated_messages.append(message)
             if len(self._accumulated_messages) >= self._max_batch_size:
                 self.flush()
+
+    def remove_matching_messages(
+        self, filter_func: Callable[[messages.BaseMessage], bool]
+    ) -> None:
+        """
+        Remove messages from _accumulated_messages that match the provided filter function.
+
+        Args:
+            filter_func: A function that takes a BaseMessage and returns True if the message should be removed
+        """
+        with self._lock:
+            self._accumulated_messages = list(
+                filter(lambda x: not filter_func(x), self._accumulated_messages)
+            )
+
+    def size(self) -> int:
+        """
+        Gets the total number of accumulated messages in the current instance.
+
+        The method calculates and retrieves the count of accumulated messages
+        maintained within an internal structure. Thread safety is guaranteed
+        through the usage of a lock mechanism.
+
+        Returns:
+            int: The total number of accumulated messages.
+        """
+        with self._lock:
+            return len(self._accumulated_messages)
