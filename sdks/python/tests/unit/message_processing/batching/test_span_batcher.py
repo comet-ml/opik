@@ -167,6 +167,7 @@ def test_create_span_message_batcher__add_duplicated_span__previous_span_is_remo
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
     )
+    assert batcher.is_empty()
 
     span_messages = fake_message_factory.fake_span_create_message_batch(
         count=2, approximate_span_size=fake_message_factory.ONE_KILOBYTE
@@ -185,4 +186,5 @@ def test_create_span_message_batcher__add_duplicated_span__previous_span_is_remo
     # check that the second message is in the batch
     batcher.flush()
     assert len(batches) == 1
+    assert len(batches[0].batch) == 1
     assert batches[0].batch[0].id == span_messages[1].span_id

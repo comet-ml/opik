@@ -69,6 +69,9 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
         return batches
 
     def add(self, message: messages.CreateTraceMessage) -> None:  # type: ignore
+        # remove any duplicate traces from the batch that was already added
+        self.remove_matching_messages(lambda x: x.trace_id == message.trace_id)
+
         return super().add(message)
 
 
