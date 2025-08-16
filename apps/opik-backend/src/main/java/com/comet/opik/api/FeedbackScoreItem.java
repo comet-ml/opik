@@ -50,6 +50,8 @@ public abstract sealed class FeedbackScoreItem {
 
     @NotNull private final ScoreSource source;
 
+    private final String author;
+
     public abstract UUID id();
 
     public abstract String threadId();
@@ -73,10 +75,11 @@ public abstract sealed class FeedbackScoreItem {
         // entity (trace or span) id
         @NotNull private UUID id;
 
-        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source"})
+        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source",
+                "author"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, String author, UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author);
             this.id = id;
         }
 
@@ -102,10 +105,10 @@ public abstract sealed class FeedbackScoreItem {
         private UUID id;
 
         @ConstructorProperties({"threadId", "projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source"})
+                "source", "author"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, String author, String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author);
             this.threadId = threadId;
         }
 
