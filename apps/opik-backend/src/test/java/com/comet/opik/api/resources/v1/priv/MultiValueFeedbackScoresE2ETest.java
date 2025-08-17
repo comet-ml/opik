@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -23,6 +25,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -33,6 +36,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -51,9 +55,11 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
@@ -110,26 +116,20 @@ public class MultiValueFeedbackScoresE2ETest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
 
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
-        mockTargetWorkspace(API_KEY1, TEST_WORKSPACE, WORKSPACE_ID, USER1);
-        mockTargetWorkspace(API_KEY2, TEST_WORKSPACE, WORKSPACE_ID, USER2);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY1, TEST_WORKSPACE, WORKSPACE_ID, USER1);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY2, TEST_WORKSPACE, WORKSPACE_ID, USER2);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
-    }
-
-    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String username) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, username);
-    }
-
-    private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
-        return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+        this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -434,6 +434,86 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(TraceThread::id))
                 .containsExactlyInAnyOrder(threadId1, threadId2);
+    }
+
+    @Test
+    @DisplayName("test score experiment by multiple authors")
+    void testScoreExperimentByMultipleAuthors() {
+        // create an experiment with a specific name for retrieval
+        var experimentName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .name(experimentName)
+                .build();
+
+        UUID experimentId = experimentResourceClient.create(experiment, API_KEY1, TEST_WORKSPACE);
+
+        // create traces to relate to experiment items
+        var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+
+        var trace1Id = traceResourceClient.createTrace(trace1, API_KEY1, TEST_WORKSPACE);
+
+        // define the feedback scores for the same trace from different users
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder().name(user1Score.name()).build();
+
+        // create scores as different users
+        var user1ScoreItem = FeedbackScoreBatchItem.builder()
+                .id(trace1Id)
+                .projectName(DEFAULT_PROJECT)
+                .name(user1Score.name())
+                .categoryName(user1Score.categoryName())
+                .value(user1Score.value())
+                .reason(user1Score.reason())
+                .source(user1Score.source())
+                .build();
+
+        var user2ScoreItem = FeedbackScoreBatchItem.builder()
+                .id(trace1Id)
+                .projectName(DEFAULT_PROJECT)
+                .name(user2Score.name())
+                .categoryName(user2Score.categoryName())
+                .value(user2Score.value())
+                .reason(user2Score.reason())
+                .source(user2Score.source())
+                .build();
+
+        // submit scores from different users
+        traceResourceClient.feedbackScores(List.of(user1ScoreItem), API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(user2ScoreItem), API_KEY2, TEST_WORKSPACE);
+
+        // create experiment items linking traces to experiment
+        var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace1Id)
+                .feedbackScores(null)
+                .build();
+
+        experimentResourceClient.createExperimentItem(Set.of(experimentItem1), API_KEY1, TEST_WORKSPACE);
+
+        // get the experiment and verify feedback scores using stream to find the experiment
+        var experimentStreamRequest = ExperimentStreamRequest.builder()
+                .name(experimentName)
+                .build();
+        var experiments = experimentResourceClient.streamExperiments(experimentStreamRequest, API_KEY2, TEST_WORKSPACE);
+        var actualExperiment = experiments.getFirst();
+
+        assertThat(actualExperiment.feedbackScores()).hasSize(1);
+
+        // find the actual score and verify it's averaged
+        var actualScore = actualExperiment.feedbackScores().stream()
+                .filter(score -> score.name().equals(user1Score.name()))
+                .findFirst()
+                .orElseThrow();
+
+        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
+        AssertionsForClassTypes.assertThat(actualScore.value())
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(avgScore);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
