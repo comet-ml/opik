@@ -362,7 +362,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
 
             if (author != null) {
-                statement.bind("author" + i, getValueOrDefault(feedbackScoreBatchItem.author()));
+                statement.bind("author" + i, getValueOrDefault(author));
             }
         }
     }
