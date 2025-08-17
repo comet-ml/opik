@@ -2,9 +2,12 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -17,7 +20,9 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -94,6 +99,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -104,6 +110,7 @@ public class MultiValueFeedbackScoresE2ETest {
         mockTargetWorkspace(API_KEY2, TEST_WORKSPACE, WORKSPACE_ID, USER2);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String username) {
@@ -130,6 +137,7 @@ public class MultiValueFeedbackScoresE2ETest {
         var trace2Id = traceResourceClient.createTrace(traces.get(1), API_KEY1, TEST_WORKSPACE);
         traceResourceClient.batchCreateTraces(traces.subList(2, traces.size()), API_KEY1, TEST_WORKSPACE);
 
+        // score first trace
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
         traceResourceClient.feedbackScore(trace1Id, user1Score, TEST_WORKSPACE, API_KEY1);
 
@@ -187,6 +195,95 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(Trace::id))
                 .containsExactlyInAnyOrder(trace1Id, trace2Id);
+    }
+
+    @Test
+    @DisplayName("test score span by multiple authors")
+    void testScoreSpanByMultipleAuthors() {
+        // create a trace first
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        // create spans
+        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                .map(span -> span.toBuilder()
+                        .id(null)
+                        .traceId(traceId)
+                        .projectName(DEFAULT_PROJECT)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .totalEstimatedCost(null)
+                        .build())
+                .toList();
+        var span1Id = spanResourceClient.createSpan(spans.getFirst(), API_KEY1, TEST_WORKSPACE);
+        var span2Id = spanResourceClient.createSpan(spans.get(1), API_KEY1, TEST_WORKSPACE);
+        spanResourceClient.batchCreateSpans(spans.subList(2, spans.size()), API_KEY1, TEST_WORKSPACE);
+
+        // score the first span
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        spanResourceClient.feedbackScore(span1Id, user1Score, TEST_WORKSPACE, API_KEY1);
+
+        // simulate another user scoring the same span by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        spanResourceClient.feedbackScore(span1Id, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        // score another span
+        var anotherSpanScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        spanResourceClient.feedbackScore(span2Id, anotherSpanScore, TEST_WORKSPACE, API_KEY1);
+
+        var actual = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
+                null, null, 5, traceId, null, null, null, null);
+
+        assertThat(actual.content()).hasSize(spans.size());
+        var actualSpan1 = actual.content().stream().filter(span -> span.id().equals(span1Id)).findFirst()
+                .orElseThrow(() -> new AssertionError("Span with id " + span1Id + " not found"));
+        assertThat(actualSpan1.feedbackScores()).hasSize(1);
+        var actualScore = actualSpan1.feedbackScores().getFirst();
+
+        // assert span values
+        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
+        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
+        assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
+
+        // assert span stats
+        ProjectStats actualStats = spanResourceClient.getSpansStats(DEFAULT_PROJECT, null, null, API_KEY2,
+                TEST_WORKSPACE, Map.of());
+        SpanAssertions.assertionStatusPage(actualStats.stats(), StatsUtils.getProjectSpanStatItems(actual.content()));
+
+        // assert value filtering
+        var actualFilteredEqual = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
+                null, null, 5, traceId, null,
+                List.of(SpanFilter.builder()
+                        .field(SpanField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value(actualScore.value().toString())
+                        .operator(Operator.EQUAL)
+                        .build()),
+                null, null);
+        assertThat(actualFilteredEqual.content()).hasSize(1);
+        assertThat(actualFilteredEqual.content().getFirst().id()).isEqualTo(span1Id);
+
+        // assert empty filtering
+        var actualFilteredNotEmpty = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
+                null, null, 5, traceId, null,
+                List.of(SpanFilter.builder()
+                        .field(SpanField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value("")
+                        .operator(Operator.IS_NOT_EMPTY)
+                        .build()),
+                null, null);
+        assertThat(actualFilteredNotEmpty.content()).hasSize(2);
+        assertThat(actualFilteredNotEmpty.content().stream().map(Span::id))
+                .containsExactlyInAnyOrder(span1Id, span2Id);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
