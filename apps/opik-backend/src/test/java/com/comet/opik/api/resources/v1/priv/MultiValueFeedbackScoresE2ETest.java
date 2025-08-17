@@ -1,5 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
@@ -26,6 +29,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -117,6 +121,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
+    private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -130,6 +135,7 @@ public class MultiValueFeedbackScoresE2ETest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -436,10 +442,17 @@ public class MultiValueFeedbackScoresE2ETest {
     @Test
     @DisplayName("test score experiment by multiple authors")
     void testScoreExperimentByMultipleAuthors() {
+        // first create a dataset
+        var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .build();
+        var datasetId = datasetResourceClient.createDataset(dataset, API_KEY1, TEST_WORKSPACE);
+
         // create an experiment with a specific name for retrieval
         var experimentName = RandomStringUtils.secure().nextAlphanumeric(10);
         var experiment = experimentResourceClient.createPartialExperiment()
                 .name(experimentName)
+                .datasetId(datasetId)
                 .build();
 
         UUID experimentId = experimentResourceClient.create(experiment, API_KEY1, TEST_WORKSPACE);
@@ -453,6 +466,15 @@ public class MultiValueFeedbackScoresE2ETest {
                 .build();
 
         var trace1Id = traceResourceClient.createTrace(trace1, API_KEY1, TEST_WORKSPACE);
+
+        // create dataset items that link to our trace
+        var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .datasetId(datasetId)
+                .traceId(trace1Id)
+                .build();
+
+        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, List.of(datasetItem)),
+                TEST_WORKSPACE, API_KEY1);
 
         // define the feedback scores for the same trace from different users
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
@@ -487,6 +509,7 @@ public class MultiValueFeedbackScoresE2ETest {
         var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                 .experimentId(experimentId)
                 .traceId(trace1Id)
+                .datasetItemId(datasetItem.id())
                 .feedbackScores(null)
                 .build();
 
@@ -495,6 +518,7 @@ public class MultiValueFeedbackScoresE2ETest {
         assertFindExperiments(experimentName, user1Score, user2Score);
         assertStreamExperiments(experimentName, user1Score, user2Score);
         assertExperimentItemsStream(experimentName, user1Score, user2Score);
+        assertDatasetItemsWithExperimentItems(experimentId, datasetId, user1Score, user2Score);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
@@ -571,5 +595,34 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // the value should be the average
         assertAverageScore(itemScore.value(), user1Score, user2Score);
+    }
+
+    private void assertDatasetItemsWithExperimentItems(
+            UUID experimentId, UUID datasetId, FeedbackScore user1Score, FeedbackScore user2Score) {
+        // now call the dataset items with experiment items API
+        var datasetItemPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId, List.of(experimentId),
+                API_KEY2, TEST_WORKSPACE);
+
+        assertThat(datasetItemPage.content()).hasSize(1);
+
+        // verify that the dataset item shows the experiment items with correct feedback scores
+        var retrievedDatasetItem = datasetItemPage.content().getFirst();
+        assertThat(retrievedDatasetItem.experimentItems()).hasSize(1);
+
+        var experimentItemFromDataset = retrievedDatasetItem.experimentItems().getFirst();
+        assertThat(experimentItemFromDataset.feedbackScores()).hasSize(1);
+
+        var scoreFromDatasetApi = experimentItemFromDataset.feedbackScores().stream()
+                .filter(score -> score.name().equals(user1Score.name()))
+                .findFirst()
+                .orElseThrow();
+
+        // verify this also preserves the multi-author feedback score data
+        assertThat(scoreFromDatasetApi.valueByAuthor()).hasSize(2);
+        assertAuthorValue(scoreFromDatasetApi.valueByAuthor(), USER1, user1Score);
+        assertAuthorValue(scoreFromDatasetApi.valueByAuthor(), USER2, user2Score);
+
+        // verify the average is correct
+        assertAverageScore(scoreFromDatasetApi.value(), user1Score, user2Score);
     }
 }
