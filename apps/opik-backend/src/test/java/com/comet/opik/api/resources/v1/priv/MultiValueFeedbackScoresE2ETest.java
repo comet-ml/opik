@@ -499,21 +499,44 @@ public class MultiValueFeedbackScoresE2ETest {
         var experimentStreamRequest = ExperimentStreamRequest.builder()
                 .name(experimentName)
                 .build();
-        var experiments = experimentResourceClient.streamExperiments(experimentStreamRequest, API_KEY2, TEST_WORKSPACE);
-        var actualExperiment = experiments.getFirst();
+        var streamedExperiments = experimentResourceClient.streamExperiments(experimentStreamRequest, API_KEY2,
+                TEST_WORKSPACE);
+        var streamedExperiment = streamedExperiments.getFirst();
 
-        assertThat(actualExperiment.feedbackScores()).hasSize(1);
+        assertThat(streamedExperiment.feedbackScores()).hasSize(1);
 
         // find the actual score and verify it's averaged
-        var actualScore = actualExperiment.feedbackScores().stream()
+        var streamedActualScore = streamedExperiment.feedbackScores().stream()
                 .filter(score -> score.name().equals(user1Score.name()))
                 .findFirst()
                 .orElseThrow();
 
         var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        AssertionsForClassTypes.assertThat(actualScore.value())
+        AssertionsForClassTypes.assertThat(streamedActualScore.value())
                 .usingComparator(StatsUtils::bigDecimalComparator)
                 .isEqualTo(avgScore);
+
+        // test the find experiments functionality
+        var foundExperiments = experimentResourceClient.findExperiments(1, 10, experimentName, API_KEY2,
+                TEST_WORKSPACE);
+        assertThat(foundExperiments.content()).hasSize(1);
+
+        var foundExperiment = foundExperiments.content().getFirst();
+        assertThat(foundExperiment.feedbackScores()).hasSize(1);
+
+        // verify the feedback score through find experiments is the same as through streaming
+        var foundActualScore = foundExperiment.feedbackScores().stream()
+                .filter(score -> score.name().equals(user1Score.name()))
+                .findFirst()
+                .orElseThrow();
+
+        AssertionsForClassTypes.assertThat(foundActualScore.value())
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(avgScore);
+
+        // verify both pathways return the same experiment data
+        assertThat(foundExperiment.id()).isEqualTo(streamedExperiment.id());
+        assertThat(foundExperiment.name()).isEqualTo(streamedExperiment.name());
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
