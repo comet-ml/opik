@@ -4,12 +4,15 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -20,6 +23,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
@@ -28,6 +32,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +43,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -45,7 +51,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static java.util.UUID.randomUUID;
@@ -100,6 +109,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -111,10 +121,15 @@ public class MultiValueFeedbackScoresE2ETest {
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String username) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, username);
+    }
+
+    private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
+        return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
     }
 
     @AfterAll
@@ -284,6 +299,141 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(Span::id))
                 .containsExactlyInAnyOrder(span1Id, span2Id);
+    }
+
+    @Test
+    @DisplayName("test score thread by multiple authors")
+    void testScoreThreadByMultipleAuthors() {
+        // create thread identifiers
+        var threadId1 = randomUUID().toString();
+        var threadId2 = randomUUID().toString();
+
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
+
+        // open threads first
+        traceResourceClient.openTraceThread(threadId1, null, projectName, API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.openTraceThread(threadId2, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // create traces within threads
+        var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId1)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+        var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId1)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+        var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId2)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+
+        traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY1, TEST_WORKSPACE);
+
+        // close threads to ensure they are written to the trace_threads table
+        traceResourceClient.closeTraceThread(threadId1, null, projectName, API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.closeTraceThread(threadId2, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // wait for threads to be created and get their IDs
+        Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            TraceThread thread1 = traceResourceClient.getTraceThread(threadId1, projectId, API_KEY1, TEST_WORKSPACE);
+            assertThat(thread1.threadModelId()).isNotNull();
+        });
+
+        // threads are now created and available for scoring
+
+        // score the first thread by user 1
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        var user1ScoreItem = FeedbackScoreBatchItemThread.builder()
+                .threadId(threadId1)
+                .projectName(projectName)
+                .name(user1Score.name())
+                .categoryName(user1Score.categoryName())
+                .value(user1Score.value())
+                .reason(user1Score.reason())
+                .source(user1Score.source())
+                .build();
+        traceResourceClient.threadFeedbackScores(List.of(user1ScoreItem), API_KEY1, TEST_WORKSPACE);
+
+        // simulate another user scoring the same thread by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        var user2ScoreItem = FeedbackScoreBatchItemThread.builder()
+                .threadId(threadId1)
+                .projectName(projectName)
+                .name(user2Score.name())
+                .categoryName(user2Score.categoryName())
+                .value(user2Score.value())
+                .reason(user2Score.reason())
+                .source(user2Score.source())
+                .build();
+        traceResourceClient.threadFeedbackScores(List.of(user2ScoreItem), API_KEY2, TEST_WORKSPACE);
+
+        // score another thread
+        var anotherThreadScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        var anotherThreadScoreItem = FeedbackScoreBatchItemThread.builder()
+                .threadId(threadId2)
+                .projectName(projectName)
+                .name(anotherThreadScore.name())
+                .categoryName(anotherThreadScore.categoryName())
+                .value(anotherThreadScore.value())
+                .reason(anotherThreadScore.reason())
+                .source(anotherThreadScore.source())
+                .build();
+        traceResourceClient.threadFeedbackScores(List.of(anotherThreadScoreItem), API_KEY1, TEST_WORKSPACE);
+
+        TraceThread.TraceThreadPage actual = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY2,
+                TEST_WORKSPACE, null, null, Map.of());
+
+        assertThat(actual.content()).hasSize(2);
+        var actualThread1 = actual.content().stream().filter(thread -> thread.id().equals(threadId1)).findFirst()
+                .orElseThrow(() -> new AssertionError("Thread with id " + threadId1 + " not found"));
+        assertThat(actualThread1.feedbackScores()).hasSize(1);
+        var actualScore = actualThread1.feedbackScores().getFirst();
+
+        // assert thread values
+        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
+        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
+        assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
+
+        // assert value filtering
+        TraceThread.TraceThreadPage actualFilteredEqual = traceResourceClient.getTraceThreads(projectId,
+                projectName, API_KEY2, TEST_WORKSPACE,
+                List.of(TraceThreadFilter.builder()
+                        .field(TraceThreadField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value(actualScore.value().toString())
+                        .operator(Operator.EQUAL)
+                        .build()),
+                null, Map.of());
+        assertThat(actualFilteredEqual.content()).hasSize(1);
+        assertThat(actualFilteredEqual.content().getFirst().id()).isEqualTo(threadId1);
+
+        // assert empty filtering
+        TraceThread.TraceThreadPage actualFilteredNotEmpty = traceResourceClient.getTraceThreads(projectId,
+                projectName, API_KEY2, TEST_WORKSPACE,
+                List.of(TraceThreadFilter.builder()
+                        .field(TraceThreadField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value("")
+                        .operator(Operator.IS_NOT_EMPTY)
+                        .build()),
+                null, Map.of());
+        assertThat(actualFilteredNotEmpty.content()).hasSize(2);
+        assertThat(actualFilteredNotEmpty.content().stream().map(TraceThread::id))
+                .containsExactlyInAnyOrder(threadId1, threadId2);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
