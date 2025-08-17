@@ -15,8 +15,8 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
@@ -30,6 +30,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -79,7 +81,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
-    private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FeedbackScoresConfig feedbackScoresConfig;
 
     @Builder(toBuilder = true)
@@ -91,7 +92,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return traceDAO.getProjectIdFromTrace(traceId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
                 .flatMap(projectId -> getAuthor()
-                        .flatMap(author -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId, author)))
+                        .flatMap(author -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId,
+                                author.orElse(null))))
                 .then();
     }
 
@@ -101,7 +103,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return spanDAO.getProjectIdFromSpan(spanId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
                 .flatMap(projectId -> getAuthor()
-                        .flatMap(author -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId, author)))
+                        .flatMap(author -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId,
+                                author.orElse(null))))
                 .then();
     }
 
@@ -140,12 +143,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(EntityType entityType,
-            List<ProjectDto<T>> projects) {
-        return Flux.fromIterable(projects)
-                .flatMap(projectDto -> getAuthor()
-                        .flatMap(author -> dao.scoreBatchOf(entityType, projectDto.scores(), author)))
-                .reduce(0L, Long::sum);
+    private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(
+            EntityType entityType, List<ProjectDto<T>> projects) {
+        return getAuthor()
+                .flatMap(author -> Flux.fromIterable(projects)
+                        .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), author.orElse(null)))
+                        .reduce(0L, Long::sum));
     }
 
     private <T extends FeedbackScoreItem> List<ProjectDto<T>> mergeProjectsAndScores(
@@ -271,18 +274,18 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private Mono<String> getAuthor() {
+    private Mono<Optional<String>> getAuthor() {
         if (!feedbackScoresConfig.isWriteToAuthored()) {
-            return Mono.just((String) null);
+            return Mono.just(Optional.empty());
         }
 
         return Mono.deferContextual(context -> {
             try {
                 String userName = context.get(RequestContext.USER_NAME);
-                return Mono.just(userName);
-            } catch (Exception e) {
-                // Fallback for tests or cases where context is not set
-                return Mono.just((String) null);
+                return Mono.just(Optional.of(userName));
+            } catch (NoSuchElementException e) {
+                log.info("Could not retrieve author from context", e);
+                return Mono.just(Optional.empty());
             }
         });
     }
@@ -327,6 +330,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     private Mono<Long> saveThreadScoreBatch(List<ProjectDto<FeedbackScoreBatchItemThread>> projects) {
+        return getAuthor()
+                .flatMap(author -> saveThreadScoreBatch(projects, author.orElse(null)));
+    }
+
+    private Mono<Long> saveThreadScoreBatch(List<ProjectDto<FeedbackScoreBatchItemThread>> projects,
+            @Nullable String author) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> {
                     // Collect unique thread IDs from the scores
@@ -343,8 +352,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // score the batch of threads with resolved thread model IDs
                             .flatMap(this::validateThreadStatus)
-                            .flatMap(validatedProjectDto -> getAuthor()
-                                    .flatMap(author -> dao.scoreBatchOfThreads(validatedProjectDto.scores(), author)));
+                            .flatMap(
+                                    validatedProjectDto -> dao.scoreBatchOfThreads(validatedProjectDto.scores(),
+                                            author));
                 })
                 .reduce(0L, Long::sum);
     }
