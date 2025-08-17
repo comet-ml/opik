@@ -176,8 +176,7 @@ public class MultiValueFeedbackScoresE2ETest {
         var actualScore = actualTrace1.feedbackScores().getFirst();
 
         // assert trace values
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertAverageScore(actualScore.value(), user1Score, user2Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
 
@@ -263,8 +262,7 @@ public class MultiValueFeedbackScoresE2ETest {
         var actualScore = actualSpan1.feedbackScores().getFirst();
 
         // assert span values
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertAverageScore(actualScore.value(), user1Score, user2Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
 
@@ -403,8 +401,7 @@ public class MultiValueFeedbackScoresE2ETest {
         var actualScore = actualThread1.feedbackScores().getFirst();
 
         // assert thread values
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertAverageScore(actualScore.value(), user1Score, user2Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
 
@@ -507,6 +504,11 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(valueByAuthor.get(author).source()).isEqualTo(expected.source());
     }
 
+    private void assertAverageScore(BigDecimal actualValue, FeedbackScore user1Score, FeedbackScore user2Score) {
+        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
+        assertThat(actualValue).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+    }
+
     private void assertFindExperiments(String experimentName, FeedbackScore user1Score, FeedbackScore user2Score) {
         var foundExperiments = experimentResourceClient.findExperiments(1, 10, experimentName, API_KEY2,
                 TEST_WORKSPACE);
@@ -521,10 +523,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .findFirst()
                 .orElseThrow();
 
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(foundActualScore.value())
-                .usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(avgScore);
+        assertAverageScore(foundActualScore.value(), user1Score, user2Score);
     }
 
     private void assertStreamExperiments(String experimentName, FeedbackScore user1Score, FeedbackScore user2Score) {
@@ -543,10 +542,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .findFirst()
                 .orElseThrow();
 
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(streamedActualScore.value())
-                .usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(avgScore);
+        assertAverageScore(streamedActualScore.value(), user1Score, user2Score);
     }
 
     private void assertExperimentItemsStream(
@@ -574,9 +570,6 @@ public class MultiValueFeedbackScoresE2ETest {
         assertAuthorValue(itemScore.valueByAuthor(), USER2, user2Score);
 
         // the value should be the average
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(itemScore.value())
-                .usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(avgScore);
+        assertAverageScore(itemScore.value(), user1Score, user2Score);
     }
 }
