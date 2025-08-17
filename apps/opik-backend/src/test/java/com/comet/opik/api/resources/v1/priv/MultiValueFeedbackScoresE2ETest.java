@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
@@ -537,6 +538,34 @@ public class MultiValueFeedbackScoresE2ETest {
         // verify both pathways return the same experiment data
         assertThat(foundExperiment.id()).isEqualTo(streamedExperiment.id());
         assertThat(foundExperiment.name()).isEqualTo(streamedExperiment.name());
+
+        // test the stream experiment items functionality
+        var experimentItemStreamRequest = ExperimentItemStreamRequest.builder()
+                .experimentName(experimentName)
+                .build();
+        var streamedItems = experimentResourceClient.streamExperimentItems(experimentItemStreamRequest, API_KEY2,
+                TEST_WORKSPACE);
+
+        assertThat(streamedItems).hasSize(1);
+
+        // verify that the experiment item has the correct feedback scores with multi-author data
+        var item = streamedItems.getFirst();
+        assertThat(item.feedbackScores()).hasSize(1);
+
+        var itemScore = item.feedbackScores().stream()
+                .filter(score -> score.name().equals(user1Score.name()))
+                .findFirst()
+                .orElseThrow();
+
+        // experiment items preserve the full feedback score data including valueByAuthor
+        assertThat(itemScore.valueByAuthor()).hasSize(2);
+        assertAuthorValue(itemScore.valueByAuthor(), USER1, user1Score);
+        assertAuthorValue(itemScore.valueByAuthor(), USER2, user2Score);
+
+        // the value should be the average
+        AssertionsForClassTypes.assertThat(itemScore.value())
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(avgScore);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {

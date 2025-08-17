@@ -156,6 +156,21 @@ public class ExperimentResourceClient {
         }
     }
 
+    public List<ExperimentItem> streamExperimentItems(ExperimentItemStreamRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .accept(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return getStreamed(response, ITEM_TYPE_REFERENCE);
+        }
+    }
+
     public void bulkUploadExperimentItem(ExperimentItemBulkUpload bulkUpload, String apiKey, String workspaceName) {
         try (var response = callExperimentItemBulkUpload(bulkUpload, apiKey, workspaceName)) {
             assertThat(response.hasEntity()).isFalse();
