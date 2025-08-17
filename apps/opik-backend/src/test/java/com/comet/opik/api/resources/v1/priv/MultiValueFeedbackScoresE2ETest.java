@@ -4,6 +4,9 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.ValueEntry;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -115,32 +118,43 @@ public class MultiValueFeedbackScoresE2ETest {
     @Test
     @DisplayName("test score trace by multiple authors")
     void testScoreTraceByMultipleAuthors() {
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .id(null)
-                .projectName(DEFAULT_PROJECT)
-                .usage(null)
-                .feedbackScores(null)
-                .build();
-        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> trace.toBuilder()
+                        .id(null)
+                        .projectName(DEFAULT_PROJECT)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+        var trace1Id = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
+        var trace2Id = traceResourceClient.createTrace(traces.get(1), API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.batchCreateTraces(traces.subList(2, traces.size()), API_KEY1, TEST_WORKSPACE);
 
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
-        traceResourceClient.feedbackScore(traceId, user1Score, TEST_WORKSPACE, API_KEY1);
+        traceResourceClient.feedbackScore(trace1Id, user1Score, TEST_WORKSPACE, API_KEY1);
 
         // simulate another user scoring the same trace by using the same name
         var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
                 .name(user1Score.name()).build();
-        traceResourceClient.feedbackScore(traceId, user2Score, TEST_WORKSPACE, API_KEY2);
+        traceResourceClient.feedbackScore(trace1Id, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        // score another trace
+        var anotherTraceScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        traceResourceClient.feedbackScore(trace2Id, anotherTraceScore, TEST_WORKSPACE, API_KEY1);
 
         var actual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY2, TEST_WORKSPACE, null,
                 null, 5, Map.of());
 
-        assertThat(actual.content()).hasSize(1);
-        assertThat(actual.content().getFirst().feedbackScores()).hasSize(1);
-        var actualScore = actual.content().getFirst().feedbackScores().getFirst();
+        assertThat(actual.content()).hasSize(traces.size());
+        var actualTrace1 = actual.content().stream().filter(trace -> trace.id().equals(trace1Id)).findFirst()
+                .orElseThrow(() -> new AssertionError("Trace with id " + trace1Id + " not found"));
+        assertThat(actualTrace1.feedbackScores()).hasSize(1);
+        var actualScore = actualTrace1.feedbackScores().getFirst();
 
         // assert trace values
-        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value()))));
+        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
+        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
         assertAuthorValue(actualScore.valueByAuthor(), USER1, user1Score);
         assertAuthorValue(actualScore.valueByAuthor(), USER2, user2Score);
 
@@ -148,6 +162,31 @@ public class MultiValueFeedbackScoresE2ETest {
         ProjectStats actualStats = traceResourceClient.getTraceStats(DEFAULT_PROJECT, null, API_KEY2,
                 TEST_WORKSPACE, null, Map.of());
         TraceAssertions.assertStats(actualStats.stats(), StatsUtils.getProjectTraceStatItems(actual.content()));
+
+        // assert value filtering
+        var actualFilteredEqual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY2, TEST_WORKSPACE,
+                List.of(TraceFilter.builder()
+                        .field(TraceField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value(actualScore.value().toString())
+                        .operator(Operator.EQUAL)
+                        .build()),
+                null, 5, Map.of());
+        assertThat(actualFilteredEqual.content()).hasSize(1);
+        assertThat(actualFilteredEqual.content().getFirst().id()).isEqualTo(trace1Id);
+
+        // assert empty filtering
+        var actualFilteredNotEmpty = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY2, TEST_WORKSPACE,
+                List.of(TraceFilter.builder()
+                        .field(TraceField.FEEDBACK_SCORES)
+                        .key(user1Score.name())
+                        .value("")
+                        .operator(Operator.IS_NOT_EMPTY)
+                        .build()),
+                null, 5, Map.of());
+        assertThat(actualFilteredNotEmpty.content()).hasSize(2);
+        assertThat(actualFilteredNotEmpty.content().stream().map(Trace::id))
+                .containsExactlyInAnyOrder(trace1Id, trace2Id);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
