@@ -1296,7 +1296,8 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
                     null;
-                case FEEDBACK_SCORES_NUMBER, DICTIONARY, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case DICTIONARY -> "";
             };
         }
 
@@ -5351,6 +5352,57 @@ class SpansResourceTest {
                     API_KEY,
                     List.of(),
                     List.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent(
+                Function<Span, Span> spanModifier) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var id = generator.generate();
+            String projectName = UUID.randomUUID().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            var modifiedSpans = IntStream.range(0, spans.size())
+                    .mapToObj(i -> i == spans.size() - 1
+                            ? spanModifier.apply(spans.get(i)) // modify last item
+                            : spans.get(i))
+                    .toList();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(modifiedSpans, API_KEY, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            getAndAssertPage(
+                    workspaceName,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    List.of(modifiedSpans.getLast()),
+                    List.of(),
+                    API_KEY,
+                    List.of(),
+                    List.of());
+        }
+
+        Stream<Arguments> batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(
+                            (Function<Span, Span>) s -> s),
+                    arguments(
+                            (Function<Span, Span>) span -> span.toBuilder()
+                                    .lastUpdatedAt(null).build()));
         }
 
         @Test

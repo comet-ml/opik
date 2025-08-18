@@ -68,7 +68,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1
 
 # Configuration for ClickHouse async insert functionality
 asyncInsert:
@@ -296,6 +296,9 @@ serviceToggles:
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: false for testing. Should be enabled for specific test scenarios when needed.
+  # Description: Whether the trace thread closing job is enabled
+  enabled: false
   # Default: 1s
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: 1s

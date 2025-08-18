@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 public class FiltersFactory {
 
     private static final String JSON_PREFIX = "$.";
+    // Captures index for json key in form of "input[0]", group(1) is the key without index might be empty string, group(2) is the index if available
     private static final Pattern INDEX_PATTERN = Pattern.compile("^(.*?)(\\[\\d+])?$");
 
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
@@ -83,8 +84,8 @@ public class FiltersFactory {
 
                         return false;
                     })
-                    .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
-                            filter.key() != null)
+                    .put(FieldType.DICTIONARY, filter -> filter.value() != null &&
+                            StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
                     .build());
 
@@ -182,6 +183,7 @@ public class FiltersFactory {
         int keyFieldSeparatorIndex = customKey.indexOf('.');
 
         if (keyFieldSeparatorIndex < 0) {
+            // No check for matches() result as group(1) will always be present and group(2) will be null if no index is present
             Matcher matcher = INDEX_PATTERN.matcher(customKey);
             matcher.matches();
 
@@ -190,6 +192,7 @@ public class FiltersFactory {
             String field = customKey.substring(0, keyFieldSeparatorIndex);
             String key = customKey.substring(keyFieldSeparatorIndex + 1);
 
+            // No check for matches() result as group(1) will always be present and group(2) will be null if no index is present
             Matcher matcher = INDEX_PATTERN.matcher(field);
             matcher.matches();
 

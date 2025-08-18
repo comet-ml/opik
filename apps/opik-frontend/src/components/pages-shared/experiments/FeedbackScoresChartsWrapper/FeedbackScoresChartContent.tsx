@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Dot, LineChart } from "recharts";
+
+import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -14,7 +16,6 @@ import { CartesianGrid, YAxis, Line } from "recharts";
 import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
-import { Dataset } from "@/types/datasets";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -27,10 +28,10 @@ export type DataRecord = {
 };
 
 export type ChartData = {
-  dataset: Dataset;
+  id: string;
+  name: string | DropdownOption<string>[];
   data: DataRecord[];
   lines: string[];
-  index: number;
 };
 
 type FeedbackScoresChartContentProps = {

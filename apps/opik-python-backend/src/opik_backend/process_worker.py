@@ -26,7 +26,6 @@ def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
         if issubclass(cls, BaseMetric):
             return cls
 
-
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
     if isinstance(score_result, ScoreResult):

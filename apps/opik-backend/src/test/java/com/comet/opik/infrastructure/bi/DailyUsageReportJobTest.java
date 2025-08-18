@@ -274,9 +274,7 @@ class DailyUsageReportJobTest {
             CLICKHOUSE.stop();
             ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
-            ZOOKEEPER_CONTAINER.stop();
         }
-
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
         }

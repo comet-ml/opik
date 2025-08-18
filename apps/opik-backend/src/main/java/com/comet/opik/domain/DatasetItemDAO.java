@@ -5,9 +5,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -80,7 +78,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 workspace_id,
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             VALUES
                 <items:{item |
                     (
@@ -238,14 +236,44 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * Counts dataset items only if there's a matching experiment item.
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            WITH feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at
+                 FROM authored_feedback_scores FINAL
+                 WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+             ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            )
             <if(feedback_scores_empty_filters)>
-            WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+            , fsc AS (
+                SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                 FROM (
                     SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    FROM feedback_scores_final
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                  )
                  GROUP BY entity_id
@@ -289,10 +317,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             entity_id
                         FROM (
                             SELECT *
-                            FROM feedback_scores
-                            WHERE entity_type = 'trace'
-                            AND workspace_id = :workspace_id
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            FROM feedback_scores_final
+                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
                         )
                         GROUP BY entity_id
@@ -369,24 +395,83 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 AND experiment_id IN :experimentIds
                 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
             	LIMIT 1 BY id
-            ), feedback_scores_final AS (
-            	SELECT
-                	entity_id,
+            ), feedback_scores_combined AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
                     name,
                     category_name,
                     value,
                     reason,
                     source,
+                    created_by,
+                    last_updated_by,
                     created_at,
                     last_updated_at,
+                    feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = :entityType
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
                     created_by,
-                    last_updated_by
-                FROM feedback_scores
-                WHERE workspace_id = :workspace_id
-                AND entity_type = :entityType
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = :entityType
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM feedback_scores_combined_grouped
             ), comments_final AS (
                 SELECT
                     id AS comment_id,
@@ -484,7 +569,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage,
-                    groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
+                    groupUniqArray(tuple(
+                        fs.entity_id,
+                        fs.name,
+                        fs.category_name,
+                        fs.value,
+                        fs.reason,
+                        fs.source,
+                        fs.created_at,
+                        fs.last_updated_at,
+                        fs.created_by,
+                        fs.last_updated_by,
+                        fs.value_by_author
+                    )) AS feedback_scores_array,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT
@@ -598,7 +695,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @WithSpan
@@ -619,8 +715,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         var template = new ST(sqlTemplate)
                 .add("items", queryItems);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
 
