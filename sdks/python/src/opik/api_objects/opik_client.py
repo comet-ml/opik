@@ -1194,6 +1194,75 @@ class Opik:
         ]
         return result
 
+    def get_prompts(
+        self,
+        filters: Optional[str] = None,
+        name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[Prompt]:
+        """
+        Retrieve prompts with optional filtering support.
+
+        This method allows you to search and filter prompts based on metadata, tags, and other attributes.
+        It supports advanced filtering using a query language similar to what is used for traces and spans.
+
+        Args:
+            filters: Optional filter string to narrow down the search. 
+                    Examples:
+                    - 'metadata.version = "1.0"' - Filter by metadata key-value
+                    - 'tags contains "production"' - Filter by tags
+                    - 'name = "my-prompt"' - Filter by exact name match
+                    - 'created_at > "2024-01-01"' - Filter by creation date
+            name: Optional prompt name filter (exact match or substring)
+            max_results: Maximum number of prompts to return (default: 1000)
+
+        Returns:
+            List[Prompt]: A list of Prompt objects that match the specified filters.
+
+        Examples:
+            Get all prompts with a specific metadata value:
+            >>> prompts = client.get_prompts(filters='metadata.environment = "production"')
+
+            Get prompts with specific tags:
+            >>> prompts = client.get_prompts(filters='tags contains "v2"')
+
+            Get prompts by name pattern:
+            >>> prompts = client.get_prompts(name="chatbot")
+
+            Combine multiple filters:
+            >>> prompts = client.get_prompts(filters='metadata.team = "nlp" and tags contains "active"')
+        """
+        prompt_client = PromptClient(self._rest_client)
+
+        # Calculate pagination parameters
+        page_size = 100
+        all_prompts = []
+        
+        page = 1
+        while len(all_prompts) < max_results:
+            prompt_infos = prompt_client.get_prompts_with_filters(
+                filters=filters,
+                name=name,
+                page=page,
+                size=page_size,
+            )
+
+            if len(prompt_infos) == 0:
+                break
+
+            # Process only as many items as we need (up to max_results limit)
+            for prompt_info in prompt_infos[: (max_results - len(all_prompts))]:
+                prompt_public = prompt_info['prompt_public']
+                latest_version = prompt_info['latest_version']
+                
+                if latest_version:
+                    prompt = Prompt.from_fern_prompt_version(prompt_public.name, latest_version)
+                    all_prompts.append(prompt)
+
+            page += 1
+
+        return all_prompts[:max_results]
+
     def create_optimization(
         self,
         dataset_name: str,

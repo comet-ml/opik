@@ -173,3 +173,66 @@ class PromptClient:
                 raise e
 
         return []
+
+    def get_prompts_with_filters(
+        self,
+        filters: Optional[str] = None,
+        name: Optional[str] = None,
+        page: int = 1,
+        size: int = 100,
+        get_latest_versions: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve prompts with filtering support.
+
+        Parameters:
+            filters: Optional filter string to narrow down the search. 
+                    Example: 'metadata.key = "value"' or 'tags contains "production"'
+            name: Optional prompt name filter
+            page: Page number for pagination (default: 1)
+            size: Page size for pagination (default: 100)
+            get_latest_versions: Whether to fetch latest version details for each prompt (default: True)
+
+        Returns:
+            List[Dict]: A list of dictionaries containing prompt info and optionally latest version details.
+                       Each dict has 'prompt_public' and 'latest_version' keys.
+        """
+        try:
+            prompts_page = self._rest_client.prompts.get_prompts(
+                filters=filters,
+                name=name,
+                page=page,
+                size=size,
+            )
+            
+            if prompts_page.content is None:
+                return []
+
+            result = []
+            for prompt_public in prompts_page.content:
+                prompt_info = {
+                    'prompt_public': prompt_public,
+                    'latest_version': None
+                }
+                
+                if get_latest_versions:
+                    # Get the latest version for each prompt
+                    try:
+                        latest_version = self._rest_client.prompts.retrieve_prompt_version(
+                            name=prompt_public.name
+                        )
+                        prompt_info['latest_version'] = latest_version
+                    except rest_api_core.ApiError as e:
+                        if e.status_code != 404:
+                            raise e
+                        # Skip prompts that don't have versions (shouldn't happen in normal cases)
+                        continue
+
+                result.append(prompt_info)
+
+            return result
+
+        except rest_api_core.ApiError as e:
+            if e.status_code != 404:
+                raise e
+            return []
