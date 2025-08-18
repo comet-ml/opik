@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
@@ -474,6 +475,8 @@ public class MultiValueFeedbackScoresE2ETest {
         var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                 .datasetId(datasetId)
                 .traceId(trace1Id)
+                .spanId(null)
+                .source(DatasetItemSource.TRACE)
                 .build();
 
         datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, List.of(datasetItem)),
