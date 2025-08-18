@@ -110,12 +110,11 @@ class LibraryInstallTest(base_metric.BaseMetric):
 """
         result = executor.run_scoring(code, {"output": "", "reference": ""})
         
-        # The execution should succeed but the installation should fail
-        assert "scores" in result, "Result should contain scores"
-        scores = result["scores"]
-        assert len(scores) == 1, "Should have one score result"
-        assert scores[0]["value"] == 0.0, "Library installation should fail"
-        assert "Failed to establish a new connection" in scores[0]["reason"], "Error should indicate network connection failure"
+        # With our security hardened image, pip is completely removed
+        # So we expect an error about pip not being found (which proves security is working)
+        assert "error" in result, "Result should contain error due to pip removal"
+        assert "No such file or directory: 'pip'" in result["error"], "Error should indicate pip was successfully removed"
+        assert result["code"] == 400, "Should return 400 error code"
         
     finally:
         executor.cleanup()
