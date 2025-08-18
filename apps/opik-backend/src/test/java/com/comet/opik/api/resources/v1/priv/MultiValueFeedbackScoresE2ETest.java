@@ -240,20 +240,10 @@ public class MultiValueFeedbackScoresE2ETest {
     @Test
     @DisplayName("test score span by multiple authors")
     void testScoreSpanByMultipleAuthors() {
-        // create a trace first
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .id(null)
-                .projectName(DEFAULT_PROJECT)
-                .usage(null)
-                .feedbackScores(null)
-                .build();
-        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
-
         // create spans
         var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                 .map(span -> span.toBuilder()
                         .id(null)
-                        .traceId(traceId)
                         .projectName(DEFAULT_PROJECT)
                         .usage(null)
                         .feedbackScores(null)
@@ -279,7 +269,7 @@ public class MultiValueFeedbackScoresE2ETest {
         spanResourceClient.feedbackScore(span2Id, anotherSpanScore, TEST_WORKSPACE, API_KEY1);
 
         var actual = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
-                null, null, 5, traceId, null, null, null, null);
+                null, null, 5, null, null, null, null, null);
 
         assertThat(actual.content()).hasSize(spans.size());
         var actualSpan1 = actual.content().stream().filter(span -> span.id().equals(span1Id)).findFirst()
@@ -299,7 +289,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert value filtering
         var actualFilteredEqual = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
-                null, null, 5, traceId, null,
+                null, null, 5, null, null,
                 List.of(SpanFilter.builder()
                         .field(SpanField.FEEDBACK_SCORES)
                         .key(user1Score.name())
@@ -312,7 +302,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert empty filtering
         var actualFilteredNotEmpty = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, DEFAULT_PROJECT,
-                null, null, 5, traceId, null,
+                null, null, 5, null, null,
                 List.of(SpanFilter.builder()
                         .field(SpanField.FEEDBACK_SCORES)
                         .key(user1Score.name())
@@ -376,8 +366,6 @@ public class MultiValueFeedbackScoresE2ETest {
             TraceThread thread1 = traceResourceClient.getTraceThread(threadId1, projectId, API_KEY1, TEST_WORKSPACE);
             assertThat(thread1.threadModelId()).isNotNull();
         });
-
-        // threads are now created and available for scoring
 
         // score the first thread by user 1
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
@@ -462,19 +450,19 @@ public class MultiValueFeedbackScoresE2ETest {
         UUID experimentId = experimentResourceClient.create(experiment, API_KEY1, TEST_WORKSPACE);
 
         // create traces to relate to experiment items
-        var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .projectName(DEFAULT_PROJECT)
                 .usage(null)
                 .feedbackScores(null)
                 .build();
 
-        var trace1Id = traceResourceClient.createTrace(trace1, API_KEY1, TEST_WORKSPACE);
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
 
         // create dataset items that link to our trace
         var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                 .datasetId(datasetId)
-                .traceId(trace1Id)
+                .traceId(traceId)
                 .spanId(null)
                 .source(DatasetItemSource.TRACE)
                 .build();
@@ -486,40 +474,21 @@ public class MultiValueFeedbackScoresE2ETest {
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
         var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder().name(user1Score.name()).build();
 
-        // create scores as different users
-        var user1ScoreItem = FeedbackScoreBatchItem.builder()
-                .id(trace1Id)
-                .projectName(DEFAULT_PROJECT)
-                .name(user1Score.name())
-                .categoryName(user1Score.categoryName())
-                .value(user1Score.value())
-                .reason(user1Score.reason())
-                .source(user1Score.source())
-                .build();
-
-        var user2ScoreItem = FeedbackScoreBatchItem.builder()
-                .id(trace1Id)
-                .projectName(DEFAULT_PROJECT)
-                .name(user2Score.name())
-                .categoryName(user2Score.categoryName())
-                .value(user2Score.value())
-                .reason(user2Score.reason())
-                .source(user2Score.source())
-                .build();
-
         // submit scores from different users
-        traceResourceClient.feedbackScores(List.of(user1ScoreItem), API_KEY1, TEST_WORKSPACE);
-        traceResourceClient.feedbackScores(List.of(user2ScoreItem), API_KEY2, TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(DEFAULT_PROJECT, user1Score)), API_KEY1,
+                TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(DEFAULT_PROJECT, user2Score)), API_KEY2,
+                TEST_WORKSPACE);
 
         // create experiment items linking traces to experiment
-        var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+        var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                 .experimentId(experimentId)
-                .traceId(trace1Id)
+                .traceId(traceId)
                 .datasetItemId(datasetItem.id())
                 .feedbackScores(null)
                 .build();
 
-        experimentResourceClient.createExperimentItem(Set.of(experimentItem1), API_KEY1, TEST_WORKSPACE);
+        experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY1, TEST_WORKSPACE);
 
         assertFindExperiments(experimentName, user1Score, user2Score);
         assertStreamExperiments(experimentName, user1Score, user2Score);
@@ -757,6 +726,17 @@ public class MultiValueFeedbackScoresE2ETest {
             String threadId, String projectName, FeedbackScore score) {
         return FeedbackScoreBatchItemThread.builder()
                 .threadId(threadId)
+                .projectName(projectName)
+                .name(score.name())
+                .categoryName(score.categoryName())
+                .value(score.value())
+                .reason(score.reason())
+                .source(score.source())
+                .build();
+    }
+
+    private FeedbackScoreBatchItem createScoreBatchItem(String projectName, FeedbackScore score) {
+        return FeedbackScoreBatchItem.builder()
                 .projectName(projectName)
                 .name(score.name())
                 .categoryName(score.categoryName())
