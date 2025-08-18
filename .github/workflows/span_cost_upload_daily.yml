@@ -24,16 +24,13 @@ jobs:
         with:
           branch: ${{ env.BRANCH_NAME }}
 
-      - name: Push updated file
-        uses: comet-ml/push-files@main
-        with:
-          branch: ${{ env.BRANCH_NAME }}
-          files: apps/opik-backend/src/main/resources/model_prices_and_context_window.json:apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          repository: 'comet-ml/opik'
-          commit_user_email: github-actions@comet.com
-          commit_user_name: 'Github Actions (${{ github.actor }})'
-          commit_message: "[NA] [BE] Update automatically model prices file"
+      - name: Commit files
+        run: |
+          set -ex
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "Github Actions (${{ github.actor }})"
+          git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          git commit --allow-empty -m "[NA] [BE] Update automatically model prices file"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6

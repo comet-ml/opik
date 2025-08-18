@@ -16,17 +16,17 @@ import agnoLogoUrl from "/images/integrations/agno.png";
 import autogenLogoUrl from "/images/integrations/autogen.png";
 import crewaiLogoUrl from "/images/integrations/crewai.png";
 import deepseekLogoUrl from "/images/integrations/deepseek.png";
-import difyLogoUrl from "/images/integrations/dify.png";
+// import difyLogoUrl from "/images/integrations/dify.png";
 import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
-import pydanticaiLogoUrl from "/images/integrations/pydanticai.png";
+// import pydanticaiLogoUrl from "/images/integrations/pydanticai.png";
 import smolagentsLogoUrl from "/images/integrations/smolagents.png";
-import strandsAgentsLogoUrl from "/images/integrations/strands-agents.png";
-import vercelAiLogoUrl from "/images/integrations/vercel-ai.png";
-import watsonxLogoUrl from "/images/integrations/watsonx.png";
+// import strandsAgentsLogoUrl from "/images/integrations/strands-agents.png";
+// import vercelAiLogoUrl from "/images/integrations/vercel-ai.png";
+// import watsonxLogoUrl from "/images/integrations/watsonx.png";
 
 import functionDecoratorsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/FunctionDecorators.py?raw";
 import openAiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/OpenAI.py?raw";
@@ -42,15 +42,34 @@ import liteLLMCode from "@/components/pages-shared/onboarding/FrameworkIntegrati
 import ragasCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ragas.py?raw";
 import dspyCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DSPy.py?raw";
 
+import ollamaCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ollama.py?raw";
+import crewaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/CrewAI.py?raw";
+import adkCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/ADK.py?raw";
+import openrouterCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/OpenRouter.py?raw";
+import autogenCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/AutoGen.py?raw";
+import agnoCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Agno.py?raw";
+import deepseekCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DeepSeek.py?raw";
+// import difyCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Dify.py?raw";
+import guardrailsaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/GuardrailsAI.py?raw";
+import predibaseCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Predibase.py?raw";
+// import pydanticaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/PydanticAI.py?raw";
+import smolagentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Smolagents.py?raw";
+import { buildDocsUrl } from "@/lib/utils";
+// import strandsAgentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/StrandsAgents.py?raw";
+// import vercelAiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/VercelAI.py?raw";
+// import watsonxCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/WatsonX.py?raw";
+// import openAIAgentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/OpenAIAgents.py?raw";
+
 export type Integration = {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   category: string;
   icon: string;
   code: string;
   tag?: string;
-  isHidden?: boolean;
+  installCommand: string;
+  docsLink: string;
 };
 
 export const INTEGRATION_CATEGORIES = {
@@ -64,10 +83,11 @@ export const INTEGRATIONS: Integration[] = [
   {
     id: "function-decorators",
     title: "Function decorators",
-    description: "Category placeholder",
     category: INTEGRATION_CATEGORIES.ALL,
     icon: pythonLogoUrl,
     code: functionDecoratorsCode,
+    installCommand: "pip install -U opik",
+    docsLink: buildDocsUrl("/tracing/log_traces"),
   },
   {
     id: "openai",
@@ -76,16 +96,20 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: openAILogoUrl,
     code: openAiCode,
+    installCommand: "pip install -U opik openai",
+    docsLink: buildDocsUrl("/tracing/integrations/openai"),
   },
-  {
-    id: "optimize-openai",
-    title: "Optimize OpenAI",
-    description: "Agent optimization",
-    category: INTEGRATION_CATEGORIES.AGENTS_OPTIMIZATION,
-    icon: openAILogoUrl,
-    code: "# OpenAI optimization code coming soon",
-    isHidden: true,
-  },
+  // TODO: Code snippet required
+  // {
+  //   id: "optimize-openai",
+  //   title: "Optimize OpenAI",
+  //   description: "Agent optimization",
+  //   category: INTEGRATION_CATEGORIES.AGENTS_OPTIMIZATION,
+  //   icon: openAILogoUrl,
+  //   code: openAIAgentsCode,
+  //   installCommand: "pip install opik openai-agents",
+  //   isHidden: true,
+  // },
   {
     id: "anthropic",
     title: "Anthropic",
@@ -93,6 +117,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: anthropicLogoUrl,
     code: anthropicCode,
+    installCommand: "pip install -U opik anthropic",
+    docsLink: buildDocsUrl("/tracing/integrations/anthropic"),
   },
 
   {
@@ -102,6 +128,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: bedrockLogoUrl,
     code: bedrockCode,
+    installCommand: "pip install -U opik boto3",
+    docsLink: buildDocsUrl("/tracing/integrations/bedrock"),
   },
   {
     id: "gemini",
@@ -110,6 +138,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: geminiLogoUrl,
     code: geminiCode,
+    installCommand: "pip install -U opik google-genai",
+    docsLink: buildDocsUrl("/tracing/integrations/gemini"),
   },
   {
     id: "ollama",
@@ -117,8 +147,9 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: ollamaLogoUrl,
-    code: "# Ollama integration code coming soon",
-    isHidden: true,
+    code: ollamaCode,
+    installCommand: "pip install -U opik ollama",
+    docsLink: buildDocsUrl("/tracing/integrations/ollama"),
   },
   {
     id: "langchain",
@@ -127,6 +158,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: langChainLogoUrl,
     code: langChainCode,
+    installCommand: "pip install -U opik langchain langchain_openai",
+    docsLink: buildDocsUrl("/tracing/integrations/langchain"),
   },
 
   {
@@ -136,6 +169,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: langGraphLogoUrl,
     code: langGraphCode,
+    installCommand: "pip install -U opik langgraph langchain",
+    docsLink: buildDocsUrl("/tracing/integrations/langgraph"),
   },
   {
     id: "llamaindex",
@@ -144,6 +179,10 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: llamaIndexLogoUrl,
     code: llamaIndexCode,
+    installCommand:
+      "pip install -U opik llama-index llama-index-agent-openai llama-index-llms-openai llama-index-callbacks-opik",
+
+    docsLink: buildDocsUrl("/tracing/integrations/llama_index"),
   },
   {
     id: "haystack",
@@ -152,6 +191,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: haystackLogoUrl,
     code: haystackCode,
+    installCommand: "pip install -U opik haystack-ai",
+    docsLink: buildDocsUrl("/tracing/integrations/haystack"),
   },
   {
     id: "litellm",
@@ -160,6 +201,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: liteLLMLogoUrl,
     code: liteLLMCode,
+    installCommand: "pip install -U opik litellm",
+    docsLink: buildDocsUrl("/tracing/integrations/litellm"),
   },
 
   {
@@ -168,8 +211,9 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: crewaiLogoUrl,
-    code: "# CrewAI integration code coming soon",
-    isHidden: true,
+    code: crewaiCode,
+    installCommand: "pip install -U opik crewai crewai-tools",
+    docsLink: buildDocsUrl("/tracing/integrations/crewai"),
   },
   {
     id: "dspy",
@@ -178,6 +222,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: dspyLogoUrl,
     code: dspyCode,
+    installCommand: "pip install -U opik dspy",
+    docsLink: buildDocsUrl("/tracing/integrations/dspy"),
   },
   {
     id: "ragas",
@@ -186,6 +232,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: ragasLogoUrl,
     code: ragasCode,
+    installCommand: "pip install -U opik ragas",
+    docsLink: buildDocsUrl("/tracing/integrations/ragas"),
   },
   {
     id: "groq",
@@ -194,6 +242,8 @@ export const INTEGRATIONS: Integration[] = [
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: groqLogoUrl,
     code: groqCode,
+    installCommand: "pip install -U opik litellm",
+    docsLink: buildDocsUrl("/tracing/integrations/groq"),
   },
 
   {
@@ -202,26 +252,30 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: googleAdkLogoUrl,
-    code: "# Google ADK integration code coming soon",
-    isHidden: true,
+    code: adkCode,
+    installCommand: "pip install -U opik google-adk litellm",
+    docsLink: buildDocsUrl("/tracing/integrations/adk"),
   },
-  {
-    id: "optimize-google-adk",
-    title: "Optimize Google ADK",
-    description: "Agent optimization",
-    category: INTEGRATION_CATEGORIES.AGENTS_OPTIMIZATION,
-    icon: googleAdkLogoUrl,
-    code: "# Google ADK optimization code coming soon",
-    isHidden: true,
-  },
+  // TODO: Code snippet required
+  // {
+  //   id: "optimize-google-adk",
+  //   title: "Optimize Google ADK",
+  //   description: "Agent optimization",
+  //   category: INTEGRATION_CATEGORIES.AGENTS_OPTIMIZATION,
+  //   icon: googleAdkLogoUrl,
+  //   code: "# Google ADK optimization code coming soon",
+  //   installCommand: "pip install opik google-adk",
+  //   isHidden: true,
+  // },
   {
     id: "openrouter",
     title: "OpenRouter",
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: openrouterLogoUrl,
-    code: "# OpenRouter integration code coming soon",
-    isHidden: true,
+    code: openrouterCode,
+    installCommand: "pip install -U opik openai",
+    docsLink: buildDocsUrl("/tracing/integrations/openrouter"),
   },
   {
     id: "autogen",
@@ -229,8 +283,10 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: autogenLogoUrl,
-    code: "# AutoGen integration code coming soon",
-    isHidden: true,
+    code: autogenCode,
+    installCommand:
+      'pip install -U "autogen-agentchat" "autogen-ext[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-exporter-otlp',
+    docsLink: buildDocsUrl("/tracing/integrations/autogen"),
   },
 
   {
@@ -239,8 +295,10 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: agnoLogoUrl,
-    code: "# Agno integration code coming soon",
-    isHidden: true,
+    code: agnoCode,
+    installCommand:
+      "pip install -U opik agno openai opentelemetry-sdk opentelemetry-exporter-otlp openinference-instrumentation-agno yfinance",
+    docsLink: buildDocsUrl("/tracing/integrations/agno"),
   },
   {
     id: "deepseek",
@@ -248,26 +306,32 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: deepseekLogoUrl,
-    code: "# DeepSeek integration code coming soon",
-    isHidden: true,
+    code: deepseekCode,
+    installCommand: "pip install -U opik openai",
+    docsLink: buildDocsUrl("/tracing/integrations/deepseek"),
   },
-  {
-    id: "dify",
-    title: "Dify",
-    description: "LLM provider",
-    category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
-    icon: difyLogoUrl,
-    code: "# Dify integration code coming soon",
-    isHidden: true,
-  },
+  // TODO: custom UI required
+  // {
+  //   id: "dify",
+  //   title: "Dify",
+  //   description: "LLM provider",
+  //   category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
+  //   icon: difyLogoUrl,
+  //   code: difyCode,
+  //   installCommand: "pip install opik requests",
+  //   isHidden: true,
+  // },
   {
     id: "guardrailsai",
     title: "GuardrailsAI",
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: guardrailsaiLogoUrl,
-    code: "# GuardrailsAI integration code coming soon",
-    isHidden: true,
+    code: guardrailsaiCode,
+    installCommand:
+      "pip install -U opik guardrails-ai \nguardrails configure \nguardrails hub install hub://guardrails/politeness_check",
+
+    docsLink: buildDocsUrl("/tracing/integrations/guardrails-ai"),
   },
 
   {
@@ -276,55 +340,65 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: predibaseLogoUrl,
-    code: "# Predibase integration code coming soon",
-    isHidden: true,
+    code: predibaseCode,
+    installCommand: "pip install -U opik predibase langchain",
+    docsLink: buildDocsUrl("/tracing/integrations/predibase"),
   },
-  {
-    id: "pydanticai",
-    title: "PydanticAI",
-    description: "Frameworks & tools",
-    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
-    icon: pydanticaiLogoUrl,
-    code: "# PydanticAI integration code coming soon",
-    isHidden: true,
-  },
+  // TODO: Not working, error
+  // {
+  //   id: "pydanticai",
+  //   title: "PydanticAI",
+  //   description: "Frameworks & tools",
+  //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+  //   icon: pydanticaiLogoUrl,
+  //   code: pydanticaiCode,
+  //   installCommand:
+  //     "pip install --upgrade --quiet opik pydantic-ai logfire 'logfire[httpx]'",
+  //   isHidden: true,
+  // },
   {
     id: "smolagents",
     title: "Smolagents",
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: smolagentsLogoUrl,
-    code: "# Smolagents integration code coming soon",
-    isHidden: true,
+    code: smolagentsCode,
+    installCommand: "pip install -U opik 'smolagents[telemetry,toolkit]'",
+    docsLink: buildDocsUrl("/tracing/integrations/smolagents"),
   },
-  {
-    id: "strands-agents",
-    title: "Strands Agents",
-    description: "Frameworks & tools",
-    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
-    icon: strandsAgentsLogoUrl,
-    code: "# Strands Agents integration code coming soon",
-    isHidden: true,
-  },
-
-  {
-    id: "vercel-ai",
-    title: "Vercel AI",
-    description: "Frameworks & tools",
-    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
-    icon: vercelAiLogoUrl,
-    code: "# Vercel AI integration code coming soon",
-    isHidden: true,
-  },
-  {
-    id: "watsonx",
-    title: "WatsonX",
-    description: "LLM provider",
-    category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
-    icon: watsonxLogoUrl,
-    code: "# WatsonX integration code coming soon",
-    isHidden: true,
-  },
+  // TODO: Outdated code
+  // {
+  //   id: "strands-agents",
+  //   title: "Strands Agents",
+  //   description: "Frameworks & tools",
+  //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+  //   icon: strandsAgentsLogoUrl,
+  //   code: strandsAgentsCode,
+  //   installCommand: "pip install -U 'strands-agents' 'strands-agents-tools' opentelemetry-exporter-otlp opik",
+  //   isHidden: true,
+  // },
+  // TODO: custom UI required
+  // {
+  //   id: "vercel-ai",
+  //   title: "Vercel AI",
+  //   description: "Frameworks & tools",
+  //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+  //   icon: vercelAiLogoUrl,
+  //   code: vercelAiCode,
+  //   installCommand: "npm install @opik/ai ai",
+  //   isHidden: true,
+  // },
+  // TODO: Broken code
+  // {
+  //   id: "watsonx",
+  //   title: "WatsonX",
+  //   description: "LLM provider",
+  //   category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
+  //   icon: watsonxLogoUrl,
+  //   code: watsonxCode,
+  //   installCommand: "pip install -U opik litellm",
+  //   isHidden: true,
+  // },
 ];
 
 export const getIntegrationsByCategory = (category: string): Integration[] => {
