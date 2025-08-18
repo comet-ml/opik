@@ -56,7 +56,7 @@ class BaseBatcher(abc.ABC):
             if len(self._accumulated_messages) >= self._max_batch_size:
                 self.flush()
 
-    def remove_matching_messages(
+    def _remove_matching_messages(
         self, filter_func: Callable[[messages.BaseMessage], bool]
     ) -> None:
         """
