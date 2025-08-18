@@ -39,13 +39,13 @@ import usePromptsList from "@/api/prompts/usePromptsList";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 
-enum MENU_ITEM_TYPE {
+export enum MENU_ITEM_TYPE {
   link = "link",
   router = "router",
   button = "button",
 }
 
-type MenuItem = {
+export type MenuItem = {
   id: string;
   path?: string;
   type: MENU_ITEM_TYPE;
@@ -238,6 +238,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     setQuickstartOpened,
   } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
+  const sidebarMenuItems = usePluginsStore(
+    (state) => state.useSidebarMenuItems,
+  )();
 
   const { data: projectData } = useProjectsList(
     {
@@ -335,6 +338,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       label: "Quickstart guide",
       onClick: () => setQuickstartOpened(true),
     },
+    ...sidebarMenuItems,
     {
       id: "provideFeedback",
       type: MENU_ITEM_TYPE.button,
