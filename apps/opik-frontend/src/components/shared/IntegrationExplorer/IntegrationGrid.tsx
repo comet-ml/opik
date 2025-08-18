@@ -6,6 +6,7 @@ import RequestIntegrationDialog from "@/components/shared/IntegrationExplorer/co
 import IntegrationDetailsDialog from "@/components/shared/IntegrationExplorer/components/IntegrationDetailsDialog";
 import { useIntegrationExplorer } from "@/components/shared/IntegrationExplorer/IntegrationExplorerContext";
 import { getIntegrationsByCategory } from "@/constants/integrations";
+import { cn } from "@/lib/utils";
 
 type IntegrationGridProps = {
   className?: string;
@@ -72,9 +73,10 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
   return (
     <>
       <div
-        className={`grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 ${
-          className || ""
-        }`}
+        className={cn(
+          "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4",
+          className,
+        )}
       >
         {filteredIntegrations.map((integration) => (
           <IntegrationCard

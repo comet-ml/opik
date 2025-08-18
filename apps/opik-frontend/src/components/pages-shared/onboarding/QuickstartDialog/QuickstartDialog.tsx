@@ -13,7 +13,7 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
 }) => {
   return (
     <SideDialog open={open} setOpen={setOpen}>
-      <div className="flex w-full min-w-fit flex-col pb-20">
+      <div className="flex w-full min-w-fit flex-col px-20 pb-20">
         <SheetTitle className="comet-title-xl my-3 text-left">
           Quickstart guide
         </SheetTitle>

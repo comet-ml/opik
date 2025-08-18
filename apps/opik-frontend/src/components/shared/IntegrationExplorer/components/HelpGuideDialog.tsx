@@ -150,8 +150,8 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
             description="Explore Opik by testing things out in the playground or browsing our Demo project. No setup required."
           >
             <HelpLinks.Playground />
-            <HelpLinks.Slack />
             <HelpLinks.DemoProject />
+            <HelpLinks.Slack />
           </HelpLinks>
         </DialogAutoScrollBody>
       </DialogContent>

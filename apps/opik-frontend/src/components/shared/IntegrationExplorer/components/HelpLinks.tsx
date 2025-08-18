@@ -91,7 +91,7 @@ const InviteDevButton: React.FC = () => {
 
   return (
     <Button
-      className="w-full"
+      className="flex-1"
       variant="outline"
       onClick={onCloseParentDialog}
       asChild
@@ -115,7 +115,7 @@ InviteDevButton.displayName = "HelpLinks.InviteDev";
 
 const SlackButton: React.FC = () => {
   return (
-    <Button className="w-full" variant="outline" asChild>
+    <Button className="flex-1" variant="outline" asChild>
       <a href={SLACK_LINK} target="_blank" rel="noopener noreferrer">
         <Slack className="mr-2 size-4" />
         <span>Get help in Slack</span>
@@ -160,7 +160,7 @@ DemoProjectButton.displayName = "HelpLinks.DemoProject";
 
 const WatchTutorialButton: React.FC = () => {
   return (
-    <Button className="w-full" variant="outline" asChild>
+    <Button className="flex-1" variant="outline" asChild>
       <a href={VIDEO_TUTORIAL_LINK} target="_blank" rel="noopener noreferrer">
         <MonitorPlay className="mr-2 size-4" />
         <span>Watch our tutorial</span>
