@@ -5,6 +5,7 @@ import haystack
 from haystack import tracing
 
 import opik
+import opik.api_objects.opik_client as opik_client
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
 from . import opik_tracer
 
@@ -102,12 +103,9 @@ class OpikConnector:
 
     def _create_opik_tracer(self, name: str, project_name: Optional[str]) -> opik_tracer.OpikTracer:
         """Create and configure the OpikTracer instance."""
-        if project_name:
-            opik_client = opik.Opik(project_name=project_name, _use_batching=True)
-        else:
-            opik_client = opik.api_objects.opik_client.get_client_cached()
+        opik_client_ = opik_client.get_client_cached()
         
-        return opik_tracer.OpikTracer(opik_client=opik_client, name=name, project_name=project_name)
+        return opik_tracer.OpikTracer(opik_client=opik_client_, name=name, project_name=project_name)
 
     @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)
     def run(

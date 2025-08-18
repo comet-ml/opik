@@ -3,13 +3,11 @@ import logging
 import os
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-import haystack
 from haystack import dataclasses as haystack_dataclasses
 from haystack import tracing
 from haystack.tracing import utils as tracing_utils
 
 import opik.url_helpers as url_helpers
-import opik.context_storage as context_storage
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
 import opik.decorator.span_creation_handler as span_creation_handler
 import opik.decorator.arguments_helpers as arguments_helpers
@@ -198,11 +196,10 @@ class OpikTracer(tracing.Tracer):
         self._opik_client = opik_client
         self._context: List[OpikSpanBridge] = []
         self._name = name
-        self._project_name = project_name or opik_client.config.project_name
+        self._project_name = project_name
         self.enforce_flush = (
-            os.getenv(HAYSTACK_OPIK_ENFORCE_FLUSH_ENV_VAR, "true").lower() == "true"
+            os.getenv(HAYSTACK_OPIK_ENFORCE_FLUSH_ENV_VAR, "false").lower() == "true"
         )
-        self._opik_context_storage = context_storage.get_current_context_instance()
 
     @contextlib.contextmanager
     def trace(
@@ -248,7 +245,6 @@ class OpikTracer(tracing.Tracer):
         trace_data, span_data = span_creation_handler.create_span_respecting_context(
             start_span_arguments=start_span_parameters,
             distributed_trace_headers=None,
-            opik_context_storage=self._opik_context_storage
         )
         final_span_or_trace_data = trace_data if trace_data else span_data
         
@@ -264,7 +260,6 @@ class OpikTracer(tracing.Tracer):
             type=span_type,
             metadata={"created_from": "haystack", "operation": operation_name}
         )
-        self._opik_context_storage.add_span_data(span_data)
         return OpikSpanBridge(span_data)
 
     def _finalize_span(self, span: OpikSpanBridge, tags: Dict[str, Any]) -> None:

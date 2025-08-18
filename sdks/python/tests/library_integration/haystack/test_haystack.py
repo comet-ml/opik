@@ -23,6 +23,7 @@ def enable_haystack_content_tracing():
     with patch_environ({"HAYSTACK_CONTENT_TRACING_ENABLED": "true"}):
         yield
 
+MODEL_NAME = "gpt-4o"
 
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
@@ -49,7 +50,7 @@ def test_haystack__happyflow(
     pipe = Pipeline()
     pipe.add_component("tracer", opik_connector)  # not necessary to add
     pipe.add_component("prompt_builder", ChatPromptBuilder())
-    pipe.add_component("llm", OpenAIChatGenerator(model="gpt-3.5-turbo"))
+    pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
 
     pipe.connect("prompt_builder.prompt", "llm.messages")
 
@@ -139,7 +140,7 @@ def test_haystack__happyflow(
                     "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
                     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
                 },
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(MODEL_NAME),
             ),
         ],
     )
@@ -165,7 +166,7 @@ def test_haystack__context_aware_tracing(fake_backend):
         pipe = Pipeline()
         pipe.add_component("tracer", opik_connector)
         pipe.add_component("prompt_builder", ChatPromptBuilder())
-        pipe.add_component("llm", OpenAIChatGenerator(model="gpt-3.5-turbo"))
+        pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
 
         pipe.connect("prompt_builder.prompt", "llm.messages")
 
@@ -183,12 +184,10 @@ def test_haystack__context_aware_tracing(fake_backend):
             }
         )
 
-        tracer.actual_tracer.flush()
         return "pipeline completed"
 
     run_haystack_in_trace()
     opik.flush_tracker()
-
 
     # Verify we have exactly one trace tree
     assert len(fake_backend.trace_trees) == 1
@@ -202,7 +201,6 @@ def test_haystack__context_aware_tracing(fake_backend):
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        project_name="Default Project",
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -212,7 +210,6 @@ def test_haystack__context_aware_tracing(fake_backend):
                 output={"output": "pipeline completed"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name="Default Project",
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -222,7 +219,6 @@ def test_haystack__context_aware_tracing(fake_backend):
                         output=ANY_DICT,  # Contains pipeline output data  
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        project_name="Default Project",
                         metadata=ANY_DICT,  # Contains haystack metadata
                         spans=[
                             # Haystack creates child spans for each component
@@ -234,7 +230,6 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 output=ANY_DICT,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
-                                project_name="Default Project",
                                 metadata=ANY_DICT,
                             ),
                             SpanModel(
@@ -245,7 +240,6 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 output=ANY_DICT,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
-                                project_name="Default Project",
                                 metadata=ANY_DICT,
                             ),
                             SpanModel(
@@ -256,7 +250,6 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 output=ANY_DICT,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
-                                project_name="Default Project",
                                 metadata=ANY_DICT,
                                 usage=ANY_DICT,
                                 model=ANY_STRING,
