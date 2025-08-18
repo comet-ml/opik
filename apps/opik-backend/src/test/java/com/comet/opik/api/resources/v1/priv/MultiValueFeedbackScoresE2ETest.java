@@ -345,6 +345,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
                 .build();
         var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -352,6 +353,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
                 .build();
         var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -359,6 +361,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
                 .build();
 
         traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY1, TEST_WORKSPACE);
@@ -377,44 +380,21 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // score the first thread by user 1
         var user1Score = factory.manufacturePojo(FeedbackScore.class);
-        var user1ScoreItem = FeedbackScoreBatchItemThread.builder()
-                .threadId(threadId1)
-                .projectName(projectName)
-                .name(user1Score.name())
-                .categoryName(user1Score.categoryName())
-                .value(user1Score.value())
-                .reason(user1Score.reason())
-                .source(user1Score.source())
-                .build();
-        traceResourceClient.threadFeedbackScores(List.of(user1ScoreItem), API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId1, projectName, user1Score)), API_KEY1, TEST_WORKSPACE);
 
         // simulate another user scoring the same thread by using the same name
         var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
                 .name(user1Score.name()).build();
-        var user2ScoreItem = FeedbackScoreBatchItemThread.builder()
-                .threadId(threadId1)
-                .projectName(projectName)
-                .name(user2Score.name())
-                .categoryName(user2Score.categoryName())
-                .value(user2Score.value())
-                .reason(user2Score.reason())
-                .source(user2Score.source())
-                .build();
-        traceResourceClient.threadFeedbackScores(List.of(user2ScoreItem), API_KEY2, TEST_WORKSPACE);
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId1, projectName, user2Score)), API_KEY2, TEST_WORKSPACE);
 
         // score another thread
         var anotherThreadScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
                 .name(user1Score.name()).build();
-        var anotherThreadScoreItem = FeedbackScoreBatchItemThread.builder()
-                .threadId(threadId2)
-                .projectName(projectName)
-                .name(anotherThreadScore.name())
-                .categoryName(anotherThreadScore.categoryName())
-                .value(anotherThreadScore.value())
-                .reason(anotherThreadScore.reason())
-                .source(anotherThreadScore.source())
-                .build();
-        traceResourceClient.threadFeedbackScores(List.of(anotherThreadScoreItem), API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId2, projectName, anotherThreadScore)), API_KEY1,
+                TEST_WORKSPACE);
 
         TraceThread.TraceThreadPage actual = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY2,
                 TEST_WORKSPACE, null, null, Map.of());
@@ -456,6 +436,10 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(TraceThread::id))
                 .containsExactlyInAnyOrder(threadId1, threadId2);
+
+        // assert thread feedback project metric
+        assertProjectMetric(projectId, MetricType.THREAD_FEEDBACK_SCORES, user1Score.name(),
+                List.of(user1Score.value(), user2Score.value()), anotherThreadScore.value());
     }
 
     @Test
@@ -665,8 +649,8 @@ public class MultiValueFeedbackScoresE2ETest {
                 .orElseThrow(() -> new AssertionError("Metric for score " + scoreName + " not found"));
         assertThat(scoreMetric.data()).hasSize(1);
 
-        var firstTraceScore = calcAverage(authoredValues);
-        var finalScore = calcAverage(List.of(firstTraceScore, otherValue));
+        var firstEntityScore = calcAverage(authoredValues); // calculate the average of authored values
+        var finalScore = calcAverage(List.of(firstEntityScore, otherValue));
 
         assertThat(scoreMetric.data().getFirst().value())
                 .usingComparator(StatsUtils::bigDecimalComparator)
@@ -764,5 +748,18 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // verify the average is correct
         assertAverageScore(scoreFromDatasetApi.value(), user1Score, user2Score);
+    }
+
+    private FeedbackScoreBatchItemThread createScoreBatchItemThread(
+            String threadId, String projectName, FeedbackScore score) {
+        return FeedbackScoreBatchItemThread.builder()
+                .threadId(threadId)
+                .projectName(projectName)
+                .name(score.name())
+                .categoryName(score.categoryName())
+                .value(score.value())
+                .reason(score.reason())
+                .source(score.source())
+                .build();
     }
 }
