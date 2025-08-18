@@ -1,5 +1,5 @@
 import React from "react";
-import LoggedDataStatus from "@/components/shared/IntegrationExplorer/components/LoggedDataStatus";
+import LoggedDataStatus from "@/components/pages-shared/onboarding/IntegrationExplorer/components/LoggedDataStatus";
 
 type WaitForDataPanelProps = {
   status: "waiting" | "logged";

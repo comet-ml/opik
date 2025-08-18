@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronsRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
-import { IntegrationExplorer } from "@/components/shared/IntegrationExplorer";
+import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 
 const NewQuickstartPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);

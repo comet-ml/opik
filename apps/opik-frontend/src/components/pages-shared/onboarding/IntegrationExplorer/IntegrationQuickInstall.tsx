@@ -1,7 +1,7 @@
 import React from "react";
-import IntegrationCard from "@/components/shared/IntegrationExplorer/components/IntegrationCard";
-import QuickInstallDialog from "@/components/shared/IntegrationExplorer/components/QuickInstallDialog";
-import { useIntegrationExplorer } from "@/components/shared/IntegrationExplorer/IntegrationExplorerContext";
+import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
+import QuickInstallDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/QuickInstallDialog";
+import { useIntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import cursorLogo from "/images/integrations/cursor.png";
 import copilotLogo from "/images/integrations/copilot.png";
 import windsurfLogo from "/images/integrations/windsurf.png";

@@ -1,7 +1,7 @@
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import React from "react";
 import { SheetTitle } from "@/components/ui/sheet";
-import { IntegrationExplorer } from "@/components/shared/IntegrationExplorer";
+import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 
 type QuickstartDialogProps = {
   open: boolean;

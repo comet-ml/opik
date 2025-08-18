@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import IntegrationCard from "@/components/shared/IntegrationExplorer/components/IntegrationCard";
-import RequestIntegrationDialog from "@/components/shared/IntegrationExplorer/components/RequestIntegrationDialog";
-import IntegrationDetailsDialog from "@/components/shared/IntegrationExplorer/components/IntegrationDetailsDialog";
-import { useIntegrationExplorer } from "@/components/shared/IntegrationExplorer/IntegrationExplorerContext";
+import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
+import RequestIntegrationDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/RequestIntegrationDialog";
+import IntegrationDetailsDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog";
+import { useIntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import { getIntegrationsByCategory } from "@/constants/integrations";
 import { cn } from "@/lib/utils";
 
