@@ -136,6 +136,7 @@ start_missing_containers() {
   # Export persistent install UUID so docker-compose and services can consume it
   export OPIK_ANONYMOUS_ID="$uuid"
   send_install_report "$uuid" "false" "$start_time"
+  echo "OPIK_ANONYMOUS_ID=$uuid"
 
   debugLog "🔍 Checking required containers..."
   all_running=true
