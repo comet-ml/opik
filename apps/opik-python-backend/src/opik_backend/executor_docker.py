@@ -172,7 +172,15 @@ class DockerExecutor(CodeExecutorBase):
                 detach=True,
                 network_disabled=self.network_disabled,
                 security_opt=["no-new-privileges"],
-                labels=self.container_labels
+                labels=self.container_labels,
+                read_only=True,  # Make filesystem read-only
+                tmpfs={
+                    '/tmp': 'size=50m,ro,noexec,nosuid,nodev',  # Read-only tmp
+                    '/var/tmp': 'size=10m,ro,noexec,nosuid,nodev',  # Read-only tmp space
+                    '/home': 'size=10m,ro,noexec,nosuid,nodev'  # Read-only user home
+                },
+                cap_drop=['ALL'],  # Drop all Linux capabilities
+                user='1001:1001'  # Explicitly run as non-root user
             )
 
             # Add the container to the pool

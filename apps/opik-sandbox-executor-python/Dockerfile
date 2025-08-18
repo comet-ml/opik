@@ -1,29 +1,80 @@
-FROM python:3.12.9-slim
+# Multi-stage build: Build stage (explicit ARM64 + EXECUTION TIME OPTIMIZED)
+# Uses -b flag for legacy .pyc layout = fastest Python bytecode loading
+FROM python:3.12.9-slim AS builder
+
+WORKDIR /build
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy and compile scoring runner with optimization level 2 (legacy layout for fastest execution)
+COPY scoring_runner.py .
+RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b ./scoring_runner.py
+
+# Use optimization level 2 (-OO) to remove assert statements, __debug__ code blocks, and docstrings
+# Use PYTHONNODEBUGRANGES=1 to reduce memory overhead (Python 3.12+)
+# Use -b flag for legacy layout = fastest execution (no subdirectory traversal)
+RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /usr/local/lib/python3.12/site-packages
+
+# Remove original .py files from site-packages to reduce package size and improve cold starts
+# Note: This trades detailed tracebacks for performance (keeping .pyc files only)
+RUN find /usr/local/lib/python3.12/site-packages -name "*.py" -delete
+
+# Pre-warm essential modules used in scoring (build-time)
+RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python /tmp/prewarm.py
+
+# Keep prewarm.py for runtime stage
+RUN cp /tmp/prewarm.py /prewarm.py
+
+# Run build-time test
+RUN printf 'print("build test passed")' | python ./scoring_runner.py 'print("build test")' '{"test": true}' || echo "Warning: build test failed"
+
+# Clean up package managers in build stage
+RUN pip uninstall -y pip setuptools wheel || true
+RUN rm -rf /usr/local/bin/pip* || true
+RUN find /usr/local/lib/python* -name "ensurepip" -type d -exec rm -rf {} + || true
+
+# Copy site-packages to runtime location
+RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
+
+# Multi-stage build: Runtime stage (explicit ARM64 + EXECUTION TIME OPTIMIZED)
+# Maximum execution speed with legacy .pyc layout + security hardening
+FROM python:3.12.9-slim AS runtime
+
+# Install essential libraries only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/bin/pip* \
+    && rm -rf /usr/local/lib/python*/ensurepip
 
 WORKDIR /opt/opik-sandbox-executor-python
 
-# Step 1: Install dependencies
-COPY requirements.txt .
-COPY scoring_runner.py .
+# Clear any existing site-packages from base image
+RUN rm -rf /usr/local/lib/python3.12/site-packages/*
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy artifacts from builder
+COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /build/scoring_runner.py ./scoring_runner.py
 
-# Step 2: Copy optimized scoring runner
-RUN chmod +x ./scoring_runner.py
+# Copy optimized .pyc file for fastest execution (legacy layout with -b flag)
+COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
+COPY --from=builder /prewarm.py /tmp/prewarm.py
 
-# Step 3: Minimal .pyc compilation
-RUN python -m compileall -q ./scoring_runner.py
+# Runtime pre-warming for additional performance boost
+RUN python /tmp/prewarm.py
 
-# Step 4: Pre-warm modules used by local imports (build-time caching for runtime efficiency)
-# These modules are imported locally in scoring_runner.py but benefit from pre-compilation
-RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python /tmp/prewarm.py && rm /tmp/prewarm.py
+# Runtime verification test
+RUN printf 'print("runtime test passed")' | python ./scoring_runner.py 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
 
-# Step 5: Test execution
-RUN printf 'print("scoring test passed")' | python ./scoring_runner.py 'print("minimal test")' '{"test": true}' || echo "Warning: scoring test failed"
+# Verify no package managers exist
+RUN ! command -v pip && ! command -v pip3 && echo "✅ Package managers successfully removed"
 
-# Step 6: Set ownership for security
-RUN chown -R 1001:1001 /opt/opik-sandbox-executor-python 
+# Set environment variable for reduced memory overhead (Python 3.12+)
+ENV PYTHONNODEBUGRANGES=1
+
+# Set ownership and user
+RUN chown -R 1001:1001 /opt/opik-sandbox-executor-python
 USER 1001:1001
 
-# Default command
 CMD ["python", "/opt/opik-sandbox-executor-python/scoring_runner.py"]
