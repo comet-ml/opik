@@ -11,6 +11,8 @@ from haystack.tracing import utils as tracing_utils
 import opik.url_helpers as url_helpers
 import opik.context_storage as context_storage
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
+import opik.decorator.span_creation_handler as span_creation_handler
+import opik.decorator.arguments_helpers as arguments_helpers
 import opik.exceptions as exceptions
 from opik.api_objects import opik_client
 from opik.api_objects import span as opik_span
@@ -230,43 +232,27 @@ class OpikTracer(tracing.Tracer):
             self._finalize_span(span, tags)
 
     def _create_span_or_trace(self, operation_name: str, span_name: str) -> OpikSpanBridge:
-        """Create a span or trace based on existing context."""
-        existing_trace_data = self._opik_context_storage.get_trace_data()
-        existing_span_data = self._opik_context_storage.top_span_data()
+        """Create a span or trace based on existing context using span_creation_handler."""
+        # For pipeline operations, use the pipeline name, otherwise use component name
+        final_name = self._name if operation_name == _PIPELINE_RUN_KEY else span_name
         metadata = {"created_from": "haystack", "operation": operation_name}
         
-        # If we have existing context, create a child span
-        if existing_trace_data or existing_span_data:
-            # For pipeline operations, use the pipeline name, otherwise use component name
-            span_name_to_use = self._name if operation_name == _PIPELINE_RUN_KEY else span_name
-            
-            if existing_trace_data:
-                # Create child span under existing trace
-                span_data = existing_trace_data.create_child_span_data(
-                    name=span_name_to_use,
-                    type="general",
-                    metadata=metadata
-                )
-            else:
-                # Create child span under existing span
-                span_data = existing_span_data.create_child_span_data(
-                    name=span_name_to_use,
-                    type="general",
-                    metadata=metadata
-                )
-            
-            self._opik_context_storage.add_span_data(span_data)
-            return OpikSpanBridge(span_data)
-        
-        # Otherwise create a new trace
-        trace_name = self._name if operation_name == _PIPELINE_RUN_KEY else span_name
-        trace_data = opik_trace.TraceData(
-            name=trace_name,
+        # Always use span_creation_handler - it handles existing context properly
+        start_span_parameters = arguments_helpers.StartSpanParameters(
+            name=final_name,
+            type="general",
             metadata=metadata,
-            project_name=self._project_name,
+            project_name=self._project_name
         )
-        self._opik_context_storage.set_trace_data(trace_data)
-        return OpikSpanBridge(trace_data)
+        
+        trace_data, span_data = span_creation_handler.create_span_respecting_context(
+            start_span_arguments=start_span_parameters,
+            distributed_trace_headers=None,
+            opik_context_storage=self._opik_context_storage
+        )
+        final_span_or_trace_data = trace_data if trace_data else span_data
+        
+        return OpikSpanBridge(final_span_or_trace_data)
 
     def _create_child_span(self, parent_span: OpikSpanBridge, span_name: str, operation_name: str, tags: Dict[str, Any]) -> OpikSpanBridge:
         """Create a child span from a parent span."""
@@ -292,16 +278,8 @@ class OpikTracer(tracing.Tracer):
             if tracing_runtime_config.is_tracing_active():
                 if isinstance(span_or_trace_data, opik_trace.TraceData):
                     self._opik_client.trace(**span_or_trace_data.as_parameters)
-                    # Only clear trace data if this is our own trace (not inherited)
-                    current_trace = self._opik_context_storage.get_trace_data()
-                    if current_trace and current_trace.id == span_or_trace_data.id:
-                        self._opik_context_storage.set_trace_data(None)
                 else:
                     self._opik_client.span(**span_or_trace_data.as_parameters)
-                    # Remove span from context storage
-                    current_span = self._opik_context_storage.top_span_data()
-                    if current_span and current_span.id == span_or_trace_data.id:
-                        self._opik_context_storage.pop_span_data()
             
             self._context.pop()
             if self.enforce_flush:
