@@ -1,5 +1,5 @@
-# Multi-stage build: Build stage (explicit ARM64 + EXECUTION TIME OPTIMIZED)
-# Uses -b flag for legacy .pyc layout = fastest Python bytecode loading
+# Multi-stage build: Runtime stage (EXECUTION TIME OPTIMIZED)
+# Execution speed with .pyc
 FROM python:3.12.9-slim AS builder
 
 WORKDIR /build
@@ -39,8 +39,8 @@ RUN find /usr/local/lib/python* -name "ensurepip" -type d -exec rm -rf {} + || t
 RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 
 #######################################################################
-# Multi-stage build: Runtime stage (explicit ARM64 + EXECUTION TIME OPTIMIZED)
-# Maximum execution speed with legacy .pyc layout + security hardening
+# Multi-stage build: Runtime stage (EXECUTION TIME OPTIMIZED)
+# Execution speed with .pyc
 FROM python:3.12.9-slim AS runtime
 
 # Clean up package managers from base image (no packages to install)
