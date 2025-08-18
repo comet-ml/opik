@@ -173,7 +173,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 # ✅ Good: Understanding trace and span relationship for @track
-# Note: In most cases, tracked root function calls produce traces and spans 
+# Note: In most cases, tracked root function calls produce traces and spans
 # with the same name, inputs, outputs, etc. This is the standard pattern for
 # @track-based integrations and should be reflected in tests.
 def test_track__root_function__trace_and_span_have_same_data(fake_backend):
@@ -225,24 +225,24 @@ def test_create_and_populate_dataset__happyflow(
 ):
     # Create dataset
     dataset = opik_client.create_dataset(name=dataset_name)
-    
+
     # Add items to dataset
     dataset.insert([
         {"input": {"query": "What is AI?"}, "expected_output": {"answer": "Artificial Intelligence"}},
         {"input": {"query": "What is ML?"}, "expected_output": {"answer": "Machine Learning"}},
     ])
-    
+
     # Verify with domain-specific helper
     verifiers.verify_dataset(
         opik_client=opik_client,
         name=dataset_name,
         dataset_items=[
             dataset_item.DatasetItem(
-                input={"query": "What is AI?"}, 
+                input={"query": "What is AI?"},
                 expected_output={"answer": "Artificial Intelligence"}
             ),
             dataset_item.DatasetItem(
-                input={"query": "What is ML?"}, 
+                input={"query": "What is ML?"},
                 expected_output={"answer": "Machine Learning"}
             ),
         ],
@@ -373,9 +373,9 @@ def test_sentiment_import_error(monkeypatch):
     # Mock the import to simulate missing nltk
     def mock_import(*args, **kwargs):
         raise ImportError("No module named 'vaderSentiment'")
-    
+
     monkeypatch.setattr("builtins.__import__", mock_import)
-    
+
     with pytest.raises(MetricComputationError):
         metric = Sentiment()
         metric.score("Some text")
@@ -420,10 +420,10 @@ async def test_async_function__happyflow(fake_backend):
     async def async_function(input_data):
         await asyncio.sleep(0.1)  # Simulate async work
         return f"processed: {input_data}"
-    
+
     result = await async_function("test_input")
     tracker.flush_tracker()
-    
+
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="async_function",
@@ -434,7 +434,7 @@ async def test_async_function__happyflow(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         spans=[ANY_BUT_NONE],  # Span details
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
 ```
@@ -443,7 +443,7 @@ async def test_async_function__happyflow(fake_backend):
 
 ### Do's:
 - ✅ Use parameterized tests for multiple scenarios efficiently
-- ✅ Test both sync and async code paths where applicable  
+- ✅ Test both sync and async code paths where applicable
 - ✅ Use appropriate test fixtures for isolation
 - ✅ Test error conditions and edge cases thoroughly
 - ✅ Use domain-specific assertion helpers

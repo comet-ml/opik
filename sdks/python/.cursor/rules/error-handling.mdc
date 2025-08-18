@@ -32,7 +32,7 @@ class MetricComputationError(OpikException):
 
 class GuardrailValidationFailed(OpikException):
     """Exception raised when a guardrail validation fails."""
-    
+
     def __init__(
         self,
         message: str,

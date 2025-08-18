@@ -12,7 +12,7 @@ Comprehensive guidelines for writing clear, maintainable documentation and follo
 ### Comprehensive Type Annotations
 
 - **Use complete type hints** for all function signatures
-- **Import typing utilities** for complex types  
+- **Import typing utilities** for complex types
 - **Use Union types** for multiple possible types
 - **Use Optional** for nullable parameters
 
@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, TypeVar, Union
 def search_spans(
     self,
     project_name: Optional[str] = None,
-    trace_id: Optional[str] = None, 
+    trace_id: Optional[str] = None,
     filter_string: Optional[str] = None,
     max_results: int = 1000,
     truncate: bool = True,
@@ -79,7 +79,7 @@ class OpikBaseModel(abc.ABC):
     If you want to implement custom LLM provider in evaluation metrics,
     you should inherit from this class.
     """
-    
+
     def __init__(self, model_name: str):
         """
         Initializes the base model with a given model name.
@@ -176,7 +176,7 @@ def get_trace_content(self, id: str) -> trace_public.TracePublic:
 def _configure_url(self, url_override: Optional[str]) -> None:
     # Handle URL
     base_url = url_override or self._default_base_url
-    
+
     # This URL set here might not be the final one.
     # It's possible that the URL will be extracted from the smart api key on the later stage.
     # In that case `self.base_url` field will be updated.
@@ -186,12 +186,12 @@ def _determine_deployment_type(self, url_override: Optional[str]) -> str:
     if url_override:
         # Step 1: If the URL is provided and active, update the configuration
         return "provided"
-    
+
     # Step 2: Check if the default local instance is active
     if self._check_local_deployment():
         # Step 3: Ask user if they want to use the found local instance
         return "local"
-    
+
     # Step 4: Ask user for URL if no valid local instance is found or approved
     return "cloud"
 ```
@@ -209,13 +209,13 @@ def build_api_client(base_url: str, api_key: str) -> OpikApi:
 # ✅ Good: Meaningful variable names
 def process_llm_response(provider: LLMProvider, response_data: Dict[str, Any]) -> OpikUsage:
     usage_builders = _PROVIDER_TO_OPIK_USAGE_BUILDERS[provider]
-    
+
     for build_function in usage_builders:
         try:
             return build_function(response_data)
         except Exception:
             continue
-    
+
     raise ValueError(f"Failed to build usage for provider {provider}")
 ```
 

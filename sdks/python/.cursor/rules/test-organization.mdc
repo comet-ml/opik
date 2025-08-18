@@ -68,10 +68,10 @@ def test_track__captures_function_metadata(fake_backend):
     )
     def test_function(x):
         return f"processed: {x}"
-    
+
     test_function("input")
     tracker.flush_tracker()
-    
+
     # Test focuses on decorator behavior, not external integrations
     expected_trace = TraceModel(
         name="custom_name",
@@ -103,12 +103,12 @@ tests/library_integration/openai/
 def test_openai_chat_completions__basic_completion(fake_backend):
     client = openai.OpenAI(api_key="test-key")
     tracked_client = track_openai(client, project_name="test")
-    
+
     response = tracked_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": "Hello"}]
     )
-    
+
     # Verify integration creates proper traces and spans
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace_tree, fake_backend.trace_trees[0])
@@ -139,7 +139,7 @@ def test_create_and_populate_dataset__happyflow(opik_client: opik.Opik, dataset_
     dataset.insert([
         {"input": {"query": "What is AI?"}, "expected_output": {"answer": "AI"}},
     ])
-    
+
     # Use domain-specific verifiers
     verifiers.verify_dataset(
         opik_client=opik_client,

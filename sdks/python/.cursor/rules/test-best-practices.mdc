@@ -51,7 +51,7 @@ def test_sentiment_classification(text, expected_sentiment):
 def test_tracked_function__happyflow(opik_client, project_name):
     # Setup
     ID_STORAGE = {}
-    
+
     @opik.track(
         tags=["outer-tag1", "outer-tag2"],
         metadata={"outer-metadata-key": "outer-metadata-value"},
@@ -60,11 +60,11 @@ def test_tracked_function__happyflow(opik_client, project_name):
     def f_outer(x):
         ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
         return "outer-output"
-    
+
     # Call
     f_outer("outer-input")
     opik.flush_tracker()
-    
+
     # Verify trace
     verifiers.verify_trace(
         opik_client=opik_client,
@@ -186,7 +186,7 @@ def test_sentiment_classification(text, expected_sentiment):
 
     # Check that the reason contains the expected sentiment category
     assert expected_sentiment in result.reason
-    
+
     # Verify the compound score is in the correct range
     assert -1.0 <= result.value <= 1.0
 
@@ -195,9 +195,9 @@ def test_sentiment_import_error(monkeypatch):
     # Mock the import to simulate missing nltk
     def mock_import(*args, **kwargs):
         raise ImportError("No module named 'vaderSentiment'")
-    
+
     monkeypatch.setattr("builtins.__import__", mock_import)
-    
+
     with pytest.raises(MetricComputationError):
         metric = Sentiment()
         metric.score("Some text")
@@ -306,7 +306,7 @@ def test_trace_creation__e2e__happyflow(opik_client: opik.Opik):
         input={"query": "test"},
         output={"result": "success"}
     )
-    
+
     # Use domain-specific verifiers for e2e assertions
     # Verifiers use synchronization.until() under the hood for waiting
     verifiers.verify_trace(
@@ -323,14 +323,14 @@ import tests.e2e.synchronization as synchronization
 
 def test_experiment_creation__manual_waiting(opik_client: opik.Opik):
     experiment = opik_client.create_experiment(name="test-experiment")
-    
+
     # If not using verifiers, manually use synchronization.until for waiting
     if not synchronization.until(
         lambda: opik_client.get_experiment_by_name("test-experiment") is not None,
         allow_errors=True,
     ):
         raise AssertionError("Experiment was not created within timeout")
-    
+
     # Then perform manual assertions
     retrieved_experiment = opik_client.get_experiment_by_name("test-experiment")
     assert retrieved_experiment.name == "test-experiment"
