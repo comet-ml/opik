@@ -163,15 +163,6 @@ def test_llama_index__no_index_construction_logging_happyflow(
     EXPECTED_TRACE_TREES = [
         TraceModel(
             id=ANY_BUT_NONE,
-            name="index_construction",
-            metadata={"created_from": "llama_index"},
-            start_time=ANY_BUT_NONE,
-            last_updated_at=ANY_BUT_NONE,
-            project_name=expected_project_name,
-            spans=ANY_BUT_NONE,  # too complex spans tree, no check
-        ),
-        TraceModel(
-            id=ANY_BUT_NONE,
             name="query",
             input={"query_str": "What did the author do growing up?"},
             output=ANY_BUT_NONE,
@@ -184,11 +175,11 @@ def test_llama_index__no_index_construction_logging_happyflow(
         ),
     ]
 
-    assert len(fake_backend.trace_trees) == 2
+    assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
 
     # check token usage info
-    llm_response = fake_backend.trace_trees[1].spans[0].spans[1].spans[3].usage
+    llm_response = fake_backend.trace_trees[0].spans[0].spans[1].spans[3].usage
     assert_dict_has_keys(
         llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
     )
