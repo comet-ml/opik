@@ -16,6 +16,108 @@ Comprehensive guidelines for implementing effective tests using fixtures, utilit
 - **Extensive examples** in `opik/sdks/python/tests/unit/decorator/test_tracker_outputs.py` and `opik/sdks/python/tests/library_integration/openai/test_openai_responses.py`
 - **Use and create verify_* functions** from `opik/sdks/python/tests/e2e/verifiers.py` for repeated assertion logic
 
+### Assertion Helpers for Flexible Testing
+
+The SDK provides specialized assertion helpers for flexible comparisons in tests:
+
+```python
+# ✅ Good: Using assertion helpers for flexible assertions
+from tests.testlib import ANY, ANY_BUT_NONE, ANY_DICT, ANY_LIST, ANY_STRING
+
+# ANY - Matches anything (including None)
+expected_data = {
+    "id": ANY,  # Will match any value
+    "name": "test",
+    "metadata": ANY,  # Will match any value including None
+}
+
+# ANY_BUT_NONE - Matches anything except None
+span_model = SpanModel(
+    id=ANY_BUT_NONE,  # Must exist but we don't care about exact value
+    start_time=ANY_BUT_NONE,  # Must be present and not None
+    end_time=ANY_BUT_NONE,  # Must be present and not None
+    name="test_span"
+)
+
+# ANY_DICT - Matches any dictionary
+trace_data = {
+    "input": ANY_DICT,  # Will match any dict: {}, {"key": "value"}, etc.
+    "output": ANY_DICT,
+    "metadata": ANY_DICT,
+}
+
+# ANY_LIST - Matches any list
+expected_result = {
+    "tags": ANY_LIST,  # Will match any list: [], ["tag1"], ["tag1", "tag2"], etc.
+    "spans": ANY_LIST,
+    "feedback_scores": ANY_LIST,
+}
+
+# ANY_STRING - Matches any string
+user_data = {
+    "user_id": ANY_STRING,  # Will match any string value
+    "session_id": ANY_STRING,
+}
+
+# Conditional matching with ANY_DICT
+metadata_check = ANY_DICT.containing({"version": "1.0"})  # Must contain this key-value
+input_check = ANY_STRING.starting_with("query:")  # Must start with this prefix
+
+# ✅ Good: Using ANY_DICT.containing() for partial matching
+expected_span = SpanModel(
+    id=ANY_BUT_NONE,
+    name="llm_call",
+    # This will match any dict that contains at least these keys
+    metadata=ANY_DICT.containing({
+        "model": "gpt-4",
+        "temperature": 0.7
+    }),
+    # Input must contain the required query field, but can have additional fields
+    input=ANY_DICT.containing({
+        "query": "What is AI?"
+    }),
+    # Output can be any dict structure
+    output=ANY_DICT,
+    usage=ANY_DICT.containing({
+        "prompt_tokens": 10,
+        "completion_tokens": 20
+    })
+)
+
+# This will match spans like:
+# metadata: {"model": "gpt-4", "temperature": 0.7, "extra_field": "value"}
+# input: {"query": "What is AI?", "context": "...", "user_id": "123"}
+# usage: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+
+# ✅ Good: Real usage example in trace testing
+EXPECTED_TRACE_TREE = TraceModel(
+    id=ANY_BUT_NONE,  # ID must exist but we don't care about exact UUID
+    name="llm_call",
+    input=ANY_DICT,  # Input can be any dict structure
+    output=ANY_DICT,  # Output can be any dict structure
+    start_time=ANY_BUT_NONE,  # Must have a start time
+    end_time=ANY_BUT_NONE,  # Must have an end time
+    tags=ANY_LIST,  # Tags can be any list (empty or with values)
+    spans=[
+        SpanModel(
+            id=ANY_BUT_NONE,
+            name=ANY_STRING,  # Name can be any string
+            usage=ANY_DICT,  # Usage data can be any dict structure
+            metadata=ANY,  # Metadata can be anything (dict, None, etc.)
+        )
+    ]
+)
+
+# When you need specific values, use exact matches
+EXPECTED_SPECIFIC_TRACE = TraceModel(
+    id=ANY_BUT_NONE,
+    name="specific_function",  # Exact name match required
+    input={"query": "test"},  # Exact input structure required
+    output={"result": "success"},  # Exact output structure required
+    spans=[]  # Exactly empty list required
+)
+```
+
 ### Test Data Generation
 
 ```python
@@ -69,6 +171,49 @@ def test_track__one_nested_function__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+# ✅ Good: Understanding trace and span relationship for @track
+# Note: In most cases, tracked root function calls produce traces and spans 
+# with the same name, inputs, outputs, etc. This is the standard pattern for
+# @track-based integrations and should be reflected in tests.
+def test_track__root_function__trace_and_span_have_same_data(fake_backend):
+    @tracker.track
+    def my_function(input_data):
+        return f"processed: {input_data}"
+
+    my_function("test_input")
+    tracker.flush_tracker()
+
+    # Both trace and its root span should have the same data
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="my_function",  # Same name as the function
+        input={"input_data": "test_input"},  # Same input
+        output={"output": "processed: test_input"},  # Same output
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="my_function",  # Same name as trace
+                input={"input_data": "test_input"},  # Same input as trace
+                output={"output": "processed: test_input"},  # Same output as trace
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],  # No nested spans
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+# ❌ Note: Exceptions to the trace/span similarity pattern
+# - Callback-based integrations (e.g., LangChain with OpikTracer)
+# - Manual context manipulation using opik_context
+# - Some complex integrations where trace and span data diverge
+# In these cases, test the actual expected behavior rather than assuming similarity
 ```
 
 ### E2E Testing Fixtures
