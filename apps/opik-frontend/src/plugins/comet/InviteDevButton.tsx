@@ -14,7 +14,7 @@ const InviteDevButton: React.FC<InviteDevButtonProps> = ({ onClick }) => {
   }
 
   return (
-    <Button className="w-full" variant="outline" onClick={onClick} asChild>
+    <Button className="flex-1" variant="outline" onClick={onClick} asChild>
       <a href={inviteMembersURL} target="_blank" rel="noopener noreferrer">
         <UserPlus className="mr-2 size-4" />
         <span>Invite a developer</span>
