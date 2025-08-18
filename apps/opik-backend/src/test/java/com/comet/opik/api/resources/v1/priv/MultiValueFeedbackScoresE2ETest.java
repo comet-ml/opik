@@ -6,7 +6,10 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -31,6 +34,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -122,6 +126,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -136,6 +141,7 @@ public class MultiValueFeedbackScoresE2ETest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
+        this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -519,6 +525,101 @@ public class MultiValueFeedbackScoresE2ETest {
         assertStreamExperiments(experimentName, user1Score, user2Score);
         assertExperimentItemsStream(experimentName, user1Score, user2Score);
         assertDatasetItemsWithExperimentItems(experimentId, datasetId, user1Score, user2Score);
+    }
+
+    @Test
+    @DisplayName("test score optimization by multiple authors")
+    void testScoreOptimizationByMultipleAuthors() {
+        // create a dataset
+        var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .build();
+        var datasetId = datasetResourceClient.createDataset(dataset, API_KEY1, TEST_WORKSPACE);
+
+        // create dataset items
+        var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                .map(item -> item.toBuilder()
+                        .datasetId(datasetId)
+                        .build())
+                .toList();
+        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, datasetItems),
+                TEST_WORKSPACE, API_KEY1);
+
+        // create an optimization
+        var scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var optimization = factory.manufacturePojo(Optimization.class).toBuilder()
+                .id(null)
+                .datasetId(datasetId)
+                .datasetName(dataset.name())
+                .objectiveName(scoreName)
+                .status(OptimizationStatus.RUNNING)
+                .numTrials(null)
+                .feedbackScores(null)
+                .build();
+
+        var optimizationId = optimizationResourceClient.create(optimization, API_KEY1, TEST_WORKSPACE);
+
+        // create an experiment as a trial for the optimization
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(datasetId)
+                .optimizationId(optimizationId)
+                .datasetName(dataset.name())
+                .type(ExperimentType.TRIAL)
+                .build();
+
+        var experimentId = experimentResourceClient.create(experiment, API_KEY1, TEST_WORKSPACE);
+
+        // create a single trace for the experiment
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        // create experiment item linking trace to the experiment
+        var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(traceId)
+                .datasetItemId(datasetItems.getFirst().id())
+                .feedbackScores(null)
+                .build();
+
+        var experimentItems = Set.of(experimentItem);
+
+        experimentResourceClient.createExperimentItem(experimentItems, API_KEY1, TEST_WORKSPACE);
+
+        // score the trace with different values from different users
+        var user1Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(scoreName)
+                .build();
+        traceResourceClient.feedbackScore(traceId, user1Score, TEST_WORKSPACE, API_KEY1);
+
+        // simulate another user scoring the same trace by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(scoreName)
+                .build();
+        traceResourceClient.feedbackScore(traceId, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        // get the optimization and verify feedback scores
+        var actualOptimization = optimizationResourceClient.get(optimizationId, API_KEY2, TEST_WORKSPACE, 200);
+
+        assertThat(actualOptimization.feedbackScores()).hasSize(1);
+        var actualScore = actualOptimization.feedbackScores().getFirst();
+        assertThat(actualScore.name()).isEqualTo(scoreName);
+
+        assertAverageScore(actualScore.value(), user1Score, user2Score);
+
+        // verify find optimization also returns the correct averaged scores
+        var optimizationPage = optimizationResourceClient.find(API_KEY2, TEST_WORKSPACE, 1, 10,
+                datasetId, null, false, 200);
+        assertThat(optimizationPage.content()).hasSize(1);
+        var foundOptimization = optimizationPage.content().getFirst();
+        assertThat(foundOptimization.feedbackScores()).hasSize(1);
+        var foundScore = foundOptimization.feedbackScores().getFirst();
+        assertThat(foundScore.name()).isEqualTo(scoreName);
+        assertAverageScore(foundScore.value(), user1Score, user2Score);
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
