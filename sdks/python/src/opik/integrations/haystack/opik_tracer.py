@@ -75,7 +75,7 @@ class OpikTracer(tracing.Tracer):
         try:
             yield span
         finally:
-            self._finalize_span(span, tags)
+            self._finalize_span(span)
 
     def _create_span_or_trace(
         self, operation_name: str, span_name: str
@@ -113,7 +113,7 @@ class OpikTracer(tracing.Tracer):
         tags: Dict[str, Any],
     ) -> opik_span_bridge.OpikSpanBridge:
         """Create a child span from a parent span."""
-        parent_data = parent_span.raw_span()
+        parent_data = parent_span.get_opik_span_or_trace_data()
         span_type: SpanType = (
             "llm"
             if tags.get(constants.COMPONENT_TYPE_KEY)
@@ -128,13 +128,11 @@ class OpikTracer(tracing.Tracer):
         )
         return opik_span_bridge.OpikSpanBridge(span_data)
 
-    def _finalize_span(
-        self, span: opik_span_bridge.OpikSpanBridge, tags: Dict[str, Any]
-    ) -> None:
+    def _finalize_span(self, span: opik_span_bridge.OpikSpanBridge) -> None:
         """Finalize span by updating metadata and ending the span."""
         try:
-            span_or_trace_data = span.raw_span()
-            span.update_span_metadata(tags)
+            span_or_trace_data = span.get_opik_span_or_trace_data()
+            span.apply_component_metadata()
             span_or_trace_data.init_end_time()
 
             # Send data to backend if tracing is active
@@ -166,7 +164,7 @@ class OpikTracer(tracing.Tracer):
         if not span:
             return None
 
-        span_data = span.raw_span()
+        span_data = span.get_opik_span_or_trace_data()
         trace_id = (
             span_data.id
             if isinstance(span_data, opik_trace.TraceData)
@@ -182,7 +180,7 @@ class OpikTracer(tracing.Tracer):
         if not span:
             return None
 
-        span_data = span.raw_span()
+        span_data = span.get_opik_span_or_trace_data()
         return (
             span_data.id
             if isinstance(span_data, opik_trace.TraceData)

@@ -143,6 +143,7 @@ def test_haystack__happyflow(
                     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
                 },
                 model=ANY_STRING.starting_with(MODEL_NAME),
+                provider="openai",
             ),
         ],
     )
@@ -254,6 +255,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 metadata=ANY_DICT,
                                 usage=ANY_DICT,
                                 model=ANY_STRING,
+                                provider="openai",
                             ),
                         ],
                     ),

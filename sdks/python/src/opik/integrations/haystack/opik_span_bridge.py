@@ -40,7 +40,9 @@ class OpikSpanBridge(tracing.Span):
 
     def set_tag(self, key: str, value: Any) -> None:
         """
-        Set a generic tag for this span.
+        Set a single tag for this span.
+
+        This method is required by the Haystack Span interface.
 
         Args:
             key: The tag key.
@@ -56,23 +58,27 @@ class OpikSpanBridge(tracing.Span):
         """
         Set a content-specific tag for this span.
 
+        This method is required by the Haystack Span interface.
+        Content tags are used for input/output data that should only be
+        logged when content tracing is enabled.
+
         Args:
-            key: The content tag key.
+            key: The content tag key (e.g., "component.input", "component.output").
             value: The content tag value.
         """
         if not tracing.tracer.is_content_tracing_enabled:
             return
 
         if key.endswith(".input"):
-            self._process_input_tag(value)
+            self._convert_and_store_input_data(value)
         elif key.endswith(".output"):
-            self._process_output_tag(value)
+            self._convert_and_store_output_data(value)
 
         self._data[key] = value
 
-    def _process_input_tag(self, value: Any) -> None:
+    def _convert_and_store_input_data(self, value: Any) -> None:
         """
-        Process input tag value and update span data.
+        Convert Haystack input data to Opik format and store in span.
 
         Args:
             value: The input tag value to process.
@@ -93,9 +99,9 @@ class OpikSpanBridge(tracing.Span):
             LOGGER.error("Failed to process input tag: %s", e, exc_info=True)
             raise exceptions.OpikException(f"Failed to process input tag: {e}") from e
 
-    def _process_output_tag(self, value: Any) -> None:
+    def _convert_and_store_output_data(self, value: Any) -> None:
         """
-        Process output tag value and update span data.
+        Convert Haystack output data to Opik format and store in span.
 
         Args:
             value: The output tag value to process.
@@ -122,20 +128,36 @@ class OpikSpanBridge(tracing.Span):
             LOGGER.error("Failed to process output tag: %s", e, exc_info=True)
             raise exceptions.OpikException(f"Failed to process output tag: {e}") from e
 
-    def raw_span(self) -> Union[opik_span.SpanData, opik_trace.TraceData]:
+    def get_opik_span_or_trace_data(
+        self,
+    ) -> Union[opik_span.SpanData, opik_trace.TraceData]:
         """
-        Return the underlying span or trace data instance.
+        Get the underlying Opik span or trace data instance.
 
-        :return: The Opik SpanData or TraceData instance.
+        This method provides access to the internal Opik data for integration
+        with the OpikTracer class.
+
+        Returns:
+            The Opik SpanData or TraceData instance managed by this bridge.
         """
         return self._span_or_trace_data
 
     def get_correlation_data_for_logs(self) -> Dict[str, Any]:
+        """
+        Get correlation data for logging purposes.
+
+        This method is required by the Haystack Span interface.
+
+        Returns:
+            Empty dictionary as correlation data is not currently supported.
+        """
         return {}
 
     def set_tags(self, tags: Dict[str, Any]) -> None:
         """
         Set multiple tags on this span.
+
+        This is a convenience method that calls set_tag for each key-value pair.
 
         Args:
             tags: Dictionary of tag keys and values.
@@ -143,51 +165,99 @@ class OpikSpanBridge(tracing.Span):
         for key, value in tags.items():
             self.set_tag(key, value)
 
-    def update_llm_metadata(self, component_type: str) -> None:
-        """Update metadata for LLM generator components.
+    def _extract_provider_from_component_type(self, component_type: str) -> str:
+        """Extract provider name from Haystack component type.
 
-        This method updates LLM-specific metadata like usage and model
-        information based on the component type and span data.
+        Args:
+            component_type: The Haystack component type (e.g., "OpenAIChatGenerator")
+
+        Returns:
+            The provider name (e.g., "openai", "anthropic", "azure")
+        """
+        # Map component types to provider names
+        if "OpenAI" in component_type:
+            return "openai"
+        elif "Azure" in component_type:
+            return "azure"
+        elif "Anthropic" in component_type:
+            return "anthropic"
+        elif "HuggingFace" in component_type:
+            return "huggingface"
+        elif "Cohere" in component_type:
+            return "cohere"
+        else:
+            # Extract provider name from component type (fallback)
+            # Remove common suffixes and convert to lowercase
+            provider = (
+                component_type.replace("Generator", "").replace("Chat", "").lower()
+            )
+            return provider if provider else "unknown"
+
+    def _extract_metadata_from_component_output(
+        self, component_type: str
+    ) -> Dict[str, Any]:
+        """Extract metadata dictionary from component output based on component type.
+
+        Args:
+            component_type: The Haystack component type
+
+        Returns:
+            Dictionary containing usage and model metadata, or empty dict if not found
+        """
+        if component_type in constants.SUPPORTED_GENERATORS:
+            # Regular generators
+            meta = self._data.get(constants.COMPONENT_OUTPUT_KEY, {}).get("meta")
+            if meta and len(meta) > 0:
+                return meta[0]
+        elif component_type in constants.SUPPORTED_CHAT_GENERATORS:
+            # Chat generators
+            replies = self._data.get(constants.COMPONENT_OUTPUT_KEY, {}).get("replies")
+            if replies and len(replies) > 0:
+                return replies[0].meta
+
+        return {}
+
+    def _extract_and_set_llm_metadata(self, component_type: str) -> None:
+        """Extract and set LLM metadata from component output.
+
+        This method extracts LLM-specific metadata like usage, model, and provider
+        information from the component output and updates the span data.
 
         Args:
             component_type: The Haystack component type (e.g., "OpenAIChatGenerator")
         """
         try:
-            if component_type in constants.SUPPORTED_GENERATORS:
-                # Regular generators
-                meta = self._data.get(constants.COMPONENT_OUTPUT_KEY, {}).get("meta")
-                if meta and len(meta) > 0:
-                    m = meta[0]
-                    self._span_or_trace_data.update(
-                        usage=m.get("usage"), model=m.get("model")
-                    )
-            elif component_type in constants.SUPPORTED_CHAT_GENERATORS:
-                # Chat generators
-                replies = self._data.get(constants.COMPONENT_OUTPUT_KEY, {}).get(
-                    "replies"
+            provider = self._extract_provider_from_component_type(component_type)
+            metadata_dict = self._extract_metadata_from_component_output(component_type)
+
+            if metadata_dict:
+                self._span_or_trace_data.update(
+                    usage=metadata_dict.get("usage"),
+                    model=metadata_dict.get("model"),
+                    provider=provider,
                 )
-                if replies and len(replies) > 0:
-                    meta = replies[0].meta
-                    self._span_or_trace_data.update(
-                        usage=meta.get("usage"), model=meta.get("model")
-                    )
         except (IndexError, AttributeError, KeyError) as e:
             LOGGER.warning(
                 "Failed to update LLM metadata for %s: %s", component_type, e
             )
 
-    def update_span_metadata(self, tags: Dict[str, Any]) -> None:
-        """Update span metadata based on component type and tags.
+    def apply_component_metadata(self) -> None:
+        """Apply component-specific metadata to span based on internal tag data.
 
-        Args:
-            tags: Dictionary of tags containing component information
+        This method processes the span's internal tags to extract and apply relevant metadata such as:
+        - LLM metadata (usage, model, provider) for generator components
+        - Pipeline input/output data for pipeline operations
+
+        The tags are already stored in the span's internal data from previous set_tags() calls.
         """
-        component_type = tags.get(constants.COMPONENT_TYPE_KEY)
+        # Extract component type from internal data
+        component_type = self._data.get(constants.COMPONENT_TYPE_KEY)
 
         if component_type and component_type in constants.ALL_SUPPORTED_GENERATORS:
-            self.update_llm_metadata(component_type)
+            self._extract_and_set_llm_metadata(component_type)
 
-        if tags.get(constants.PIPELINE_INPUT_DATA_KEY) is not None:
-            input_data = tags.get("haystack.pipeline.input_data", {})
-            output_data = tags.get("haystack.pipeline.output_data", {})
+        # Check for pipeline data in internal tags
+        if self._data.get(constants.PIPELINE_INPUT_DATA_KEY) is not None:
+            input_data = self._data.get("haystack.pipeline.input_data", {})
+            output_data = self._data.get("haystack.pipeline.output_data", {})
             self._span_or_trace_data.update(input=input_data, output=output_data)
