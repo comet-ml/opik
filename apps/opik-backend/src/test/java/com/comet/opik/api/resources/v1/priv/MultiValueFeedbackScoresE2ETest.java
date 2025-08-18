@@ -12,6 +12,7 @@ import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.ValueEntry;
@@ -22,6 +23,8 @@ import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -35,6 +38,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -61,6 +65,8 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -127,6 +133,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
+    private ProjectMetricsResourceClient projectMetricsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -142,6 +149,7 @@ public class MultiValueFeedbackScoresE2ETest {
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
+        this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -158,6 +166,7 @@ public class MultiValueFeedbackScoresE2ETest {
                         .projectName(DEFAULT_PROJECT)
                         .usage(null)
                         .feedbackScores(null)
+                        .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
                         .build())
                 .toList();
         var trace1Id = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
@@ -221,6 +230,10 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(Trace::id))
                 .containsExactlyInAnyOrder(trace1Id, trace2Id);
+
+        // assert feedback project metric
+        assertProjectMetric(actualTrace1.projectId(), MetricType.FEEDBACK_SCORES, user1Score.name(),
+                List.of(user1Score.value(), user2Score.value()), anotherTraceScore.value());
     }
 
     @Test
@@ -629,9 +642,35 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(valueByAuthor.get(author).source()).isEqualTo(expected.source());
     }
 
+    private BigDecimal calcAverage(List<BigDecimal> scores) {
+        return BigDecimal.valueOf(StatsUtils.avgFromList(scores));
+    }
+
     private void assertAverageScore(BigDecimal actualValue, FeedbackScore user1Score, FeedbackScore user2Score) {
-        var avgScore = BigDecimal.valueOf(StatsUtils.avgFromList(List.of(user1Score.value(), user2Score.value())));
-        assertThat(actualValue).usingComparator(StatsUtils::bigDecimalComparator).isEqualTo(avgScore);
+        assertThat(actualValue).usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(calcAverage(List.of(user1Score.value(), user2Score.value())));
+    }
+
+    private void assertProjectMetric(
+            UUID projectId, MetricType metricType, String scoreName, List<BigDecimal> authoredValues,
+            BigDecimal otherValue) {
+        var projectMetrics = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                .metricType(metricType)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .intervalEnd(Instant.now())
+                .build(), BigDecimal.class, API_KEY1, TEST_WORKSPACE);
+        var scoreMetric = projectMetrics.results().stream()
+                .filter(predicate -> predicate.name().equals(scoreName)).findFirst()
+                .orElseThrow(() -> new AssertionError("Metric for score " + scoreName + " not found"));
+        assertThat(scoreMetric.data()).hasSize(1);
+
+        var firstTraceScore = calcAverage(authoredValues);
+        var finalScore = calcAverage(List.of(firstTraceScore, otherValue));
+
+        assertThat(scoreMetric.data().getFirst().value())
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(finalScore);
     }
 
     private void assertFindExperiments(String experimentName, FeedbackScore user1Score, FeedbackScore user2Score) {
