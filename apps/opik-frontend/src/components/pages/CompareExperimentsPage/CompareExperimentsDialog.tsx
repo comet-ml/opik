@@ -56,6 +56,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
       workspaceName,
       filters: [
         createFilter({
+          id: "dataset_id",
           field: "dataset_id",
           operator: "=",
           value: datasetId,
@@ -67,6 +68,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
     },
     {
       placeholderData: keepPreviousData,
+      enabled: open,
     },
   );
 
