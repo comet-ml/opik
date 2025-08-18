@@ -35,6 +35,7 @@ COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
 COPY redoc/ redoc/
 
 RUN dos2unix ./*.sh
+RUN chmod +x ./*.sh
 
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
