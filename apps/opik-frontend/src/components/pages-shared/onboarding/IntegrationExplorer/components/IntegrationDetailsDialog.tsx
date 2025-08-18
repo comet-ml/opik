@@ -18,7 +18,7 @@ import { ExternalLink } from "lucide-react";
 import { IntegrationStep } from "./IntegrationStep";
 
 type IntegrationDetailsDialogProps = {
-  selectedIntegration: Integration | null;
+  selectedIntegration?: Integration;
   onClose: () => void;
 };
 
