@@ -237,8 +237,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 {activeSection === DetailsActionSection.AIAssistants && (
                   <TraceAIViewer
                     traceId={traceId}
-                    spanId={spanId}
-                    projectId={projectId}
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
                   />
