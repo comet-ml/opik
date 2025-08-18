@@ -1,5 +1,6 @@
 import copy
 from typing import Any, Dict, Optional
+from enum import Enum
 
 from opik.rest_api.types import PromptVersionDetail
 from .prompt_template import PromptTemplate
@@ -16,40 +17,27 @@ class Prompt:
         self,
         name: str,
         prompt: str,
+        type: PromptType,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
-    ) -> None:
-        """
-        Initializes a new instance of the class with the given parameters.
-        Creates a new prompt using the opik client and sets the initial state of the instance attributes based on the created prompt.
-
-        Parameters:
-            name: The name for the prompt.
-            prompt: The template for the prompt.
-        """
-
-        self._template = PromptTemplate(template=prompt, type=type)
+        commit: Optional[str] = None,
+        id: Optional[str] = None,
+        created_by: Optional[str] = None,
+        version_count: Optional[int] = None,
+        created_at: Optional[str] = None,
+        last_updated_at: Optional[str] = None,
+        last_updated_by: Optional[str] = None,
+    ):
+        self._id = id
         self._name = name
-        self._metadata = metadata
+        self._prompt = prompt
         self._type = type
-
-        self._sync_with_backend()
-
-    def _sync_with_backend(self) -> None:
-        from opik.api_objects import opik_client
-
-        opik_client_ = opik_client.get_client_cached()
-        prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
-        prompt_version = prompt_client_.create_prompt(
-            name=self._name,
-            prompt=self._template.text,
-            metadata=self._metadata,
-            type=self._type,
-        )
-
-        self._commit = prompt_version.commit
-        self.__internal_api__prompt_id__ = prompt_version.prompt_id
-        self.__internal_api__version_id__ = prompt_version.id
+        self._metadata = metadata
+        self._commit = commit
+        self._created_by = created_by
+        self._version_count = version_count
+        self._created_at = created_at
+        self._last_updated_at = last_updated_at
+        self._last_updated_by = last_updated_by
 
     @property
     def name(self) -> str:
@@ -57,9 +45,19 @@ class Prompt:
         return self._name
 
     @property
+    def id(self) -> str:
+        """The ID of the prompt."""
+        return self._id
+
+    @property
     def prompt(self) -> str:
-        """The latest template of the prompt."""
-        return str(self._template)
+        """The template content of the prompt."""
+        return self._prompt
+
+    @property
+    def type(self) -> PromptType:
+        """The type of the prompt."""
+        return self._type
 
     @property
     def commit(self) -> Optional[str]:
@@ -68,13 +66,33 @@ class Prompt:
 
     @property
     def metadata(self) -> Optional[Dict[str, Any]]:
-        """The metadata dictionary associated with the prompt"""
-        return copy.deepcopy(self._metadata)
+        """The metadata associated with the prompt."""
+        return self._metadata
 
     @property
-    def type(self) -> PromptType:
-        """The prompt type of the prompt."""
-        return self._type
+    def created_by(self) -> Optional[str]:
+        """The user who created the prompt."""
+        return self._created_by
+
+    @property
+    def version_count(self) -> Optional[int]:
+        """The number of versions of this prompt."""
+        return self._version_count
+
+    @property
+    def created_at(self) -> Optional[str]:
+        """When the prompt was created."""
+        return self._created_at
+
+    @property
+    def last_updated_at(self) -> Optional[str]:
+        """When the prompt was last updated."""
+        return self._last_updated_at
+
+    @property
+    def last_updated_by(self) -> Optional[str]:
+        """The user who last updated the prompt."""
+        return self._last_updated_by
 
     def format(self, **kwargs: Any) -> str:
         """
@@ -91,22 +109,27 @@ class Prompt:
 
     @classmethod
     def from_fern_prompt_version(
-        cls,
-        name: str,
-        prompt_version: PromptVersionDetail,
+        cls, name: str, prompt_version: PromptVersionDetail, id: Optional[str] = None,
+        created_by: Optional[str] = None, version_count: Optional[int] = None, 
+        created_at: Optional[str] = None, last_updated_at: Optional[str] = None, 
+        last_updated_by: Optional[str] = None
     ) -> "Prompt":
-        # will not call __init__ to avoid API calls, create new instance with __new__
-        prompt = cls.__new__(cls)
-
-        prompt.__internal_api__version_id__ = prompt_version.id
-        prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
-
-        prompt._name = name
-        prompt._template = PromptTemplate(
-            template=prompt_version.template,
-            type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
+        """
+        Creates a Prompt object from a Fern-generated PromptVersionDetail.
+        """
+        return cls(
+            name=name,
+            prompt=prompt_version.template,
+            type=PromptType(prompt_version.type),
+            metadata=prompt_version.metadata,
+            commit=prompt_version.commit,
+            id=id,
+            created_by=created_by,
+            version_count=version_count,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            last_updated_by=last_updated_by,
         )
-        prompt._commit = prompt_version.commit
-        prompt._metadata = prompt_version.metadata
-        prompt._type = prompt_version.type
-        return prompt
+
+    def __str__(self) -> str:
+        return str(self._prompt)

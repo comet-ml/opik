@@ -1240,43 +1240,46 @@ class Opik:
         all_prompts = []
         page = 1
         page_size = min(100, max_results)  # Use smaller page size for efficiency
-        
+
         while len(all_prompts) < max_results:
             current_size = min(page_size, max_results - len(all_prompts))
-            
+
             try:
                 result = prompt_client.get_prompts_with_filters(
                     filters=filters,
                     name=name,
                     page=page,
                     size=current_size,
-                    get_latest_versions=True,
+                    get_latest_versions=True, # Always fetch latest versions for OpikClient.get_prompts
                 )
-                
-                if not result:
-                    break
-                
-                # Convert to Prompt objects
-                for item in result:
-                    if item["latest_version"] is not None:
-                        prompt = Prompt.from_fern_prompt_version(
-                            item["prompt_public"].name, 
-                            item["latest_version"]
-                        )
-                        all_prompts.append(prompt)
-                
-                # If we got fewer results than requested, we've reached the end
-                if len(result) < current_size:
-                    break
-                    
-                page += 1
-                
             except Exception as e:
-                # Handle specific error cases
-                if "Invalid filters" in str(e):
-                    raise ValueError(f"Invalid filter format: {filters}")
                 raise e
-        
+
+            if not result:
+                break # No more results
+
+            for item in result:
+                if item["latest_version"] is not None:
+                    prompt = Prompt.from_fern_prompt_version(
+                        item["prompt_public"].name,
+                        item["latest_version"],
+                        item["prompt_public"].id,
+                        getattr(item["prompt_public"], 'created_by', None),
+                        getattr(item["prompt_public"], 'version_count', None),
+                        getattr(item["prompt_public"], 'created_at', None),
+                        getattr(item["prompt_public"], 'last_updated_at', None),
+                        getattr(item["prompt_public"], 'last_updated_by', None)
+                    )
+                    all_prompts.append(prompt)
+                else:
+                    # Skip prompts without latest version
+                    continue
+
+            if len(result) < current_size:
+                break # Partial page, no more results
+
+            page += 1
+
         return all_prompts
 
     def create_optimization(
