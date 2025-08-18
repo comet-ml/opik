@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
-  UserPlus,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -39,15 +38,14 @@ import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/Pr
 import usePromptsList from "@/api/prompts/usePromptsList";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
-import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
-enum MENU_ITEM_TYPE {
+export enum MENU_ITEM_TYPE {
   link = "link",
   router = "router",
   button = "button",
 }
 
-type MenuItem = {
+export type MenuItem = {
   id: string;
   path?: string;
   type: MENU_ITEM_TYPE;
@@ -240,6 +238,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     setQuickstartOpened,
   } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
+  const sidebarMenuItems = usePluginsStore(
+    (state) => state.useSidebarMenuItems,
+  )();
 
   const { data: projectData } = useProjectsList(
     {
@@ -313,8 +314,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
-  const inviteMembersURL = useInviteMembersURL();
-
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -339,19 +338,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       label: "Quickstart guide",
       onClick: () => setQuickstartOpened(true),
     },
-    ...(inviteMembersURL
-      ? [
-          {
-            id: "inviteTeamMember",
-            type: MENU_ITEM_TYPE.button,
-            icon: UserPlus,
-            label: "Invite a teammate",
-            onClick: () => {
-              window.open(inviteMembersURL, "_blank");
-            },
-          },
-        ]
-      : []),
+    ...sidebarMenuItems,
     {
       id: "provideFeedback",
       type: MENU_ITEM_TYPE.button,
