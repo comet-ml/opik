@@ -52,7 +52,7 @@ python_requires=">=3.8"
 # Supported versions: 3.8, 3.9, 3.10, 3.11, 3.12
 classifiers=[
     "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -81,7 +81,7 @@ def lazy_import_OpikLogger() -> Optional["litellm.integrations.opik.opik.OpikLog
 def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     if lazy_import_OpikLogger() is None:
         return params
-    
+
     # Continue with integration logic
     import litellm
     # ... rest of implementation
@@ -193,7 +193,7 @@ except ImportError:
 def use_optional_feature():
     if not OPTIONAL_AVAILABLE:
         raise ImportError("Optional library not installed. Install with: pip install some-library")
-    
+
     return SomeClass()
 ```
 

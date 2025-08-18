@@ -22,17 +22,17 @@ class ThreadsClient:
     """Client for managing and interacting with conversational threads."""
     def __init__(self, client: "opik.Opik"):
         self._opik_client = client
-    
+
     def search_threads(self, project_name: Optional[str] = None) -> List[TraceThread]:
         """Single responsibility - only handles thread search operations."""
         pass
 
-# ✅ Good: Single responsibility - focused only on message processing  
+# ✅ Good: Single responsibility - focused only on message processing
 class OpikMessageProcessor(BaseMessageProcessor):
     """Processes messages with single responsibility - message handling."""
     def __init__(self, rest_client: rest_api_client.OpikApi):
         self._rest_client = rest_client
-    
+
     def process(self, message: BaseMessage) -> None:
         """Single responsibility - only processes messages."""
         pass
@@ -64,13 +64,13 @@ def build_opik_usage(
 ) -> opik_usage.OpikUsage:
     """Factory function open for extension - new providers can be added."""
     build_functions = _PROVIDER_TO_OPIK_USAGE_BUILDERS[provider]
-    
+
     for build_function in build_functions:
         try:
             return build_function(usage)
         except Exception:
             continue
-    
+
     raise ValueError(f"Failed to build OpikUsage for provider {provider}")
 ```
 
@@ -95,7 +95,7 @@ class Streamer:
         self._queue_consumers = queue_consumers
         self._batch_manager = batch_manager
         self._file_upload_manager = file_upload_manager
-        
+
         # Start injected components
         self._start_queue_consumers()
         if self._batch_manager is not None:
@@ -117,7 +117,7 @@ def construct_online_streamer(
         httpx_client=httpx_client,
         worker_count=file_upload_worker_count,
     )
-    
+
     return construct_streamer(
         message_processor=message_processor,
         file_upload_manager=file_uploader,
@@ -169,14 +169,14 @@ def construct_online_streamer(
     """Builder function that constructs complex objects with dependencies."""
     # Build message processor
     message_processor = message_processors.OpikMessageProcessor(rest_client=rest_client)
-    
+
     # Build file upload manager
     file_uploader = upload_manager.FileUploadManager(
         rest_client=rest_client,
         httpx_client=httpx_client,
         worker_count=file_upload_worker_count,
     )
-    
+
     # Use another builder function to construct the final object
     return construct_streamer(
         message_processor=message_processor,
@@ -201,7 +201,7 @@ class OpikUsage(pydantic.BaseModel):
             total_tokens=usage.get("total_tokens"),
             provider_usage=openai_chat_completions_usage.OpenAICompletionsUsage.from_dict(usage)
         )
-    
+
     @classmethod
     def from_anthropic_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         """Factory method for Anthropic format."""
@@ -227,15 +227,15 @@ class Opik:
     def create_experiment(self, name: str, description: Optional[str] = None) -> Experiment:
         """High-level API with appropriate defaults."""
         pass
-    
+
     def create_dataset(self, name: str, description: Optional[str] = None) -> Dataset:
         """Consistent pattern with experiment creation."""
         pass
-    
+
     def get_experiment_by_id(self, id: str) -> Experiment:
         """Consistent naming pattern for retrieval."""
         pass
-    
+
     def get_dataset(self, name: str) -> Dataset:
         """Consistent retrieval pattern."""
         pass

@@ -12,7 +12,7 @@ Comprehensive guidelines for organizing imports and implementing proper access c
 ### Import Grouping and Order
 
 - **Always import modules, not names** (except from `typing` or similar commonly used modules)
-- **Keep the namespace clean** 
+- **Keep the namespace clean**
 - **Group imports**: standard library, third-party, local imports
 - **Order**: Standard library → Third-party → Local imports
 
@@ -29,7 +29,7 @@ import httpx
 from .threads import threads_client
 from .. import (
     config,
-    datetime_helpers, 
+    datetime_helpers,
     exceptions,
     httpx_client,
     id_helpers,
@@ -91,17 +91,17 @@ class OpikConfigurator:
     def configure(self) -> None:
         """Public API method."""
         self._configure_cloud()
-    
+
     def _configure_cloud(self) -> None:
         """Private method - only used within this class."""
         api_key = self._ask_for_api_key()
         workspace = self._get_default_workspace()
         self._update_config()
-    
+
     def _ask_for_api_key(self) -> str:
         """Private method - only used within this class."""
         pass
-    
+
     def _update_config(self, save_to_file: bool = True) -> None:
         """Private method - only used within this class."""
         pass
@@ -136,19 +136,19 @@ class Opik:
         self._project_name = project_name  # Protected attribute
         self._config = self._initialize_config()  # Protected attribute
         self._streamer = self._initialize_streamer()  # Protected attribute
-    
+
     def create_experiment(self, name: str) -> Experiment:
         """Public API method."""
         return self._create_experiment_internal(name)
-    
+
     def _create_experiment_internal(self, name: str) -> Experiment:
         """Protected method - used only within this class."""
         pass
-    
+
     def _initialize_config(self) -> Config:
         """Protected method - used only within this class."""
         pass
-    
+
     def _initialize_streamer(self) -> Streamer:
         """Protected method - used only within this class."""
         pass
@@ -164,16 +164,16 @@ class OpikTracer(BaseTracer):
         super().__init__()
         self._project_name = project_name  # Protected attribute
         self._spans_map = {}  # Protected attribute
-    
+
     def _persist_run(self, run: Run) -> None:
         """Protected method - required by BaseTracer interface."""
         span_data = self._convert_run_to_span(run)
         self._update_spans_map(span_data)
-    
+
     def _convert_run_to_span(self, run: Run) -> SpanData:
         """Protected method - used only within this class."""
         pass
-    
+
     def _update_spans_map(self, span_data: SpanData) -> None:
         """Protected method - used only within this class."""
         pass
@@ -205,7 +205,7 @@ api_client_ = rest_api_client.OpikApi()
 
 1. **Follow the established patterns** in the codebase
 2. **Use meaningful module and class names** that reflect their purpose
-3. **Keep modules focused** on single responsibilities  
+3. **Keep modules focused** on single responsibilities
 4. **Use consistent naming conventions** throughout the codebase
 
 ### Search Strategy for Access Patterns
@@ -217,7 +217,7 @@ api_client_ = rest_api_client.OpikApi()
 grep -r "def _method_name" sdks/python/src/opik/
 grep -r "class _ClassName" sdks/python/src/opik/
 
-# Search in tests  
+# Search in tests
 grep -r "method_name" sdks/python/tests/
 ```
 
@@ -249,7 +249,7 @@ DEFAULT_TIMEOUT: Final[int] = 30
 # ✅ Good: Explicit __all__ declaration (from __init__.py)
 __all__ = [
     "__version__",
-    "Attachment", 
+    "Attachment",
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",
