@@ -11,45 +11,7 @@ Guidelines for identifying when methods need refactoring and how to improve them
 
 ### When to Extract Helper Methods
 
-**Red Flag**: Similar code blocks with only minor differences
-
-```python
-# ❌ Bad: Duplicated logic with minor variations
-if component_type in SUPPORTED_GENERATORS:
-    meta = data.get("output", {}).get("meta")
-    if meta and len(meta) > 0:
-        result = meta[0]
-        span.update(usage=result.get("usage"), model=result.get("model"))
-elif component_type in SUPPORTED_CHAT_GENERATORS:
-    replies = data.get("output", {}).get("replies")
-    if replies and len(replies) > 0:
-        result = replies[0].meta
-        span.update(usage=result.get("usage"), model=result.get("model"))
-```
-
-**Solution**: Extract the common pattern
-
-```python
-# ✅ Good: Extracted common logic
-def _extract_metadata_from_output(self, component_type: str) -> Dict[str, Any]:
-    """Extract metadata based on component type."""
-    if component_type in SUPPORTED_GENERATORS:
-        meta = self._data.get("output", {}).get("meta")
-        return meta[0] if meta and len(meta) > 0 else {}
-    elif component_type in SUPPORTED_CHAT_GENERATORS:
-        replies = self._data.get("output", {}).get("replies")
-        return replies[0].meta if replies and len(replies) > 0 else {}
-    return {}
-
-def _apply_metadata(self, component_type: str) -> None:
-    """Apply metadata using extracted data."""
-    metadata = self._extract_metadata_from_output(component_type)
-    if metadata:
-        self.span.update(
-            usage=metadata.get("usage"),
-            model=metadata.get("model")
-        )
-```
+**Red Flag**: Similar code blocks with only minor differences - these are prime candidates for helper methods that extract the common pattern while parameterizing the differences.
 
 ## Access Control Review
 
@@ -101,32 +63,34 @@ class DataProcessor:
 
 ```python
 # ❌ Bad: Redundant parameter passing
-class SpanManager:
+class SpanTracker:
     def __init__(self):
-        self._tags = {}
+        self._span_data = {}
     
-    def set_tags(self, tags: Dict[str, Any]) -> None:
-        self._tags.update(tags)
+    def set_span_data(self, data: Dict[str, Any]) -> None:
+        self._span_data.update(data)
     
-    def process_tags(self, tags: Dict[str, Any]) -> None:  # Redundant parameter
-        component_type = tags.get("component.type")       # Could use self._tags
-        # Process using external tags instead of stored state
+    def validate_span(self, data: Dict[str, Any]) -> bool:  # Redundant parameter
+        span_id = data.get("span_id")                       # Could use self._span_data
+        # Validate using external data instead of stored state
+        return span_id is not None
 ```
 
 ```python
 # ✅ Good: Use internal state
-class SpanManager:
+class SpanTracker:
     def __init__(self):
-        self._tags = {}
+        self._span_data = {}
     
-    def set_tags(self, tags: Dict[str, Any]) -> None:
-        """Store tags in internal state."""
-        self._tags.update(tags)
+    def set_span_data(self, data: Dict[str, Any]) -> None:
+        """Store span data in internal state."""
+        self._span_data.update(data)
     
-    def process_component_metadata(self) -> None:  # No redundant parameters
-        """Process metadata using internal tag state."""
-        component_type = self._tags.get("component.type")
-        # Process using internal state
+    def validate_span(self) -> bool:  # No redundant parameters
+        """Validate span using internal state."""
+        span_id = self._span_data.get("span_id")
+        # Validate using internal state
+        return span_id is not None
 ```
 
 ## Method Naming Improvement
@@ -137,67 +101,18 @@ class SpanManager:
 
 ```python
 # ❌ Bad: Generic, unclear names
-def process_input_tag(self, value):     # What kind of processing?
-def update_metadata(self, type_name):   # What kind of update?
+def process_span(self, value):          # What kind of processing?
+def update_trace(self, name):           # What kind of update?
 def handle_data(self, data):            # Too generic
-def raw_span(self):                     # What does "raw" mean?
+def get_raw(self):                      # What does "raw" mean?
 ```
 
 ```python
 # ✅ Good: Specific, action-oriented names  
-def _convert_and_store_input_data(self, value):    # Clear action + outcome
-def _extract_and_set_llm_metadata(self, type_name): # Clear action + target
-def _validate_and_format_response(self, data):      # Clear actions
-def get_underlying_span_data(self):                 # Clear what is returned
-```
-
-## Error Handling Consolidation
-
-### Centralizing Exception Patterns
-
-**Red Flag**: Same try-catch pattern repeated multiple times
-
-```python
-# ❌ Bad: Repeated error handling
-def process_input(self, data):
-    try:
-        # Process input
-        result = complex_input_processing(data)
-        self.span.update(input=result)
-    except Exception as e:
-        LOGGER.error("Failed to process input: %s", e, exc_info=True)
-        raise OpikException(f"Failed to process input: {e}") from e
-
-def process_output(self, data):
-    try:
-        # Process output  
-        result = complex_output_processing(data)
-        self.span.update(output=result)
-    except Exception as e:
-        LOGGER.error("Failed to process output: %s", e, exc_info=True)
-        raise OpikException(f"Failed to process output: {e}") from e
-```
-
-```python
-# ✅ Good: Centralized error handling
-def _handle_processing_error(self, operation: str, error: Exception) -> None:
-    """Centralized error handling for data processing operations."""
-    LOGGER.error("Failed to process %s: %s", operation, error, exc_info=True)
-    raise OpikException(f"Failed to process {operation}: {error}") from error
-
-def process_input(self, data):
-    try:
-        result = complex_input_processing(data)
-        self.span.update(input=result)
-    except Exception as e:
-        self._handle_processing_error("input", e)
-
-def process_output(self, data):
-    try:
-        result = complex_output_processing(data)
-        self.span.update(output=result)
-    except Exception as e:
-        self._handle_processing_error("output", e)
+def _validate_and_store_span_input(self, value):   # Clear action + outcome
+def _extract_and_set_trace_metadata(self, name):   # Clear action + target
+def _parse_and_validate_feedback(self, data):      # Clear actions
+def get_unprocessed_span_data(self):                # Clear what is returned
 ```
 
 ## Refactoring Decision Tree
@@ -216,10 +131,7 @@ When reviewing a method, ask these questions in order:
 4. **Naming**: Does the method name clearly describe its action and purpose?
    - → Rename to be more descriptive and action-oriented
 
-5. **Error Handling**: Is this try-catch pattern repeated elsewhere?
-   - → Extract common error handling into helper methods
-
-6. **Constants**: Are there magic strings/numbers that appear in multiple places?
+5. **Constants**: Are there magic strings/numbers that appear in multiple places?
    - → Extract to constants module
 
 ## Implementation Checklist
@@ -230,7 +142,6 @@ Before writing a new method:
 - [ ] Should this method be public or private?
 - [ ] Are all parameters necessary, or can I use internal state?
 - [ ] Does the method name clearly describe what it does?
-- [ ] Can error handling be reused from existing patterns?
 - [ ] Are there magic values that should be constants?
 
 ## Code Review Questions
@@ -241,5 +152,4 @@ When reviewing methods:
 - [ ] Are all public methods actually used outside the class?
 - [ ] Are parameters redundant with object state?
 - [ ] Are method names descriptive and action-oriented?
-- [ ] Is error handling consistent across similar methods?
 - [ ] Are constants defined in multiple places?
