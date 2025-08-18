@@ -28,7 +28,7 @@ RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types imp
 RUN cp /tmp/prewarm.py /prewarm.py
 
 # Run build-time test
-RUN printf 'print("build test passed")' | python ./scoring_runner.py 'print("build test")' '{"test": true}' || echo "Warning: build test failed"
+RUN printf 'print("build test passed")' | python ./scoring_runner.pyc 'print("build test")' '{"test": true}' || echo "Warning: build test failed"
 
 # Clean up package managers in build stage
 RUN pip uninstall -y pip setuptools wheel || true
@@ -38,14 +38,13 @@ RUN find /usr/local/lib/python* -name "ensurepip" -type d -exec rm -rf {} + || t
 # Copy site-packages to runtime location
 RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 
+#######################################################################
 # Multi-stage build: Runtime stage (explicit ARM64 + EXECUTION TIME OPTIMIZED)
 # Maximum execution speed with legacy .pyc layout + security hardening
 FROM python:3.12.9-slim AS runtime
 
-# Install essential libraries only
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /usr/local/bin/pip* \
+# Clean up package managers from base image (no packages to install)
+RUN rm -rf /usr/local/bin/pip* \
     && rm -rf /usr/local/lib/python*/ensurepip
 
 WORKDIR /opt/opik-sandbox-executor-python
@@ -55,17 +54,20 @@ RUN rm -rf /usr/local/lib/python3.12/site-packages/*
 
 # Copy artifacts from builder
 COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
-COPY --from=builder /build/scoring_runner.py ./scoring_runner.py
 
 # Copy optimized .pyc file for fastest execution (legacy layout with -b flag)
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
 COPY --from=builder /prewarm.py /tmp/prewarm.py
 
 # Runtime pre-warming for additional performance boost
-RUN python /tmp/prewarm.py
+RUN python -OO /tmp/prewarm.py
+
+# Remove original .py files from site-packages to reduce package size and improve cold starts
+# Note: This trades detailed tracebacks for performance (keeping .pyc files only)
+RUN find /usr/local/lib/python3.12/site-packages -name "*.py" -delete
 
 # Runtime verification test
-RUN printf 'print("runtime test passed")' | python ./scoring_runner.py 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
+RUN printf 'print("runtime test passed")' | python -OO ./scoring_runner.pyc 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
 
 # Verify no package managers exist
 RUN ! command -v pip && ! command -v pip3 && echo "✅ Package managers successfully removed"
@@ -77,4 +79,4 @@ ENV PYTHONNODEBUGRANGES=1
 RUN chown -R 1001:1001 /opt/opik-sandbox-executor-python
 USER 1001:1001
 
-CMD ["python", "/opt/opik-sandbox-executor-python/scoring_runner.py"]
+CMD ["python", "-OO", "/opt/opik-sandbox-executor-python/scoring_runner.pyc"]
