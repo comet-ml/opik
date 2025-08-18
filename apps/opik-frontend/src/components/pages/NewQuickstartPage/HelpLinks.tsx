@@ -1,13 +1,11 @@
 import React, { createContext, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Blocks, MonitorPlay, MousePointerClick, UserPlus } from "lucide-react";
+import { Blocks, MonitorPlay, MousePointerClick } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import { buildUrl } from "@/plugins/comet/utils";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useUser from "@/plugins/comet/useUser";
 import Slack from "@/icons/slack.svg?react";
 import { Link } from "@tanstack/react-router";
+import usePluginsStore from "@/store/PluginsStore";
 
 export const VIDEO_TUTORIAL_LINK =
   "https://www.youtube.com/watch?v=h1XK-dMtUJI";
@@ -74,42 +72,16 @@ const useHelpLinks = (): HelpLinksContextValue => {
 
 const InviteDevButton: React.FC = () => {
   const { onCloseParentDialog } = useHelpLinks();
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
-  const workspace = allWorkspaces?.find(
-    (workspace) => workspace.workspaceName === workspaceName,
+  const InviteDevButtonComponent = usePluginsStore(
+    (state) => state.InviteDevButton,
   );
 
-  if (!user) {
+  if (!InviteDevButtonComponent) {
     return null;
   }
 
-  return (
-    <Button
-      className="w-full"
-      variant="outline"
-      onClick={onCloseParentDialog}
-      asChild
-    >
-      <a
-        href={buildUrl(
-          "account-settings/workspaces",
-          workspaceName,
-          `&initialInviteId=${workspace?.workspaceId}`,
-        )}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <UserPlus className="mr-2 size-4" />
-        <span>Invite a developer</span>
-      </a>
-    </Button>
-  );
+  return <InviteDevButtonComponent onClick={onCloseParentDialog} />;
 };
 InviteDevButton.displayName = "HelpLinks.InviteDev";
 

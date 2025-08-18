@@ -3,6 +3,7 @@ import { create } from "zustand";
 
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
 import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
+import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -14,6 +15,7 @@ type PluginStore = {
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
   }> | null;
+  InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -27,6 +29,7 @@ const PLUGIN_NAMES = [
   "GoogleColabCard",
   "WorkspacePreloader",
   "RetentionBanner",
+  "InviteDevButton",
   "init",
 ];
 
@@ -38,6 +41,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GoogleColabCard: null,
   WorkspacePreloader: null,
   RetentionBanner: null,
+  InviteDevButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
