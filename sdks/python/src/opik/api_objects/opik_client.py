@@ -1203,16 +1203,18 @@ class Opik:
         """
         Retrieve prompts with optional filtering support.
 
-        This method allows you to search and filter prompts based on metadata, tags, and other attributes.
-        It supports advanced filtering using a query language similar to what is used for traces and spans.
+        This method allows you to search and filter prompts based on tags and other attributes.
 
         Args:
             filters: Optional filter string to narrow down the search. 
+                    Uses the same query language as other Opik filtering methods.
                     Examples:
-                    - 'metadata.version = "1.0"' - Filter by metadata key-value
                     - 'tags contains "production"' - Filter by tags
+                    - 'tags not_contains "staging"' - Filter out prompts with specific tags
+                    - 'tags is_empty' - Filter prompts with no tags
+                    - 'tags is_not_empty' - Filter prompts that have tags
                     - 'name = "my-prompt"' - Filter by exact name match
-                    - 'created_at > "2024-01-01"' - Filter by creation date
+                    - 'name contains "chatbot"' - Filter by name pattern
             name: Optional prompt name filter (exact match or substring)
             max_results: Maximum number of prompts to return (default: 1000)
 
@@ -1220,48 +1222,62 @@ class Opik:
             List[Prompt]: A list of Prompt objects that match the specified filters.
 
         Examples:
-            Get all prompts with a specific metadata value:
-            >>> prompts = client.get_prompts(filters='metadata.environment = "production"')
-
             Get prompts with specific tags:
-            >>> prompts = client.get_prompts(filters='tags contains "v2"')
+            >>> prompts = client.get_prompts(filters='tags contains "production"')
 
             Get prompts by name pattern:
             >>> prompts = client.get_prompts(name="chatbot")
 
-            Combine multiple filters:
-            >>> prompts = client.get_prompts(filters='metadata.team = "nlp" and tags contains "active"')
+            Get prompts without specific tags:
+            >>> prompts = client.get_prompts(filters='tags not_contains "deprecated"')
+
+            Get prompts with no tags:
+            >>> prompts = client.get_prompts(filters='tags is_empty')
         """
         prompt_client = PromptClient(self._rest_client)
-
-        # Calculate pagination parameters
-        page_size = 100
-        all_prompts = []
         
+        # Use pagination to respect max_results
+        all_prompts = []
         page = 1
+        page_size = min(100, max_results)  # Use smaller page size for efficiency
+        
         while len(all_prompts) < max_results:
-            prompt_infos = prompt_client.get_prompts_with_filters(
-                filters=filters,
-                name=name,
-                page=page,
-                size=page_size,
-            )
-
-            if len(prompt_infos) == 0:
-                break
-
-            # Process only as many items as we need (up to max_results limit)
-            for prompt_info in prompt_infos[: (max_results - len(all_prompts))]:
-                prompt_public = prompt_info['prompt_public']
-                latest_version = prompt_info['latest_version']
+            current_size = min(page_size, max_results - len(all_prompts))
+            
+            try:
+                result = prompt_client.get_prompts_with_filters(
+                    filters=filters,
+                    name=name,
+                    page=page,
+                    size=current_size,
+                    get_latest_versions=True,
+                )
                 
-                if latest_version:
-                    prompt = Prompt.from_fern_prompt_version(prompt_public.name, latest_version)
-                    all_prompts.append(prompt)
-
-            page += 1
-
-        return all_prompts[:max_results]
+                if not result:
+                    break
+                
+                # Convert to Prompt objects
+                for item in result:
+                    if item["latest_version"] is not None:
+                        prompt = Prompt.from_fern_prompt_version(
+                            item["prompt_public"].name, 
+                            item["latest_version"]
+                        )
+                        all_prompts.append(prompt)
+                
+                # If we got fewer results than requested, we've reached the end
+                if len(result) < current_size:
+                    break
+                    
+                page += 1
+                
+            except Exception as e:
+                # Handle specific error cases
+                if "Invalid filters" in str(e):
+                    raise ValueError(f"Invalid filter format: {filters}")
+                raise e
+        
+        return all_prompts
 
     def create_optimization(
         self,

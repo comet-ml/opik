@@ -65,18 +65,18 @@ class TestPromptClientFiltering:
         assert result[0]["latest_version"] is not None
 
     def test_get_prompts_with_filters__with_filters(self, mock_rest_client):
-        """Test get_prompts_with_filters with metadata filters."""
+        """Test get_prompts_with_filters with filters."""
         prompt_client = PromptClient(mock_rest_client)
         
         result = prompt_client.get_prompts_with_filters(
-            filters='metadata.environment = "production"',
+            filters='tags contains "production"',
             name="test",
             page=1,
             size=50
         )
         
         mock_rest_client.prompts.get_prompts.assert_called_once_with(
-            filters='metadata.environment = "production"',
+            filters='tags contains "production"',
             name="test",
             page=1,
             size=50
@@ -113,9 +113,8 @@ class TestPromptClientFiltering:
         mock_rest_client.prompts.get_prompts.side_effect = ApiError(status_code=404)
         prompt_client = PromptClient(mock_rest_client)
         
-        result = prompt_client.get_prompts_with_filters()
-        
-        assert len(result) == 0
+        with pytest.raises(ApiError):
+            prompt_client.get_prompts_with_filters()
 
     def test_get_prompts_with_filters__api_error_non_404(self, mock_rest_client):
         """Test get_prompts_with_filters raises non-404 API errors."""
@@ -160,11 +159,11 @@ class TestOpikClientPromptFiltering:
             assert result[0].commit == "abc123"
             # Check that first call was made with page=1
             mock_filter.assert_any_call(
-                filters=None, name=None, page=1, size=100
+                filters=None, name=None, page=1, size=100, get_latest_versions=True
             )
 
     def test_get_prompts__with_filters(self, mock_opik_client):
-        """Test get_prompts with metadata filters."""
+        """Test get_prompts with filters."""
         with patch.object(PromptClient, 'get_prompts_with_filters') as mock_filter:
             # First call returns 1 result, second call returns empty (end of data)
             mock_filter.side_effect = [
@@ -187,7 +186,7 @@ class TestOpikClientPromptFiltering:
             ]
             
             result = mock_opik_client.get_prompts(
-                filters='metadata.environment = "production"',
+                filters='tags contains "production"',
                 name="production"
             )
             
@@ -196,16 +195,46 @@ class TestOpikClientPromptFiltering:
             assert result[0].metadata == {"environment": "production"}
             # Check that first call was made with page=1
             mock_filter.assert_any_call(
-                filters='metadata.environment = "production"',
+                filters='tags contains "production"',
                 name="production",
                 page=1,
-                size=100
+                size=100,
+                get_latest_versions=True
             )
 
     def test_get_prompts__max_results_limit(self, mock_opik_client):
         """Test get_prompts respects max_results limit."""
         with patch.object(PromptClient, 'get_prompts_with_filters') as mock_filter:
-            # First page returns 50 results (requested 100, got 50)
+            # First page returns 75 results (requested 75, got 75)
+            mock_filter.side_effect = [
+                [
+                    {
+                        "prompt_public": prompt_public.PromptPublic(
+                            id=f"prompt-{i}", name=f"test_prompt_{i}"
+                        ),
+                        "latest_version": prompt_version_detail.PromptVersionDetail(
+                            id=f"version-{i}",
+                            prompt_id=f"prompt-{i}",
+                            template=f"Template {i}",
+                            type="mustache",
+                            commit=f"commit{i}"
+                        )
+                    }
+                    for i in range(75)
+                ]
+            ]
+            
+            result = mock_opik_client.get_prompts(max_results=75)
+            
+            assert len(result) == 75
+            assert mock_filter.call_count == 1
+            # Should request page_size=75
+            mock_filter.assert_any_call(filters=None, name=None, page=1, size=75, get_latest_versions=True)
+
+    def test_get_prompts__pagination_break_on_partial_page(self, mock_opik_client):
+        """Test get_prompts stops pagination when partial page is returned."""
+        with patch.object(PromptClient, 'get_prompts_with_filters') as mock_filter:
+            # First page returns 50 results (requested 100, got 50) - partial page
             mock_filter.side_effect = [
                 [
                     {
@@ -221,32 +250,15 @@ class TestOpikClientPromptFiltering:
                         )
                     }
                     for i in range(50)
-                ],
-                # Second page returns remaining results (requested 100, got 25)
-                [
-                    {
-                        "prompt_public": prompt_public.PromptPublic(
-                            id=f"prompt-{i}", name=f"test_prompt_{i}"
-                        ),
-                        "latest_version": prompt_version_detail.PromptVersionDetail(
-                            id=f"version-{i}",
-                            prompt_id=f"prompt-{i}",
-                            template=f"Template {i}",
-                            type="mustache",
-                            commit=f"commit{i}"
-                        )
-                    }
-                    for i in range(50, 75)  # Only 25 more to reach max_results=75
                 ]
             ]
             
-            result = mock_opik_client.get_prompts(max_results=75)
+            result = mock_opik_client.get_prompts(max_results=100)
             
-            assert len(result) == 75
-            assert mock_filter.call_count == 2
-            # Both calls should request page_size=100
-            mock_filter.assert_any_call(filters=None, name=None, page=1, size=100)
-            mock_filter.assert_any_call(filters=None, name=None, page=2, size=100)
+            assert len(result) == 50
+            assert result[0].name == "test_prompt_0"
+            # Should call once: first page gets 50 results, which is less than requested 100, so pagination stops
+            assert mock_filter.call_count == 1
 
     def test_get_prompts__empty_response(self, mock_opik_client):
         """Test get_prompts handles empty response."""
@@ -257,46 +269,17 @@ class TestOpikClientPromptFiltering:
             
             assert len(result) == 0
 
-    def test_get_prompts__pagination_break_on_partial_page(self, mock_opik_client):
-        """Test get_prompts stops pagination when empty response is returned."""
-        with patch.object(PromptClient, 'get_prompts_with_filters') as mock_filter:
-            # First page returns 1 result, second page returns empty (end of data)
-            mock_filter.side_effect = [
-                [
-                    {
-                        "prompt_public": prompt_public.PromptPublic(
-                            id="prompt-1", name="last_prompt"
-                        ),
-                        "latest_version": prompt_version_detail.PromptVersionDetail(
-                            id="version-1",
-                            prompt_id="prompt-1",
-                            template="Last template",
-                            type="mustache",
-                            commit="last123"
-                        )
-                    }
-                ],
-                []  # Empty response to indicate end of data
-            ]
-            
-            result = mock_opik_client.get_prompts(max_results=1000)
-            
-            assert len(result) == 1
-            assert result[0].name == "last_prompt"
-            # Should call twice: first page gets 1 result, second page gets empty
-            assert mock_filter.call_count == 2
-
     def test_get_prompts__filter_syntax_examples(self, mock_opik_client):
         """Test get_prompts works with various filter syntax examples."""
         with patch.object(PromptClient, 'get_prompts_with_filters') as mock_filter:
             mock_filter.return_value = []
             
-            # Test different filter patterns
+            # Test different filter patterns (only supported fields)
             test_filters = [
-                'metadata.environment = "production"',
-                'tags contains "v2"',
+                'tags contains "production"',
                 'name = "chatbot-prompt"',
-                'metadata.team = "nlp" and tags contains "active"',
+                'tags contains "v2"',
+                'name starts_with "chat"',
                 'created_at > "2024-01-01"'
             ]
             

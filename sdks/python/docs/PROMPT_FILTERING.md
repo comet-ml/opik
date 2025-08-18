@@ -1,10 +1,10 @@
 # Prompt Filtering in Opik Python SDK
 
-This document describes the new prompt filtering functionality available in the Opik Python SDK, which allows you to search and retrieve prompts based on metadata, tags, and other attributes.
+This document describes the new prompt filtering functionality available in the Opik Python SDK, which allows you to search and retrieve prompts based on various attributes.
 
 ## Overview
 
-The new `get_prompts()` method provides powerful filtering capabilities similar to what's available for traces and spans. This addresses GitHub issue #3033 by providing Python SDK support for the REST API's filtering functionality.
+The new `get_prompts()` method provides filtering capabilities for prompts. This addresses GitHub issue #3033 by providing Python SDK support for the REST API's filtering functionality.
 
 ## API Reference
 
@@ -29,25 +29,71 @@ def get_prompts(
 
 ## Filter Syntax
 
-The `filters` parameter supports Opik's query language with the following operators:
+The `filters` parameter uses the same query language as other Opik filtering methods (like `search_traces`). The SDK automatically converts filter strings to the backend's expected format.
 
-### Basic Operators
-- `=` - Exact match
-- `!=` - Not equal
-- `contains` - Substring/array contains
-- `>`, `<`, `>=`, `<=` - Numeric/date comparisons
+### Supported Fields
+- **id**: Filter by prompt ID
+- **name**: Filter by prompt name
+- **description**: Filter by prompt description
+- **created_at**: Filter by creation date
+- **last_updated_at**: Filter by last update date
+- **created_by**: Filter by creator
+- **last_updated_by**: Filter by last updater
+- **tags**: Filter by prompt tags
+- **version_count**: Filter by number of versions
 
-### Logical Operators
-- `and` - Logical AND
-- `or` - Logical OR
-- Parentheses for grouping: `(condition1) and (condition2)`
+### Supported Operators
+- **=**: Exact match
+- **!=**: Not equal
+- **contains**: Check if field contains the specified value
+- **not_contains**: Check if field does not contain the specified value
+- **starts_with**: Check if field starts with the specified value
+- **ends_with**: Check if field ends with the specified value
+- **is_empty**: Check if field is empty
+- **is_not_empty**: Check if field is not empty
+- **>**: Greater than (for numeric fields)
+- **>=**: Greater than or equal (for numeric fields)
+- **<**: Less than (for numeric fields)
+- **<=**: Less than or equal (for numeric fields)
 
-### Field References
-- `metadata.key` - Access metadata fields
-- `tags` - Access tags array
-- `name` - Prompt name
-- `created_at` - Creation timestamp
-- `created_by` - Creator
+### Filter Format
+Filters are specified as a string in the format: `field operator "value"`
+
+The SDK uses the existing `OpikQueryLanguage` parser to convert these to the backend's expected JSON format.
+
+### Examples by Field Type
+
+#### Tags Filtering
+- `tags contains "production"` - Filter prompts that contain the specified tag
+- `tags not_contains "staging"` - Filter prompts that do not contain the specified tag
+- `tags is_empty` - Filter prompts with no tags
+- `tags is_not_empty` - Filter prompts that have tags
+
+#### Name Filtering
+- `name = "exact_name"` - Filter by exact name match
+- `name contains "pattern"` - Filter by name pattern
+- `name starts_with "chat"` - Filter prompts whose names start with "chat"
+- `name ends_with "prompt"` - Filter prompts whose names end with "prompt"
+
+#### ID Filtering
+- `id = "prompt-id"` - Filter by exact prompt ID
+- `id != "prompt-id"` - Filter out specific prompt ID
+
+#### Description Filtering
+- `description contains "chatbot"` - Filter prompts with "chatbot" in description
+- `description is_empty` - Filter prompts with no description
+
+#### Date Filtering
+- `created_at > "2024-01-01"` - Filter prompts created after date
+- `last_updated_at <= "2024-12-31"` - Filter prompts updated before date
+
+#### User Filtering
+- `created_by = "user@example.com"` - Filter prompts created by specific user
+- `last_updated_by contains "admin"` - Filter prompts updated by users with "admin" in name
+
+#### Version Count Filtering
+- `version_count > 5` - Filter prompts with more than 5 versions
+- `version_count <= 10` - Filter prompts with 10 or fewer versions
 
 ## Usage Examples
 
@@ -64,222 +110,131 @@ all_prompts = client.get_prompts()
 print(f"Found {len(all_prompts)} prompts")
 ```
 
-### Filtering by Metadata
-
-```python
-# Filter by environment
-production_prompts = client.get_prompts(
-    filters='metadata.environment = "production"'
-)
-
-# Filter by team
-nlp_prompts = client.get_prompts(
-    filters='metadata.team = "nlp"'
-)
-
-# Filter by version
-v1_prompts = client.get_prompts(
-    filters='metadata.version = "1.0"'
-)
-```
-
 ### Filtering by Tags
 
 ```python
-# Find prompts with specific tag
-active_prompts = client.get_prompts(
-    filters='tags contains "active"'
-)
-
-# Find prompts with production tag
-prod_tagged = client.get_prompts(
+# Filter by tags containing "production"
+production_prompts = client.get_prompts(
     filters='tags contains "production"'
 )
+
+# Filter out prompts with "deprecated" tag
+active_prompts = client.get_prompts(
+    filters='tags not_contains "deprecated"'
+)
+
+# Get prompts with no tags
+untagged_prompts = client.get_prompts(
+    filters='tags is_empty'
+)
+
+# Get prompts that have tags
+tagged_prompts = client.get_prompts(
+    filters='tags is_not_empty'
+)
 ```
 
-### Name-Based Filtering
+### Filtering by Name
 
 ```python
+# Filter by exact name
+specific_prompt = client.get_prompts(
+    name="my-chatbot-prompt"
+)
+
 # Filter by name pattern
-chatbot_prompts = client.get_prompts(name="chatbot")
-
-# This will find prompts like:
-# - "chatbot-assistant"
-# - "customer-chatbot"
-# - "chatbot-v2"
-```
-
-### Complex Filtering
-
-```python
-# Multiple conditions with AND
-specific_prompts = client.get_prompts(
-    filters='metadata.team = "nlp" and metadata.environment = "production"'
+chatbot_prompts = client.get_prompts(
+    name="chatbot"
 )
 
-# Multiple conditions with OR
-dev_prompts = client.get_prompts(
-    filters='metadata.environment = "development" or metadata.environment = "staging"'
+# Using filters parameter for exact name match
+exact_prompts = client.get_prompts(
+    filters='name = "my-prompt"'
 )
 
-# Complex nested conditions
-complex_prompts = client.get_prompts(
-    filters='(metadata.team = "nlp" or metadata.team = "ml") and tags contains "v2"'
+# Using filters parameter for name pattern
+pattern_prompts = client.get_prompts(
+    filters='name contains "assistant"'
+)
+
+# Filter by name prefix
+chat_prompts = client.get_prompts(
+    filters='name starts_with "chat"'
 )
 ```
 
-### Date-Based Filtering
+### Filtering by Other Fields
 
 ```python
-# Find recent prompts
+# Filter by description
+chatbot_prompts = client.get_prompts(
+    filters='description contains "chatbot"'
+)
+
+# Filter by creation date
 recent_prompts = client.get_prompts(
     filters='created_at > "2024-01-01"'
 )
 
-# Find prompts from specific time range
-prompts_in_range = client.get_prompts(
-    filters='created_at >= "2024-01-01" and created_at < "2024-02-01"'
+# Filter by creator
+user_prompts = client.get_prompts(
+    filters='created_by = "user@example.com"'
+)
+
+# Filter by version count
+complex_prompts = client.get_prompts(
+    filters='version_count > 5'
 )
 ```
 
 ### Limiting Results
 
 ```python
-# Get only first 10 prompts
-limited_prompts = client.get_prompts(max_results=10)
-
-# Combine with filters
-top_production = client.get_prompts(
-    filters='metadata.environment = "production"',
-    max_results=5
+# Limit to first 10 results
+limited_prompts = client.get_prompts(
+    filters='tags contains "active"',
+    max_results=10
 )
 ```
-
-## Complete Example
-
-```python
-import opik
-
-def main():
-    # Initialize client
-    client = opik.Opik()
-    
-    # Create some test prompts
-    client.create_prompt(
-        name="chatbot_assistant",
-        prompt="You are a helpful assistant: {{query}}",
-        metadata={
-            "environment": "production",
-            "team": "customer-service",
-            "version": "2.1"
-        }
-    )
-    
-    client.create_prompt(
-        name="code_reviewer",
-        prompt="Review this code: {{code}}",
-        metadata={
-            "environment": "staging", 
-            "team": "engineering",
-            "version": "1.0"
-        }
-    )
-    
-    # Find all production prompts
-    prod_prompts = client.get_prompts(
-        filters='metadata.environment = "production"'
-    )
-    
-    print(f"Production prompts: {len(prod_prompts)}")
-    for prompt in prod_prompts:
-        print(f"- {prompt.name}: {prompt.metadata}")
-    
-    # Find customer service team prompts
-    cs_prompts = client.get_prompts(
-        filters='metadata.team = "customer-service"'
-    )
-    
-    print(f"Customer service prompts: {len(cs_prompts)}")
-    
-    # Find prompts by name pattern
-    chatbot_prompts = client.get_prompts(name="chatbot")
-    print(f"Chatbot prompts: {len(chatbot_prompts)}")
-
-if __name__ == "__main__":
-    main()
-```
-
-## Migration from REST API
-
-If you were previously using the REST API directly for prompt filtering, you can now use the SDK:
-
-### Before (REST API)
-```python
-import requests
-
-response = requests.get(
-    "https://api.opik.com/v1/prompts",
-    params={"filters": 'metadata.environment = "production"'},
-    headers={"Authorization": "Bearer YOUR_TOKEN"}
-)
-prompts = response.json()
-```
-
-### After (Python SDK)
-```python
-import opik
-
-client = opik.Opik()
-prompts = client.get_prompts(filters='metadata.environment = "production"')
-```
-
-## Performance Considerations
-
-- The method automatically handles pagination for large result sets
-- Use `max_results` to limit memory usage for very large prompt collections
-- Specific filters are more efficient than broad searches
-- Consider using name filtering combined with metadata filtering for best performance
 
 ## Error Handling
 
+### Invalid Filter Format
+
+Invalid filter formats will provide helpful error messages:
+
 ```python
 try:
-    prompts = client.get_prompts(filters='invalid.syntax')
-except Exception as e:
-    print(f"Filter error: {e}")
-    # Handle invalid filter syntax
+    prompts = client.get_prompts(filters='invalid_field = "value"')
+except ValueError as e:
+    print(e)
+    # Output: Invalid filter format: invalid_field = "value"
 ```
 
-## Comparison with Existing Methods
+## Backend Limitations
 
-| Method | Use Case | Returns |
-|--------|----------|---------|
-| `get_prompt(name, commit)` | Get specific prompt version | Single `Prompt` or `None` |
-| `get_all_prompts(name)` | Get all versions of named prompt | `List[Prompt]` |
-| `get_prompts(filters, name, max_results)` | **NEW:** Search with filters | `List[Prompt]` |
+The backend REST API for prompts supports filtering by all the fields listed above. The filtering capabilities are comprehensive and include:
 
-## Implementation Details
+- **String fields**: id, name, description, created_by, last_updated_by, tags
+- **Date fields**: created_at, last_updated_at  
+- **Numeric fields**: version_count
 
-### Architecture
-- Built on existing REST API `/v1/private/prompts` endpoint
-- Uses efficient pagination to handle large result sets
-- Returns latest version of each matching prompt
-- Consistent with trace and span filtering patterns
+## Migration from Other Resources
 
-### Limitations
-- Returns only latest version of each prompt (not all versions)
-- Filter syntax must be valid Opik query language
-- Some complex nested queries may have performance implications
+If you're familiar with filtering for traces or spans, note that prompt filtering uses the same query language:
 
-## Related Issues
+```python
+# ✅ Works for traces/spans
+traces = client.search_traces(filters='metadata.environment = "production"')
 
-- Resolves GitHub issue #3033: Python SDK support for get_prompt with filters
-- Addresses missing documentation for REST API filters
+# ✅ Works for prompts
+prompts = client.get_prompts(filters='tags contains "production"')
+```
 
-## Future Enhancements
+## Best Practices
 
-Potential future improvements could include:
-- Support for retrieving specific versions in filtered results
-- Additional filter operators (regex, fuzzy matching)
-- Sorting options for filtered results
-- Aggregate functions (count, grouping)
+1. **Use tags for categorization**: Use tags to categorize your prompts effectively
+2. **Combine with name filtering**: Use the `name` parameter for simple name-based filtering
+3. **Handle errors gracefully**: Always catch `ValueError` when using filters
+4. **Test your filters**: Verify your filter syntax works before using in production
+5. **Use appropriate operators**: Choose the right operator for your field type (e.g., `>` for numeric fields)

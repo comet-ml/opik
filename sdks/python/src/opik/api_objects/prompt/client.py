@@ -1,3 +1,5 @@
+import json
+import re
 from typing import Any, Dict, List, Optional
 
 from opik.rest_api import client as rest_client
@@ -49,130 +51,71 @@ class PromptClient:
         type: PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
     ) -> prompt_version_detail.PromptVersionDetail:
-        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
-            template=prompt,
-            metadata=metadata,
-            type=type,
-        )
-        new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
-            self._rest_client.prompts.create_prompt_version(
-                name=name,
-                version=new_prompt_version_detail_data,
-            )
-        )
-        return new_prompt_version_detail
+        """
+        Creates a new version of the prompt.
 
-    def _get_latest_version(
-        self, name: str
-    ) -> Optional[prompt_version_detail.PromptVersionDetail]:
+        Parameters:
+        - name: The name of the prompt.
+        - prompt: The template content for the prompt.
+        - type: The type of the prompt.
+        - metadata: Optional metadata to be included in the prompt.
+
+        Returns:
+        - A PromptVersionDetail object for the new version.
+        """
+        create_prompt_version = rest_api_core.CreatePromptVersion(
+            name=name,
+            prompt=prompt,
+            type=type,
+            metadata=metadata,
+        )
+
+        return self._rest_client.prompts.create_prompt_version(create_prompt_version)
+
+    def _get_latest_version(self, name: str) -> Optional[prompt_version_detail.PromptVersionDetail]:
+        """
+        Gets the latest version of the prompt.
+
+        Parameters:
+        - name: The name of the prompt.
+
+        Returns:
+        - A PromptVersionDetail object for the latest version, or None if not found.
+        """
         try:
-            prompt_latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name
-            )
-            return prompt_latest_version
-        except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
+            return self._rest_client.prompts.get_prompt(name=name)
+        except Exception:
             return None
 
     def get_prompt(
-        self,
-        name: str,
-        commit: Optional[str] = None,
+        self, name: str, commit: Optional[str] = None
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Gets the prompt detail for the given prompt name and commit version.
 
         Parameters:
-            name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+        - name: The name of the prompt.
+        - commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            Prompt: The details of the specified prompt.
+        - A PromptVersionDetail object for the specified prompt, or None if not found.
         """
         try:
-            prompt_version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name,
-                commit=commit,
-            )
-            return prompt_version
+            return self._rest_client.prompts.get_prompt(name=name, commit=commit)
+        except Exception:
+            return None
 
-        except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-
-        return None
-
-    # TODO: Need to add support for prompt name in the BE so we don't
-    # need to retrieve the prompt id
-    def get_all_prompts(
-        self, name: str
-    ) -> List[prompt_version_detail.PromptVersionDetail]:
+    def get_all_prompts(self, name: str) -> List[prompt_version_detail.PromptVersionDetail]:
         """
-        Retrieve all the prompt details for a given prompt name.
+        Gets all versions of the prompt.
 
         Parameters:
-            name: The name of the prompt.
+        - name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+        - A list of PromptVersionDetail objects for all versions of the prompt.
         """
-        try:
-            prompts_matching_name_string = self._rest_client.prompts.get_prompts(
-                name=name
-            ).content
-            if (
-                prompts_matching_name_string is None
-                or len(prompts_matching_name_string) == 0
-            ):
-                raise ValueError("No prompts found for name: " + name)
-
-            filtered_prompt_list = [
-                x.id for x in prompts_matching_name_string if name == x.name
-            ]
-            if len(filtered_prompt_list) == 0:
-                raise ValueError("No prompts found for name: " + name)
-
-            prompt_id = filtered_prompt_list[0]
-
-            page = 1
-            size = 100
-
-            prompts: List[prompt_version_detail.PromptVersionDetail] = []
-            while True:
-                prompt_versions = self._rest_client.prompts.get_prompt_versions(
-                    id=prompt_id, page=page, size=size
-                ).content
-
-                prompts.extend(
-                    [
-                        # Converting to PromptVersionDetail for consistency with other methods.
-                        # TODO: backend should implement non-frontend endpoint which will return PromptVersionDetail objects
-                        prompt_version_detail.PromptVersionDetail(
-                            id=version.id,
-                            prompt_id=version.prompt_id,
-                            template=version.template,
-                            type=version.type,
-                            metadata=version.metadata,
-                            commit=version.commit,
-                            created_at=version.created_at,
-                            created_by=version.created_by,
-                        )
-                        for version in prompt_versions
-                    ]
-                )
-
-                if len(prompt_versions) < size:
-                    break
-                page += 1
-
-            return prompts
-
-        except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-
-        return []
+        return self._rest_client.prompts.get_all_prompts(name=name)
 
     def get_prompts_with_filters(
         self,
@@ -187,7 +130,7 @@ class PromptClient:
 
         Parameters:
             filters: Optional filter string to narrow down the search. 
-                    Example: 'metadata.key = "value"' or 'tags contains "production"'
+                    Example: 'tags contains "production"' or 'name contains "chatbot"'
             name: Optional prompt name filter
             page: Page number for pagination (default: 1)
             size: Page size for pagination (default: 100)
@@ -204,35 +147,23 @@ class PromptClient:
                 page=page,
                 size=size,
             )
-            
-            if prompts_page.content is None:
-                return []
 
+            if not get_latest_versions:
+                return [{"prompt_public": prompt, "latest_version": None} for prompt in prompts_page.content]
+
+            # Get latest version details for each prompt
             result = []
-            for prompt_public in prompts_page.content:
-                prompt_info = {
-                    'prompt_public': prompt_public,
-                    'latest_version': None
-                }
-                
-                if get_latest_versions:
-                    # Get the latest version for each prompt
-                    try:
-                        latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                            name=prompt_public.name
-                        )
-                        prompt_info['latest_version'] = latest_version
-                    except rest_api_core.ApiError as e:
-                        if e.status_code != 404:
-                            raise e
-                        # Skip prompts that don't have versions (shouldn't happen in normal cases)
-                        continue
-
-                result.append(prompt_info)
+            for prompt in prompts_page.content:
+                latest_version = self._get_latest_version(prompt.name)
+                result.append({
+                    "prompt_public": prompt,
+                    "latest_version": latest_version
+                })
 
             return result
 
-        except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-            return []
+        except Exception as e:
+            # Handle specific error cases
+            if "Invalid filters" in str(e):
+                raise ValueError(f"Invalid filter format: {filters}")
+            raise e
