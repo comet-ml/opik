@@ -23,7 +23,9 @@ def enable_haystack_content_tracing():
     with patch_environ({"HAYSTACK_CONTENT_TRACING_ENABLED": "true"}):
         yield
 
+
 MODEL_NAME = "gpt-4o"
+
 
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
@@ -157,7 +159,6 @@ def test_haystack__context_aware_tracing(fake_backend):
     from haystack.components.generators.chat import OpenAIChatGenerator
     from haystack.dataclasses import ChatMessage
     from opik.integrations.haystack import OpikConnector
-    from haystack.tracing import tracer
 
     @opik.track(name="External Trace", capture_output=True)
     def run_haystack_in_trace():
@@ -191,7 +192,7 @@ def test_haystack__context_aware_tracing(fake_backend):
 
     # Verify we have exactly one trace tree
     assert len(fake_backend.trace_trees) == 1
-    
+
     # Build expected trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -216,7 +217,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                         name="Nested Chat Pipeline",
                         type="general",
                         input=ANY_DICT,  # Contains pipeline input data
-                        output=ANY_DICT,  # Contains pipeline output data  
+                        output=ANY_DICT,  # Contains pipeline output data
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         metadata=ANY_DICT,  # Contains haystack metadata
@@ -260,5 +261,5 @@ def test_haystack__context_aware_tracing(fake_backend):
             ),
         ],
     )
-    
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

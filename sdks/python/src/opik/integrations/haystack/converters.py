@@ -13,13 +13,13 @@ def convert_message_to_openai_format(
 ) -> Dict[str, Any]:
     """
     Convert a Haystack ChatMessage to OpenAI format.
-    
+
     This function handles version differences in Haystack, using the appropriate
     conversion method based on the installed version.
-    
+
     Args:
         message: The Haystack ChatMessage to convert.
-        
+
     Returns:
         Dictionary representation of the message in OpenAI format.
     """
