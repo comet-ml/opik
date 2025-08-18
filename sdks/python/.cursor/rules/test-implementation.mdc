@@ -1,18 +1,320 @@
 ---
-description: Test fixtures, utilities, and implementation patterns
-globs:
+description: Test fixtures, utilities, and implementation patterns for the Python SDK
+globs: sdks/python/tests/**/*
 alwaysApply: true
 ---
+# Python SDK Test Implementation Guidelines
+
+Comprehensive guidelines for implementing effective tests using fixtures, utilities, and patterns in the Opik Python SDK.
 
 ## Test Fixtures and Utilities
-- Use `fake_backend` fixture to emulate real backend when testing creation of spans, traces and feedback scores in unit tests and library integration tests
-- Use TraceModel, SpanModel, FeedbackScoreModel and assertion helper functions
-- Extensive examples in `opik/sdks/python/tests/unit/decorator/test_tracker_outputs.py` and `opik/sdks/python/tests/library_integration/openai/test_openai_responses.py`
-- Use and create verify_* functions from `opik/sdks/python/tests/e2e/verifiers.py` for repeated assertion logic
+
+### Fake Backend Testing
+
+- **Use `fake_backend` fixture** to emulate real backend when testing creation of spans, traces and feedback scores in unit tests and library integration tests
+- **Use TraceModel, SpanModel, FeedbackScoreModel** and assertion helper functions
+- **Extensive examples** in `opik/sdks/python/tests/unit/decorator/test_tracker_outputs.py` and `opik/sdks/python/tests/library_integration/openai/test_openai_responses.py`
+- **Use and create verify_* functions** from `opik/sdks/python/tests/e2e/verifiers.py` for repeated assertion logic
+
+### Test Data Generation
+
+```python
+# ✅ Good: Using fake_backend for integration tests (from test_tracker_outputs.py)
+from tests.testlib import TraceModel, SpanModel, ANY_BUT_NONE, assert_equal
+from opik.decorator import tracker
+
+def test_track__one_nested_function__happyflow(fake_backend):
+    @tracker.track
+    def f_inner(x):
+        return "inner-output"
+
+    @tracker.track
+    def f_outer(x):
+        f_inner("inner-input")
+        return "outer-output"
+
+    f_outer("outer-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "outer-input"},
+        output={"output": "outer-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "outer-input"},
+                output={"output": "outer-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={"x": "inner-input"},
+                        output={"output": "inner-output"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+```
+
+### E2E Testing Fixtures
+
+```python
+# ✅ Good: E2E test fixtures (from test_dataset.py)
+def test_create_and_populate_dataset__happyflow(
+    opik_client: opik.Opik, dataset_name: str
+):
+    # Create dataset
+    dataset = opik_client.create_dataset(name=dataset_name)
+    
+    # Add items to dataset
+    dataset.insert([
+        {"input": {"query": "What is AI?"}, "expected_output": {"answer": "Artificial Intelligence"}},
+        {"input": {"query": "What is ML?"}, "expected_output": {"answer": "Machine Learning"}},
+    ])
+    
+    # Verify with domain-specific helper
+    verifiers.verify_dataset(
+        opik_client=opik_client,
+        name=dataset_name,
+        dataset_items=[
+            dataset_item.DatasetItem(
+                input={"query": "What is AI?"}, 
+                expected_output={"answer": "Artificial Intelligence"}
+            ),
+            dataset_item.DatasetItem(
+                input={"query": "What is ML?"}, 
+                expected_output={"answer": "Machine Learning"}
+            ),
+        ],
+    )
+```
+
+## Parameterized Testing
+
+### Simple Parameterization
+
+```python
+# ✅ Good: Simple parameterized testing (from test_opik_query_language.py)
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        ('name = "test"', [{"field": "name", "operator": "=", "value": "test"}]),
+        (
+            "usage.total_tokens > 100",
+            [{"field": "usage.total_tokens", "operator": ">", "value": "100"}],
+        ),
+        (
+            'tags contains "important"',
+            [{"field": "tags", "operator": "contains", "value": "important"}],
+        ),
+        (
+            'feedback_scores."Answer Relevance" < 0.8',
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "Answer Relevance",
+                    "operator": "<",
+                    "value": "0.8",
+                }
+            ],
+        ),
+    ],
+)
+def test_valid_oql_expressions(filter_string, expected):
+    oql = OpikQueryLanguage(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+```
+
+### Complex Parameterization with Custom Parametrizers
+
+```python
+# ✅ Good: Complex parameterization (from test_langchain_bedrock.py)
+parametrize_chat_model = pytest.mark.parametrize(
+    "chat_model",
+    [
+        langchain_aws.ChatBedrock(
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            max_tokens=10,
+        ),
+        langchain_aws.ChatBedrockConverse(
+            model_id=BEDROCK_MODEL_FOR_TESTS,
+            name=SOME_BEDROCK_CHAT_MODEL_NAME,
+            max_tokens=10,
+        ),
+    ],
+    ids=["ChatBedrock", "ChatBedrockConverse"],
+)
+
+@parametrize_chat_model
+def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__happyflow(
+    fake_backend,
+    chat_model,
+):
+    # Test implementation that works with both chat model types
+    pass
+```
+
+### Validation Testing with Parameterization
+
+```python
+# ✅ Good: Validation testing (from test_feedback_score_validator.py)
+@pytest.mark.parametrize(
+    argnames="feedback_score_dict, is_valid",
+    argvalues=[
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "reason": "good reason",
+                "category_name": "sentiment",
+            },
+            True,
+        ),
+        (
+            {
+                "id": 123213232,  # Invalid: should be string
+                "name": "toxicity",
+                "value": 0.5,
+                "reason": "good reason",
+                "category_name": "sentiment",
+            },
+            False,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": "0.5",  # Valid: string value accepted
+            },
+            True,
+        ),
+        ("not-even-a-dict", False),
+    ],
+)
+def test_feedback_score_validator(feedback_score_dict, is_valid):
+    tested = feedback_score.FeedbackScoreValidator(feedback_score_dict)
+    assert tested.validate().ok() is is_valid, f"Failed with {feedback_score_dict}"
+```
 
 ## Test Coverage and Scenarios
-- Use parameterized tests for testing multiple scenarios efficiently
-- Test both sync and async code paths where applicable
-- Use appropriate test fixtures for isolation
-- Test error conditions and edge cases thoroughly
-- Use domain-specific assertion helpers
+
+### Error Condition Testing
+
+```python
+# ✅ Good: Error testing with mocking (from test_sentiment.py)
+def test_sentiment_import_error(monkeypatch):
+    # Mock the import to simulate missing nltk
+    def mock_import(*args, **kwargs):
+        raise ImportError("No module named 'vaderSentiment'")
+    
+    monkeypatch.setattr("builtins.__import__", mock_import)
+    
+    with pytest.raises(MetricComputationError):
+        metric = Sentiment()
+        metric.score("Some text")
+```
+
+### Integration Testing with Different Models
+
+```python
+# ✅ Good: Model agnostic testing (from test_evaluation_metrics.py)
+model_parametrizer = pytest.mark.parametrize(
+    argnames="model",
+    argvalues=[
+        "gpt-4o",
+        langchain_chat_model.LangchainChatModel(
+            chat_model=langchain_openai.ChatOpenAI(
+                model_name="gpt-4o",
+            )
+        ),
+    ],
+)
+
+@model_parametrizer
+def test__answer_relevance__context_provided_happyflow(model):
+    answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
+
+    result = answer_relevance_metric.score(
+        input="What's the capital of France?",
+        output="The capital of France is Paris.",
+        context=["France is a country in Europe."],
+    )
+
+    assert_helpers.assert_score_result(result)
+```
+
+### Async Testing Patterns
+
+```python
+# ✅ Good: Async testing with proper setup
+@pytest.mark.asyncio
+async def test_async_function__happyflow(fake_backend):
+    @tracker.track
+    async def async_function(input_data):
+        await asyncio.sleep(0.1)  # Simulate async work
+        return f"processed: {input_data}"
+    
+    result = await async_function("test_input")
+    tracker.flush_tracker()
+    
+    expected_trace = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_function",
+        input={"input_data": "test_input"},
+        output={"output": "processed: test_input"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[ANY_BUT_NONE],  # Span details
+    )
+    
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(expected_trace, fake_backend.trace_trees[0])
+```
+
+## Best Practices
+
+### Do's:
+- ✅ Use parameterized tests for multiple scenarios efficiently
+- ✅ Test both sync and async code paths where applicable  
+- ✅ Use appropriate test fixtures for isolation
+- ✅ Test error conditions and edge cases thoroughly
+- ✅ Use domain-specific assertion helpers
+- ✅ Create reusable parametrizers for complex test scenarios
+- ✅ Use meaningful test data in parameterized tests
+
+### Don'ts:
+- ❌ Write repetitive tests without parameterization
+- ❌ Skip testing error scenarios
+- ❌ Use magic values without explanation in test data
+- ❌ Mix unit tests with integration tests inappropriately
+- ❌ Forget to flush tracker in tests that create spans/traces
+
+## Key References
+
+- [Test Best Practices](test-best-practices.mdc)
+- [Test Organization](test-organization.mdc)
+- [Architecture Guidelines](architecture.mdc)
+- [API Design Guidelines](api-design.mdc)
