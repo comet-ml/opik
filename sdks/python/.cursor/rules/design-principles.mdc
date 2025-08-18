@@ -319,6 +319,11 @@ class OpikManager:
     def process_messages(self): pass
 ```
 
+### State Management
+
+- **Use internal state effectively** - avoid passing data that's already stored in the object
+- **Minimize parameter redundancy** - if data is available via `self`, don't require it as a parameter
+
 ## Key References
 
 - [API Design Guidelines](api-design.mdc)
