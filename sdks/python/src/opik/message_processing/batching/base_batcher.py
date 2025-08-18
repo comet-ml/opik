@@ -37,9 +37,8 @@ class BaseBatcher(abc.ABC):
             self._last_time_flush_callback_called = time.time()
 
     def is_ready_to_flush(self) -> bool:
-        return (
-            time.time() - self._last_time_flush_callback_called
-        ) >= self._flush_interval_seconds
+        elapsed = time.time() - self._last_time_flush_callback_called
+        return elapsed >= self._flush_interval_seconds
 
     def is_empty(self) -> bool:
         with self._lock:

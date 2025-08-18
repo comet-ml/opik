@@ -19,6 +19,9 @@ from ...testlib import (
 def test_track__trace_logged_at_start_and_end__flush_before_end__both_traces_sent(
     fake_backend_with_patched_environment,
 ):
+    # disable deduplication to make sure that the trace batch is not deduplicated
+    fake_backend_with_patched_environment.merge_duplicates = False
+
     @tracker.track
     def f(x):
         # we need to flush the tracker here; otherwise deduplication of the trace batch will leave only
@@ -81,6 +84,9 @@ def test_track__trace_logged_at_start_and_end__flush_before_end__both_traces_sen
 def test_track__trace_logged_at_start_and_end__deduplication_applied_to_the_batch_before_flush__only_last_trace_sent(
     fake_backend_with_patched_environment,
 ):
+    # disable deduplication to make sure that the trace batch is not deduplicated
+    fake_backend_with_patched_environment.merge_duplicates = False
+
     @tracker.track
     def f(x):
         return "the-output"
