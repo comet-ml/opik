@@ -1,5 +1,5 @@
 import React from "react";
-import { ExternalLink, Book, UserPlus, PlayIcon } from "lucide-react";
+import { ExternalLink, Book, PlayIcon } from "lucide-react";
 import imageTutorialUrl from "/images/tutorial-placeholder.png";
 import {
   Dialog,
@@ -24,12 +24,8 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 }) => {
   const InviteUsersForm = usePluginsStore((state) => state.InviteUsersForm);
 
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-[790px] gap-2">
         <DialogHeader>
           <DialogTitle>Help guide</DialogTitle>
@@ -144,22 +140,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
             </div>
           </div>
 
-          <div className="rounded-lg border bg-card p-4">
-            <div className="mb-4 flex flex-col items-start gap-1.5">
-              <div className="flex items-center gap-2">
-                <UserPlus className="size-4 text-muted-slate" />
-                <div className="comet-body-s-accented">
-                  Invite a team member
-                </div>
-              </div>
-              <div className="comet-body-s text-muted-slate">
-                Invite teammates by email or username to join your workspace and
-                help with setup. Use commas to invite multiple people at once.
-              </div>
-            </div>
-
-            {InviteUsersForm ? <InviteUsersForm /> : null}
-          </div>
+          {InviteUsersForm ? <InviteUsersForm /> : null}
 
           <Separator className="my-6" />
 
@@ -170,6 +151,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
           >
             <HelpLinks.Playground />
             <HelpLinks.DemoProject />
+            <HelpLinks.Slack />
           </HelpLinks>
         </DialogAutoScrollBody>
       </DialogContent>
