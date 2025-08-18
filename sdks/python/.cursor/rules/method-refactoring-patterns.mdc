@@ -1,6 +1,6 @@
 ---
 description: Patterns for identifying and refactoring methods to improve code quality and maintainability
-globs: 
+globs:
 alwaysApply: true
 ---
 # Method Refactoring Patterns
@@ -26,13 +26,13 @@ class DataProcessor:
         cleaned = self.clean_data(data)      # Only called here
         validated = self.validate_data(data) # Only called here
         return self.format_data(validated)
-    
+
     def clean_data(self, data):      # Should be private
         pass
-    
-    def validate_data(self, data):   # Should be private  
+
+    def validate_data(self, data):   # Should be private
         pass
-    
+
     def format_data(self, data):     # Should be private
         pass
 ```
@@ -44,13 +44,13 @@ class DataProcessor:
         cleaned = self._clean_data(data)
         validated = self._validate_data(data)
         return self._format_data(validated)
-    
+
     def _clean_data(self, data):         # Private helper
         pass
-    
+
     def _validate_data(self, data):      # Private helper
         pass
-    
+
     def _format_data(self, data):        # Private helper
         pass
 ```
@@ -66,10 +66,10 @@ class DataProcessor:
 class SpanTracker:
     def __init__(self):
         self._span_data = {}
-    
+
     def set_span_data(self, data: Dict[str, Any]) -> None:
         self._span_data.update(data)
-    
+
     def validate_span(self, data: Dict[str, Any]) -> bool:  # Redundant parameter
         span_id = data.get("span_id")                       # Could use self._span_data
         # Validate using external data instead of stored state
@@ -81,11 +81,11 @@ class SpanTracker:
 class SpanTracker:
     def __init__(self):
         self._span_data = {}
-    
+
     def set_span_data(self, data: Dict[str, Any]) -> None:
         """Store span data in internal state."""
         self._span_data.update(data)
-    
+
     def validate_span(self) -> bool:  # No redundant parameters
         """Validate span using internal state."""
         span_id = self._span_data.get("span_id")
@@ -108,7 +108,7 @@ def get_raw(self):                      # What does "raw" mean?
 ```
 
 ```python
-# ✅ Good: Specific, action-oriented names  
+# ✅ Good: Specific, action-oriented names
 def _validate_and_store_span_input(self, value):   # Clear action + outcome
 def _extract_and_set_trace_metadata(self, name):   # Clear action + target
 def _parse_and_validate_feedback(self, data):      # Clear actions
