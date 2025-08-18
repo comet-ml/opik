@@ -114,20 +114,32 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_4_SONNET,
-      label: "Claude 4 Sonnet",
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      label: "Claude Opus 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
+      label: "Claude Opus 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
+      label: "Claude Sonnet 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+      label: "Claude Sonnet 3.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
+      label: "Claude Haiku 3.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3,
+      label: "Claude Haiku 3",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
       label: "Claude 3.5 Sonnet 2024-10-22",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
-      label: "Claude 3.5 Haiku 2024-10-22",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
-      label: "Claude 3.5 Sonnet 2024-06-20",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
@@ -136,22 +148,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
       label: "Claude 3 Sonnet 2024-02-29",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
-      label: "Claude 3 Haiku 2024-03-07",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
-      label: "Claude 3.5 Sonnet Latest",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
-      label: "Claude 3.5 Haiku Latest",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
-      label: "Claude 3 Opus Latest",
     },
   ],
 
