@@ -42,7 +42,7 @@ setup(
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "rapidfuzz>=3.0.0,<4.0.0",
         "litellm<1.75.0",
-        "openai<2.0.0",
+        "openai<1.100.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
