@@ -145,10 +145,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
       label: "Claude 3 Opus 2024-02-29",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
-      label: "Claude 3 Sonnet 2024-02-29",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
