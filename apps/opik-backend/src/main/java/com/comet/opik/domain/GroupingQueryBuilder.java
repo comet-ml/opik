@@ -17,9 +17,27 @@ import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 @Slf4j
 public class GroupingQueryBuilder {
 
-    public static final String JSON_FIELD = "JSON_VALUE(%s, '%s')";
+    /**
+     * Regex pattern for validating JSON path keys.
+     *
+     * Validates JSON paths that:
+     * - Start with '$'
+     * - May be followed by:
+     *   - Dot notation for object keys (e.g., .key, .key_name)
+     *   - Array indices (e.g., [0], [123])
+     *   - Bracket notation for string keys (e.g., ['key'], ['complex.key'])
+     * - Allows multiple segments (e.g., $.key[0]['another_key'], $.key1.key2)
+     *
+     * Examples of valid paths:
+     *   $, $.key, $['key'], $[0], $[4].model, $.key[0]['another_key'], $.key1.key2, $.input.key[4].role, $.input['key1'][12]['key2']
+     *
+     * Examples of invalid paths:
+     *   $[0].['model weird'], $.key with space, $[abc], $['unterminated], model.xx, $.
+     *
+     */
     private static final String VALID_JSON_KEY_REGEXP = "^\\$(?:\\.(?:[A-Za-z0-9_]+)|\\[\\d+\\]|\\['(?:[^'\\\\]|\\\\.)*'\\])*$";
-    private static final String DUMMY_JSON_KEY = "$.__dummy__";
+    public static final String DUMMY_JSON_KEY = "$.__dummy__";
+    public static final String JSON_FIELD = "JSON_VALUE(%s, '%s')";
 
     public void addGroupingTemplateParams(@NonNull List<GroupBy> groups, @NonNull ST template) {
         List<String> groupings = groups.stream()
