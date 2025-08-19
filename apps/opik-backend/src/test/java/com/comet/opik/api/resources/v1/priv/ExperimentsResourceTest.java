@@ -2467,6 +2467,9 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build())),
                     Arguments.of(List
                             .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("invalid key").type(FieldType.DICTIONARY)
+                                    .build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
         }
