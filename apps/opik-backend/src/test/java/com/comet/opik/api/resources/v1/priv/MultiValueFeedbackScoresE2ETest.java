@@ -475,10 +475,10 @@ public class MultiValueFeedbackScoresE2ETest {
         var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder().name(user1Score.name()).build();
 
         // submit scores from different users
-        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(DEFAULT_PROJECT, user1Score)), API_KEY1,
-                TEST_WORKSPACE);
-        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(DEFAULT_PROJECT, user2Score)), API_KEY2,
-                TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(traceId, DEFAULT_PROJECT, user1Score)),
+                API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(createScoreBatchItem(traceId, DEFAULT_PROJECT, user2Score)),
+                API_KEY2, TEST_WORKSPACE);
 
         // create experiment items linking traces to experiment
         var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -735,8 +735,9 @@ public class MultiValueFeedbackScoresE2ETest {
                 .build();
     }
 
-    private FeedbackScoreBatchItem createScoreBatchItem(String projectName, FeedbackScore score) {
+    private FeedbackScoreBatchItem createScoreBatchItem(UUID id, String projectName, FeedbackScore score) {
         return FeedbackScoreBatchItem.builder()
+                .id(id)
                 .projectName(projectName)
                 .name(score.name())
                 .categoryName(score.categoryName())
