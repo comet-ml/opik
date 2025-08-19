@@ -28,9 +28,10 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     accordingly.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, merge_duplicates: bool = True) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self._trace_trees: List[TraceModel] = []
+        self.merge_duplicates = merge_duplicates
 
         self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
             list
@@ -74,6 +75,41 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         self._trace_trees.sort(key=lambda x: x.start_time)
         return self._trace_trees
 
+    def _save_trace(self, trace: TraceModel) -> None:
+        if self.merge_duplicates:
+            # merge traces with the same id to keep only the latest one
+            if trace.id in self._observations:
+                existing_trace = self._observations[trace.id]
+                if (
+                    existing_trace.end_time is None
+                    or trace.end_time > existing_trace.end_time
+                ):
+                    # remove the current trace from the list
+                    self._trace_trees.remove(existing_trace)
+
+        self._trace_trees.append(trace)
+        self._observations[trace.id] = trace
+
+    def _save_span(
+        self, span: SpanModel, trace_id: str, parent_span_id: Optional[str]
+    ) -> None:
+        if self.merge_duplicates:
+            # merge spans with the same id to keep only the latest one
+            if span.id in self._observations:
+                existing_span = self._observations[span.id]
+                if (
+                    existing_span.end_time is None
+                    or span.end_time > existing_span.end_time
+                ):
+                    self._span_trees.remove(existing_span)
+
+        self._span_to_parent_span[span.id] = parent_span_id
+        if parent_span_id is None:
+            self._span_trees.append(span)
+
+        self._span_to_trace[span.id] = trace_id
+        self._observations[span.id] = span
+
     @property
     def span_trees(self):
         """
@@ -114,8 +150,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 last_updated_at=message.last_updated_at,
             )
 
-            self._trace_trees.append(trace)
-            self._observations[message.trace_id] = trace
+            self._save_trace(trace)
 
         elif isinstance(message, trace_write.TraceWrite):
             trace = TraceModel(
@@ -131,14 +166,12 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 thread_id=message.thread_id,
                 last_updated_at=message.last_updated_at,
             )
-
-            self._trace_trees.append(trace)
-            self._observations[message.id] = trace
-
             if message.error_info is not None:
                 trace.error_info = ErrorInfoDict(
                     **message.error_info.dict(by_alias=True)
                 )
+
+            self._save_trace(trace)
 
         elif isinstance(message, messages.CreateSpanMessage):
             span = SpanModel(
@@ -160,13 +193,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 last_updated_at=message.last_updated_at,
             )
 
-            self._span_to_parent_span[span.id] = message.parent_span_id
-            if message.parent_span_id is None:
-                self._span_trees.append(span)
-
-            self._span_to_trace[span.id] = message.trace_id
-
-            self._observations[message.span_id] = span
+            self._save_span(
+                span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
+            )
 
         elif isinstance(message, span_write.SpanWrite):
             span = SpanModel(
@@ -192,13 +221,10 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                     **message.error_info.dict(by_alias=True)
                 )
 
-            self._span_to_parent_span[span.id] = message.parent_span_id
-            if message.parent_span_id is None:
-                self._span_trees.append(span)
+            self._save_span(
+                span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
+            )
 
-            self._span_to_trace[span.id] = message.trace_id
-
-            self._observations[message.id] = span
         elif isinstance(message, messages.CreateSpansBatchMessage):
             for item in message.batch:
                 self.process(item)
