@@ -1,10 +1,3 @@
-"""
-Shared constants for the Haystack integration.
-
-This module contains constants that are used across multiple modules
-in the Haystack integration to avoid duplication and circular imports.
-"""
-
 from typing import List
 
 SUPPORTED_GENERATORS: List[str] = [
