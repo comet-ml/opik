@@ -158,8 +158,8 @@ services:
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health-check" ]
       interval: 1s
-      timeout: 30s
-      retries: 30
+      timeout: 600s
+      retries: 600
       start_period: 1s
     depends_on:
       mysql:

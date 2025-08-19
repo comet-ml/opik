@@ -181,6 +181,8 @@ function Start-MissingContainers {
     $env:OPIK_ANONYMOUS_ID = $Uuid
     $startTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
+    Write-DebugLog "[DEBUG] OPIK_ANONYMOUS_ID = $Uuid"
+
     Send-InstallReport -Uuid $uuid -EventCompleted "false" -StartTime $startTime
 
     Write-DebugLog '[DEBUG] Checking required containers...'
@@ -239,6 +241,7 @@ function Start-MissingContainers {
 
             if ($status -ne 'running') {
                 Write-Host "[ERROR] $container failed to start (status: $status)"
+                $allRunning = $false
                 break
             }
 
@@ -265,6 +268,8 @@ function Start-MissingContainers {
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
         New-OpikConfigIfMissing
+    } else {
+        Write-DebugLog '[DEBUG] Skipping install completed report due to startup errors.'
     }
 }
 
