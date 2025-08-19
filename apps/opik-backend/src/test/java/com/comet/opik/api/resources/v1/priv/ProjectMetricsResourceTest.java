@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -39,11 +40,9 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.reflect.TypeUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -68,7 +67,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
@@ -153,6 +151,7 @@ class ProjectMetricsResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private ProjectMetricsResourceClient projectMetricsResourceClient;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
@@ -163,6 +162,7 @@ class ProjectMetricsResourceTest {
     void setUpAll(ClientSupport client) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -1257,26 +1257,11 @@ class ProjectMetricsResourceTest {
         }
     }
 
-    private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(
-            UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
-        try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                .post(Entity.json(request))) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            assertThat(response.hasEntity()).isTrue();
-
-            Type parameterize = TypeUtils.parameterize(ProjectMetricResponse.class, aClass);
-            return response.readEntity(new GenericType<>(parameterize));
-        }
-    }
-
     private <T extends Number> void getMetricsAndAssert(
             UUID projectId, ProjectMetricRequest request, Instant marker, List<String> names, Class<T> aClass,
             Map<String, T> minus3, Map<String, T> minus1, Map<String, T> current) {
-        var response = getProjectMetrics(projectId, request, aClass);
+        var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, aClass, API_KEY,
+                WORKSPACE_NAME);
 
         var expected = createExpected(marker, request.interval(), names, minus3, minus1, current);
 

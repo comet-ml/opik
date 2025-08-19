@@ -295,7 +295,7 @@ public class StatsUtils {
                 .reduce(0.0, Double::sum) / values.size();
     }
 
-    private static Double avgFromList(List<BigDecimal> values) {
+    public static Double avgFromList(List<BigDecimal> values) {
         return values.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .doubleValue() / values.size();

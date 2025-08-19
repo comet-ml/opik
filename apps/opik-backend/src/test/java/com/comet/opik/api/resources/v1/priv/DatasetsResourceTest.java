@@ -4597,65 +4597,53 @@ class DatasetsResourceTest {
 
         private void assertPageAndContent(UUID datasetId, List<UUID> experimentIds, String apiKey, String workspaceName,
                 List<ExperimentItem> expectedExperimentItems, Set<Column> columns, List<DatasetItem> datasetItems) {
-            var experimentIdsQueryParm = JsonUtils.writeValueAsString(experimentIds);
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId, experimentIds, apiKey,
+                    workspaceName);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("experiment_ids", experimentIdsQueryParm)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            assertThat(actualPage.page()).isEqualTo(1);
+            assertThat(actualPage.size()).isEqualTo(datasetItems.size());
+            assertThat(actualPage.total()).isEqualTo(datasetItems.size());
+            assertThat(actualPage.columns()).isEqualTo(columns);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+            var actualDatasetItems = actualPage.content();
 
-                assertThat(actualPage.page()).isEqualTo(1);
-                assertThat(actualPage.size()).isEqualTo(datasetItems.size());
-                assertThat(actualPage.total()).isEqualTo(datasetItems.size());
-                assertThat(actualPage.columns()).isEqualTo(columns);
+            assertPage(datasetItems, actualPage.content());
 
-                var actualDatasetItems = actualPage.content();
+            for (var i = 0; i < actualDatasetItems.size(); i++) {
+                var actualDatasetItem = actualDatasetItems.get(i);
+                var expectedDatasetItem = datasetItems.get(i);
+                var expectedExperimentItem = expectedExperimentItems.get(i);
 
-                assertPage(datasetItems, actualPage.content());
+                assertThat(actualDatasetItem.experimentItems())
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELDS_LIST)
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                        .isEqualTo(List.of(expectedExperimentItem));
 
-                for (var i = 0; i < actualDatasetItems.size(); i++) {
-                    var actualDatasetItem = actualDatasetItems.get(i);
-                    var expectedDatasetItem = datasetItems.get(i);
-                    var expectedExperimentItem = expectedExperimentItems.get(i);
+                for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
+                    var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                            actualDatasetItem.experimentItems().get(j), USER);
 
-                    assertThat(actualDatasetItem.experimentItems())
+                    assertThat(actualExperimentItem.feedbackScores())
                             .usingRecursiveComparison()
-                            .ignoringFields(IGNORED_FIELDS_LIST)
-                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                            .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                            .isEqualTo(List.of(expectedExperimentItem));
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .ignoringCollectionOrder()
+                            .isEqualTo(expectedExperimentItem.feedbackScores());
 
-                    for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
-                                actualDatasetItem.experimentItems().get(j), USER);
+                    assertThat(actualExperimentItem.createdAt())
+                            .isAfter(expectedExperimentItem.createdAt());
+                    assertThat(actualExperimentItem.lastUpdatedAt())
+                            .isAfter(expectedExperimentItem.lastUpdatedAt());
 
-                        assertThat(actualExperimentItem.feedbackScores())
-                                .usingRecursiveComparison()
-                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                .ignoringCollectionOrder()
-                                .isEqualTo(expectedExperimentItem.feedbackScores());
-
-                        assertThat(actualExperimentItem.createdAt())
-                                .isAfter(expectedExperimentItem.createdAt());
-                        assertThat(actualExperimentItem.lastUpdatedAt())
-                                .isAfter(expectedExperimentItem.lastUpdatedAt());
-
-                        assertThat(actualExperimentItem.createdBy())
-                                .isEqualTo(USER);
-                        assertThat(actualExperimentItem.lastUpdatedBy())
-                                .isEqualTo(USER);
-                    }
-
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    assertThat(actualExperimentItem.createdBy())
+                            .isEqualTo(USER);
+                    assertThat(actualExperimentItem.lastUpdatedBy())
+                            .isEqualTo(USER);
                 }
+
+                assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
             }
         }
 
