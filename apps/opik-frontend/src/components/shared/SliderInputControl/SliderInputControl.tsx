@@ -120,7 +120,7 @@ const SliderInputControl = ({
       </div>
       <Slider
         id={sliderId}
-        value={[value ?? defaultValue]}
+        value={[toNumber(localValue)]}
         onValueChange={(values) => {
           setLocalValue(values[0].toString());
         }}
