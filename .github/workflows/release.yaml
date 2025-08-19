@@ -87,6 +87,7 @@ jobs:
       - create-git-tag
       - release-apps
       - release-sdk
+      - release-typescript-sdk
       - publish-helm-chart
     runs-on: ubuntu-latest
     timeout-minutes: 5
