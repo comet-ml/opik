@@ -97,7 +97,16 @@ class OpikSpanBridge(tracing.Span):
                 self._span_or_trace_data.update(input={"input": value})
         except Exception as e:
             LOGGER.error("Failed to process input tag: %s", e, exc_info=True)
-            raise exceptions.OpikException(f"Failed to process input tag: {e}") from e
+            LOGGER.error(
+                "Failed to process input tag (type: %s, value: %r): %s",
+                type(value).__name__,
+                value,
+                e,
+                exc_info=True,
+            )
+            raise exceptions.OpikException(
+                f"Failed to process input tag (type: {type(value).__name__}, value: {value!r}): {e}"
+            ) from e
 
     def _convert_and_store_output_data(self, value: Any) -> None:
         """
