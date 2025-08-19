@@ -106,7 +106,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
   const isAIInspectorEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AI_TRACE_INSPECTOR_ENABLED,
+    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
   const { toast } = useToast();
 

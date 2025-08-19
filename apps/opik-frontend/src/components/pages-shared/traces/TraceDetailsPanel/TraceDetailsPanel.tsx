@@ -15,6 +15,7 @@ import useTraceById from "@/api/traces/useTraceById";
 import Loader from "@/components/shared/Loader/Loader";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
 import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
+import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
 import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/components/shared/NoData/NoData";
 import { Span } from "@/types/traces";
@@ -29,7 +30,6 @@ import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPa
 import TraceDetailsActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel";
 import get from "lodash/get";
 import { METADATA_AGENT_GRAPH_KEY } from "@/constants/traces";
-import TraceAIViewer from "./TraceAIAssistantPanel/TraceAIViewer";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 

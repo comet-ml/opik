@@ -1,64 +1,94 @@
 import { useCallback } from "react";
-import {
-  RunStreamingArgs,
-  RunStreamingReturn,
-} from "@/api/playground/useCompletionProxyStreaming";
-import { BASE_OPIK_AI_URL, TRACE_ANALYZER_REST_ENDPOINT } from "@/api/api";
+import { isPlainObject, get, isString, isArray, compact } from "lodash";
+import type {
+  TraceAnalyzerRunStreamingArgs,
+  TraceAnalyzerRunStreamingReturn,
+} from "@/types/ai-assistant";
+import api, { BASE_OPIK_AI_URL, TRACE_ANALYZER_REST_ENDPOINT } from "@/api/api";
+
+type StreamResponsePart = {
+  text: string;
+};
+
+type StreamResponseContent = {
+  parts: StreamResponsePart[];
+  role: string;
+};
+
+type StreamResponse = {
+  content: StreamResponseContent;
+  partial: boolean;
+  invocationId: string;
+  author: string;
+  actions: {
+    stateDelta: Record<string, unknown>;
+    artifactDelta: Record<string, unknown>;
+    requestedAuthConfigs: Record<string, unknown>;
+  };
+  id: string;
+  timestamp: number;
+  error?: string;
+};
+
+const isRecord = (val: unknown): val is Record<string, unknown> => {
+  return isPlainObject(val);
+};
+
+const isValidStreamResponse = (payload: unknown): payload is StreamResponse => {
+  if (!isRecord(payload)) return false;
+
+  const content = get(payload, "content");
+  if (!isPlainObject(content)) return false;
+
+  const parts = get(content, "parts");
+  return isArray(parts);
+};
+
+const extractTextFromStreamPayload = (payload: unknown): string => {
+  // Validate payload conforms to standard stream response format
+  if (!isValidStreamResponse(payload)) return "";
+
+  // Extract text from content.parts array
+  const parts = payload.content.parts;
+  const textParts = compact(
+    parts.map((part) => (isString(part.text) ? part.text : "")),
+  );
+
+  return textParts.join("");
+};
 
 type UseTraceAnalyzerRunStreamingParams = {
   traceId: string;
-  workspaceName: string;
 };
 
 export default function useTraceAnalyzerRunStreaming({
   traceId,
-  workspaceName,
 }: UseTraceAnalyzerRunStreamingParams) {
   return useCallback(
     async ({
-      messages,
+      message,
       signal,
       onAddChunk,
-    }: RunStreamingArgs): Promise<RunStreamingReturn> => {
+    }: TraceAnalyzerRunStreamingArgs): Promise<TraceAnalyzerRunStreamingReturn> => {
       let accumulatedValue = "";
+      let detectedError: string | null = null;
 
       try {
-        const isRecord = (val: unknown): val is Record<string, unknown> => {
-          return val !== null && typeof val === "object";
-        };
-
-        const extractTextFromStreamPayload = (payload: unknown): string => {
-          if (!isRecord(payload)) return "";
-
-          const content = (payload as { content?: unknown }).content;
-
-          if (typeof content === "string") return content;
-
-          if (isRecord(content)) {
-            const parts = (content as { parts?: unknown }).parts;
-            if (Array.isArray(parts)) {
-              return (parts as { text?: unknown }[])
-                .map((part) => (typeof part.text === "string" ? part.text : ""))
-                .join("");
-            }
-          }
-
-          return "";
-        };
-
-        const lastUserMessage = ([...messages]
-          .reverse()
-          .find((m) => m.role === "user")?.content || "") as string;
-
         const response = await fetch(
           `${BASE_OPIK_AI_URL}${TRACE_ANALYZER_REST_ENDPOINT}${traceId}`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Comet-Workspace": workspaceName,
-            },
-            body: JSON.stringify({ message: lastUserMessage, streaming: true }),
+            headers: (() => {
+              const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+              };
+              const workspace = api.defaults.headers.common["Comet-Workspace"];
+              if (typeof workspace === "string") {
+                headers["Comet-Workspace"] = workspace;
+              }
+              return headers;
+            })(),
+            body: JSON.stringify({ message, streaming: true }),
             credentials: "include",
             signal,
           },
@@ -82,42 +112,50 @@ export default function useTraceAnalyzerRunStreaming({
               : line;
             try {
               const parsed = JSON.parse(jsonData) as unknown;
+              // Detect error payloads in standard stream response format
+              if (isRecord(parsed)) {
+                const maybeError = get(parsed, "error");
+                if (isString(maybeError) && maybeError.trim() !== "") {
+                  detectedError = maybeError;
+                  break;
+                }
+              }
+
               const delta = extractTextFromStreamPayload(parsed);
               if (delta) {
-                accumulatedValue += delta;
+                // Check if this is a valid stream response to access the partial field
+                if (isValidStreamResponse(parsed)) {
+                  if (parsed.partial) {
+                    // Accumulate when partial is true
+                    accumulatedValue += delta;
+                  } else {
+                    // Replace when partial is false
+                    accumulatedValue = delta;
+                  }
+                } else {
+                  // Fallback: accumulate if we can't determine partial status
+                  accumulatedValue += delta;
+                }
                 onAddChunk(accumulatedValue);
               }
             } catch {
               // ignore non-JSON lines
             }
           }
+          if (detectedError) break;
         }
 
         return {
-          result: null,
-          startTime: "",
-          endTime: "",
-          usage: null,
-          choices: null,
-          providerError: null,
-          opikError: null,
-          pythonProxyError: null,
+          error: detectedError,
         };
       } catch (error) {
         const typedError = error as Error;
         const isStopped = typedError.name === "AbortError";
         return {
-          result: null,
-          startTime: "",
-          endTime: "",
-          usage: null,
-          choices: null,
-          providerError: null,
-          opikError: isStopped ? null : typedError.message,
-          pythonProxyError: null,
+          error: isStopped ? null : typedError.message,
         };
       }
     },
-    [traceId, workspaceName],
+    [traceId],
   );
 }

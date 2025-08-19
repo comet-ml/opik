@@ -17,7 +17,7 @@ type FeatureTogglesState = {
 const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
-  [FeatureToggleKeys.AI_TRACE_INSPECTOR_ENABLED]: false,
+  [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -42,7 +42,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
     if (data) {
       setFeatures({
         ...data,
-        [FeatureToggleKeys.AI_TRACE_INSPECTOR_ENABLED]: true,
+        [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: true,
       });
     }
   }, [data]);
