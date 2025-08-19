@@ -135,7 +135,14 @@ class OpikSpanBridge(tracing.Span):
                 self._span_or_trace_data.update(output={"output": value})
         except Exception as e:
             LOGGER.error("Failed to process output tag: %s", e, exc_info=True)
-            raise exceptions.OpikException(f"Failed to process output tag: {e}") from e
+            LOGGER.error(
+                "Failed to process output tag. Value: %r, Exception: %s", value, e, exc_info=True
+            )
+            # Try to include which key was being processed
+            key = "replies" if isinstance(value, dict) and "replies" in value else "output"
+            raise exceptions.OpikException(
+                f"Failed to process output tag for key '{key}' with value {value!r}: {e}"
+            ) from e
 
     def get_opik_span_or_trace_data(
         self,
