@@ -323,11 +323,15 @@ def test_missing_data_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             INVALID_METRIC,
-            ["from typing import", "^", "SyntaxError:"]  # Common parts in both executors
+            """  File "<string>", line 2
+    from typing import
+                      ^
+SyntaxError: """
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
-            ["ModuleNotFoundError: No module named 'flask'"],  # Module error still present
+            """  File "<string>", line 4, in <module>
+ModuleNotFoundError: No module named 'flask'""",
             marks=pytest.mark.skipif(
                 lambda: isinstance(app.executor, ProcessExecutor),
                 reason="Flask injection test only makes sense for DockerExecutor"
@@ -344,10 +348,7 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
     
     # Normalize error message to handle differences between remote and local images
     error_message = normalize_error_message(str(response.json["error"]))
-    
-    # Check that all common parts are present regardless of executor type
-    for expected_part in stacktrace:
-        assert expected_part in error_message
+    assert stacktrace in error_message
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -363,11 +364,13 @@ def test_missing_metric_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             CONSTRUCTOR_EXCEPTION_METRIC,
-            "Exception: Exception in constructor"  # Simplified due to .pyc optimization
+            """  File "<string>", line 16, in __init__
+Exception: Exception in constructor"""
     ),
     (
             SCORE_EXCEPTION_METRIC,
-            "Exception: Exception while scoring"  # Simplified due to .pyc optimization
+            """  File "<string>", line 20, in score
+Exception: Exception while scoring"""
     )
 ])
 def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
@@ -450,10 +453,9 @@ def test_conversation_thread_metric_wrong_data_structure_fails(client, app):
 
     response = client.post(EVALUATORS_URL, json=wrong_payload)
 
-    # Should fail with 400 error about evaluation failure
+    # Should fail with 400 error about mapping vs list
     assert response.status_code == 400
-    # With our optimized image, the error message may be simplified
-    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in response.json["error"]
+    assert "argument after ** must be a mapping, not list" in response.json["error"]
 
 
 def test_conversation_thread_metric_with_trace_thread_type(client, app):
