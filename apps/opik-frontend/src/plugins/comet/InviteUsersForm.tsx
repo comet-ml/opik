@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Send } from "lucide-react";
+import { Send, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,41 +99,54 @@ const InviteUsersForm = () => {
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)}>
-        <div className="flex gap-3">
-          <FormField
-            control={form.control}
-            name="users"
-            render={({ field }) => (
-              <FormItem className="flex-1">
-                <FormLabel className="sr-only">Emails or Usernames</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder="Type emails or usernames separated by commas"
-                    className="h-8"
-                    tabIndex={-1}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <Button
-            type="submit"
-            disabled={
-              form.formState.isSubmitting || inviteUsersMutation.isPending
-            }
-            className="shrink-0"
-            size="sm"
-          >
-            <Send className="mr-2 size-3.5" />
-            Send invite
-          </Button>
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-4 flex flex-col items-start gap-1.5">
+        <div className="flex items-center gap-2">
+          <UserPlus className="size-4 text-muted-slate" />
+          <div className="comet-body-s-accented">Invite a team member</div>
         </div>
-      </form>
-    </Form>
+        <div className="comet-body-s text-muted-slate">
+          Invite teammates by email or username to join your workspace and help
+          with setup. Use commas to invite multiple people at once.
+        </div>
+      </div>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)}>
+          <div className="flex gap-3">
+            <FormField
+              control={form.control}
+              name="users"
+              render={({ field }) => (
+                <FormItem className="flex-1">
+                  <FormLabel className="sr-only">Emails or Usernames</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="Type emails or usernames separated by commas"
+                      className="h-8"
+                      tabIndex={-1}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button
+              type="submit"
+              disabled={
+                form.formState.isSubmitting || inviteUsersMutation.isPending
+              }
+              className="shrink-0"
+              size="sm"
+            >
+              <Send className="mr-2 size-3.5" />
+              Send invite
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 };
 
