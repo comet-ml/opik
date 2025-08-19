@@ -25,3 +25,19 @@ title: PyTest Integration
         }}
     />
 </div>
+
+## Integrating LLM Testing into Your Development Workflow
+
+This video demonstrates how to integrate Opik's PyTest functionality into your development workflow, bridging traditional software testing with LLM application testing. Using a real-world call summarizer Streamlit application example, you'll learn how to write regression tests that ensure new features don't break existing LLM functionality, while creating comprehensive datasets from your test cases for ongoing evaluation.
+
+## Key Highlights
+
+- **LLM Unit Testing**: Use the [`@llm_unit`](https://www.comet.com/docs/opik/testing/pytest_integration#advanced-usage) decorator to transform any PyTest function into an LLM test that automatically captures traces and sends them to Opik projects
+- **Flexible Integration**: Works with both [`@track`](https://www.comet.com/docs/opik/tracing/log_traces#decorators) decorated functions and integration-wrapped clients (like [`track_openai`](https://www.comet.com/docs/opik/tracing/integrations/openai)) for comprehensive test coverage
+- **Mixed Testing Strategies**: Combine traditional unit tests, mocked LLM calls, and real API calls within the same test suite based on your specific needs
+- **Cost-Conscious CI/CD**: Be mindful of API costs when using real LLM calls in CI/CD pipelines - consider running expensive tests only locally or selectively
+- **Cumulative Dataset Creation**: All test cases automatically contribute to a centralized "tests" dataset, providing comprehensive test coverage documentation
+- **Regression Prevention**: Write tests that ensure new code doesn't break existing LLM functionality, maintaining application stability as you iterate
+- **Real-World Example**: Practical demonstration using a call summarizer application with actual Streamlit integration and multiple test scenarios
+- **Trace Integration**: Test traces integrate seamlessly with Opik's experiment and dataset system, providing feedback scores and success metrics
+- **File Path Tracking**: Each test result references the exact test function file path, making debugging and maintenance straightforward

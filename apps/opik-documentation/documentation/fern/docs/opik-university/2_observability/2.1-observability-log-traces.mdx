@@ -25,3 +25,18 @@ title: Log Traces
         }}
     />
 </div>
+
+## Getting Started with Opik Tracing
+
+This hands-on video demonstrates how to implement tracing in Opik, the foundation of LLM observability. You'll learn how traces capture complete interactions between your application and LLMs (inputs, outputs, metadata, and feedback scores), and see step-by-step implementation using OpenAI as an example. Think of traces as the equivalent of logs in traditional software, but specifically designed for LLM applications.
+
+## Key Highlights
+
+- **Simple Setup**: Configure Opik with just your API key and workspace settings - optionally set project names to organize traces
+- **Multiple Integration Methods**: Use dedicated integrations (like [`track_openai`](https://www.comet.com/docs/opik/tracing/log_traces#using-an-integration)) for automatic tracing, or the `@track` decorator for custom function tracing
+- **Rich Trace Visualization**: View complete interaction flows in the Opik UI with inputs, outputs, and hierarchical spans for multi-step processes
+- **Powerful Filtering & Search**: Filter traces by time ranges, tags, feedback scores, and search by specific trace IDs for production debugging
+- **Framework Support**: Dedicated integrations available for popular frameworks like LangChain, LlamaIndex, and others
+- **Automatic Span Creation**: Multi-step applications and RAG workflows automatically generate spans for each step, providing complete process visibility
+- **Function-Level Tracing**: The [`@track`](https://www.comet.com/docs/opik/tracing/log_traces#decorators) decorator creates detailed trace stacks that mirror your function structure, making debugging intuitive
+- **Production-Ready**: Tag system and filtering capabilities make it easy to organize and analyze traces from production environments

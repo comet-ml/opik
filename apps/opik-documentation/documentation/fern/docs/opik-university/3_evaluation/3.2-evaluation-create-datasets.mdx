@@ -25,3 +25,18 @@ title: Create Evaluation Datasets
         }}
     />
 </div>
+
+## Building Datasets for RAG Evaluation
+
+This hands-on video demonstrates dataset creation using a practical RAG (Retrieval Augmented Generation) example that compares OpenAI and Google Gemini models. You'll learn how evaluation datasets serve as the foundation for systematic LLM testing - they're collections of example inputs your application will encounter along with expected outputs, similar to validation sets in traditional machine learning.
+
+## Key Highlights
+
+- **Practical RAG Setup**: Complete example showing OpenAI vs Google Gemini model comparison with vector store integration using LangChain and Chroma
+- **Dual Creation Methods**: Create datasets via UI (select traces and "add to dataset") or programmatically using the Opik client with [`get_or_create_dataset()`](https://www.comet.com/docs/opik/evaluation/datasets#creating-a-dataset-using-the-sdk)
+- **Flexible Data Structure**: Define custom fields in dataset items based on your specific use case - make inputs and outputs as verbose as your application needs
+- **Automatic Deduplication**: Opik automatically prevents duplicate entries in datasets, ensuring data quality and consistency
+- **Multiple Dataset Strategy**: Create focused datasets for different aspects - common questions, edge cases, failure modes, and specific capabilities like reasoning or summarization
+- **Trace-to-Dataset Conversion**: Leverage existing traces by filtering high-performing interactions and converting them directly into evaluation datasets
+- **Validation Set Approach**: Datasets function like traditional ML validation sets, providing representative examples for systematic performance assessment
+- **Scalable Architecture**: Use class-based setup to handle different model providers with consistent interfaces while maintaining traceability with [`@track`](https://www.comet.com/docs/opik/tracing/log_traces#decorators) decorators
