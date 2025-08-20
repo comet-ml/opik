@@ -84,6 +84,7 @@ if TYPE_CHECKING:
 - **If method/attribute is used only inside its class** - it should be protected
 - **If function/object is used only inside its module** - it should be protected
 - **Classes may omit underscores in names** if they are used only in their modules
+- **Review method visibility regularly**: Ask "Is this method called from outside this class?"
 
 ```python
 # ✅ Good: Protected methods for internal use

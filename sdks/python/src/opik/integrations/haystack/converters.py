@@ -3,7 +3,6 @@ import importlib.metadata
 from typing import Any, Dict
 
 import haystack.dataclasses
-import haystack.version
 
 import opik.semantic_version as semantic_version
 
