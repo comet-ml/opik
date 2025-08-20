@@ -78,7 +78,6 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -2468,6 +2467,9 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build())),
                     Arguments.of(List
                             .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("invalid key").type(FieldType.DICTIONARY)
+                                    .build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
         }
@@ -4480,22 +4482,9 @@ class ExperimentsResourceTest {
             List<ExperimentItem> unexpectedExperimentItems,
             String apiKey,
             String workspaceName) {
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .path("stream")
-                .request()
-                .accept(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-            var actualExperimentItems = experimentResourceClient.getStreamed(
-                    actualResponse, EXPERIMENT_ITEM_TYPE_REFERENCE);
-
-            ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
-                    unexpectedExperimentItems, USER);
-        }
+        var actualExperimentItems = experimentResourceClient.streamExperimentItems(request, apiKey, workspaceName);
+        ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
+                unexpectedExperimentItems, USER);
     }
 
     private String getExperimentsPath() {

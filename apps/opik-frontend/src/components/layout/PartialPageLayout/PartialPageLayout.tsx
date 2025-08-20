@@ -14,7 +14,7 @@ export const PartialPageLayout = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const logo = LogoComponent ? (
-    <LogoComponent expanded={false} />
+    <LogoComponent expanded={true} />
   ) : (
     <Logo expanded={false} />
   );

@@ -156,6 +156,21 @@ public class ExperimentResourceClient {
         }
     }
 
+    public List<ExperimentItem> streamExperimentItems(ExperimentItemStreamRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .accept(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return getStreamed(response, ITEM_TYPE_REFERENCE);
+        }
+    }
+
     public void bulkUploadExperimentItem(ExperimentItemBulkUpload bulkUpload, String apiKey, String workspaceName) {
         try (var response = callExperimentItemBulkUpload(bulkUpload, apiKey, workspaceName)) {
             assertThat(response.hasEntity()).isFalse();
@@ -234,6 +249,59 @@ public class ExperimentResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_OK) {
                 return response.readEntity(ExperimentGroupAggregationsResponse.class);
+            }
+            return null;
+        }
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, String name, String apiKey, String workspaceName) {
+        return findExperiments(page, size, null, null, null, name, false, null, null, null, apiKey, workspaceName,
+                HttpStatus.SC_OK);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
+            String apiKey, String workspaceName, int expectedStatus) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+        if (optimizationId != null) {
+            webTarget = webTarget.queryParam("optimization_id", optimizationId);
+        }
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+        if (datasetDeleted) {
+            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+        if (promptId != null) {
+            webTarget = webTarget.queryParam("prompt_id", promptId);
+        }
+        if (sorting != null) {
+            webTarget = webTarget.queryParam("sorting", sorting);
+        }
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Experiment.ExperimentPage.class);
             }
             return null;
         }
