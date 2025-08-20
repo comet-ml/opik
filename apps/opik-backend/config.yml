@@ -406,6 +406,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -457,3 +460,9 @@ asyncInsert:
   # wait_for_async_insert=1, and async_insert_use_adaptive_busy_timeout=1 settings
   # to reduce IO overhead for concurrent requests.
   enabled: ${OPIK_CLICKHOUSE_ASYNC_INSERT_ENABLED:-false}
+
+# Configuration for feedback scores
+feedbackScores:
+  # Default: false
+  # Description: Whether to write feedback scores by their author or not
+  writeToAuthored: ${OPIK_FEEDBACK_SCORES_WRITE_TO_AUTHORED:-false}

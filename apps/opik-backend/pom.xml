@@ -25,13 +25,13 @@
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
-        <google-protobuf.version>4.31.0</google-protobuf.version>
+        <google-protobuf.version>4.32.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>1.21.0</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.50.0</redisson.version>
-        <opentelmetry.version>2.18.0</opentelmetry.version>
+        <opentelmetry.version>2.19.0</opentelmetry.version>
         <aws.java.sdk.version>2.32.4</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
