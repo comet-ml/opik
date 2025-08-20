@@ -65,7 +65,7 @@ class TestStructuredOutputComplianceTemplate:
         assert "true" in query
         assert "false" in query
         assert "Valid JSON format" in query
-        assert "Missing quotes around age value" in query
+        assert "Missing quotes around age key" in query
         assert "<example>" in query
         assert "</example>" in query
 
