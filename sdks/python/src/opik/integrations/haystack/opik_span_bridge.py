@@ -96,7 +96,6 @@ class OpikSpanBridge(tracing.Span):
             else:
                 self._span_or_trace_data.update(input={"input": value})
         except Exception as e:
-            LOGGER.error("Failed to process input tag: %s", e, exc_info=True)
             LOGGER.error(
                 "Failed to process input tag (type: %s, value: %r): %s",
                 type(value).__name__,
@@ -134,7 +133,6 @@ class OpikSpanBridge(tracing.Span):
             else:
                 self._span_or_trace_data.update(output={"output": value})
         except Exception as e:
-            LOGGER.error("Failed to process output tag: %s", e, exc_info=True)
             LOGGER.error(
                 "Failed to process output tag. Value: %r, Exception: %s",
                 value,
