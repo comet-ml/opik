@@ -2,9 +2,10 @@ import logging
 from typing import Any, Dict, Optional
 
 import opik
-from opik import llm_usage, logging_messages
+from opik import llm_usage, logging_messages, _logging as opik_logging
 from . import langchain_run_helpers
 from . import provider_usage_extractor_protocol
+from .langchain_run_helpers import langchain_usage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,16 +55,34 @@ class GoogleGenerativeAIUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        langchain_usage = langchain_run_helpers.try_get_token_usage(run_dict)
-        usage_metadata = langchain_usage.map_to_google_gemini_usage()
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
+            run_dict, candidate_keys=None
+        ):
+            if isinstance(token_usage, langchain_usage.LangChainUsage):
+                gemini_usage_dict = token_usage.map_to_google_gemini_usage()
+                return llm_usage.OpikUsage.from_google_dict(gemini_usage_dict)
 
-        return llm_usage.OpikUsage.from_google_dict(usage_metadata)
+        opik_logging.log_once_at_level(
+            logging.WARNING,
+            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
+            LOGGER,
+            run_dict,
+        )
+
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+            logger=LOGGER,
+        )
+
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
+            run_dict,
             exc_info=True,
         )
-        return None
+
+    return None
 
 
 def _get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:

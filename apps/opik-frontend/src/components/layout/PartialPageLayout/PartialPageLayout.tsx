@@ -14,7 +14,7 @@ export const PartialPageLayout = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const logo = LogoComponent ? (
-    <LogoComponent expanded={false} />
+    <LogoComponent expanded={true} />
   ) : (
     <Logo expanded={false} />
   );
@@ -32,7 +32,7 @@ export const PartialPageLayout = ({
           {UserMenu ? <UserMenu /> : null}
         </nav>
 
-        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-white px-6">
+        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           {children}
         </section>
       </main>

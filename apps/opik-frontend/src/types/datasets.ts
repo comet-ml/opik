@@ -102,3 +102,22 @@ export interface ExperimentItem {
 export interface ExperimentsCompare extends DatasetItem {
   experiment_items: ExperimentItem[];
 }
+
+export interface ExperimentsAggregations {
+  experiment_count: number;
+  trace_count: number;
+  total_estimated_cost?: number;
+  total_estimated_cost_avg?: number;
+  duration?: AggregatedDuration;
+  feedback_scores?: AggregatedFeedbackScore[];
+}
+
+export interface ExperimentsGroupNode {
+  label?: string;
+  groups?: Record<string, ExperimentsGroupNode>;
+}
+
+export interface ExperimentsGroupNodeWithAggregations {
+  aggregations?: ExperimentsAggregations;
+  groups?: Record<string, ExperimentsGroupNodeWithAggregations>;
+}

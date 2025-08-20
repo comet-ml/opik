@@ -136,6 +136,7 @@ function Send-InstallReport {
             event_properties = @{
                 start_time  = $StartTime
                 end_time    = $EndTime
+                event_ver = "1"
                 script_type = "ps1"
             }
         }
@@ -147,6 +148,7 @@ function Send-InstallReport {
             event_type   = $EventType
             event_properties = @{
                 start_time = $StartTime
+                event_ver  = "1"
                 script_type = "ps1"
             }
         }
@@ -173,8 +175,13 @@ function Send-InstallReport {
 function Start-MissingContainers {
     Test-DockerStatus
 
+    # Generate a run-scoped anonymous ID for this installation session
     $Uuid = [guid]::NewGuid().ToString()
+    # Export persistent install UUID so docker-compose and services can consume it
+    $env:OPIK_ANONYMOUS_ID = $Uuid
     $startTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    Write-DebugLog "[DEBUG] OPIK_ANONYMOUS_ID = $Uuid"
 
     Send-InstallReport -Uuid $uuid -EventCompleted "false" -StartTime $startTime
 
@@ -234,6 +241,7 @@ function Start-MissingContainers {
 
             if ($status -ne 'running') {
                 Write-Host "[ERROR] $container failed to start (status: $status)"
+                $allRunning = $false
                 break
             }
 
@@ -260,6 +268,8 @@ function Start-MissingContainers {
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
         New-OpikConfigIfMissing
+    } else {
+        Write-DebugLog '[DEBUG] Skipping install completed report due to startup errors.'
     }
 }
 

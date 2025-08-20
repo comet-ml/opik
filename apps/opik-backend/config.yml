@@ -82,7 +82,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
 
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
@@ -245,6 +245,9 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Description: Configuration for anonymous ID used to identify the installation
+  # Default: empty
+  anonymousId: ${OPIK_ANONYMOUS_ID:-}
 
 # Configuration for application metadata
 metadata:
@@ -402,10 +405,13 @@ serviceToggles:
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
-  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: true
+  # Description: Whether the trace thread closing job is enabled
+  enabled: ${OPIK_TRACE_THREAD_CLOSING_JOB_ENABLED:-true}
   # Default: 15min
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
@@ -451,3 +457,9 @@ asyncInsert:
   # wait_for_async_insert=1, and async_insert_use_adaptive_busy_timeout=1 settings
   # to reduce IO overhead for concurrent requests.
   enabled: ${OPIK_CLICKHOUSE_ASYNC_INSERT_ENABLED:-false}
+
+# Configuration for feedback scores
+feedbackScores:
+  # Default: false
+  # Description: Whether to write feedback scores by their author or not
+  writeToAuthored: ${OPIK_FEEDBACK_SCORES_WRITE_TO_AUTHORED:-false}
