@@ -30,6 +30,7 @@ import com.comet.opik.domain.ExperimentItemBulkIngestionService;
 import com.comet.opik.domain.ExperimentItemSearchCriteria;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.ExperimentUpdatePayload;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
@@ -483,5 +484,33 @@ public class ExperimentsResource {
                 feedbackScoreNames.scores().size(), experimentIds, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
+    }
+
+    @POST
+    @Path("/update/{id}")
+    public Response updateExperimentById(
+            @PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdatePayload.class))) @NotNull ExperimentUpdatePayload body) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+
+        var plan = experimentService.planUpdate(id, body.name(), body.metadata())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        if (!plan.changed()) {
+            log.info("No-op update for experiment id='{}' (nothing changed).", id);
+            return Response.noContent().build();
+        }
+
+        experimentService.applyUpdatePlan(id, plan)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        return Response.noContent().build();
     }
 }

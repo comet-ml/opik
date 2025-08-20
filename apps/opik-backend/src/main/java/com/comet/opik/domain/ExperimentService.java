@@ -5,6 +5,8 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
@@ -19,6 +21,8 @@ import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -496,5 +500,47 @@ public class ExperimentService {
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
         return experimentDAO.getDailyCreatedCount();
+    }
+
+    public Mono<ExperimentUpdatePlan> planUpdate(UUID experimentId, String incomingName, JsonNode incomingMetadata) {
+        return experimentDAO.getById(experimentId)
+                .switchIfEmpty(Mono.error(new NotFoundException("Experiment not found: " + experimentId)))
+                .map(current -> {
+                    // target name
+                    String targetName = current.name();
+                    if (incomingName != null) {
+                        targetName = org.apache.commons.lang3.StringUtils.isBlank(incomingName)
+                                ? nameGenerator.generateName()
+                                : incomingName;
+                    }
+
+                    // target metadata (stringified for plan)
+                    String currentMetaStr = JsonUtils.getStringOrDefault(current.metadata());
+                    JsonNode targetMetaNode = incomingMetadata != null ? incomingMetadata : current.metadata();
+                    String targetMetadata = JsonUtils.getStringOrDefault(targetMetaNode);
+
+                    boolean changed = !java.util.Objects.equals(targetName, current.name())
+                            || !java.util.Objects.equals(targetMetadata, currentMetaStr);
+
+                    log.info(
+                            "Update plan for id='{}': currentName='{}' → targetName='{}'; currentMeta={} → targetMeta={}; changed={}",
+                            experimentId, current.name(), targetName, currentMetaStr, targetMetadata, changed);
+
+                    return new ExperimentUpdatePlan(targetName, targetMetadata, changed);
+                });
+    }
+
+    @WithSpan
+    public Mono<Void> applyUpdatePlan(UUID experimentId, ExperimentUpdatePlan plan) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return experimentDAO.updateNameAndMetadata(
+                    experimentId,
+                    plan.targetName(),
+                    plan.targetMetadata(),
+                    userName)
+                    .then();
+        });
     }
 }
