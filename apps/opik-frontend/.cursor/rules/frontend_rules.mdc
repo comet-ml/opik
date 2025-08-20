@@ -1,546 +1,62 @@
 ---
-description: Guidelines for Frontend Development
-globs:
+description: Main frontend development guidelines - references detailed rules
+globs: "**/*"
 alwaysApply: true
 ---
 
+# Frontend Development Guidelines
 
-# Opik Frontend Development Rules for Cursor
+This is the main frontend development guide. For detailed guidelines, refer to the specific rule files:
 
-## Technology Stack & Architecture
+## Available Detailed Rules
 
-### Core Technologies
-- **React 18** with **TypeScript**
-- **Vite** as build tool and dev server
-- **TanStack Router** for routing
-- **TanStack Query** for data fetching and caching
-- **Zustand** for state management
-- **React Hook Form** with **Zod** for form validation
-- **shadcn/ui** + **Radix UI** for UI components
-- **Tailwind CSS** for styling with custom design system
-- **CodeMirror 6** for code editing/viewing
-- **Recharts** for data visualization
-- **Lodash** for utility functions
+1. **[Tech Stack](mdc:.cursor/rules/tech-stack.mdc)** - Technology stack and project structure
+2. **[Performance](mdc:.cursor/rules/performance.mdc)** - Performance optimization with selective hook usage
+3. **[UI Components](mdc:.cursor/rules/ui-components.mdc)** - UI component patterns and design system
+4. **[API & Data Fetching](mdc:.cursor/rules/api-data-fetching.mdc)** - React Query patterns and data handling
+5. **[State Management](mdc:.cursor/rules/state-management.mdc)** - Zustand stores and local storage
+6. **[Forms](mdc:.cursor/rules/forms.mdc)** - React Hook Form and Zod validation patterns
+7. **[Code Quality](mdc:.cursor/rules/code-quality.mdc)** - TypeScript patterns and naming conventions
+8. **[Accessibility & Testing](mdc:.cursor/rules/accessibility-testing.mdc)** - Accessibility and testing guidelines
+9. **[Unit Testing](mdc:.cursor/rules/unit-testing.mdc)** - Unit testing patterns for complex cases
 
-### Project Structure
-```
-src/
-├── api/                    # API layer with React Query hooks
-├── components/
-│   ├── ui/                # shadcn/ui base components
-│   ├── shared/            # Reusable business components
-│   ├── layout/            # Layout components
-│   ├── pages/             # Page-specific components
-│   └── pages-shared/      # Cross-page shared components
-├── hooks/                 # Custom React hooks
-├── lib/                   # Utility functions and helpers
-├── store/                 # Zustand stores
-├── types/                 # TypeScript type definitions
-├── constants/             # Application constants
-└── icons/                 # SVG icons
-```
+## Quick Reference
 
-## Component Development Patterns
+### Performance Rules (Updated)
+- **Use `useMemo` ONLY for**: Complex computations, large data transformations, expensive operations
+- **Use `useCallback` ONLY for**: Functions passed to children, functions in useEffect deps, complex event handlers
+- **Avoid**: Memoizing simple values, primitive operations, or functions only used locally
 
 ### Component Structure
 ```typescript
-// Standard component structure
-import React, { useMemo, useCallback } from "react";
-import { cn } from "@/lib/utils";
-
-type ComponentProps = {
-  // Props interface
-};
-
-const Component: React.FunctionComponent<ComponentProps> = ({
-  prop1,
-  prop2,
-  ...props
-}) => {
+const Component: React.FunctionComponent<Props> = ({ ...props }) => {
   // 1. State hooks
-  // 2. useMemo for expensive computations
-  // 3. useCallback for event handlers
-  // 4. Other hooks
+  // 2. Queries/mutations  
+  // 3. Selective memoization (only when needed)
+  // 4. Event handlers (memoize only if passed to children)
   
-  return (
-    <div className="component-container">
-      {/* JSX */}
-    </div>
-  );
+  return <div>{/* JSX */}</div>;
 };
-
-export default Component;
 ```
 
-### Performance Optimization Rules
-
-#### useMemo Usage
-- **Always memoize** data transformations: `const rows = useMemo(() => data?.content ?? [], [data?.content]);`
-- **Always memoize** complex computations and filtered/sorted arrays
-- **Always memoize** function parameters passed to child components
-- **Pattern**: `const processedData = useMemo(() => transformData(rawData), [rawData]);`
-
-#### useCallback Usage
-- **Always wrap** event handlers in useCallback: `const handleClick = useCallback(() => {}, [deps]);`
-- **Always wrap** functions passed as props to child components
-- **Always wrap** functions used in useEffect dependencies
-- **Pattern**: `const deleteHandler = useCallback(() => { /* logic */ }, [dependency]);`
-
-#### Data Processing
-- Use `useMemo` for transforming API responses: `const items = useMemo(() => data?.content ?? [], [data?.content]);`
-- Always provide fallback arrays: `data?.content ?? []`
-- Process sorting with utility functions: `processSorting(sorting)`
-
-### UI Component Patterns
-
-#### Button Variants
-Use the established button variant system:
-```typescript
-// Primary actions
-<Button variant="default">Save</Button>
-<Button variant="special">Special Action</Button>
-
-// Secondary actions  
-<Button variant="secondary">Cancel</Button>
-<Button variant="outline">Edit</Button>
-
-// Destructive actions
-<Button variant="destructive">Delete</Button>
-
-// Minimal/Ghost actions
-<Button variant="ghost">Link Action</Button>
-<Button variant="minimal">Subtle Action</Button>
-
-// Icon buttons
-<Button variant="default" size="icon"><Icon /></Button>
-<Button variant="ghost" size="icon-sm"><Icon /></Button>
-```
-
-#### Size Variants
-```typescript
-// Button sizes
-size="3xs" | "2xs" | "sm" | "default" | "lg"
-size="icon-3xs" | "icon-2xs" | "icon-xs" | "icon-sm" | "icon" | "icon-lg"
-```
-
-### Data Tables
-
-#### DataTable Component Pattern
-```typescript
-const columns: ColumnDef<DataType>[] = useMemo(() => [
-  {
-    id: COLUMN_ID_ID,
-    accessorKey: "id",
-    header: "ID",
-    size: 100,
-    meta: {
-      type: COLUMN_TYPE.string,
-    },
-  },
-  // ... more columns
-], []);
-
-const rows = useMemo(() => data?.content ?? [], [data?.content]);
-
-// Always use DataTable wrapper
-<DataTable 
-  columns={columns}
-  data={rows}
-  rowHeight={ROW_HEIGHT.medium}
-  // ... other props
-/>
-```
-
-#### Column Types
-Use predefined column types:
-- `COLUMN_TYPE.string` - Text data
-- `COLUMN_TYPE.number` - Numeric data
-- `COLUMN_TYPE.time` - Date/time data
-- `COLUMN_TYPE.duration` - Duration data
-- `COLUMN_TYPE.cost` - Cost data
-- `COLUMN_TYPE.list` - Array data
-- `COLUMN_TYPE.dictionary` - Object data
-- `COLUMN_TYPE.numberDictionary` - Feedback scores
-- `COLUMN_TYPE.category` - Category/tag data
-
-## Styling Guidelines
-
-### Design System
-
-#### Color System
-Always use CSS custom properties:
-```css
-/* Primary colors */
-bg-primary text-primary-foreground
-hover:bg-primary-hover active:bg-primary-active
-
-/* Secondary colors */
-bg-secondary text-secondary-foreground
-
-/* Muted colors */
-bg-muted text-muted-foreground
-text-muted-gray border-muted-disabled
-
-/* Destructive colors */
-bg-destructive text-destructive-foreground
-border-destructive text-destructive
-
-/* Background variations */
-bg-background bg-primary-foreground bg-popover
-```
-
-#### Typography Classes
-Use custom typography classes:
-```css
-/* Titles */
-.comet-title-xl    /* 3xl font-medium */
-.comet-title-l     /* 2xl font-medium */
-.comet-title-m     /* xl font-medium */
-.comet-title-s     /* lg font-medium */
-.comet-title-xs    /* sm font-medium */
-
-/* Body text */
-.comet-body               /* base font-normal */
-.comet-body-accented      /* base font-medium */
-.comet-body-s             /* sm font-normal */
-.comet-body-s-accented    /* sm font-medium */
-.comet-body-xs            /* xs font-normal */
-.comet-body-xs-accented   /* xs font-medium */
-
-/* Code */
-.comet-code               /* monospace font */
-```
-
-#### Layout Classes
-```css
-.comet-header-height      /* 64px header */
-.comet-sidebar-width      /* sidebar width */
-.comet-content-inset      /* content padding */
-.comet-custom-scrollbar   /* custom scrollbar */
-.comet-no-scrollbar       /* hide scrollbar */
-```
-
-#### Spacing and Sizing
-- Use consistent spacing: `gap-2`, `gap-4`, `gap-6`, `gap-8`
-- Use consistent padding: `p-2`, `p-4`, `p-6`, `px-4`, `py-2`
-- Use consistent margins: `mb-4`, `mt-6`, `mx-2`
-- Border radius: `rounded-md` (default), `rounded-lg`, `rounded-xl`
-
-### Component Styling Patterns
-
-#### Container Patterns
-```typescript
-// Page containers
-<div className="size-full overflow-auto p-6">
-
-// Card containers  
-<div className="rounded-lg border bg-card p-6">
-
-// Form containers
-<div className="space-y-6">
-
-// Button groups
-<div className="flex items-center gap-2">
-
-// Grid layouts
-<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-```
-
-#### State Classes
-```typescript
-// Loading states
-<Skeleton className="h-4 w-full" />
-
-// Error states
-className={cn("border", { "border-destructive": hasError })}
-
-// Active states
-"comet-table-row-active"
-
-// Disabled states
-"disabled:opacity-50 disabled:pointer-events-none"
-```
-
-## API and Data Fetching
-
-### React Query Patterns
-
-#### Query Hook Structure
-```typescript
-// File: src/api/entity/useEntityList.ts
-import { useQuery } from "@tanstack/react-query";
-import api, { ENTITY_KEY, ENTITY_REST_ENDPOINT } from "@/api/api";
-
-type UseEntityListParams = {
-  workspaceName: string;
-  search?: string;
-  sorting?: Sorting;
-  page: number;
-  size: number;
-};
-
-const getEntityList = async (
-  { signal }: QueryFunctionContext,
-  params: UseEntityListParams,
-) => {
-  const { data } = await api.get(ENTITY_REST_ENDPOINT, {
-    signal,
-    params: {
-      workspace_name: params.workspaceName,
-      ...processSorting(params.sorting),
-      ...(params.search && { name: params.search }),
-      size: params.size,
-      page: params.page,
-    },
-  });
-  return data;
-};
-
-export default function useEntityList(
-  params: UseEntityListParams,
-  options?: QueryConfig<UseEntityListResponse>,
-) {
-  return useQuery({
-    queryKey: [ENTITY_KEY, params],
-    queryFn: (context) => getEntityList(context, params),
-    ...options,
-  });
-}
-```
-
-#### Query Key Patterns
-- Use descriptive keys: `[ENTITIES_KEY, params]`
-- Include all parameters that affect the query
-- Use constants for query keys defined in `api.ts`
-
-#### Data Processing
-```typescript
-// Always provide fallbacks and memoize
-const entities = useMemo(() => data?.content ?? [], [data?.content]);
-const totalItems = data?.total ?? 0;
-```
-
-### Mutation Patterns
-```typescript
-const mutation = useMutation({
-  mutationFn: deleteEntity,
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: [ENTITIES_KEY] });
-    toast({ description: "Entity deleted successfully" });
-  },
-  onError: (error) => {
-    toast({ description: "Failed to delete entity", variant: "destructive" });
-  },
-});
-```
-
-## State Management
-
-### Zustand Store Pattern
-```typescript
-// File: src/store/EntityStore.ts
-import { create } from "zustand";
-
-type EntityState = {
-  selectedEntity: Entity | null;
-  filters: FilterState;
-};
-
-type EntityActions = {
-  setSelectedEntity: (entity: Entity | null) => void;
-  updateFilters: (filters: Partial<FilterState>) => void;
-  resetFilters: () => void;
-};
-
-type EntityStore = EntityState & EntityActions;
-
-const useEntityStore = create<EntityStore>((set) => ({
-  // State
-  selectedEntity: null,
-  filters: defaultFilters,
-  
-  // Actions
-  setSelectedEntity: (entity) => set({ selectedEntity: entity }),
-  updateFilters: (newFilters) => 
-    set((state) => ({ filters: { ...state.filters, ...newFilters } })),
-  resetFilters: () => set({ filters: defaultFilters }),
-}));
-
-// Exported selectors
-export const useSelectedEntity = () => 
-  useEntityStore((state) => state.selectedEntity);
-export const useEntityFilters = () => 
-  useEntityStore((state) => state.filters);
-
-export default useEntityStore;
-```
-
-### Local Storage Integration
-```typescript
-// Use use-local-storage-state for persistence
-import useLocalStorageState from "use-local-storage-state";
-
-const [preferences, setPreferences] = useLocalStorageState("key", {
-  defaultValue: defaultPreferences,
-});
-```
-
-## Form Handling
-
-### React Hook Form + Zod Pattern
-```typescript
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
-// Define schema
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email"),
-});
-
-type FormData = z.infer<typeof formSchema>;
-
-// Use in component
-const form = useForm<FormData>({
-  resolver: zodResolver(formSchema),
-  defaultValues: {
-    name: "",
-    email: "",
-  },
-});
-
-const onSubmit = useCallback((data: FormData) => {
-  // Handle form submission
-}, []);
-
-// Form JSX
-<Form {...form}>
-  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-    <FormField
-      control={form.control}
-      name="name"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Name</FormLabel>
-          <FormControl>
-            <Input {...field} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  </form>
-</Form>
-```
-
-## Error Handling and Loading States
-
-### Loading Patterns
-```typescript
-// Query loading
-if (isLoading) return <Loader />;
-if (error) return <div>Error: {error.message}</div>;
-
-// Component loading
-{isLoading && <Skeleton className="h-4 w-full" />}
-
-// Button loading
-<Button disabled={isLoading}>
-  {isLoading && <Spinner className="mr-2" />}
-  Submit
-</Button>
-```
-
-### Toast Notifications
-```typescript
-import { useToast } from "@/components/ui/use-toast";
-
-const { toast } = useToast();
-
-// Success toast
-toast({ description: "Operation completed successfully" });
-
-// Error toast  
-toast({ 
-  description: "Operation failed", 
-  variant: "destructive" 
-});
-```
-
-## Code Quality Rules
-
-### TypeScript Patterns
-- **Always** define explicit prop interfaces
-- **Always** use `React.FunctionComponent<Props>` for components
-- **Use** strict type checking for API responses
-- **Prefer** type unions over enums where appropriate
-- **Always** provide return types for complex functions
-
-### Import Organization
-```typescript
-// 1. React and external libraries
-import React, { useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
-
-// 2. UI components (grouped)
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-
-// 3. Shared components
-import DataTable from "@/components/shared/DataTable/DataTable";
-
-// 4. Hooks and utilities
-import { cn } from "@/lib/utils";
-import useEntityStore from "@/store/EntityStore";
-
-// 5. Types and constants
-import { COLUMN_TYPE } from "@/types/shared";
-```
-
-### Naming Conventions
-- **Components**: PascalCase (`DataTable`, `UserProfile`)
-- **Files**: PascalCase for components, camelCase for utilities
-- **Hooks**: camelCase starting with `use` (`useEntityList`)
-- **Constants**: SCREAMING_SNAKE_CASE (`COLUMN_TYPE`, `API_ENDPOINTS`)
-- **CSS Classes**: Use `comet-` prefix for custom classes
-- **Event Handlers**: Descriptive names (`handleDeleteClick`, `onEntitySelect`)
-
-### Performance Best Practices
-- **Always** memoize data transformations with `useMemo`
-- **Always** memoize event handlers with `useCallback`
-- **Always** provide dependency arrays for hooks
-- **Use** lazy loading for large components/routes
-- **Avoid** inline functions in JSX props
-- **Prefer** pagination over infinite scrolling for large datasets
-
-### Component Composition
-- **Favor** composition over prop drilling
-- **Use** context sparingly, prefer prop passing
-- **Create** reusable compound components (Dialog, Card, etc.)
-- **Extract** common logic into custom hooks
-- **Keep** components focused and single-responsibility
-
-### Code Formatting
-- **Use** Prettier with provided configuration
-- **Follow** ESLint rules (no warnings allowed)
-- **Use** trailing commas in multiline structures
-- **Prefer** double quotes for strings
-- **Use** meaningful variable names
-
-## Accessibility Guidelines
-- **Always** provide `aria-label` for icon buttons
-- **Use** semantic HTML elements
-- **Ensure** keyboard navigation works
-- **Provide** focus indicators
-- **Use** proper heading hierarchy
-- **Include** loading states and error messages
-
-## Testing Patterns
-- **Write** tests for custom hooks using `@testing-library/react`
-- **Test** user interactions, not implementation details
-- **Mock** API calls using MSW or similar
-- **Use** `screen.getByRole` over `getByTestId`
-- **Write** integration tests for complex user flows
-
-When building new components or features, always follow these established patterns to ensure consistency with the existing codebase. The senior developer who created this project prioritized type safety, performance optimization, accessibility, and maintainable code architecture.
+### Key Technologies
+- **React 18** + **TypeScript**
+- **TanStack Router** + **TanStack Query**
+- **Zustand** for state management
+- **shadcn/ui** + **Tailwind CSS**
+- **React Hook Form** + **Zod**
+- **Vitest** for unit testing
+
+### Import Order
+1. React and external libraries
+2. UI components (grouped)
+3. Shared components
+4. Hooks and utilities
+5. Types and constants
+
+### Unit Testing Guidelines
+- **Always test**: Complex utility functions, data processing logic, filter/search logic
+- **Consider testing**: Custom hooks with complex state, components with significant conditional rendering
+- **Don't test**: Simple UI components without logic, third-party library integrations
+
+When building components, always follow the established patterns and refer to the detailed rules for comprehensive guidelines.

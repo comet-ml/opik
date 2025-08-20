@@ -1,0 +1,171 @@
+---
+description: Frontend UI component patterns and design system guidelines
+globs: "**/*"
+alwaysApply: false
+---
+
+# UI Components & Design System
+
+## Button Component Patterns
+
+### Button Variants
+Use the established button variant system:
+```typescript
+// Primary actions
+<Button variant="default">Save</Button>
+<Button variant="special">Special Action</Button>
+
+// Secondary actions  
+<Button variant="secondary">Cancel</Button>
+<Button variant="outline">Edit</Button>
+
+// Destructive actions
+<Button variant="destructive">Delete</Button>
+
+// Minimal/Ghost actions
+<Button variant="ghost">Link Action</Button>
+<Button variant="minimal">Subtle Action</Button>
+
+// Icon buttons
+<Button variant="default" size="icon"><Icon /></Button>
+<Button variant="ghost" size="icon-sm"><Icon /></Button>
+```
+
+### Size Variants
+```typescript
+// Button sizes
+size="3xs" | "2xs" | "sm" | "default" | "lg"
+size="icon-3xs" | "icon-2xs" | "icon-xs" | "icon-sm" | "icon" | "icon-lg"
+```
+
+## Data Table Patterns
+
+### DataTable Component Usage
+```typescript
+const columns: ColumnDef<DataType>[] = useMemo(() => [
+  {
+    id: COLUMN_ID_ID,
+    accessorKey: "id",
+    header: "ID",
+    size: 100,
+    meta: {
+      type: COLUMN_TYPE.string,
+    },
+  },
+  // ... more columns
+], []);
+
+const rows = data?.content ?? []; // Simple fallback, no useMemo needed
+
+// Always use DataTable wrapper
+<DataTable 
+  columns={columns}
+  data={rows}
+  rowHeight={ROW_HEIGHT.medium}
+  // ... other props
+/>
+```
+
+### Column Types
+Use predefined column types:
+- `COLUMN_TYPE.string` - Text data
+- `COLUMN_TYPE.number` - Numeric data
+- `COLUMN_TYPE.time` - Date/time data
+- `COLUMN_TYPE.duration` - Duration data
+- `COLUMN_TYPE.cost` - Cost data
+- `COLUMN_TYPE.list` - Array data
+- `COLUMN_TYPE.dictionary` - Object data
+- `COLUMN_TYPE.numberDictionary` - Feedback scores
+- `COLUMN_TYPE.category` - Category/tag data
+
+## Color System
+Always use CSS custom properties:
+```css
+/* Primary colors */
+bg-primary text-primary-foreground
+hover:bg-primary-hover active:bg-primary-active
+
+/* Secondary colors */
+bg-secondary text-secondary-foreground
+
+/* Muted colors */
+bg-muted text-muted-foreground
+text-muted-gray border-muted-disabled
+
+/* Destructive colors */
+bg-destructive text-destructive-foreground
+border-destructive text-destructive
+
+/* Background variations */
+bg-background bg-primary-foreground bg-popover
+```
+
+## Typography Classes
+Use custom typography classes:
+```css
+/* Titles */
+.comet-title-xl    /* 3xl font-medium */
+.comet-title-l     /* 2xl font-medium */
+.comet-title-m     /* xl font-medium */
+.comet-title-s     /* lg font-medium */
+.comet-title-xs    /* sm font-medium */
+
+/* Body text */
+.comet-body               /* base font-normal */
+.comet-body-accented      /* base font-medium */
+.comet-body-s             /* sm font-normal */
+.comet-body-s-accented    /* sm font-medium */
+.comet-body-xs            /* xs font-normal */
+.comet-body-xs-accented   /* xs font-medium */
+
+/* Code */
+.comet-code               /* monospace font */
+```
+
+## Layout Classes
+```css
+.comet-header-height      /* 64px header */
+.comet-sidebar-width      /* sidebar width */
+.comet-content-inset      /* content padding */
+.comet-custom-scrollbar   /* custom scrollbar */
+.comet-no-scrollbar       /* hide scrollbar */
+```
+
+## Container Patterns
+```typescript
+// Page containers
+<div className="size-full overflow-auto p-6">
+
+// Card containers  
+<div className="rounded-lg border bg-card p-6">
+
+// Form containers
+<div className="space-y-6">
+
+// Button groups
+<div className="flex items-center gap-2">
+
+// Grid layouts
+<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+```
+
+## State Classes
+```typescript
+// Loading states
+<Skeleton className="h-4 w-full" />
+
+// Error states
+className={cn("border", { "border-destructive": hasError })}
+
+// Active states
+"comet-table-row-active"
+
+// Disabled states
+"disabled:opacity-50 disabled:pointer-events-none"
+```
+
+## Spacing Guidelines
+- Use consistent spacing: `gap-2`, `gap-4`, `gap-6`, `gap-8`
+- Use consistent padding: `p-2`, `p-4`, `p-6`, `px-4`, `py-2`
+- Use consistent margins: `mb-4`, `mt-6`, `mx-2`
+- Border radius: `rounded-md` (default), `rounded-lg`, `rounded-xl`
