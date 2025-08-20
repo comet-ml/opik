@@ -42,6 +42,7 @@ import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.jersey.PATCH;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -524,5 +525,18 @@ public class ExperimentsResource {
                 feedbackScoreNames.scores().size(), experimentIds, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
+    }
+
+    @PATCH
+    @Path("/{id}")
+    public Response update(
+            @PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull ExperimentUpdate experimentUpdate) {
+
+        experimentService.update(id, experimentUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.noContent().build();
     }
 }
