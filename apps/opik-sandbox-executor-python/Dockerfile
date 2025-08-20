@@ -1,6 +1,6 @@
 # Multi-stage build: Runtime stage (EXECUTION TIME OPTIMIZED)
 # Execution speed with .pyc
-FROM python:3.12.9-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY scoring_runner.py .
 RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b ./scoring_runner.py
 
-# Use optimization level 2 (-OO) to remove assert statements, __debug__ code blocks, and docstrings
 # Use PYTHONNODEBUGRANGES=1 to reduce memory overhead (Python 3.12+)
 # Use -b flag for legacy layout = fastest execution (no subdirectory traversal)
 RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /usr/local/lib/python3.12/site-packages
@@ -24,8 +23,9 @@ RUN find /usr/local/lib/python3.12/site-packages -name "*.py" -delete
 # Pre-warm essential modules used in scoring (build-time)
 RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python /tmp/prewarm.py
 
-# Keep prewarm.py for runtime stage
+# Keep prewarm.py for runtime stage and compile it
 RUN cp /tmp/prewarm.py /prewarm.py
+RUN python -m compileall -o 2 -b /prewarm.py
 
 # Run build-time test
 RUN printf 'print("build test passed")' | python ./scoring_runner.pyc 'print("build test")' '{"test": true}' || echo "Warning: build test failed"
@@ -41,7 +41,7 @@ RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 #######################################################################
 # Multi-stage build: Runtime stage (EXECUTION TIME OPTIMIZED)
 # Execution speed with .pyc
-FROM python:3.12.9-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 # Clean up package managers from base image (no packages to install)
 RUN rm -rf /usr/local/bin/pip* \
@@ -57,17 +57,17 @@ COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
 
 # Copy optimized .pyc file for fastest execution (legacy layout with -b flag)
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
-COPY --from=builder /prewarm.py /tmp/prewarm.py
+COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
 
 # Runtime pre-warming for additional performance boost
-RUN python -OO /tmp/prewarm.py
+RUN python /tmp/prewarm.pyc
 
 # Remove original .py files from site-packages to reduce package size and improve cold starts
 # Note: This trades detailed tracebacks for performance (keeping .pyc files only)
 RUN find /usr/local/lib/python3.12/site-packages -name "*.py" -delete
 
 # Runtime verification test
-RUN printf 'print("runtime test passed")' | python -OO ./scoring_runner.pyc 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
+RUN printf 'print("runtime test passed")' | python ./scoring_runner.pyc 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
 
 # Verify no package managers exist
 RUN ! command -v pip && ! command -v pip3 && echo "✅ Package managers successfully removed"
@@ -79,4 +79,4 @@ ENV PYTHONNODEBUGRANGES=1
 RUN chown -R 1001:1001 /opt/opik-sandbox-executor-python
 USER 1001:1001
 
-CMD ["python", "-OO", "/opt/opik-sandbox-executor-python/scoring_runner.pyc"]
+CMD ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc"]

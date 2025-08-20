@@ -172,15 +172,7 @@ class DockerExecutor(CodeExecutorBase):
                 detach=True,
                 network_disabled=self.network_disabled,
                 security_opt=["no-new-privileges"],
-                labels=self.container_labels,
-                read_only=True,  # Make filesystem read-only
-                tmpfs={
-                    '/tmp': 'size=50m,ro,noexec,nosuid,nodev',  # Read-only tmp
-                    '/var/tmp': 'size=10m,ro,noexec,nosuid,nodev',  # Read-only tmp space
-                    '/home': 'size=10m,ro,noexec,nosuid,nodev'  # Read-only user home
-                },
-                cap_drop=['ALL'],  # Drop all Linux capabilities
-                user='1001:1001'  # Explicitly run as non-root user
+                labels=self.container_labels
             )
 
             # Add the container to the pool
@@ -258,7 +250,7 @@ class DockerExecutor(CodeExecutorBase):
 
         with self.tracer.start_as_current_span("docker.run_scoring"):
             try:
-                cmd = ["python", "-OO", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, json.dumps(data), payload_type or ""]
+                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, json.dumps(data), payload_type or ""]
             
                 future = self.scoring_executor.submit(
                     container.exec_run,
