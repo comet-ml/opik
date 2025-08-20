@@ -109,7 +109,7 @@ jobs:
                 " **To fix this:**\n\n" +
                 `  1. **Run Interactive Rebase:** Open your terminal and run \`${rebaseCommand}\`.\n` +
                 "  2. **Edit Commits:** An editor will open. For each invalid commit listed below, change the word **`pick`** to **`reword`**.\n" +
-                "  3. **Save and Push:** Save the file. Your editor will then prompt you to rewrite each message. Once you are done, force-push the changes with **`git push --force`**.\n\n" +
+                "  3. **Save and Push:** Save the file. Your editor will then prompt you to rewrite each message. Once you are done, force-push the changes with **`git push --force`**.\n\n"
               );
             }
             
