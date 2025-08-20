@@ -68,7 +68,7 @@ export enum EXPLAINER_ID {
   metric_answer_relevance = "metric_answer_relevance",
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
-  trace_opik_ai,
+  trace_opik_ai = "trace_opik_ai",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {

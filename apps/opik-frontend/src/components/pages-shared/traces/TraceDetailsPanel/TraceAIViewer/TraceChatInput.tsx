@@ -7,7 +7,6 @@ import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { TraceLLMChatType } from "@/types/ai-assistant";
-import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
