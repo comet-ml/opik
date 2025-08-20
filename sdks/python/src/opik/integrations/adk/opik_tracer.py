@@ -161,7 +161,7 @@ class OpikTracer:
                     name=adk_tracer_for_opik_context_management.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
                     project_name=self.project_name,
                     metadata=self.metadata,
-                    type="llm",  # for now
+                    type="llm",
                     model=model,
                     provider=provider,
                     input=input,
