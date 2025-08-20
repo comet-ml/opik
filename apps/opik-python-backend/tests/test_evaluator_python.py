@@ -323,15 +323,13 @@ def test_missing_data_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             INVALID_METRIC,
-            """  File "<string>", line 2
-    from typing import
+            """from typing import
                       ^
-SyntaxError: """
+SyntaxError: invalid syntax"""
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
-            """  File "<string>", line 4, in <module>
-ModuleNotFoundError: No module named 'flask'""",
+            """ModuleNotFoundError: No module named 'flask'""",
             marks=pytest.mark.skipif(
                 lambda: isinstance(app.executor, ProcessExecutor),
                 reason="Flask injection test only makes sense for DockerExecutor"
@@ -344,20 +342,11 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
+    assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
     
-    # Check for the main error message (should be consistent)
-    error_str = str(response.json["error"])
-    assert "400 Bad Request:" in error_str
-    assert ("Field 'code' contains invalid Python code" in error_str or 
-            "Execution failed: Python code contains an invalid metric" in error_str)
-    
-    # For syntax error tests, check for key error indicators instead of exact stacktrace
-    if "from typing import" in code:
-        # Check for syntax error indicators
-        assert ("SyntaxError" in error_str or "invalid syntax" in error_str)
-    elif "flask" in code.lower():
-        # Check for module not found indicators
-        assert ("ModuleNotFoundError" in error_str or "No module named 'flask'" in error_str)
+    # Normalize error message to handle differences between remote and local images
+    error_message = normalize_error_message(str(response.json["error"]))
+    assert stacktrace in error_message
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -373,13 +362,11 @@ def test_missing_metric_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             CONSTRUCTOR_EXCEPTION_METRIC,
-            """  File "<string>", line 16, in __init__
-Exception: Exception in constructor"""
+            """Exception: Exception in constructor"""
     ),
     (
             SCORE_EXCEPTION_METRIC,
-            """  File "<string>", line 20, in score
-Exception: Exception while scoring"""
+            """Exception: Exception while scoring"""
     )
 ])
 def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
@@ -388,17 +375,11 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
     
-    # Check for the main error message (should be consistent)
-    error_str = str(response.json["error"])
-    assert "400 Bad Request:" in error_str
-    assert "can't be evaluated" in error_str
-    
-    # Check for the specific exception message instead of exact stacktrace format
-    if "Exception in constructor" in stacktrace:
-        assert "Exception in constructor" in error_str
-    elif "Exception while scoring" in stacktrace:
-        assert "Exception while scoring" in error_str
+    # Normalize error message to handle differences between remote and local images
+    error_message = normalize_error_message(str(response.json["error"]))
+    assert stacktrace in error_message
 
 
 def test_no_scores_returns_bad_request(client):
