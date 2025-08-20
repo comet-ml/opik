@@ -406,6 +406,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
