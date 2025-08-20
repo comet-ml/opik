@@ -19,6 +19,7 @@ class FeedbackScoreBatchItemThread(UniversalBaseModel):
     value: float
     reason: typing.Optional[str] = None
     source: FeedbackScoreBatchItemThreadSource
+    author: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
