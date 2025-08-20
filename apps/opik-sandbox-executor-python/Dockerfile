@@ -8,7 +8,7 @@ COPY scoring_runner.py .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip uninstall -y setuptools wheel || true
+RUN pip uninstall -y setuptools wheel
 
 RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b ./scoring_runner.py
 
@@ -17,10 +17,11 @@ RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b ./scoring_runner.py
 RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /usr/local/lib/python3.12/site-packages
 
 # Pre-warm essential modules used in scoring (build-time)
-RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py && python /tmp/prewarm.py
+RUN echo "import sys, json, time, traceback, uuid, inspect, opik; from types import ModuleType; print('✅ Essential modules cached')" > /tmp/prewarm.py
+RUN PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /tmp/prewarm.py
 
-# Keep prewarm.py for runtime stage
-RUN python /tmp/prewarm.py
+# Keep prewarm.py for the runtime stage
+RUN python /tmp/prewarm.pyc
 
 # Runtime verification test
 RUN printf 'print("runtime test passed")' | python ./scoring_runner.py 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
