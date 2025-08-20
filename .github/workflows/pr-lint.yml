@@ -68,8 +68,8 @@ jobs:
             const commits = await github.rest.pulls.listCommits({ owner, repo, pull_number: pr.number });
             const invalidCommits = [];
 
-            for (const { sha, commit } of commits.data) {
-              if (commit.parents.length > 1) { continue; } // Ignore merge commits
+            for (const { sha, commit, parents } of commits.data) {
+              if (parents.length > 1) { continue; } // Ignore merge commits
               if (!commitMessageRegex.test(commit.message)) {
                 invalidCommits.push(
                   `  - \`${sha.substring(0, 7)}\`: ${commit.message.split('\\n')[0]}`
