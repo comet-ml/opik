@@ -94,9 +94,6 @@ class AnyString:
     def starting_with(self, startswith: str):
         return AnyString(startswith=startswith)
 
-    def containing(self, containing: str):
-        return AnyString(containing=containing)
-
 
 ANY = mock.ANY
 ANY_BUT_NONE = AnyButNone()

@@ -702,8 +702,10 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@pytest.mark.parametrize("model_name", ["openai/gpt-4o-mini", "openai/gpt-5-mini"])
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
     fake_backend,
+    model_name,
 ):
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -711,7 +713,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm("openai/gpt-4o-mini"),
+        model=adk_lite_llm.LiteLlm(model_name),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
@@ -770,7 +772,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.containing("gpt-4o-mini"),
+                name=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -779,7 +781,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING.starting_with("gpt-4o-mini"),
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
             ),
             SpanModel(
@@ -798,7 +800,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.containing("gpt-4o-mini"),
+                name=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -807,7 +809,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING.starting_with("gpt-4o-mini"),
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
             ),
         ],
