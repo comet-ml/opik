@@ -29,22 +29,20 @@ jobs:
 
             // 1. Validate PR Title
             const title = pr.title;
-            // --- UPDATED REGEX: Changed '*' to '+' to require at least one component tag ---
-            const titleRegex = /^\[(OPIK-\d+|Issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
+            const titleRegex = /^\[(OPIK-\d+|#\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
             if (!titleRegex.test(title)) {
-              // --- UPDATED ERROR MESSAGE to reflect new requirement ---
               errors.push(
-                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and at least one component tag (`[FE]`, `[BE]`, `[DOCS]`, `[SDK]`, `[GHA]`.) after the ticket number.\n\n" +
-                "  - **Internal contributors:** `[OPIK-xxxx] [COMPONENT] Your change` to link to a Jira ticket\n" +
-                "  - **External:** Please open a GitHub Issue first. Then, use `[Issue-xxxx] Your change` to link to it: `[Issue-xxxx] [COMPONENT] Your change`\n\n" +
-                "  *Example with multiple tags: `[Issue-123] [BE] [FE] Fix authentication bug`*"
+                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and at least one component tag (`[FE]`, `[BE]`, etc.).\n\n" +
+                "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx] [COMPONENT] Your change`\n" +
+                "  - **External contributors: Open a Github Issue and link to it via its number:** `[#xxxx] [COMPONENT] Your change`\n\n" +
+                "  *Example: `[#3108] [BE] [FE] Fix authentication bug`*"
               );
             }
 
             // 2. Validate PR Description
-            const body = pr.body;
+            const body = pr.body || "";
             const requiredHeadings = ["## Details", "## Change checklist", "## Issues", "## Testing", "## Documentation"];
-            if (!body) {
+            if (body.length === 0) {
               errors.push("❌ **Missing Description.** The PR description cannot be empty.");
             } else {
               for (const heading of requiredHeadings) {
@@ -52,48 +50,83 @@ jobs:
                   errors.push(`❌ **Missing Section.** The description is missing the \`${heading}\` section.`);
                 }
               }
-              const issuesSectionRegex = /## Issues\s*(- Resolves #\S+|- OPIK-\S+|- NA)/;
-              if (!issuesSectionRegex.test(body)) {
+
+              // Helper function to get content of a markdown section
+              const getSectionContent = (sectionTitle) => {
+                const startIndex = body.indexOf(sectionTitle);
+                if (startIndex === -1) return null;
+                const nextHeaderIndex = body.indexOf("## ", startIndex + sectionTitle.length);
+                const endIndex = nextHeaderIndex !== -1 ? nextHeaderIndex : body.length;
+                return body.substring(startIndex + sectionTitle.length, endIndex).trim();
+              };
+              
+              const detailsContent = getSectionContent("## Details");
+              if (detailsContent !== null && detailsContent.length === 0) {
+                  errors.push("❌ **Incomplete Details Section.** The `## Details` section cannot be empty.");
+              }
+
+              const issuesContent = getSectionContent("## Issues");
+              const issuesRegex = /(#\d+|OPIK-\d+)/;
+              if (issuesContent !== null && !issuesRegex.test(issuesContent)) {
                  errors.push(
-                   "❌ **Incomplete Issues Section.** You must fill out at least one item under `## Issues`."
+                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`) or Jira ticket (`OPIK-xxxx`) under the `## Issues` section."
                  );
               }
             }
 
             // 3. Validate Commit Messages
+            const author = pr.user.login;
+            let ticketPattern = 'OPIK-\\d+|#\\d+'; // Changed Issue-\\d+ to #\\d+
+            if (author === 'github-actions[bot]') {
+              ticketPattern += '|NA';
+            }
             const commitMessageRegex = new RegExp(
-              `^(\\[(OPIK-\\d+|Issue-\\d+)\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
+              `^(\\[(${ticketPattern})\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
             );
             
             const commits = await github.rest.pulls.listCommits({ owner, repo, pull_number: pr.number });
             const invalidCommits = [];
 
             for (const { sha, commit, parents } of commits.data) {
-              if (parents.length > 1) { continue; } // Ignore merge commits
-              if (!commitMessageRegex.test(commit.message)) {
+              if (parents.length > 1) { continue; }
+              const message = commit.message || ""; 
+              if (!commitMessageRegex.test(message)) {
                 invalidCommits.push(
-                  `  - \`${sha.substring(0, 7)}\`: ${commit.message.split('\n')[0]}`
+                  `  - \`${sha.substring(0, 7)}\`: ${message.split('\n')[0]}`
                 );
               }
             }
 
             if (invalidCommits.length > 0) {
+              const baseRef = pr.base.ref;
+              const rebaseCommand = `git rebase -i ${baseRef}`;
               errors.push(
-                "❌ **Invalid Commit Message Format.** One or more commits need to be fixed (you can use `git rebase -i` to edit them).\n\n" +
-                "   - **Task Commits:** Must start with `[OPIK-xxxx]` (internal contributors) or `[Issue-xxxx]` (external contributors: please open a GitHub Issue first. Then, use `[Issue-xxxx] Your change` to link to it).\n" +
+                "❌ **Invalid Commit Message Format.** One or more commits do not follow the required format.\n\n" +
+                "   - **Task Commits:** Must start with JIRA ticket ID `[OPIK-xxxx]` (internal) or GitHub issue ID `[#xxxx]` (external).\n" +
                 "   - **Revision Commits:** Must start with `Revision X:`.\n\n" +
                 "   **Invalid Commits:**\n" +
-                invalidCommits.join('\n')
+                invalidCommits.join('\n') +
+                " **To fix this:**\n\n" +
+                `  1. **Run Interactive Rebase:** Open your terminal and run \`${rebaseCommand}\`.\n` +
+                "  2. **Edit Commits:** An editor will open. For each invalid commit listed below, change the word **`pick`** to **`reword`**.\n" +
+                "  3. **Save and Push:** Save the file. Your editor will then prompt you to rewrite each message. Once you are done, force-push the changes with **`git push --force`**.\n\n" +
               );
             }
             
-            // 4. Final step: Comment on PR with errors if any exist
+            // 4. Final step: Comment on PR and/or fail the job
             if (errors.length > 0) {
-              const errorMessage = "### 📋 PR Linter Failed\n\n" + errors.join("\n\n---\n\n");
+              const commentBody = "### 📋 PR Linter Failed\n\n" + errors.join("\n\n---\n\n");
               
-              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: errorMessage });
+              const logMessage = "PR Linter Failed:\n\n" + errors.join("\n\n")
+                  .replace(/❌ \*\*/g, '❌ ')
+                  .replace(/\*\*`/g, '`')
+                  .replace(/`\*\*/g, '`')
+                  .replace(/###\s/g, '')
+                  .replace(/---\n\n/g, '');
+
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: commentBody });
               
-              core.setFailed("This PR does not meet the formatting requirements.");
+              core.setFailed(logMessage);
             } else {
                console.log("✅ PR linting passed!");
             }
