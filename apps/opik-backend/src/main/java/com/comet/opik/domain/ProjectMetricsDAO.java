@@ -131,7 +131,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ),
             <if(feedback_scores_empty_filters)>
-             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
                     FROM feedback_scores_final
@@ -249,7 +249,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             <if(thread_feedback_scores_empty_filters)>
-             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+               fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
                     FROM feedback_scores_final
