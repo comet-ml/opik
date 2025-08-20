@@ -30,7 +30,7 @@ jobs:
             // 1. Validate PR Title
             const title = pr.title;
             // --- UPDATED REGEX: Changed '*' to '+' to require at least one component tag ---
-            const titleRegex = /^\[(OPIK-\d+|issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
+            const titleRegex = /^\[(OPIK-\d+|Issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
             if (!titleRegex.test(title)) {
               // --- UPDATED ERROR MESSAGE to reflect new requirement ---
               errors.push(
@@ -53,7 +53,7 @@ jobs:
                 }
               }
               const issuesSectionRegex = /## Issues\s*(- Resolves #\S+|- OPIK-\S+|- NA)/;
-              if (!issuesSectionRegex.test(body.replace(/\s/g, ''))) {
+              if (!issuesSectionRegex.test(body)) {
                  errors.push(
                    "❌ **Incomplete Issues Section.** You must fill out at least one item under `## Issues`."
                  );
@@ -62,7 +62,7 @@ jobs:
 
             // 3. Validate Commit Messages
             const commitMessageRegex = new RegExp(
-              `^(\\[(OPIK-\\d+|issue-\\d+)\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
+              `^(\\[(OPIK-\\d+|Issue-\\d+)\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
             );
             
             const commits = await github.rest.pulls.listCommits({ owner, repo, pull_number: pr.number });
@@ -72,7 +72,7 @@ jobs:
               if (parents.length > 1) { continue; } // Ignore merge commits
               if (!commitMessageRegex.test(commit.message)) {
                 invalidCommits.push(
-                  `  - \`${sha.substring(0, 7)}\`: ${commit.message.split('\\n')[0]}`
+                  `  - \`${sha.substring(0, 7)}\`: ${commit.message.split('\n')[0]}`
                 );
               }
             }
