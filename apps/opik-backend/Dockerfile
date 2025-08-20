@@ -14,7 +14,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 ###############################
 FROM amazoncorretto:21.0.7-al2023
 
-RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
+RUN yum update -y && yum install -y shadow ca-certificates openssl perl dos2unix \
     && yum clean all
 VOLUME /tmp
 # Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
@@ -25,7 +25,8 @@ ADD install_rds_cert.sh .
 ARG STORE_PASSWORD=changeit
 
 # install RDS certificates
-RUN chmod 700 install_rds_cert.sh \
+RUN dos2unix install_rds_cert.sh \
+    && chmod 700 install_rds_cert.sh \
     && ./install_rds_cert.sh /tmp/certs/global-bundle.pem $STORE_PASSWORD \
     && rm install_rds_cert.sh /tmp/certs/global-bundle.pem
 
@@ -33,7 +34,9 @@ WORKDIR /opt/opik
 COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
 COPY redoc/ redoc/
 
+RUN dos2unix ./*.sh
 RUN chmod +x ./*.sh
+
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
 
