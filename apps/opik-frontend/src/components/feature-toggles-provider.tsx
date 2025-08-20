@@ -37,7 +37,14 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    // if (data) setFeatures(data);
+    // TODO lala remove this after testing
+    if (data) {
+      setFeatures({
+        ...data,
+        [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: true,
+      });
+    }
   }, [data]);
 
   const value = useMemo(() => {
