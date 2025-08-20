@@ -9294,6 +9294,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     SpanFilter_Public:
       type: object
       properties:
@@ -9795,6 +9797,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     FeedbackScoreBatchThread:
       required:
       - scores
