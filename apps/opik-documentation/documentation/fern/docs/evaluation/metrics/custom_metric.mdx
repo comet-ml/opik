@@ -128,7 +128,7 @@ metric.score(output="Paris is the capital of France")
 
 In this example, we used the OpenAI Python client to call the LLM. You don't have to use the OpenAI Python client, you can update the code example above to use any LLM client you have access to.
 
-#### Example: Adding support for many all LLM providers
+#### Example: Adding support for many LLM providers
 
 In order to support a wide range of LLM providers, we recommend using the `litellm` library to call your LLM. This allows you to support hundreds of models without having to maintain a custom LLM client.
 
@@ -188,6 +188,35 @@ You can then use this metric to score your LLM outputs:
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
+```
+
+#### Example: Creating a metric with multiple scores
+You can implement a metric that returns multiple scores, which will display as separate columns in the UI when using it in an evaluation.
+
+To do so, setup your `score` method to return a list of `ScoreResult` objects.
+
+```python
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+import json
+
+class MultiScoreCustomMetric(base_metric.BaseMetric):
+    def __init__(self, name: str):
+        self.name = name
+
+    def score(self, input: str, output: str, **ignored_kwargs: Any):
+        # Add you logic here
+
+        return [score_result.ScoreResult(
+            value=0,
+            name=self.name,
+            reason="Optional reason for the score"
+        ),
+        score_result.ScoreResult(
+            value=1,
+            name=f"{self.name}-2",
+            reason="Optional reason for the score"
+        )]
 ```
 
 #### Example: Enforcing structured outputs
