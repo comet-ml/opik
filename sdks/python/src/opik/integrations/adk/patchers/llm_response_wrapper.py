@@ -13,6 +13,7 @@ from opik.llm_usage import opik_usage
 
 LOGGER = logging.getLogger(__name__)
 
+
 class LlmResponseCreateWrapper:
     def __init__(
         self,
