@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import useAppStore, { useUserApiKey } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
@@ -42,8 +42,7 @@ const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[]
 const OPTIMIZATION_CODE_TEMPLATES: Record<OPTIMIZATION_ALGORITHMS, string> = {
   [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: `# Configure the SDK
 import os
-os.environ["OPIK_API_KEY"] = "API_KEY_PLACEHOLDER"
-os.environ["OPIK_WORKSPACE"] = "WORKSPACE_NAME_PLACEHOLDER"
+# INJECT_OPIK_CONFIGURATION
 
 import opik
 from opik_optimizer import (
@@ -56,7 +55,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 prompt = ChatPrompt(
     system="Answer the question.",
     user="{question}", # This must match dataset field
-}
+)
 
 # Get the dataset to evaluate the prompt on
 client = opik.Opik()
@@ -68,7 +67,7 @@ def levenshtein_ratio(dataset_item, llm_output):
     return metric.score(
         reference=dataset_item["answer"], # This must match dataset field
         output=llm_output,
-)
+    )
 
 # Run the optimization
 optimizer = MetaPromptOptimizer(
@@ -93,8 +92,7 @@ result.display()`,
 
   [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
 import os
-os.environ["OPIK_API_KEY"] = "API_KEY_PLACEHOLDER"
-os.environ["OPIK_WORKSPACE"] = "WORKSPACE_NAME_PLACEHOLDER"
+# INJECT_OPIK_CONFIGURATION
 
 import opik
 from opik_optimizer import (
@@ -107,7 +105,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 prompt = ChatPrompt(
     system="Answer the question.",
     user="{question}", # This must match dataset field
-}
+)
 
 # Get the dataset to evaluate the prompt on
 client = opik.Opik()
@@ -119,7 +117,7 @@ def levenshtein_ratio(dataset_item, llm_output):
     return metric.score(
         reference=dataset_item["answer"], # This must match dataset field
         output=llm_output,
-)
+    )
 
 # Run the optimization
 optimizer = FewShotBayesianOptimizer(
@@ -142,8 +140,7 @@ result.display()`,
 
   [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
 import os
-os.environ["OPIK_API_KEY"] = "API_KEY_PLACEHOLDER"
-os.environ["OPIK_WORKSPACE"] = "WORKSPACE_NAME_PLACEHOLDER"
+# INJECT_OPIK_CONFIGURATION
 
 import opik
 from opik_optimizer import (
@@ -156,7 +153,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 prompt = ChatPrompt(
     system="Answer the question.",
     user="{question}", # This must match dataset field
-}
+)
 
 # Get the dataset to evaluate the prompt on
 client = opik.Opik()
@@ -168,7 +165,7 @@ def levenshtein_ratio(dataset_item, llm_output):
     return metric.score(
         reference=dataset_item["answer"], # This must match dataset field
         output=llm_output,
-)
+    )
 
 # Run the optimization
 optimizer = EvolutionaryOptimizer(
@@ -202,7 +199,6 @@ const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
 > = ({ open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const apiKey = useUserApiKey();
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
@@ -214,8 +210,6 @@ const AddOptimizationDialog: React.FunctionComponent<
 
   // Get the hardcoded code template for the selected algorithm and inject dynamic values
   const section3 = OPTIMIZATION_CODE_TEMPLATES[selectedModel]
-    .replace("WORKSPACE_NAME_PLACEHOLDER", workspaceName || "your-workspace")
-    .replace("API_KEY_PLACEHOLDER", apiKey || "your-api-key-here")
     .replace("DATASET_NAME_PLACEHOLDER", datasetName || "your-dataset-name");
 
   const { data, isLoading } = useDatasetsList(
