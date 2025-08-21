@@ -213,7 +213,7 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
 
   const renderEmptyState = () => {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3">
+      <div className="flex min-h-full flex-col items-center justify-center gap-3 py-2">
         <div className="comet-title-m text-center text-foreground">
           Ready to dig into your trace?
         </div>
