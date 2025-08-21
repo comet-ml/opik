@@ -258,35 +258,6 @@ services:
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
 
-
-
-  # OpenTelemetry Collector for receiving logs from Fluent Bit
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.113.0
-    hostname: otel-collector
-    ports:
-      - "4317:4317"   # OTLP gRPC receiver
-      - "4318:4318"   # OTLP HTTP receiver
-      - "13133:13133" # Health check
-      - "8888:8888"   # Prometheus metrics
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otelcol-contrib/otel-collector-config.yaml:ro
-      - otel-collector-data:/tmp
-    environment:
-      NAMESPACE: ${NAMESPACE:-opik}
-      DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-production}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      OTEL_AUTH_TOKEN: ${OTEL_AUTH_TOKEN:-}
-    command: ["--config=/etc/otelcol-contrib/otel-collector-config.yaml"]
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-    profiles:
-      - otel
-
 networks:
   default:
 
@@ -296,4 +267,3 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
-  otel-collector-data:
