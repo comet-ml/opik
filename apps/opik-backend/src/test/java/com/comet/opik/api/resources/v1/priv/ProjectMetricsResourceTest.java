@@ -34,7 +34,6 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
-import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -47,6 +46,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -923,6 +923,59 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var tracesWithSpans = createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), 6);
+            var traceForFilter = tracesWithSpans.getLeft().getFirst();
+            var filteredCostMinus3 = calculateCost(
+                    tracesWithSpans.getRight().stream().filter(span -> span.traceId() == traceForFilter.id()).toList());
+            var costMinus3Total = calculateCost(tracesWithSpans.getRight());
+
+            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_COST,
+                    createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var costCurrent = Map.of(ProjectMetricsDAO.NAME_COST, createSpans(projectName, marker));
+
+            var expectedValues = Arrays.asList(Map.of(ProjectMetricsDAO.NAME_COST, filteredCostMinus3),
+                    Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total.subtract(filteredCostMinus3)),
+                    Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total), costMinus1, costCurrent, null);
+
+            // create feedback scores for the first trace
+            tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
+                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+
+            // create guardrails for the first trace
+            var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
+                    traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
+                    .result(GuardrailResult.PASSED)
+                    .build();
+
+            guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(getFilter.apply(traceForFilter)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.happyPathWithFilter();
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -947,10 +1000,13 @@ class ProjectMetricsResourceTest {
 
         private BigDecimal createSpans(
                 String projectName, Instant marker) {
-            var MODEL_NAME = "gpt-3.5-turbo";
-            var provider = "openai";
+            return calculateCost(createSpans(projectName, marker, 5).getRight());
+        }
 
-            List<Trace> traces = IntStream.range(0, 5)
+        private Pair<List<Trace>, List<Span>> createSpans(
+                String projectName, Instant marker, int traceCount) {
+
+            List<Trace> traces = IntStream.range(0, traceCount)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plusSeconds(i))
@@ -961,19 +1017,18 @@ class ProjectMetricsResourceTest {
             List<Span> spans = traces.stream()
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
-                            .model(MODEL_NAME)
-                            .provider(provider)
-                            .usage(Map.of(
-                                    "prompt_tokens", RANDOM.nextInt(),
-                                    "completion_tokens", RANDOM.nextInt()))
                             .traceId(trace.id())
-                            .totalEstimatedCost(null)
+                            .totalEstimatedCost(BigDecimal.valueOf(Math.abs(RANDOM.nextInt(10000))))
                             .build())
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return Pair.of(traces, spans);
+        }
+
+        private BigDecimal calculateCost(List<Span> spans) {
             return spans.stream()
-                    .map(span -> CostService.calculateCost(MODEL_NAME, provider, span.usage(), null))
+                    .map(Span::totalEstimatedCost)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
     }
@@ -1040,12 +1095,15 @@ class ProjectMetricsResourceTest {
             var startTime = subtract(marker, TIME_BUCKET_3, interval).plusMillis(RANDOM.nextInt(50));
             var endTime = subtract(marker, TIME_BUCKET_3, interval).plus(4, ChronoUnit.HOURS);
 
-            List<Trace> traceForFilter = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval), 1, startTime, endTime);
-            List<Trace> tracesMinus3 = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval), 5, null, endTime.plusMillis(RANDOM.nextInt(50)));
+            List<Trace> traceForFilter = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval), 1,
+                    startTime, endTime);
+            List<Trace> tracesMinus3 = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval), 5, null,
+                    endTime.plusMillis(RANDOM.nextInt(50)));
 
             List<BigDecimal> durationsTraceForFilter = calculateQuantiles(traceForFilter);
             List<BigDecimal> durationsMinus3 = calculateQuantiles(tracesMinus3);
-            List<BigDecimal> durationsTotalMinus3 = calculateQuantiles(Stream.concat(traceForFilter.stream(), tracesMinus3.stream()).toList());
+            List<BigDecimal> durationsTotalMinus3 = calculateQuantiles(
+                    Stream.concat(traceForFilter.stream(), tracesMinus3.stream()).toList());
 
             List<BigDecimal> durationsMinus1 = createTraces(projectName, subtract(marker, TIME_BUCKET_1, interval));
             List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
@@ -1071,7 +1129,8 @@ class ProjectMetricsResourceTest {
                     ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
                     ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
 
-            var expectedValues = Arrays.asList(durationTraceForFilter, durationMinus3, durationTotalMinus3, durationMinus1, durationCurrent, null);
+            var expectedValues = Arrays.asList(durationTraceForFilter, durationMinus3, durationTotalMinus3,
+                    durationMinus1, durationCurrent, null);
 
             // create feedback scores for the first trace
             traceForFilter.forEach(trace -> trace.feedbackScores()
@@ -1079,7 +1138,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                            traceForFilter.getFirst().id(), randomUUID(), projectName).getFirst().toBuilder()
+                    traceForFilter.getFirst().id(), randomUUID(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -1148,7 +1207,8 @@ class ProjectMetricsResourceTest {
             return calculateQuantiles(traces);
         }
 
-        private List<Trace> createTraces(String projectName, Instant marker, int tracesCount, Instant startTime, Instant endTime) {
+        private List<Trace> createTraces(String projectName, Instant marker, int tracesCount, Instant startTime,
+                Instant endTime) {
             List<Trace> traces = IntStream.range(0, tracesCount)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -1572,12 +1632,12 @@ class ProjectMetricsResourceTest {
 
     static Stream<Arguments> happyPathWithFilter() {
         return Stream.of(Arguments.of(
-                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
-                                .field(TraceField.ID)
-                                .operator(EQUAL)
-                                .value(trace.id().toString())
-                                .build(),
-                        Arrays.asList(0, 5, 5)),
+                (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                        .field(TraceField.ID)
+                        .operator(EQUAL)
+                        .value(trace.id().toString())
+                        .build(),
+                Arrays.asList(0, 5, 5)),
                 Arguments.of(
                         (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
                                 .field(TraceField.NAME)
