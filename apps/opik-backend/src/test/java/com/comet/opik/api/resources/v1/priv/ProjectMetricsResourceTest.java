@@ -412,7 +412,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -612,7 +612,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -822,7 +822,8 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            var tracesWithSpans = createTracesWithSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names, 6);
+            var tracesWithSpans = createTracesWithSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names,
+                    6);
             var traceForFilter = tracesWithSpans.getLeft().getFirst();
             var filteredUsageMinus3 = aggregateSpansUsage(
                     tracesWithSpans.getRight().stream().filter(span -> span.traceId() == traceForFilter.id()).toList());
@@ -833,7 +834,8 @@ class ProjectMetricsResourceTest {
             var usageMinus1 = createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
             var usage = createSpans(projectName, marker, names);
 
-            var expectedValues = Arrays.asList(filteredUsageMinus3, usageMinus3, usageMinus3Total, usageMinus1, usage, null);
+            var expectedValues = Arrays.asList(filteredUsageMinus3, usageMinus3, usageMinus3Total, usageMinus1, usage,
+                    null);
 
             // create feedback scores for the first trace
             tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
@@ -841,7 +843,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                            traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
+                    traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -859,7 +861,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -917,7 +919,7 @@ class ProjectMetricsResourceTest {
                             .usage(usageNames == null
                                     ? null
                                     : usageNames.stream().collect(
-                                    Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
+                                            Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
                             .build())
                     .toList();
 
@@ -1034,7 +1036,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -1225,7 +1227,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -1336,9 +1338,10 @@ class ProjectMetricsResourceTest {
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            var tracesWithGuardrails = createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval), 6);
+            var tracesWithGuardrails = createTracesWithGuardrails(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 6);
             var traceForFilter = tracesWithGuardrails.getLeft().getFirst();
-            var filteredGuardrailsMinus3 = tracesWithGuardrails.getRight().getFirst();  // guardrails count for first trace
+            var filteredGuardrailsMinus3 = tracesWithGuardrails.getRight().getFirst(); // guardrails count for first trace
             var guardrailsMinus3Total = tracesWithGuardrails.getRight().stream().mapToLong(Long::longValue).sum();
 
             var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
@@ -1348,15 +1351,16 @@ class ProjectMetricsResourceTest {
 
             var expectedValues = Arrays.asList(
                     Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, filteredGuardrailsMinus3),
-                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total - filteredGuardrailsMinus3),
+                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                            guardrailsMinus3Total - filteredGuardrailsMinus3),
                     Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total),
-                    guardrailsMinus1, 
-                    guardrails, 
+                    guardrailsMinus1,
+                    guardrails,
                     null);
 
             // create feedback scores for the first trace
-            traceForFilter.feedbackScores().forEach(score -> 
-                    traceResourceClient.feedbackScore(traceForFilter.id(), score, WORKSPACE_NAME, API_KEY));
+            traceForFilter.feedbackScores().forEach(
+                    score -> traceResourceClient.feedbackScore(traceForFilter.id(), score, WORKSPACE_NAME, API_KEY));
 
             var filter = getFilter.apply(traceForFilter);
 
@@ -1377,7 +1381,7 @@ class ProjectMetricsResourceTest {
         }
 
         Stream<Arguments> happyPathWithFilter() {
-            return ProjectMetricsResourceTest.happyPathWithFilter();
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
         }
 
         @ParameterizedTest
@@ -1414,7 +1418,8 @@ class ProjectMetricsResourceTest {
                     .count();
         }
 
-        private Pair<List<Trace>, List<Long>> createTracesWithGuardrails(String projectName, Instant marker, int tracesCount) {
+        private Pair<List<Trace>, List<Long>> createTracesWithGuardrails(String projectName, Instant marker,
+                int tracesCount) {
             List<Trace> traces = IntStream.range(0, tracesCount)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -1775,7 +1780,7 @@ class ProjectMetricsResourceTest {
                 .toList();
     }
 
-    static Stream<Arguments> happyPathWithFilter() {
+    static Stream<Arguments> happyPathWithFilterArguments() {
         return Stream.of(Arguments.of(
                 (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
                         .field(TraceField.ID)
