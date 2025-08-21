@@ -811,6 +811,58 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var tracesWithSpans = createTracesWithSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names, 6);
+            var traceForFilter = tracesWithSpans.getLeft().getFirst();
+            var filteredUsageMinus3 = aggregateSpansUsage(
+                    tracesWithSpans.getRight().stream().filter(span -> span.traceId() == traceForFilter.id()).toList());
+            var usageMinus3 = aggregateSpansUsage(
+                    tracesWithSpans.getRight().stream().filter(span -> span.traceId() != traceForFilter.id()).toList());
+            var usageMinus3Total = aggregateSpansUsage(tracesWithSpans.getRight());
+
+            var usageMinus1 = createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpans(projectName, marker, names);
+
+            var expectedValues = Arrays.asList(filteredUsageMinus3, usageMinus3, usageMinus3Total, usageMinus1, usage, null);
+
+            // create feedback scores for the first trace
+            tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
+                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+
+            // create guardrails for the first trace
+            var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
+                            traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
+                    .result(GuardrailResult.PASSED)
+                    .build();
+
+            guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(getFilter.apply(traceForFilter)))
+                    .build(), marker, names, Long.class, expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.happyPathWithFilter();
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -844,7 +896,13 @@ class ProjectMetricsResourceTest {
 
         private Map<String, Long> createSpans(
                 String projectName, Instant marker, List<String> usageNames) {
-            List<Trace> traces = IntStream.range(0, 5)
+            return aggregateSpansUsage(createTracesWithSpans(
+                    projectName, marker, usageNames, 5).getRight());
+        }
+
+        private Pair<List<Trace>, List<Span>> createTracesWithSpans(
+                String projectName, Instant marker, List<String> usageNames, int tracesCount) {
+            List<Trace> traces = IntStream.range(0, tracesCount)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plusSeconds(i))
@@ -859,12 +917,16 @@ class ProjectMetricsResourceTest {
                             .usage(usageNames == null
                                     ? null
                                     : usageNames.stream().collect(
-                                            Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
+                                    Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
                             .build())
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
+            return Pair.of(traces, spans);
+        }
+
+        private Map<String, Long> aggregateSpansUsage(List<Span> spans) {
             return spans.stream().map(Span::usage)
                     .filter(Objects::nonNull)
                     .flatMap(i -> i.entrySet().stream())
