@@ -4,6 +4,7 @@ import api, {
   BASE_OPIK_AI_URL,
   QueryConfig,
   TRACE_AI_ASSISTANT_KEY,
+  TRACE_ANALYZER_REST_ENDPOINT,
 } from "@/api/api";
 import { TraceAnalyzerHistoryResponse } from "@/types/ai-assistant";
 
@@ -16,7 +17,7 @@ const getTraceAnalyzerHistory = async (
   { traceId }: UseTraceAnalyzerHistoryParams,
 ) => {
   const { data } = await api.get<TraceAnalyzerHistoryResponse>(
-    `/trace-analyzer/session/${traceId}`,
+    `${TRACE_ANALYZER_REST_ENDPOINT}${traceId}`,
     {
       baseURL: BASE_OPIK_AI_URL,
       signal,
