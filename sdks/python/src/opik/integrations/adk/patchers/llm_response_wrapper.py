@@ -26,6 +26,7 @@ class LlmResponseCreateWrapper:
     def __call__(
         self, generate_content_response: genai_types.GenerateContentResponse
     ) -> adk_models.LlmResponse:
+        LOGGER.debug("LlmResponseCreateWrapper called")
         return _wrap_llm_response_create(
             generate_content_response, self.wrapped_response_create
         )
@@ -92,6 +93,8 @@ def _wrap_llm_response_create(
     ],
 ) -> adk_models.LlmResponse:
     usage_metadata = generate_content_response.usage_metadata
+    LOGGER.debug("_wrap_llm_response_create: usage_metadata=%s", usage_metadata)
+
     response = wrapped_response_create(generate_content_response)
     if usage_metadata is None:
         return response
@@ -102,5 +105,6 @@ def _wrap_llm_response_create(
     response.custom_metadata["opik_usage"] = usage_metadata
     response.custom_metadata["provider"] = adk_helpers.get_adk_provider()
     response.custom_metadata["model_version"] = generate_content_response.model_version
+    LOGGER.debug("_wrap_llm_response_create finished: response.custom_metadata=%s", response.custom_metadata)
 
     return response
