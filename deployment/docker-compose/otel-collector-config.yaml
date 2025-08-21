@@ -1,0 +1,85 @@
+# Sample OpenTelemetry Collector Configuration
+# For receiving NGINX access logs and Fluent Bit metrics
+
+receivers:
+  # OTLP receiver for logs from Fluent Bit
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+        cors:
+          allowed_origins: ["*"]
+
+processors:
+  # Resource processor to add additional attributes
+  resource:
+    attributes:
+      - key: service.namespace
+        value: "${NAMESPACE:-opik}"
+        action: upsert
+      - key: deployment.environment
+        value: "${DEPLOYMENT_ENV:-production}"
+        action: upsert
+
+  # Batch processor for performance
+  batch:
+    send_batch_size: 100
+    timeout: 10s
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    limit_mib: 256
+    spike_limit_mib: 64
+
+exporters:
+  # Debug exporter for testing
+  debug:
+    verbosity: detailed
+
+# File exporter for logs
+  file/logs:
+    path: "/tmp/otel-logs.json"
+    rotation:
+      max_megabytes: 10
+      max_days: 7
+
+  # File exporter for metrics  
+  file/metrics:
+    path: "/tmp/otel-metrics.json"
+    rotation:
+      max_megabytes: 10
+      max_days: 7
+
+  # Example: Export to external OTLP endpoint
+  # otlp/backend:
+  #   endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+  #   headers:
+  #     Authorization: "Bearer ${OTEL_AUTH_TOKEN}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, file/logs]
+      # exporters: [debug, file/logs, otlp/backend]  # Enable for external export
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, file/metrics]
+      # exporters: [debug, file/metrics, otlp/backend]  # Enable for external export
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      address: "0.0.0.0:8888"
+
+  extensions: [health_check]
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
