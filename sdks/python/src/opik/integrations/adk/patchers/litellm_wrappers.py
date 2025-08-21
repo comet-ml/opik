@@ -9,7 +9,7 @@ import opik
 if TYPE_CHECKING:
     import litellm
 
-LOGGER = logging.Logger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_provider_and_model(

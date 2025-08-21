@@ -11,8 +11,7 @@ import opik
 from opik import llm_usage
 from opik.llm_usage import opik_usage
 
-LOGGER = logging.Logger(__name__)
-
+LOGGER = logging.getLogger(__name__)
 
 class LlmResponseCreateWrapper:
     def __init__(
