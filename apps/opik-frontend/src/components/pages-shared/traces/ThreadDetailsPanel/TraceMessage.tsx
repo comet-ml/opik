@@ -36,19 +36,14 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           src={message}
           theme="github"
           className="comet-code"
-          dark={true}
           collapseStringsAfterLength={10000}
           enableClipboard={false}
         />
       );
     } else if (isUndefined(message)) {
-      return <span className="text-white">-</span>;
+      return <span>-</span>;
     } else {
-      return (
-        <MarkdownPreview className="text-white">
-          {toString(message)}
-        </MarkdownPreview>
-      );
+      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
   }, [trace.input]);
 
@@ -75,7 +70,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   return (
     <div className="border-b pt-4 first:pt-0" data-trace-message-id={trace.id}>
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
-        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[#7678EF] px-4 py-2">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[#E7ECFF] px-4 py-2">
           {input}
         </div>
       </div>
