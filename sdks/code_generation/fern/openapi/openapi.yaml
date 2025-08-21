@@ -8872,6 +8872,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
       type: object
@@ -8881,6 +8882,8 @@ components:
         traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
+          type: boolean
+        opikAIEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
