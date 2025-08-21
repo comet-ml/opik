@@ -52,14 +52,14 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
                 opik_client
             )
         )
+        adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement.start_as_current_span.opik_patched = True  # type: ignore
+        adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement.start_span.opik_patched = True  # type: ignore
 
         if not hasattr(adk_telemetry.tracer.start_as_current_span, "opik_patched"):
             adk_telemetry.tracer.start_as_current_span = (
                 no_op_opik_tracer.start_as_current_span
             )
             adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
-            adk_telemetry.tracer.start_as_current_span.opik_patched = True  # type: ignore
-            adk_telemetry.tracer.start_span.opik_patched = True  # type: ignore
             LOGGER.debug("Patched adk_telemetry.tracer")
 
         if not hasattr(base_agent.tracer.start_as_current_span, "opik_patched"):
@@ -67,6 +67,4 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
                 no_op_opik_tracer.start_as_current_span
             )
             base_agent.tracer.start_span = no_op_opik_tracer.start_span
-            base_agent.tracer.start_as_current_span.opik_patched = True  # type: ignore
-            base_agent.tracer.start_span.opik_patched = True  # type: ignore
             LOGGER.debug("Patched base_agent.tracer")
