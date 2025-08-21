@@ -192,6 +192,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceThreadField.START_TIME, START_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
@@ -352,6 +354,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.START_TIME)
+                    .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
                     .build())));
