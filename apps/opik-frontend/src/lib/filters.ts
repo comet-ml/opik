@@ -122,7 +122,7 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
   value: secondsToMilliseconds(Number(filter.value)).toString(),
 });
 
-const processFiltersArray = (filters: Filter[]) => {
+export const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
       switch (filter.type) {
