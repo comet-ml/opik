@@ -209,8 +209,10 @@ const AddOptimizationDialog: React.FunctionComponent<
   const section1 = "pip install opik-optimizer";
 
   // Get the hardcoded code template for the selected algorithm and inject dynamic values
-  const section3 = OPTIMIZATION_CODE_TEMPLATES[selectedModel]
-    .replace("DATASET_NAME_PLACEHOLDER", datasetName || "your-dataset-name");
+  const section3 = OPTIMIZATION_CODE_TEMPLATES[selectedModel].replace(
+    "DATASET_NAME_PLACEHOLDER",
+    datasetName || "your-dataset-name",
+  );
 
   const { data, isLoading } = useDatasetsList(
     {
