@@ -271,7 +271,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           graph={graph}
           setGraph={setGraph}
           hasAgentGraph={hasAgentGraph}
-          activeSection={activeSection}
           setActiveSection={setActiveSection}
         />
       }

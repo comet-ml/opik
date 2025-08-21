@@ -49,7 +49,7 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
-import { cn, getJSONPaths } from "@/lib/utils";
+import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import {
@@ -75,7 +75,6 @@ type TraceDetailsActionsPanelProps = {
   graph: boolean | null;
   setGraph: OnChangeFn<boolean | null | undefined>;
   hasAgentGraph: boolean;
-  activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue) => void;
 };
 
@@ -97,7 +96,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   setGraph,
   hasAgentGraph,
   treeData,
-  activeSection,
   setActiveSection,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
@@ -121,10 +119,13 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       { name: "PADDING", size: 24, visible: true },
       { name: "FILTER", size: 60, visible: true },
       { name: "SEPARATOR", size: 25, visible: true },
-      { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
-      { name: "SEPARATOR", size: 25, visible: hasAgentGraph },
       { name: "INSPECT_TRACE", size: 166, visible: isAIInspectorEnabled },
-      { name: "SEPARATOR", size: 25, visible: isAIInspectorEnabled },
+      { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
+      {
+        name: "SEPARATOR",
+        size: 25,
+        visible: isAIInspectorEnabled || hasAgentGraph,
+      },
       { name: "MORE", size: 32, visible: true },
     ];
 
@@ -325,47 +326,44 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           disabled={isSpansLazyLoading}
           align="end"
         />
-        {hasAgentGraph && (
-          <>
-            <Separator orientation="vertical" className="mx-1 h-4" />
-            <TooltipWrapper
-              content={graph ? "Hide agent graph" : "Show agent graph"}
-            >
-              <Button
-                variant="secondary"
-                size={isSmall ? "icon-sm" : "sm"}
-                onClick={() => setGraph(!graph)}
-              >
-                {graph ? (
-                  <NetworkOff className="size-3.5 shrink-0" />
-                ) : (
-                  <Network className="size-3.5 shrink-0" />
-                )}
-                {isSmall ? null : (
-                  <span className="ml-1.5">
-                    {graph ? "Hide agent graph" : "Show agent graph"}
-                  </span>
-                )}
-              </Button>
-            </TooltipWrapper>
-          </>
+        {(isAIInspectorEnabled || hasAgentGraph) && (
+          <Separator orientation="vertical" className="mx-1 h-4" />
         )}
         {isAIInspectorEnabled && (
-          <>
-            <Separator orientation="vertical" className="mx-1 h-4" />
-            <TooltipWrapper content="AI-powered trace analysis">
-              <Button
-                variant="default"
-                size={isSmall ? "icon-sm" : "sm"}
-                onClick={() =>
-                  setActiveSection(DetailsActionSection.AIAssistants)
-                }
-              >
-                <Sparkles className="size-3.5 shrink-0" />
-                {isSmall ? null : <span className="ml-1.5">Inspect trace</span>}
-              </Button>
-            </TooltipWrapper>
-          </>
+          <TooltipWrapper content="AI-powered trace analysis">
+            <Button
+              variant="default"
+              size={isSmall ? "icon-sm" : "sm"}
+              onClick={() =>
+                setActiveSection(DetailsActionSection.AIAssistants)
+              }
+            >
+              <Sparkles className="size-3.5 shrink-0" />
+              {isSmall ? null : <span className="ml-1.5">Inspect trace</span>}
+            </Button>
+          </TooltipWrapper>
+        )}
+        {hasAgentGraph && (
+          <TooltipWrapper
+            content={graph ? "Hide agent graph" : "Show agent graph"}
+          >
+            <Button
+              variant="secondary"
+              size={isSmall ? "icon-sm" : "sm"}
+              onClick={() => setGraph(!graph)}
+            >
+              {graph ? (
+                <NetworkOff className="size-3.5 shrink-0" />
+              ) : (
+                <Network className="size-3.5 shrink-0" />
+              )}
+              {isSmall ? null : (
+                <span className="ml-1.5">
+                  {graph ? "Hide agent graph" : "Show agent graph"}
+                </span>
+              )}
+            </Button>
+          </TooltipWrapper>
         )}
         <Separator orientation="vertical" className="mx-1 h-4" />
         <DropdownMenu>
