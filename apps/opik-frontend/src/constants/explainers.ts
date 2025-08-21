@@ -485,6 +485,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.trace_opik_ai]: {
     id: EXPLAINER_ID.trace_opik_ai,
     description:
-      "Using OpikAI logs your traces. Avoid this feature if you're not comfortable with that.",
+      "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
   },
 };
