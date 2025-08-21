@@ -13,6 +13,7 @@ from google.adk.agents import base_agent
 
 LOGGER = logging.getLogger(__name__)
 
+
 def patch_adk(opik_client: opik_client.Opik) -> None:
     old_function = google.adk.models.LlmResponse.create
     if not hasattr(old_function, "opik_patched"):
@@ -30,17 +31,19 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
                     lite_llm.LiteLLMClient.acompletion
                 )
             )
-            lite_llm.LiteLLMClient.acompletion.opik_patched = True
+            lite_llm.LiteLLMClient.acompletion.opik_patched = True  # type: ignore
             LOGGER.debug("Patched LiteLLMClient.acompletion")
 
     if hasattr(lite_llm, "_model_response_to_generate_content_response"):
-        if not hasattr(lite_llm._model_response_to_generate_content_response, "opik_patched"):
+        if not hasattr(
+            lite_llm._model_response_to_generate_content_response, "opik_patched"
+        ):
             lite_llm._model_response_to_generate_content_response = (
                 litellm_wrappers.generate_content_response_decorator(
                     lite_llm._model_response_to_generate_content_response
                 )
             )
-            lite_llm._model_response_to_generate_content_response.opik_patched = True
+            lite_llm._model_response_to_generate_content_response.opik_patched = True  # type: ignore
             LOGGER.debug("Patched _model_response_to_generate_content_response")
 
     if semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0":  # type: ignore
@@ -51,21 +54,19 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
         )
 
         if not hasattr(adk_telemetry.tracer.start_as_current_span, "opik_patched"):
-
             adk_telemetry.tracer.start_as_current_span = (
                 no_op_opik_tracer.start_as_current_span
             )
             adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
-            adk_telemetry.tracer.start_as_current_span.opik_patched = True
-            adk_telemetry.tracer.start_span.opik_patched = True
+            adk_telemetry.tracer.start_as_current_span.opik_patched = True  # type: ignore
+            adk_telemetry.tracer.start_span.opik_patched = True  # type: ignore
             LOGGER.debug("Patched adk_telemetry.tracer")
-
 
         if not hasattr(base_agent.tracer.start_as_current_span, "opik_patched"):
             base_agent.tracer.start_as_current_span = (
                 no_op_opik_tracer.start_as_current_span
             )
             base_agent.tracer.start_span = no_op_opik_tracer.start_span
-            base_agent.tracer.start_as_current_span.opik_patched = True
-            base_agent.tracer.start_span.opik_patched = True
+            base_agent.tracer.start_as_current_span.opik_patched = True  # type: ignore
+            base_agent.tracer.start_span.opik_patched = True  # type: ignore
             LOGGER.debug("Patched base_agent.tracer")
