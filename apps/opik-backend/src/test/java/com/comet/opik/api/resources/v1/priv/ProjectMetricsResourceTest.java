@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -690,6 +691,197 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            var traceForFilter = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .startTime(subtract(marker, TIME_BUCKET_3, interval).plus(6, ChronoUnit.SECONDS))
+                    .build();
+
+            var scoresMinus3ForFilter = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
+                    names, 1, traceForFilter);
+            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval), names, 5,
+                    null);
+            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval), names, 5,
+                    null);
+            var scores = createFeedbackScores(projectName, marker, names, 5, null);
+
+            traceForFilter = traceForFilter.toBuilder()
+                    .feedbackScores(feedbackScoresMapper(scoresMinus3ForFilter))
+                    .build();
+
+            var filteredScoresMinus3Map = aggregateFeedbackScores(scoresMinus3ForFilter);
+            var scoresExcludingFilteredMinus3Map = aggregateFeedbackScores(scoresMinus3);
+            var totalScoresMinus3Map = aggregateFeedbackScores(
+                    Stream.concat(scoresMinus3ForFilter.stream(), scoresMinus3.stream()).toList());
+            var scoresMinus1Map = aggregateFeedbackScores(scoresMinus1);
+            var scoresMap = aggregateFeedbackScores(scores);
+
+            var expectedValues = Arrays.asList(filteredScoresMinus3Map, scoresExcludingFilteredMinus3Map,
+                    totalScoresMinus3Map, scoresMinus1Map,
+                    scoresMap, null);
+
+            // create guardrails for the first trace
+            var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
+                    traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
+                    .result(GuardrailResult.PASSED)
+                    .build();
+
+            guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(getFilter.apply(traceForFilter)))
+                    .build(), marker, names, BigDecimal.class, expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)), expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return Stream.of(Arguments.of(
+                    (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(EQUAL)
+                            .value(trace.id().toString())
+                            .build(),
+                    Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.NAME)
+                                    .operator(EQUAL)
+                                    .value(trace.name())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.NAME)
+                                    .operator(NOT_EQUAL)
+                                    .value(trace.name())
+                                    .build(),
+                            Arrays.asList(1, 3, 4)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.START_TIME)
+                                    .operator(EQUAL)
+                                    .value(trace.startTime().toString())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.END_TIME)
+                                    .operator(EQUAL)
+                                    .value(trace.endTime().toString())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.INPUT)
+                                    .operator(EQUAL)
+                                    .value(trace.input().toString())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.OUTPUT)
+                                    .operator(EQUAL)
+                                    .value(trace.output().toString())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.CUSTOM)
+                                    .operator(EQUAL)
+                                    .value(trace.input().propertyStream().toList().getFirst().getValue().asText())
+                                    .key("input." + trace.input().propertyStream().toList().getFirst().getKey())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.CUSTOM)
+                                    .operator(EQUAL)
+                                    .value(trace.output().propertyStream().toList().getFirst().getValue().asText())
+                                    .key("output." + trace.output().propertyStream().toList().getFirst().getKey())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.METADATA)
+                                    .operator(EQUAL)
+                                    .value(trace.metadata().propertyStream().toList().getFirst().getValue().asText())
+                                    .key(trace.metadata().propertyStream().toList().getFirst().getKey())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.TAGS)
+                                    .operator(CONTAINS)
+                                    .value(trace.tags().stream().findFirst().orElse(""))
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.DURATION)
+                                    .operator(GREATER_THAN)
+                                    .value(String.valueOf(Duration.of(3, ChronoUnit.HOURS).toMillis()))
+                                    .build(),
+                            Arrays.asList(2, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.THREAD_ID)
+                                    .operator(EQUAL)
+                                    .value(trace.threadId())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.VISIBILITY_MODE)
+                                    .operator(EQUAL)
+                                    .value(VisibilityMode.DEFAULT.getValue())
+                                    .build(),
+                            Arrays.asList(2, 3, 4)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.ERROR_INFO)
+                                    .operator(IS_NOT_EMPTY)
+                                    .value("")
+                                    .build(),
+                            Arrays.asList(2, 3, 4)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.GUARDRAILS)
+                                    .operator(EQUAL)
+                                    .value(GuardrailResult.PASSED.getResult())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.FEEDBACK_SCORES)
+                                    .operator(EQUAL)
+                                    .key(trace.feedbackScores().getFirst().name())
+                                    .value(trace.feedbackScores().getFirst().value().toString())
+                                    .build(),
+                            Arrays.asList(0, 5, 5)),
+                    Arguments.of(
+                            (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                    .field(TraceField.FEEDBACK_SCORES)
+                                    .operator(IS_EMPTY)
+                                    .key("NonExistingKey")
+                                    .value("")
+                                    .build(),
+                            Arrays.asList(2, 3, 4)));
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -737,6 +929,46 @@ class ProjectMetricsResourceTest {
 
                         return scores;
                     }).flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
+                                    .toList())));
+        }
+
+        private List<FeedbackScoreBatchItem> createFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames, int tracesCount, Trace traceForFilter) {
+            return IntStream.range(0, tracesCount)
+                    .mapToObj(i -> {
+                        // create a trace
+                        Trace trace = traceForFilter != null
+                                ? traceForFilter
+                                : factory.manufacturePojo(Trace.class).toBuilder()
+                                        .projectName(projectName)
+                                        .startTime(marker.plus(i, ChronoUnit.SECONDS))
+                                        .build();
+
+                        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+                        // create several feedback scores for that trace
+                        List<FeedbackScoreBatchItem> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                        .name(name)
+                                        .projectName(projectName)
+                                        .id(trace.id())
+                                        .build())
+                                .collect(Collectors.toList());
+
+                        traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+                        return scores;
+                    }).flatMap(List::stream)
+                    .toList();
+        }
+
+        private Map<String, BigDecimal> aggregateFeedbackScores(List<FeedbackScoreBatchItem> scores) {
+            return scores.stream()
                     .collect(Collectors.groupingBy(FeedbackScoreItem::name))
                     .entrySet().stream()
                     .collect(Collectors.toMap(
@@ -1482,10 +1714,10 @@ class ProjectMetricsResourceTest {
                 .map(name -> {
                     var expectedUsage = Arrays.asList(
                             null,
-                            dataMinus3.get(name),
+                            dataMinus3 == null ? null : dataMinus3.get(name),
                             null,
-                            dataMinus1.get(name),
-                            dataNow.get(name));
+                            dataMinus1 == null ? null : dataMinus1.get(name),
+                            dataNow == null ? null : dataNow.get(name));
 
                     return ProjectMetricResponse.Results.<T>builder()
                             .name(name)
@@ -1530,5 +1762,14 @@ class ProjectMetricsResourceTest {
 
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
         AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
+    }
+
+    private List<FeedbackScore> feedbackScoresMapper(List<FeedbackScoreBatchItem> items) {
+        return items.stream()
+                .map(item -> factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                        .name(item.name())
+                        .value(item.value())
+                        .build())
+                .toList();
     }
 }
