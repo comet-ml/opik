@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useUserApiKey } from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
@@ -202,6 +202,7 @@ const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
 > = ({ open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const apiKey = useUserApiKey();
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
@@ -214,7 +215,7 @@ const AddOptimizationDialog: React.FunctionComponent<
   // Get the hardcoded code template for the selected algorithm and inject dynamic values
   const section3 = OPTIMIZATION_CODE_TEMPLATES[selectedModel]
     .replace("WORKSPACE_NAME_PLACEHOLDER", workspaceName || "your-workspace")
-    .replace("API_KEY_PLACEHOLDER", "your-api-key-here")
+    .replace("API_KEY_PLACEHOLDER", apiKey || "your-api-key-here")
     .replace("DATASET_NAME_PLACEHOLDER", datasetName || "your-dataset-name");
 
   const { data, isLoading } = useDatasetsList(
