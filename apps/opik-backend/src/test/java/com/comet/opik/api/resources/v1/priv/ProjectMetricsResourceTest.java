@@ -1326,6 +1326,61 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var tracesWithGuardrails = createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval), 6);
+            var traceForFilter = tracesWithGuardrails.getLeft().getFirst();
+            var filteredGuardrailsMinus3 = tracesWithGuardrails.getRight().getFirst();  // guardrails count for first trace
+            var guardrailsMinus3Total = tracesWithGuardrails.getRight().stream().mapToLong(Long::longValue).sum();
+
+            var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, marker));
+
+            var expectedValues = Arrays.asList(
+                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, filteredGuardrailsMinus3),
+                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total - filteredGuardrailsMinus3),
+                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total),
+                    guardrailsMinus1, 
+                    guardrails, 
+                    null);
+
+            // create feedback scores for the first trace
+            traceForFilter.feedbackScores().forEach(score -> 
+                    traceResourceClient.feedbackScore(traceForFilter.id(), score, WORKSPACE_NAME, API_KEY));
+
+            var filter = getFilter.apply(traceForFilter);
+
+            if (filter.field() == TraceField.GUARDRAILS) {
+                return;
+            }
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(filter))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.happyPathWithFilter();
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -1357,6 +1412,34 @@ class ProjectMetricsResourceTest {
                     .flatMap(List::stream)
                     .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
                     .count();
+        }
+
+        private Pair<List<Trace>, List<Long>> createTracesWithGuardrails(String projectName, Instant marker, int tracesCount) {
+            List<Trace> traces = IntStream.range(0, tracesCount)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(marker.plusSeconds(i))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            List<Long> guardrailCounts = traces.stream()
+                    .map(trace -> {
+                        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                                trace.projectName());
+                        var guardrailsWithAtLeastOneFailed = IntStream.range(0, guardrails.size())
+                                .mapToObj(i -> i == 0
+                                        ? guardrails.get(i).toBuilder().result(GuardrailResult.FAILED).build()
+                                        : guardrails.get(i))
+                                .toList();
+                        guardrailsResourceClient.addBatch(guardrailsWithAtLeastOneFailed, API_KEY, WORKSPACE_NAME);
+                        return guardrailsWithAtLeastOneFailed.stream()
+                                .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                                .count();
+                    })
+                    .toList();
+
+            return Pair.of(traces, guardrailCounts);
         }
 
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
