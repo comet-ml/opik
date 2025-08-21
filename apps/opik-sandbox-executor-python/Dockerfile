@@ -31,7 +31,7 @@ RUN cp /tmp/prewarm.py /prewarm.py
 RUN python -m compileall -o 2 -b /prewarm.py
 
 # Run build-time test
-RUN printf 'print("build test passed")' | python ./scoring_runner.pyc 'print("build test")' '{"test": true}' || echo "Warning: build test failed"
+RUN printf 'print("build test passed")' | python ./scoring_runner.pyc 'print("build test")' '{"test": true}' || echo "Warning: scoring_runner.pyc build validation failed - compiled bytecode may be corrupted or dependencies may be missing"
 
 # Copy site-packages to runtime location
 RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
@@ -56,7 +56,7 @@ COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
 RUN python /tmp/prewarm.pyc
 
 # Runtime verification test
-RUN printf 'print("runtime test passed")' | python ./scoring_runner.pyc 'print("runtime test")' '{"test": true}' || echo "Warning: runtime test failed"
+RUN printf 'print("runtime test passed")' | python ./scoring_runner.pyc 'print("runtime test")' '{"test": true}' || echo "Warning: runtime validation failed - scoring_runner.pyc may not be properly configured or dependencies may be missing"
 
 # Set environment variable for reduced memory overhead (Python 3.12+)
 ENV PYTHONNODEBUGRANGES=1
