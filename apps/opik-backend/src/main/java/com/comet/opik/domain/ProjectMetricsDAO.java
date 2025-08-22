@@ -223,7 +223,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
+                   AND project_id = :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT workspace_id,
@@ -235,7 +235,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
+                   AND project_id = :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
             ), feedback_scores_final AS (
                 SELECT
