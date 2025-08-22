@@ -39,7 +39,7 @@ const VertexAIModelConfigs = ({
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxOutputTokens"
           min={0}
-          max={10000}
+          max={65535}
           step={1}
           defaultValue={DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
