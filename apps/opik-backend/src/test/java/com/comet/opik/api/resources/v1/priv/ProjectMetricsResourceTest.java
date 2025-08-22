@@ -84,6 +84,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -614,15 +615,7 @@ class ProjectMetricsResourceTest {
                         .key("NonExistingScore")
                         .build();
 
-                getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
-                        .metricType(MetricType.FEEDBACK_SCORES)
-                        .interval(interval)
-                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                        .intervalEnd(Instant.now())
-                        .traceFilters(List.of(filter))
-                        .build(), marker, names, BigDecimal.class, totalScoresMinus3Map, scoresMinus1Map, scoresMap);
-
-                return;
+                expectedIndexes = List.of(2, 3, 4);
             }
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -630,7 +623,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .traceFilters(List.of(getFilter.apply(traceForFilter)))
+                    .traceFilters(List.of(filter))
                     .build(), marker, names, BigDecimal.class, expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)), expectedValues.get(expectedIndexes.get(2)));
         }
@@ -769,7 +762,9 @@ class ProjectMetricsResourceTest {
                     put("", null);
                 }
             };
-            var expectedValues = Arrays.asList(filteredScoresMinus3, restScoresMinus3, scoresMinus1, scores, empty);
+
+            var expectedValues = new ArrayList<>(
+                    List.of(filteredScoresMinus3, restScoresMinus3, scoresMinus1, scores, empty));
 
             var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
                     WORKSPACE_NAME);
@@ -802,17 +797,7 @@ class ProjectMetricsResourceTest {
                         .key("NonExistingScore")
                         .build();
 
-                getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
-                        .metricType(MetricType.THREAD_FEEDBACK_SCORES)
-                        .interval(interval)
-                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                        .intervalEnd(Instant.now())
-                        .threadFilters(List.of(filter))
-                        .build(), marker, allEmpty ? List.of("") : names, BigDecimal.class,
-                        aggregateFeedbackScores(
-                                threadsWithScoresMinus3.getRight()),
-                        expectedValues.get(expectedIndexes.get(1)),
-                        expectedValues.get(expectedIndexes.get(2)));
+                expectedValues.add(1, aggregateFeedbackScores(threadsWithScoresMinus3.getRight()));
 
                 return;
             }

@@ -117,18 +117,22 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ), guardrails_agg AS (
                 SELECT
                     entity_id,
-                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                    if(sum(failed) > 0, 'failed', 'passed') AS guardrails_result
                 FROM (
-                    SELECT
-                        *
-                    FROM guardrails
-                    WHERE entity_type = 'trace'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, id
+                      SELECT
+                          workspace_id,
+                          project_id,
+                          entity_id,
+                          id,
+                          result = 'failed' AS failed
+                      FROM guardrails
+                      WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                      LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_type, entity_id
+                GROUP BY workspace_id, project_id, entity_id
             ),
             <if(feedback_scores_empty_filters)>
              fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
