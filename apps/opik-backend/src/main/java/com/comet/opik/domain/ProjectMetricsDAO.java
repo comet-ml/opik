@@ -384,7 +384,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         thread_model_id,
                         start_time
                     FROM threads_filtered
-                    WHERE status = 'inactive'
                 ) t ON t.thread_model_id = fs.entity_id
             )
             SELECT <bucket> AS bucket,

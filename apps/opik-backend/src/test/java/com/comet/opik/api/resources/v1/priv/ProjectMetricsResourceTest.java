@@ -56,6 +56,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -606,6 +607,24 @@ class ProjectMetricsResourceTest {
 
             guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
 
+            var filter = getFilter.apply(traceForFilter);
+            if (filter.field() == TraceField.FEEDBACK_SCORES && filter.operator() == IS_EMPTY) {
+
+                filter = filter.toBuilder()
+                        .key("NonExistingScore")
+                        .build();
+
+                getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                        .metricType(MetricType.FEEDBACK_SCORES)
+                        .interval(interval)
+                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                        .intervalEnd(Instant.now())
+                        .traceFilters(List.of(filter))
+                        .build(), marker, names, BigDecimal.class, totalScoresMinus3Map, scoresMinus1Map, scoresMap);
+
+                return;
+            }
+
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
                     .interval(interval)
@@ -719,6 +738,102 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        @Disabled
+        void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var threadsWithScoresMinus3 = createThreadWithFeedbackScores(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval),
+                    names);
+            var threadForFilterId = threadsWithScoresMinus3.getLeft().getFirst();
+
+            var filteredScoresMinus3 = aggregateFeedbackScores(List.of(threadsWithScoresMinus3.getRight().getFirst()));
+            var restScoresMinus3 = aggregateFeedbackScores(
+                    threadsWithScoresMinus3.getRight().subList(1, threadsWithScoresMinus3.getRight().size()));
+
+            var scoresMinus1 = createThreadFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval),
+                    names);
+            var scores = createThreadFeedbackScores(projectName, marker, names);
+
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+            var expectedValues = Arrays.asList(filteredScoresMinus3, restScoresMinus3, scoresMinus1, scores, empty);
+
+            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            assertThat(createdThread.feedbackScores().size()).isEqualTo(5);
+
+            // create one more trace for a thread to have some data for filtering
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadForFilterId)
+                    .startTime(subtract(marker, TIME_BUCKET_3, interval).plus(40, ChronoUnit.SECONDS))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Add tags to the thread
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
+            traceResourceClient.updateThread(update, createdThread.threadModelId(), API_KEY, WORKSPACE_NAME, 204);
+
+            // get one more time, to have actual data for lastUpdatedAt
+            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            boolean allEmpty = expectedIndexes.stream().allMatch(i -> i == expectedValues.size() - 1);
+
+            var filter = getFilter.apply(updatedThread);
+            if (filter.field() == TraceThreadField.FEEDBACK_SCORES && filter.operator() == IS_EMPTY) {
+
+                filter = filter.toBuilder()
+                        .key("NonExistingScore")
+                        .build();
+
+                getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                        .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                        .interval(interval)
+                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                        .intervalEnd(Instant.now())
+                        .threadFilters(List.of(filter))
+                        .build(), marker, allEmpty ? List.of("") : names, BigDecimal.class,
+                        aggregateFeedbackScores(
+                                threadsWithScoresMinus3.getRight()),
+                        expectedValues.get(expectedIndexes.get(1)),
+                        expectedValues.get(expectedIndexes.get(2)));
+
+                return;
+            }
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .threadFilters(List.of(filter))
+                    .build(), marker, allEmpty ? List.of("") : names, BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -743,11 +858,31 @@ class ProjectMetricsResourceTest {
 
         private Map<String, BigDecimal> createThreadFeedbackScores(
                 String projectName, Instant marker, List<String> scoreNames) {
-            return IntStream.range(0, 3)
-                    .mapToObj(i -> {
-                        // create a thread with a unique thread_id
-                        String threadId = UUID.randomUUID().toString();
+            var threadsWithScores = createThreadWithFeedbackScores(projectName, marker, scoreNames);
 
+            return aggregateFeedbackScores(threadsWithScores.getRight());
+        }
+
+        private Map<String, BigDecimal> aggregateFeedbackScores(
+                List<List<FeedbackScoreBatchItemThread>> scores) {
+            return scores.stream()
+                    .flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
+                                    .toList())));
+        }
+
+        private Pair<List<String>, List<List<FeedbackScoreBatchItemThread>>> createThreadWithFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
+
+            List<String> threadIds = IntStream.range(0, 3).mapToObj(i -> UUID.randomUUID().toString()).toList();
+
+            var score = IntStream.range(0, threadIds.size())
+                    .mapToObj(i -> {
+                        String threadId = threadIds.get(i);
                         // open the thread first
                         traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
                                 WORKSPACE_NAME);
@@ -778,13 +913,9 @@ class ProjectMetricsResourceTest {
                         traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
                         return scores;
-                    }).flatMap(List::stream)
-                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
-                    .entrySet().stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
-                                    .toList())));
+                    }).toList();
+
+            return Pair.of(threadIds, score);
         }
     }
 
@@ -1544,12 +1675,11 @@ class ProjectMetricsResourceTest {
             var updatedThread = traceResourceClient.getTraceThread(
                     tracesPerThreadMinus3.getFirst().getFirst().threadId(), projectId, API_KEY, WORKSPACE_NAME);
 
-            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus3.size());
             Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus1.size());
             Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadNow.size());
 
             var expectedValues = Arrays.asList(Map.of(ProjectMetricsDAO.NAME_THREADS, 1L),
-                    Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus3.size() - 1), minus3, minus1,
+                    Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus3.size() - 1), minus1,
                     current, null);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -1696,23 +1826,19 @@ class ProjectMetricsResourceTest {
             var filteredDurationsMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight().subList(0, 1));
             var durationsMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight().subList(1,
                     tracesWithThreadDurationsMinus3.getRight().size()));
-            var durationsTotalMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight());
 
-            var durationsMinus1 = createTracesWithThreadDuration(projectName, subtract(marker, TIME_BUCKET_1, interval));
+            var durationsMinus1 = createTracesWithThreadDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
             var durationsCurrent = createTracesWithThreadDuration(projectName, marker);
 
             var filteredDurationMinus3 = Map.of(
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P50, filteredDurationsMinus3.getFirst(),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P90, filteredDurationsMinus3.get(1),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P99, filteredDurationsMinus3.getLast());
-            var durationMinus3 = Map.of(
+            var restDurationMinus3 = Map.of(
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
-            var durationTotalMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsTotalMinus3.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsTotalMinus3.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsTotalMinus3.getLast());
             var durationMinus1 = Map.of(
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
@@ -1722,10 +1848,11 @@ class ProjectMetricsResourceTest {
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
                     ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
 
-            var expectedValues = Arrays.asList(filteredDurationMinus3, durationMinus3,
-                    durationTotalMinus3, durationMinus1, durationCurrent, null);
+            var expectedValues = Arrays.asList(filteredDurationMinus3, restDurationMinus3,
+                    durationMinus1, durationCurrent, null);
 
-            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY, WORKSPACE_NAME);
+            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
 
             // Add tags to the thread
             var update = factory.manufacturePojo(TraceThreadUpdate.class);
@@ -1742,7 +1869,8 @@ class ProjectMetricsResourceTest {
             traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             // get one more time, to have actual data for lastUpdatedAt
-            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY, WORKSPACE_NAME);
+            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_DURATION)
@@ -1791,7 +1919,8 @@ class ProjectMetricsResourceTest {
                     List.of(0.50, 0.90, 0.99));
         }
 
-        private Pair<List<String>, List<Double>> createTraceThreads(String projectName, Instant marker, Integer tracesCount) {
+        private Pair<List<String>, List<Double>> createTraceThreads(String projectName, Instant marker,
+                Integer tracesCount) {
             // Create different threads with different durations
             List<String> threadIds = IntStream.range(0, 3)
                     .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
@@ -1815,7 +1944,7 @@ class ProjectMetricsResourceTest {
                 Instant threadEndTime = threadStartTime.plusMillis(baseDurationMs);
 
                 // Create multiple traces within the thread
-                List<Trace> traces = IntStream.range(0, tracesCount != null && i == 0 ? tracesCount : numTraces)  // needed for number of messages filter
+                List<Trace> traces = IntStream.range(0, tracesCount != null && i == 0 ? tracesCount : numTraces) // needed for number of messages filter
                         .mapToObj(j -> {
                             // First trace starts at thread start time
                             Instant traceStart = j == 0 ? threadStartTime : threadStartTime.plusMillis(j * 50L);
@@ -2091,84 +2220,84 @@ class ProjectMetricsResourceTest {
                         .operator(EQUAL)
                         .value(thread.id())
                         .build(),
-                Arrays.asList(0, 5, 5)),
+                Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.ID)
                                 .operator(NOT_EQUAL)
                                 .value(thread.id())
                                 .build(),
-                        Arrays.asList(1, 3, 4)),
+                        Arrays.asList(1, 2, 3)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.FIRST_MESSAGE)
                                 .operator(EQUAL)
                                 .value(thread.firstMessage().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.LAST_MESSAGE)
                                 .operator(EQUAL)
                                 .value(thread.lastMessage().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.NUMBER_OF_MESSAGES)
                                 .operator(EQUAL)
                                 .value(String.valueOf(thread.numberOfMessages()))
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.DURATION)
                                 .operator(EQUAL)
                                 .value(BigDecimal.valueOf(thread.duration()).toPlainString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.CREATED_AT)
                                 .operator(EQUAL)
                                 .value(thread.createdAt().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.LAST_UPDATED_AT)
                                 .operator(EQUAL)
                                 .value(thread.lastUpdatedAt().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.START_TIME)
                                 .operator(EQUAL)
                                 .value(thread.startTime().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.END_TIME)
                                 .operator(EQUAL)
                                 .value(thread.endTime().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.STATUS)
                                 .operator(EQUAL)
                                 .value(ACTIVE.getValue())
                                 .build(),
-                        Arrays.asList(5, 5, 5)),
+                        Arrays.asList(4, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.TAGS)
                                 .operator(CONTAINS)
                                 .value(thread.tags().stream().findFirst().orElse(""))
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.FEEDBACK_SCORES)
@@ -2176,7 +2305,7 @@ class ProjectMetricsResourceTest {
                                 .key(thread.feedbackScores().getFirst().name())
                                 .value(thread.feedbackScores().getFirst().value().toString())
                                 .build(),
-                        Arrays.asList(0, 5, 5)),
+                        Arrays.asList(0, 4, 4)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.FEEDBACK_SCORES)
@@ -2184,6 +2313,6 @@ class ProjectMetricsResourceTest {
                                 .key(thread.feedbackScores().getFirst().name())
                                 .value("")
                                 .build(),
-                        Arrays.asList(1, 3, 4)));
+                        Arrays.asList(1, 2, 3)));
     }
 }
