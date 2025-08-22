@@ -19,7 +19,7 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
     if not hasattr(old_function, "opik_patched"):
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         google.adk.models.LlmResponse.create = create_wrapper
-        old_function.opik_patched = True
+        google.adk.models.LlmResponse.create.opik_patched = True  # type: ignore
         LOGGER.debug("Patched LlmResponse.create")
 
     if hasattr(lite_llm, "LiteLLMClient") and hasattr(
@@ -52,19 +52,13 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
                 opik_client
             )
         )
-        adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement.start_as_current_span.opik_patched = True  # type: ignore
-        adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement.start_span.opik_patched = True  # type: ignore
 
-        if not hasattr(adk_telemetry.tracer.start_as_current_span, "opik_patched"):
-            adk_telemetry.tracer.start_as_current_span = (
-                no_op_opik_tracer.start_as_current_span
-            )
-            adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
-            LOGGER.debug("Patched adk_telemetry.tracer")
+        adk_telemetry.tracer.start_as_current_span = (
+            no_op_opik_tracer.start_as_current_span
+        )
+        adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
 
-        if not hasattr(base_agent.tracer.start_as_current_span, "opik_patched"):
-            base_agent.tracer.start_as_current_span = (
-                no_op_opik_tracer.start_as_current_span
-            )
-            base_agent.tracer.start_span = no_op_opik_tracer.start_span
-            LOGGER.debug("Patched base_agent.tracer")
+        base_agent.tracer.start_as_current_span = (
+            no_op_opik_tracer.start_as_current_span
+        )
+        base_agent.tracer.start_span = no_op_opik_tracer.start_span
