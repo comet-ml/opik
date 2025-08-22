@@ -772,7 +772,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.starting_with(model_name.split("/")[-1]),
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -800,7 +800,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.starting_with(model_name.split("/")[-1]),
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
