@@ -1599,11 +1599,11 @@ class ProjectMetricsResourceTest {
             // Create multiple traces per thread to test that threads are counted, not traces
             var tracesForThreads = IntStream.range(0, threadIds.size()).mapToObj(threadIdIdx -> {
                 List<Trace> traces = IntStream
-                        .range(0, tracesPerThread == null || threadIdIdx != 0 ? 2 : tracesPerThread) // 2 traces per thread except for the first thread
+                        .range(0, tracesPerThread == null || threadIdIdx != 0 ? 2 : tracesPerThread) // 2 traces per thread except for the first thread, needed for number of messages filter
                         .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                                 .projectName(projectName)
                                 .threadId(threadIds.get(threadIdIdx))
-                                .startTime(marker.plusSeconds(i))
+                                .startTime(marker.plusSeconds(threadIdIdx * (i + 1)))
                                 .build())
                         .toList();
                 traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
@@ -1678,6 +1678,92 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create thread durations with specific patterns for filtering
+            var tracesWithThreadDurationsMinus3 = createTraceThreads(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5);
+            var threadForFilterId = tracesWithThreadDurationsMinus3.getLeft().getFirst();
+
+            var filteredDurationsMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight().subList(0, 1));
+            var durationsMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight().subList(1,
+                    tracesWithThreadDurationsMinus3.getRight().size()));
+            var durationsTotalMinus3 = calculateQuantiles(tracesWithThreadDurationsMinus3.getRight());
+
+            var durationsMinus1 = createTracesWithThreadDuration(projectName, subtract(marker, TIME_BUCKET_1, interval));
+            var durationsCurrent = createTracesWithThreadDuration(projectName, marker);
+
+            var filteredDurationMinus3 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, filteredDurationsMinus3.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, filteredDurationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, filteredDurationsMinus3.getLast());
+            var durationMinus3 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
+            var durationTotalMinus3 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsTotalMinus3.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsTotalMinus3.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsTotalMinus3.getLast());
+            var durationMinus1 = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
+            var durationCurrent = Map.of(
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
+
+            var expectedValues = Arrays.asList(filteredDurationMinus3, durationMinus3,
+                    durationTotalMinus3, durationMinus1, durationCurrent, null);
+
+            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY, WORKSPACE_NAME);
+
+            // Add tags to the thread
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
+            traceResourceClient.updateThread(update, createdThread.threadModelId(), API_KEY, WORKSPACE_NAME, 204);
+
+            // Add feedback scores to the thread
+            var scores = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
+                    .stream()
+                    .map(score -> (FeedbackScoreBatchItemThread) score.toBuilder()
+                            .threadId(createdThread.id())
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+            traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            // get one more time, to have actual data for lastUpdatedAt
+            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .threadFilters(List.of(getFilter.apply(updatedThread)))
+                    .build(), marker,
+                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void emptyData(TimeInterval interval) {
             // setup
@@ -1695,6 +1781,17 @@ class ProjectMetricsResourceTest {
         }
 
         private List<BigDecimal> createTracesWithThreadDuration(String projectName, Instant marker) {
+            var threadDurations = createTraceThreads(projectName, marker, null).getRight();
+
+            return calculateQuantiles(threadDurations);
+        }
+
+        private List<BigDecimal> calculateQuantiles(List<Double> threadDurations) {
+            return StatsUtils.calculateQuantiles(threadDurations,
+                    List.of(0.50, 0.90, 0.99));
+        }
+
+        private Pair<List<String>, List<Double>> createTraceThreads(String projectName, Instant marker, Integer tracesCount) {
             // Create different threads with different durations
             List<String> threadIds = IntStream.range(0, 3)
                     .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
@@ -1718,7 +1815,7 @@ class ProjectMetricsResourceTest {
                 Instant threadEndTime = threadStartTime.plusMillis(baseDurationMs);
 
                 // Create multiple traces within the thread
-                List<Trace> traces = IntStream.range(0, numTraces)
+                List<Trace> traces = IntStream.range(0, tracesCount != null && i == 0 ? tracesCount : numTraces)  // needed for number of messages filter
                         .mapToObj(j -> {
                             // First trace starts at thread start time
                             Instant traceStart = j == 0 ? threadStartTime : threadStartTime.plusMillis(j * 50L);
@@ -1744,8 +1841,7 @@ class ProjectMetricsResourceTest {
             threadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
                     WORKSPACE_NAME));
 
-            return StatsUtils.calculateQuantiles(threadDurations,
-                    List.of(0.50, 0.90, 0.99));
+            return Pair.of(threadIds, threadDurations);
         }
 
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
@@ -2027,10 +2123,10 @@ class ProjectMetricsResourceTest {
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.DURATION)
-                                .operator(GREATER_THAN)
-                                .value(String.valueOf(Duration.of(3, ChronoUnit.HOURS).toMillis()))
+                                .operator(EQUAL)
+                                .value(BigDecimal.valueOf(thread.duration()).toPlainString())
                                 .build(),
-                        Arrays.asList(2, 5, 5)),
+                        Arrays.asList(0, 5, 5)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.CREATED_AT)
@@ -2051,7 +2147,7 @@ class ProjectMetricsResourceTest {
                                 .operator(EQUAL)
                                 .value(thread.startTime().toString())
                                 .build(),
-                        Arrays.asList(2, 5, 5)),
+                        Arrays.asList(0, 5, 5)),
                 Arguments.of(
                         (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
                                 .field(TraceThreadField.END_TIME)
