@@ -108,8 +108,9 @@ class EvaluationEngine:
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
             task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
 
+        item_content = item.get_content(include_id=True)
         trace_data = trace.TraceData(
-            input=item.get_content(),
+            input=item_content,
             name="evaluation_task",
             created_by="evaluation",
             project_name=self._project_name,
@@ -121,8 +122,6 @@ class EvaluationEngine:
             trace_data=trace_data,
             client=self._client,
         ):
-            item_content = item.get_content()
-
             LOGGER.debug("Task started, input: %s", item_content)
             try:
                 task_output_ = task(item_content)
