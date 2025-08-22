@@ -37,6 +37,16 @@ const OpenAIModelConfigs = ({
       PROVIDER_MODEL_TYPE.GPT_5_MINI,
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
     ].includes(model as PROVIDER_MODEL_TYPE);
+
+  const isOSeriesModel =
+    model &&
+    [
+      PROVIDER_MODEL_TYPE.GPT_O1,
+      PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+      PROVIDER_MODEL_TYPE.GPT_O3,
+      PROVIDER_MODEL_TYPE.GPT_O3_MINI,
+      PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+    ].includes(model as PROVIDER_MODEL_TYPE);
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -47,7 +57,11 @@ const OpenAIModelConfigs = ({
           min={0}
           max={1}
           step={0.01}
-          defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
+          defaultValue={
+            isOSeriesModel
+              ? DEFAULT_OPEN_AI_CONFIGS.O_SERIES_TEMPERATURE
+              : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE
+          }
           label="Temperature"
           tooltip={
             <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
