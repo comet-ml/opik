@@ -145,7 +145,7 @@ const AnthropicModelConfigs = ({
         onChange={(v) => onChange({ maxCompletionTokens: v })}
         id="maxCompletionTokens"
         min={0}
-        max={10000}
+        max={64000}
         step={1}
         defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
         label="Max output tokens"

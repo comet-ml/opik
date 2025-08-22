@@ -61,7 +61,7 @@ const OpenAIModelConfigs = ({
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
           min={0}
-          max={10000}
+          max={128000}
           step={1}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
