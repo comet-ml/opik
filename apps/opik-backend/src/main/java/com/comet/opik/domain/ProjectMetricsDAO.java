@@ -81,335 +81,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             TimeInterval.DAILY, "toIntervalDay(1)",
             TimeInterval.HOURLY, "toIntervalHour(1)");
 
-    private static final String GET_TRACE_DURATION = """
-            WITH traces_dedup AS (
-                SELECT
-                       id,
-                       start_time,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration
-                FROM traces final
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-            )
-            SELECT <bucket> AS bucket,
-                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
-            FROM traces_dedup
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_TRACE_COUNT = """
-            SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT id), 0) as count
-            FROM traces
-            WHERE project_id = :project_id
-            AND workspace_id = :workspace_id
-            AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-            AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_FEEDBACK_SCORES = """
-            WITH feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'trace'
-                  AND project_id = :project_id
-                  AND workspace_id = :workspace_id
-                UNION ALL
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'trace'
-                  AND project_id = :project_id
-                  AND workspace_id = :workspace_id
-            ), feedback_scores_final AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
-            ), feedback_scores_deduplication AS (
-                SELECT t.start_time,
-                        fs.name,
-                        fs.value
-                FROM feedback_scores_final fs
-                JOIN (
-                    SELECT
-                        id,
-                        start_time
-                    FROM traces final
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                ) t ON t.id = fs.entity_id
-            )
-            SELECT <bucket> AS bucket,
-                    name,
-                    nullIf(avg(value), 0) AS value
-            FROM feedback_scores_deduplication
-            GROUP BY name, bucket
-            ORDER BY name, bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_THREAD_FEEDBACK_SCORES = """
-            WITH feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                  AND project_id = :project_id
-                  AND workspace_id = :workspace_id
-                UNION ALL
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                  AND project_id = :project_id
-                  AND workspace_id = :workspace_id
-            ), feedback_scores_final AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
-            ), thread_feedback_scores AS (
-                SELECT t.start_time,
-                        fs.name,
-                        fs.value
-                FROM feedback_scores_final fs
-                JOIN (
-                    SELECT
-                        tt.id,
-                        min(t.start_time) as start_time
-                    FROM trace_threads tt final
-                    JOIN traces t final ON t.thread_id = tt.thread_id
-                        AND t.project_id = tt.project_id
-                        AND t.workspace_id = tt.workspace_id
-                    WHERE tt.project_id = :project_id
-                    AND tt.workspace_id = :workspace_id
-                    AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
-                    AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                    AND tt.status = 'inactive'
-                    GROUP BY tt.id
-                ) t ON t.id = fs.entity_id
-            )
-            SELECT <bucket> AS bucket,
-                    name,
-                    nullIf(avg(value), 0) AS value
-            FROM thread_feedback_scores
-            GROUP BY name, bucket
-            ORDER BY name, bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_TOKEN_USAGE = """
-            WITH spans_dedup AS (
-                SELECT t.start_time as start_time,
-                       name,
-                       value
-                FROM (
-                    SELECT
-                        start_time,
-                        id
-                    FROM traces final
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                ) t
-                JOIN (
-                    SELECT
-                        trace_id,
-                        usage
-                    FROM spans final
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                ) s ON s.trace_id = t.id
-                ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
-                WHERE value > 0
-            )
-            SELECT <bucket> AS bucket,
-                    name,
-                    nullIf(sum(value), 0) AS value
-            FROM spans_dedup
-            GROUP BY name, bucket
-            ORDER BY name, bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_COST = """
-            WITH spans_dedup AS (
-                SELECT t.start_time AS start_time,
-                       s.total_estimated_cost AS value
-                FROM (
-                    SELECT
-                        start_time,
-                        id
-                    FROM traces final
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                ) t
-                JOIN (
-                    SELECT
-                        trace_id,
-                        total_estimated_cost
-                    FROM spans final
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                ) s ON s.trace_id = t.id
-            )
-            SELECT <bucket> AS bucket,
-                    nullIf(sum(value), 0) AS value
-            FROM spans_dedup
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_GUARDRAILS_FAILED_COUNT = """
-            WITH traces_dedup AS (
-                SELECT
-                       id,
-                       start_time,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration
-                FROM traces final
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-            )
-            SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT g.id), 0) AS failed_cnt
-            FROM traces_dedup AS t
-                JOIN guardrails AS g ON g.entity_id = t.id
-            WHERE g.result = 'failed'
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_THREAD_COUNT = """
-            WITH thread_summary AS (
-                SELECT
-                    tt.id,
-                    min(t.start_time) as start_time
-                FROM trace_threads tt
-                JOIN traces t ON tt.thread_id = t.thread_id
-                    AND tt.project_id = t.project_id
-                    AND tt.workspace_id = t.workspace_id
-                WHERE tt.project_id = :project_id
-                AND tt.workspace_id = :workspace_id
-                AND tt.thread_id != ''
-                AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                GROUP BY tt.id
-            )
-            SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT id), 0) as count
-            FROM thread_summary
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
-    private static final String GET_THREAD_DURATION = """
-            WITH thread_duration_summary AS (
-                SELECT
-                    tt.id,
-                    min(t.start_time) as thread_start_time,
-                    max(t.end_time) as thread_end_time,
-                    if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
-                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
-                            NULL) AS thread_duration
-                FROM trace_threads tt
-                JOIN traces t ON tt.thread_id = t.thread_id
-                    AND tt.project_id = t.project_id
-                    AND tt.workspace_id = t.workspace_id
-                WHERE tt.project_id = :project_id
-                AND tt.workspace_id = :workspace_id
-                AND tt.thread_id != ''
-                AND t.start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND t.start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                GROUP BY tt.id
-            )
-            SELECT <bucket> AS bucket,
-                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(thread_duration)) AS duration
-            FROM (
-                SELECT
-                    thread_start_time as start_time,
-                    thread_duration
-                FROM thread_duration_summary
-            ) AS thread_data
-            GROUP BY bucket
-            ORDER BY bucket
-            WITH FILL
-                FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
-                STEP <step>;
-            """;
-
     private static final String TRACE_FILTERED_PREFIX = """
             WITH feedback_scores_combined AS (
                 SELECT workspace_id,
@@ -489,7 +160,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                     FROM traces FINAL
-                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                    <if(guardrails_filters)>
+                    LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                    <endif>
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -660,7 +333,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             """;
 
-    private static final String GET_TRACE_DURATION_WITH_FILTER = """
+    private static final String GET_TRACE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
@@ -673,7 +346,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_TRACE_COUNT_WITH_FILTER = """
+    private static final String GET_TRACE_COUNT = """
             %s
             SELECT <bucket> AS bucket,
                    nullIf(count(DISTINCT id), 0) as count
@@ -686,7 +359,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_FEEDBACK_SCORES_WITH_FILTER = """
+    private static final String GET_FEEDBACK_SCORES = """
             %s, feedback_scores_deduplication AS (
                 SELECT t.start_time,
                         fs.name,
@@ -706,7 +379,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_THREAD_FEEDBACK_SCORES_WITH_FILTER = """
+    private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
                 SELECT t.start_time,
                         fs.name,
@@ -731,7 +404,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_TOKEN_USAGE_WITH_FILTER = """
+    private static final String GET_TOKEN_USAGE = """
             %s, spans_dedup AS (
                 SELECT t.start_time as start_time,
                        name,
@@ -760,7 +433,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_COST_WITH_FILTER = """
+    private static final String GET_COST = """
             %s, spans_dedup AS (
                 SELECT t.start_time AS start_time,
                        s.total_estimated_cost AS value
@@ -785,7 +458,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_GUARDRAILS_FAILED_COUNT_WITH_FILTER = """
+    private static final String GET_GUARDRAILS_FAILED_COUNT = """
             %s
             SELECT <bucket> AS bucket,
                    nullIf(count(DISTINCT g.id), 0) AS failed_cnt
@@ -800,7 +473,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
-    private static final String GET_THREAD_COUNT_WITH_FILTER = """
+    private static final String GET_THREAD_COUNT = """
             %s
             SELECT <bucket> AS bucket,
                    nullIf(count(DISTINCT id), 0) as count
@@ -813,7 +486,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_THREAD_DURATION_WITH_FILTER = """
+    private static final String GET_THREAD_DURATION = """
             %s
             SELECT <bucket> AS bucket,
                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
@@ -829,7 +502,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_TRACE_DURATION_WITH_FILTER : GET_TRACE_DURATION, "traceDuration")
+                GET_TRACE_DURATION, "traceDuration")
                 .flatMapMany(result -> result
                         .map((row, metadata) -> mapDuration(row, TRACE_DURATION_PREFIX)))
                 .reduce(Stream::concat)
@@ -865,7 +538,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_TRACE_COUNT_WITH_FILTER : GET_TRACE_COUNT, "traceCount")
+                GET_TRACE_COUNT, "traceCount")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
                         row -> row.get("count", Integer.class)))
                 .collectList());
@@ -874,7 +547,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.threadFilters() != null ? GET_THREAD_COUNT_WITH_FILTER : GET_THREAD_COUNT, "threadCount")
+                GET_THREAD_COUNT, "threadCount")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREADS,
                         row -> row.get("count", Integer.class)))
                 .collectList());
@@ -883,7 +556,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.threadFilters() != null ? GET_THREAD_DURATION_WITH_FILTER : GET_THREAD_DURATION,
+                GET_THREAD_DURATION,
                 "threadDuration")
                 .flatMapMany(result -> result
                         .map((row, metadata) -> mapDuration(row, THREAD_DURATION_PREFIX)))
@@ -894,7 +567,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_FEEDBACK_SCORES_WITH_FILTER : GET_FEEDBACK_SCORES,
+                GET_FEEDBACK_SCORES,
                 "feedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
@@ -906,7 +579,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getThreadFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.threadFilters() != null ? GET_THREAD_FEEDBACK_SCORES_WITH_FILTER : GET_THREAD_FEEDBACK_SCORES,
+                GET_THREAD_FEEDBACK_SCORES,
                 "threadFeedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
@@ -918,7 +591,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_TOKEN_USAGE_WITH_FILTER : GET_TOKEN_USAGE, "token usage")
+                GET_TOKEN_USAGE, "token usage")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
                         row -> row.get("name", String.class),
@@ -929,7 +602,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_COST_WITH_FILTER : GET_COST, "cost")
+                GET_COST, "cost")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
                         row -> NAME_COST,
@@ -940,7 +613,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.traceFilters() != null ? GET_GUARDRAILS_FAILED_COUNT_WITH_FILTER : GET_GUARDRAILS_FAILED_COUNT,
+                GET_GUARDRAILS_FAILED_COUNT,
                 "guardrailsFailedCount")
                 .flatMapMany(result -> rowToDataPoint(result,
                         row -> NAME_GUARDRAILS_FAILED_COUNT,
@@ -967,6 +640,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
+                    filterQueryBuilder.hasGuardrailsFilter(filters)
+                            .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
                 });
 
         Optional.ofNullable(request.threadFilters())

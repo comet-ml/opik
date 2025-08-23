@@ -384,6 +384,13 @@ public class FilterQueryBuilder {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
 
+    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return filters.stream()
+                .filter(filter -> filter.field() == TraceField.GUARDRAILS)
+                .findFirst()
+                .map(filter -> true);
+    }
+
     public Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
