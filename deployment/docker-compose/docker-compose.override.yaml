@@ -28,7 +28,7 @@ services:
 
   python-backend:
     ports:
-      - "8000:8000" # Exposing Python backend HTTP port to host
+      - "8001:8000" # Exposing Python backend HTTP port to host on 8001 to avoid conflicts
 
   frontend:
     ports:
