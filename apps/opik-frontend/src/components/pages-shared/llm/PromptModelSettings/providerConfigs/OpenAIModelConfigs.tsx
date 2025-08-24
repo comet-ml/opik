@@ -37,6 +37,7 @@ const OpenAIModelConfigs = ({
       PROVIDER_MODEL_TYPE.GPT_5_MINI,
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
     ].includes(model as PROVIDER_MODEL_TYPE);
+
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
