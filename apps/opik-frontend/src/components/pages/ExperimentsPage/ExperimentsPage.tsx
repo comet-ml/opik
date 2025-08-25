@@ -565,7 +565,11 @@ const ExperimentsPage: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewExperimentClick}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewExperimentClick}
+          >
             Create new experiment
           </Button>
         </div>

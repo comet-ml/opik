@@ -469,7 +469,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewOptimizationClick}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewOptimizationClick}
+          >
             Create new optimization
           </Button>
         </div>
