@@ -4916,7 +4916,7 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(batch, workspaceName, apiKey);
 
-            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(20);
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
@@ -4986,6 +4986,105 @@ class DatasetsResourceTest {
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")));
 
+        }
+
+        @Test
+        void findWithDeletedDatasetItems() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating a trace with input and output
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            // Creating the dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Creating a dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Creating experiment and experiment item
+            var experimentId = GENERATOR.generate();
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .input(trace.input())
+                    .output(trace.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Delete the dataset item using the correct POST endpoint
+            var deleteRequest = new DatasetItemsDelete(List.of(datasetItem.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Query for dataset items with experiment items - should still return the experiment item
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                // Should still return one "dataset item" even though it was deleted
+                assertThat(actualPage.total()).isEqualTo(1);
+                assertThat(actualPage.content()).hasSize(1);
+
+                // Create expected dataset item with null source and empty data since it was deleted
+                var expectedDatasetItem = datasetItem.toBuilder()
+                        .source(null)
+                        .data(Map.of()) // Data should be empty when dataset item is deleted
+                        .build();
+
+                // Verify the key aspects: dataset item with empty data and experiment item present
+                assertThat(actualPage.content()).hasSize(1);
+                var actualDatasetItem = actualPage.content().get(0);
+
+                // Key assertion: Dataset item should have empty data when deleted
+                assertThat(actualDatasetItem.data()).isEmpty();
+                assertThat(actualDatasetItem.source()).isNull();
+                assertThat(actualDatasetItem.id()).isEqualTo(datasetItem.id());
+
+                // Key assertion: Experiment item should still be returned
+                assertThat(actualDatasetItem.experimentItems()).hasSize(1);
+                var actualExperimentItem = actualDatasetItem.experimentItems().get(0);
+                assertThat(actualExperimentItem.id()).isEqualTo(experimentItem.id());
+                assertThat(actualExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
+                assertThat(actualExperimentItem.traceId()).isEqualTo(trace.id());
+            }
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
