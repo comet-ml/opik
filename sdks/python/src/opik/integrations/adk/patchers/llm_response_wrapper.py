@@ -39,10 +39,11 @@ class LLMUsageData:
     provider: Optional[str]
 
 
-def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
+def pop_llm_usage_data(
+    result_dict: Dict[str, Any], provider: Optional[str]
+) -> Optional[LLMUsageData]:
     """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
     opik_usage_metadata = None
-    provider = None
     model = None
 
     if (custom_metadata := result_dict.get("custom_metadata", None)) is not None:
@@ -50,11 +51,6 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
             model = custom_metadata.pop("model_version", None)
             if model is not None:
                 model = model.split("/")[-1]
-
-            provider = custom_metadata.pop("provider", None)
-    else:
-        provider = adk_helpers.get_adk_provider()
-        model = None
 
     # in streaming mode ADK returns the usage metadata in the result dict as the last call
     # to the after_model_callback bypassing our patching (no opik_usage)
@@ -71,13 +67,9 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
             logger=LOGGER,
             error_message="Failed to log token usage from ADK Gemini call",
         )
-    # if not google provider was used - usage data will be in OpenAI format
     else:
-        usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=opik.LLMProvider.OPENAI,
+        usage = llm_usage.build_opik_usage_from_unknown_provider(
             usage=opik_usage_metadata,
-            logger=LOGGER,
-            error_message=f"Failed to log token usage from ADK {provider} call",
         )
 
     if usage is None:
