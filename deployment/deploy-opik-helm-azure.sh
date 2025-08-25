@@ -30,8 +30,8 @@ print_error() {
 }
 
 # Load environment variables from .env.azure
-if [ -f "docker-compose/.env.azure" ]; then
-    export $(cat docker-compose/.env.azure | xargs)
+if [ -f ".env.azure" ]; then
+    export $(cat .env.azure | xargs)
     print_success "Loaded environment variables from .env.azure"
 else
     print_error ".env.azure file not found! Please make sure you're running this from the deployment directory."
