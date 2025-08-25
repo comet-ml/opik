@@ -162,7 +162,14 @@ class DatasetItemResultMapper {
     }
 
     private static Map<String, JsonNode> getData(Row row) {
-        return Optional.ofNullable(row.get("data", Map.class))
+
+        Optional<Map> data = Optional.ofNullable(row.get("data", Map.class));
+
+        if (row.getMetadata().contains("data_final")) {
+            data = Optional.ofNullable(row.get("data_final", Map.class));
+        }
+
+        return data
                 .filter(s -> !s.isEmpty())
                 .map(value -> (Map<String, String>) value)
                 .stream()

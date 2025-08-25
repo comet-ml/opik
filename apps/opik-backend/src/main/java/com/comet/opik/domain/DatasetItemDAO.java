@@ -281,7 +281,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             )
             <endif>
             SELECT
-               COUNT(DISTINCT COALESCE(di.id, ei.dataset_item_id)) AS count
+               COUNT(DISTINCT ei.dataset_item_id) AS count
             FROM (
                 SELECT
                     dataset_item_id,
@@ -294,13 +294,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ) AS ei
             LEFT JOIN (
                 SELECT
-                    id
+                    id,
+                    data
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS di ON di.id = ei.dataset_item_id
@@ -336,6 +334,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS tfs ON ei.trace_id = tfs.id
+            <endif>
+            <if(dataset_item_filters)>
+            WHERE <dataset_item_filters>
             <endif>
             ;
             """;
@@ -390,9 +391,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             	SELECT * FROM dataset_items
             	WHERE workspace_id = :workspace_id
             	AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
-            	<if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
             	ORDER BY id DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), feedback_scores_combined AS (
@@ -532,7 +530,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 ei.dataset_item_id AS id,
                 :datasetId AS dataset_id,
-                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), COALESCE(di.data, map())) as data <else> COALESCE(di.data, map()) AS data <endif>,
+                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
+                COALESCE(di.data, map()) AS data,
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
@@ -631,6 +630,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.last_updated_at,
                 di.created_by,
                 di.last_updated_by
+            <if(dataset_item_filters)>
+            HAVING <dataset_item_filters>
+            <endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT :limit OFFSET :offset
             ;

@@ -5046,6 +5046,8 @@ class DatasetsResourceTest {
             var expectedDatasetItem = datasetItem.toBuilder()
                     .source(null)
                     .data(Map.of()) // Data should be empty when dataset item is deleted
+                    .traceId(null) // NULL because dataset item was hard-deleted
+                    .spanId(null) // NULL because dataset item was hard-deleted
                     .build();
 
             // Create expected experiment item with adjusted fields to match API response
