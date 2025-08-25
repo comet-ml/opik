@@ -299,6 +299,52 @@ evaluation = evaluate(
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
 
+### Passing additional arguments to `evaluation_task`
+
+Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client. 
+Since `evaluate` calls the task as `task(x)` for each dataset item, the recommended pattern is to create a wrapper (or use `functools.partial`) that closes over any additional arguments.
+
+Using a wrapper function:
+
+```python
+# Extra dependencies you want to provide to the task
+MODEL = "gpt-4o"
+IMAGE_TYPE = "thumbnail"
+
+def evaluation_task(x, model, image_type, client, prompt):
+    full_response = client.get_answer(
+        x["question"],
+        x["image_paths"][image_type],
+        prompt.format(),
+        model=model,
+    )
+    response = full_response["response"]
+    return {
+        "response": response,
+        "bbox": full_response.get("bounding_boxes"),
+        "image_url": full_response.get("image_url"),
+    }
+
+def make_task(model, image_type, client, prompt):
+    # Return a unary function that evaluate() can call as task(x)
+    def _task(x):
+        return evaluation_task(x, model, image_type, client, prompt)
+    return _task
+
+task = make_task(MODEL, IMAGE_TYPE, bot, system_prompt)
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=task,  # evaluate will call task(x) for each item
+    scoring_metrics=[levenshteinratio_metric],
+    scoring_key_mapping={
+        "input": "question",
+        "output": "response",
+        "reference": "expected_answer",
+    },
+)
+```
+
 ### Accessing logged experiments
 
 You can access all the experiments logged to the platform from the SDK with the [`Opik.get_experiments_by_name`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_name) and [`Opik.get_experiment_by_id`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_id) methods:
