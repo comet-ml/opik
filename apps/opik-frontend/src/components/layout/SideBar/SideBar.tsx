@@ -241,6 +241,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const sidebarMenuItems = usePluginsStore(
     (state) => state.useSidebarMenuItems,
   )();
+//   const useSidebarMenuItemsFn = usePluginsStore(
+//     (state) => state.useSidebarMenuItems,
+//   );
+  //const sidebarMenuItems = useSidebarMenuItemsFn ? useSidebarMenuItemsFn() : [];
 
   const { data: projectData } = useProjectsList(
     {
