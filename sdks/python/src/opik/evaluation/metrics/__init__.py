@@ -18,6 +18,7 @@ from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
+from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError
@@ -38,6 +39,7 @@ __all__ = [
     "Hallucination",
     "IsJson",
     "LevenshteinRatio",
+    "StructuredOutputCompliance",
     "MetricComputationError",
     "Moderation",
     "RagasMetricWrapper",

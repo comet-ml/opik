@@ -369,6 +369,42 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
   },
+  {
+    label: "Structured Output Compliance",
+    description:
+      "Checks if the output follows a defined JSON or JSON-LD structure",
+    value: LLM_JUDGE.structure_compliance,
+    messages: [
+      {
+        id: "kYZITG6",
+        role: LLM_MESSAGE_ROLE.user,
+        content:
+          `You are an expert in evaluating structured data. Your task is to determine whether the OUTPUT is a valid JSON or JSON-LD object and conforms to the expected structure.\n\n` +
+          `Expected Schema (for context):\n` +
+          `{{context}}\n\n` +
+          `OUTPUT:\n` +
+          `{{output}}\n\n` +
+          `Your response should be JSON in the format:\n` +
+          `{\n` +
+          `  "score": true or false,\n` +
+          `  "reason": ["optional reason if false"]\n` +
+          `}`,
+      },
+    ],
+    variables: {
+      context: "",
+      output: "",
+    },
+    schema: [
+      {
+        name: "Structure Compliance",
+        description:
+          "Returns True if the output follows the expected structure",
+        type: LLM_SCHEMA_TYPE.BOOLEAN,
+        unsaved: false,
+      },
+    ],
+  },
 ];
 
 export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
