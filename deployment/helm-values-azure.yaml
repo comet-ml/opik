@@ -1,0 +1,57 @@
+# Custom values for Azure deployment
+registry: &registry opikacr.azurecr.io
+
+component:
+  backend:
+    image:
+      repository: opik-backend
+      tag: latest
+    env:
+      OPIK_VERSION: "latest"
+      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
+      OPIK_USAGE_REPORT_ENABLED: "true"
+      
+  python-backend:
+    image:
+      repository: opik-python-backend
+      tag: latest
+    env:
+      OPIK_VERSION: "latest"
+      PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
+      OPIK_REVERSE_PROXY_URL: ""
+      
+  frontend:
+    image:
+      repository: opik-frontend
+      tag: latest
+    ingress:
+      enabled: false
+
+# Disable demo data generation for now
+demoDataJob:
+  enabled: false
+
+# Configure resources for Azure
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 20Gi
+    
+mysql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+
+redis:
+  enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
