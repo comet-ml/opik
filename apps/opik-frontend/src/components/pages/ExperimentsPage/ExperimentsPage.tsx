@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChartLine, Info, RotateCw } from "lucide-react";
+import { ChartLine, RotateCw } from "lucide-react";
 import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";

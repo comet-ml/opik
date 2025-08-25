@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Info, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
