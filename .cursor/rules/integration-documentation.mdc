@@ -1,0 +1,346 @@
+---
+description: Guidelines for creating and maintaining integration documentation for Opik, including templates, quality standards, and consistency requirements
+globs: apps/opik-documentation/**/*
+alwaysApply: false
+---
+
+# Integration Documentation Guidelines
+
+This document provides comprehensive guidelines for creating and maintaining integration documentation for Opik. It covers both code integrations (requiring Python SDK) and OpenTelemetry configuration-only integrations.
+
+## 📋 Integration Type Decision Matrix
+
+Use this matrix to determine which template to use:
+
+| Integration Type | Requirements | Template to Use | Examples |
+|------------------|--------------|-----------------|----------|
+| **Code Integration** | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration | `integration_template_code.md` | OpenAI, Anthropic, LangChain, CrewAI, DSPy, Haystack |
+| **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md` | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python |
+
+## 🔧 Code Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with description**
+2. **Account setup** (Comet.com account creation)
+3. **Installation** (`pip install opik [integration_package]`)
+4. **Configuration** (`opik.configure()`)
+5. **Environment setup** (API keys)
+6. **Basic usage** (import and `track_*()` wrapper)
+7. **Simple example** (working code snippet)
+8. **Advanced usage** (with `@track` decorator)
+9. **Integration-specific features** (streaming, async, etc.)
+10. **Results viewing** (screenshot)
+11. **Troubleshooting** (common issues)
+
+### Required Code Patterns
+
+```python
+# Always include these imports and patterns
+from opik.integrations.[module] import track_[integration]
+from [package] import [ClientClass]
+
+# Wrapping pattern
+client = [ClientClass]()
+tracked_client = track_[integration](client, project_name="optional")
+
+# Combined with @track decorator
+from opik import track
+
+@track
+def my_function():
+    result = tracked_client.some_method()
+    return result
+```
+
+### Integration-Specific Adaptations
+
+Customize these sections based on integration type:
+
+- **LLM Providers** (OpenAI, Anthropic): Focus on model calls, streaming, token usage
+- **Agent Frameworks** (CrewAI, Autogen): Focus on multi-agent workflows, task execution
+- **ML Frameworks** (LangChain, DSPy): Focus on chains, pipelines, evaluation
+- **Validation** (Guardrails): Focus on validation steps, rule enforcement
+
+## ⚙️ OpenTelemetry Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with description**
+2. **Framework description** (what it is, why OTEL)
+3. **Prerequisites** (account, framework installed)
+4. **Dependencies installation** (OTEL packages)
+5. **Environment configuration** (cloud vs self-hosted)
+6. **OTEL SDK setup** (tracer provider, exporters)
+7. **Framework instrumentation** (framework-specific config)
+8. **Verification** (test code)
+9. **Environment variable alternative** (production setup)
+10. **Framework-specific config** (advanced options)
+11. **Results viewing** (screenshot)
+12. **Troubleshooting** (OTEL-specific issues)
+
+### Required Configuration Patterns
+
+```python
+# Environment variables pattern
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=api-key,projectName=project,Comet-Workspace=workspace"
+
+# OTEL SDK setup pattern
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+processor = BatchSpanProcessor(OTLPSpanExporter())
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
+```
+
+## 📝 Content Standards
+
+### Required Placeholders
+
+Replace these placeholders in templates:
+
+**Code Integrations:**
+- `[INTEGRATION_NAME]` → Actual integration name (e.g., "OpenAI")
+- `[integration_name]` → Lowercase version (e.g., "openai")
+- `[integration_module]` → Python module name (e.g., "openai")
+- `[integration_package]` → Package to install (e.g., "openai")
+- `[ClientClass]` → Main client class (e.g., "OpenAI")
+- `[INTEGRATION_API_KEY_NAME]` → Environment variable name (e.g., "OPENAI_API_KEY")
+
+**OpenTelemetry Integrations:**
+- `[FRAMEWORK_NAME]` → Framework name (e.g., "PydanticAI")
+- `[framework_name]` → Lowercase version (e.g., "pydantic-ai")
+- `[framework_otel_packages]` → Required OTEL packages
+
+### Code Examples Requirements
+
+1. **Always use realistic examples** - not just "hello world"
+2. **Include working imports** - users should be able to copy-paste
+3. **Show both simple and advanced usage**
+4. **Include error handling where relevant**
+5. **Add comments explaining key steps**
+
+### Screenshots and Visual Assets
+
+1. **Include at least one screenshot** of traces in Opik UI
+2. **Use consistent screenshot style** (same browser, same project structure)
+3. **Show relevant trace data** (spans, metadata, timing)
+4. **Update screenshots** when UI changes
+
+## 🔍 Quality Checklist
+
+Before publishing integration documentation, verify:
+
+### Functional Requirements
+- [ ] All code examples are tested and working
+- [ ] API keys and environment setup is accurate
+- [ ] Integration actually produces traces in Opik
+- [ ] Screenshots show current UI state
+- [ ] Links are working and point to correct destinations
+
+### Content Requirements
+- [ ] All placeholder text is replaced with actual values
+- [ ] Examples are realistic and useful
+- [ ] Troubleshooting covers common issues
+- [ ] Advanced usage shows integration-specific features
+- [ ] Installation instructions are complete
+
+### Style Requirements
+- [ ] Consistent formatting with existing docs
+- [ ] Proper markdown syntax
+- [ ] Code blocks have language tags
+- [ ] UTM parameters in links are updated
+- [ ] Follows the template structure
+
+## 🚀 Publication Process
+
+### Documentation Locations
+
+**Code Integrations:**
+- Doc: `apps/opik-documentation/documentation/fern/docs/cookbook/[integration_name].mdx`
+- Notebook: `apps/opik-documentation/documentation/docs/cookbook/[integration_name].ipynb` (optional)
+
+**OpenTelemetry Integrations:**
+- Doc: `apps/opik-documentation/documentation/fern/docs/tracing/opentelemetry/[framework_name].mdx`
+- Primary: `apps/opik-documentation/documentation/fern/docs/cookbook/[framework_name]_otel_integration.mdx`
+
+### Templates Location
+
+Templates are available at:
+- `apps/opik-documentation/documentation/templates/integration_template_code.md`
+- `apps/opik-documentation/documentation/templates/integration_template_otel.md`
+
+## 📋 Integration Maintenance Requirements
+
+When adding, updating, or removing integrations in Opik, you must update **ALL** of the following locations to maintain consistency:
+
+### Required Update Locations
+
+#### 1. Main README Files
+**Files**: `README.md`, `readme_CN.md`, `readme_JP.md`, `readme_KO.md`
+**Section**: "📝 Logging Traces with Integrations"
+- Update the integrations table/list
+- Ensure all integration names are consistent
+- Update any integration-specific descriptions
+
+#### 2. Integration Overview Documentation
+**File**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx`
+**Section**: Main integrations table
+- Update the integrations table with consistent naming
+- Ensure all columns are populated (Integration, Description, Documentation, Try in Colab)
+- Add documentation links for new integrations
+- Add Colab badges for integrations with notebooks
+
+#### 3. Cookbook Overview
+**File**: `apps/opik-documentation/documentation/fern/docs/cookbook/overview.mdx`
+**Sections**: 
+- "LLM Providers" card group
+- "Frameworks & Tools" card group
+- Only include integrations that have corresponding cookbook notebooks
+
+### Integration Information Requirements
+
+#### For Each Integration, Ensure:
+- **Name**: Consistent across all locations
+- **Description**: Clear, concise explanation of what the integration does
+- **Documentation Link**: Points to the correct integration documentation
+- **Colab Badge**: Only for integrations with cookbook notebooks
+- **Category**: Properly categorized as either "LLM Provider" or "Framework & Tool"
+
+#### Integration Categories:
+- **LLM Providers**: OpenAI, Anthropic, Bedrock, Gemini, Groq, Ollama, Vertex AI, watsonx, etc.
+- **Frameworks & Tools**: LangChain, LlamaIndex, Haystack, Instructor, CrewAI, DSPy, etc.
+
+### Update Checklist
+
+When modifying integrations, verify:
+
+- [ ] README.md integration list is updated
+- [ ] Integration overview table is updated
+- [ ] Cookbook overview cards are updated (if applicable)
+- [ ] Integration names are consistent across all locations
+- [ ] Documentation links are correct and functional
+- [ ] Colab badges are added for integrations with notebooks
+- [ ] Categories are properly assigned
+- [ ] Descriptions are clear and consistent
+
+### Example Integration Entry
+
+```markdown
+| Integration | Description | Documentation | Try in Colab |
+|-------------|-------------|---------------|--------------|
+| NewIntegration | Log traces for all NewIntegration LLM calls | [Documentation](/tracing/integrations/newintegration) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/newintegration.ipynb) |
+```
+
+### Common Maintenance Mistakes to Avoid
+
+- ❌ Adding integration to README but forgetting integration overview
+- ❌ Updating integration overview but forgetting cookbook overview
+- ❌ Inconsistent naming between locations
+- ❌ Broken documentation links
+- ❌ Missing Colab badges for integrations with notebooks
+- ❌ Incorrect categorization of integrations
+
+## 📖 Integration-Specific Guidance
+
+### LLM Provider Integrations (OpenAI, Anthropic, etc.)
+
+**Focus Areas:**
+- Model selection and parameters
+- Token usage tracking
+- Streaming response handling
+- Error handling for rate limits
+- Cost tracking capabilities
+
+**Required Examples:**
+- Basic chat completion
+- Streaming response
+- Function calling (if supported)
+- Async usage (if supported)
+
+### Agent Framework Integrations (CrewAI, Autogen, etc.)
+
+**Focus Areas:**
+- Multi-agent workflows
+- Task execution tracking
+- Agent communication
+- Tool usage
+- Hierarchical trace structures
+
+**Required Examples:**
+- Simple single-agent task
+- Multi-agent collaboration
+- Tool usage within agents
+- Error handling in workflows
+
+### ML Framework Integrations (LangChain, DSPy, etc.)
+
+**Focus Areas:**
+- Pipeline/chain execution
+- Component-level tracking
+- Data flow through stages
+- Evaluation integration
+- Custom component tracking
+
+**Required Examples:**
+- Simple chain execution
+- Complex pipeline with multiple steps
+- Integration with evaluation
+- Custom component tracking
+
+### Validation Framework Integrations (Guardrails, etc.)
+
+**Focus Areas:**
+- Validation rule tracking
+- Pass/fail metrics
+- Rule violation details
+- Performance impact
+- Custom validator support
+
+**Required Examples:**
+- Basic validation setup
+- Multiple validation rules
+- Custom validator creation
+- Error handling and recovery
+
+## 🔧 Ongoing Maintenance Guidelines
+
+### Regular Updates Required
+
+1. **Version compatibility** - Test with new package versions
+2. **API changes** - Update for provider API changes
+3. **Screenshot updates** - Keep UI screenshots current
+4. **Link validation** - Ensure all links remain valid
+5. **Dependency updates** - Update package versions in examples
+
+### Monitoring Integration Health
+
+1. **Community feedback** - Monitor GitHub issues and Slack
+2. **Usage analytics** - Track which integrations are most used
+3. **Breaking changes** - Watch for upstream breaking changes
+4. **Performance** - Monitor integration performance impact
+
+### Integration Lifecycle Management
+
+#### Addition Process:
+1. Add to README.md integration list
+2. Add to integration overview table
+3. Add to cookbook overview (if notebook exists)
+4. Create integration documentation
+5. Create cookbook notebook (optional)
+6. Update any cross-references
+
+#### Removal Process:
+1. Remove from README.md
+2. Remove from integration overview
+3. Remove from cookbook overview (if present)
+4. Remove corresponding documentation files
+5. Remove cookbook notebooks (if present)
+6. Update any cross-references
+
+This rule ensures that users always have consistent, up-to-date information about Opik integrations across all documentation locations, while providing clear guidelines for creating high-quality integration documentation.
