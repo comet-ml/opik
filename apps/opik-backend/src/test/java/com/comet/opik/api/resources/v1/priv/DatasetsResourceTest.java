@@ -5042,49 +5042,34 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Query for dataset items with experiment items - should still return the experiment item
-            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+            // Create expected dataset item with null source and empty data since it was deleted
+            var expectedDatasetItem = datasetItem.toBuilder()
+                    .source(null)
+                    .data(Map.of()) // Data should be empty when dataset item is deleted
+                    .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("page", 1)
-                    .queryParam("size", 10)
-                    .queryParam("experiment_ids", experimentIdsParam)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            // Create expected experiment item with adjusted fields to match API response
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .feedbackScores(null) // API returns null for feedback scores in this context
+                    .comments(null) // API returns null for comments in this context
+                    .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
+                    .usage(null) // API returns null for usage in this context
+                    // Don't set duration - let it be compared as-is from the API response
+                    .build();
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+            // Query for dataset items with experiment items using assertion helper
+            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, List.of(),
+                    apiKey, workspaceName, Set.of(), List.of(expectedDatasetItem));
 
-                // Should still return one "dataset item" even though it was deleted
-                assertThat(actualPage.total()).isEqualTo(1);
-                assertThat(actualPage.content()).hasSize(1);
+            // Get the actual duration from the API response to use in expected experiment item
+            var actualExperimentItem = actualPage.content().get(0).experimentItems().get(0);
+            var expectedExperimentItemWithActualDuration = expectedExperimentItem.toBuilder()
+                    .duration(actualExperimentItem.duration()) // Use actual duration from API
+                    .build();
 
-                // Create expected dataset item with null source and empty data since it was deleted
-                var expectedDatasetItem = datasetItem.toBuilder()
-                        .source(null)
-                        .data(Map.of()) // Data should be empty when dataset item is deleted
-                        .build();
-
-                // Verify the key aspects: dataset item with empty data and experiment item present
-                assertThat(actualPage.content()).hasSize(1);
-                var actualDatasetItem = actualPage.content().get(0);
-
-                // Key assertion: Dataset item should have empty data when deleted
-                assertThat(actualDatasetItem.data()).isEmpty();
-                assertThat(actualDatasetItem.source()).isNull();
-                assertThat(actualDatasetItem.id()).isEqualTo(datasetItem.id());
-
-                // Key assertion: Experiment item should still be returned
-                assertThat(actualDatasetItem.experimentItems()).hasSize(1);
-                var actualExperimentItem = actualDatasetItem.experimentItems().get(0);
-                assertThat(actualExperimentItem.id()).isEqualTo(experimentItem.id());
-                assertThat(actualExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
-                assertThat(actualExperimentItem.traceId()).isEqualTo(trace.id());
-            }
+            // Verify the experiment items are properly associated using assertion helper
+            assertDatasetItemExperiments(actualPage, List.of(expectedDatasetItem),
+                    List.of(expectedExperimentItemWithActualDuration));
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
