@@ -26,8 +26,10 @@ const GetStartedSection = () => {
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
-  const [isNewDatasetDialogOpened, setIsNewDatasetDialogOpened] = useState(false);
-  const [isNewOptimizationDialogOpened, setIsNewOptimizationDialogOpened] = useState(false);
+  const [isNewDatasetDialogOpened, setIsNewDatasetDialogOpened] =
+    useState(false);
+  const [isNewOptimizationDialogOpened, setIsNewOptimizationDialogOpened] =
+    useState(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -36,7 +38,8 @@ const GetStartedSection = () => {
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
   const openNewDatasetDialog = () => setIsNewDatasetDialogOpened(true);
-  const openNewOptimizationDialog = () => setIsNewOptimizationDialogOpened(true);
+  const openNewOptimizationDialog = () =>
+    setIsNewOptimizationDialogOpened(true);
 
   return (
     <div>
