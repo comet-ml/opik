@@ -47,7 +47,7 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
     ]
 
     def __init__(self, opik_client: opik_client.Opik):
-        self._opik_client = opik_client
+        self.opik_client = opik_client
 
     def start_span(
         self,
@@ -96,7 +96,7 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
             # so we manually finalize it here to avoid incorrect span nesting.
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
             current_span_data.init_end_time()
-            self._opik_client.span(**current_span_data.as_parameters)
+            self.opik_client.span(**current_span_data.as_parameters)
             current_span_data = opik.context_storage.top_span_data()
 
         try:
@@ -145,7 +145,7 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
         trace_data = opik.context_storage.pop_trace_data(ensure_id=trace_id)
         if trace_data is not None:
             trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.as_parameters)
+            self.opik_client.trace(**trace_data.as_parameters)
 
     def _finalize_span_if_its_not_finalized_yet(self, span_id: str) -> None:
         opik.context_storage.trim_span_data_stack_to_certain_span(span_id)
@@ -153,7 +153,7 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
         span_data = opik.context_storage.pop_span_data(ensure_id=span_id)
         if span_data is not None:
             span_data.init_end_time()
-            self._opik_client.span(**span_data.as_parameters)
+            self.opik_client.span(**span_data.as_parameters)
 
 
 def _is_externally_created_llm_span_ready_for_immediate_finalization(
