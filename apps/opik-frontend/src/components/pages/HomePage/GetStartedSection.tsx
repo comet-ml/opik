@@ -4,11 +4,15 @@ import {
   FlaskConical,
   InspectionPanel,
   MousePointer,
+  Database,
+  SparklesIcon,
 } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -22,6 +26,8 @@ const GetStartedSection = () => {
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
+  const [isNewDatasetDialogOpened, setIsNewDatasetDialogOpened] = useState(false);
+  const [isNewOptimizationDialogOpened, setIsNewOptimizationDialogOpened] = useState(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -29,6 +35,8 @@ const GetStartedSection = () => {
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
+  const openNewDatasetDialog = () => setIsNewDatasetDialogOpened(true);
+  const openNewOptimizationDialog = () => setIsNewOptimizationDialogOpened(true);
 
   return (
     <div>
@@ -44,6 +52,15 @@ const GetStartedSection = () => {
             <InspectionPanel className="size-3.5 text-[#295747]" />
           </div>
           <div className="comet-body-s">Log a trace</div>
+        </div>
+        <div
+          onClick={openNewDatasetDialog}
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-[#E0F2FE] ">
+            <Database className="size-3.5 text-[#0C4A6E]" />
+          </div>
+          <div className="comet-body-s">Create a dataset</div>
         </div>
         <div
           onClick={openNewExperimentDialog}
@@ -65,6 +82,15 @@ const GetStartedSection = () => {
             <div className="comet-body-s">Set a guardrail</div>
           </div>
         )}
+        <div
+          onClick={openNewOptimizationDialog}
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-[#FEF3C7] ">
+            <SparklesIcon className="size-3.5 text-[#92400E]" />
+          </div>
+          <div className="comet-body-s">Create an optimization</div>
+        </div>
         <Link
           className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
           to={"/$workspaceName/playground"}
@@ -96,6 +122,14 @@ const GetStartedSection = () => {
       <AddExperimentDialog
         open={isNewExperimentDialogOpened}
         setOpen={setIsNewExperimentDialogOpened}
+      />
+      <AddEditDatasetDialog
+        open={isNewDatasetDialogOpened}
+        setOpen={setIsNewDatasetDialogOpened}
+      />
+      <AddOptimizationDialog
+        open={isNewOptimizationDialogOpened}
+        setOpen={setIsNewOptimizationDialogOpened}
       />
       {isGuardrailsEnabled && (
         <SetGuardrailDialog
