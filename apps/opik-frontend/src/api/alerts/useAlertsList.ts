@@ -356,11 +356,11 @@ const getAlertsList = async (
         size,
         page,
       },
-      validateStatus: (status) => status === 200 || status === 404, // TODO lala remove when ready
+      validateStatus: (status) => status === 200 || status === 404, // TODO [ANDRII] remove when ready
     },
   );
 
-  // return data; // TODO lala uncomment when ready
+  // return data; // TODO [ANDRII] uncomment when ready
 
   // Simulate API delay
   await new Promise((resolve) => setTimeout(resolve, 300));

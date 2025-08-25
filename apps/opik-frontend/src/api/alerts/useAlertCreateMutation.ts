@@ -6,7 +6,7 @@ import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseAlertCreateMutationParams = {
-  alert: Omit<Alert, "id">;
+  alert: Partial<Alert>;
 };
 
 const useAlertCreateMutation = () => {

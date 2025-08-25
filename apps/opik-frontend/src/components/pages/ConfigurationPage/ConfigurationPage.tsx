@@ -5,6 +5,8 @@ import { StringParam, useQueryParam } from "use-query-params";
 import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
 import AlertsTab from "@/components/pages/ConfigurationPage/AlertsTab/AlertsTab";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
@@ -17,6 +19,10 @@ const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
 const ConfigurationPage = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
+
+  const isAlertsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
+  );
 
   useEffect(() => {
     if (!tab) {
@@ -47,9 +53,14 @@ const ConfigurationPage = () => {
             >
               AI Providers
             </TabsTrigger>
-            <TabsTrigger variant="underline" value={CONFIGURATION_TABS.ALERTS}>
-              Alerts
-            </TabsTrigger>
+            {isAlertsEnabled && (
+              <TabsTrigger
+                variant="underline"
+                value={CONFIGURATION_TABS.ALERTS}
+              >
+                Alerts
+              </TabsTrigger>
+            )}
             <TabsTrigger
               variant="underline"
               value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}
@@ -66,9 +77,11 @@ const ConfigurationPage = () => {
             <AIProvidersTab />
           </TabsContent>
 
-          <TabsContent value={CONFIGURATION_TABS.ALERTS}>
-            <AlertsTab />
-          </TabsContent>
+          {isAlertsEnabled && (
+            <TabsContent value={CONFIGURATION_TABS.ALERTS}>
+              <AlertsTab />
+            </TabsContent>
+          )}
 
           <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
             <WorkspacePreferencesTab />
