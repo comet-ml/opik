@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/types/alerts";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog";
+import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog/AddEditAlertDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import useAlertsBatchDeleteMutation from "@/api/alerts/useAlertsBatchDeleteMutation";
 

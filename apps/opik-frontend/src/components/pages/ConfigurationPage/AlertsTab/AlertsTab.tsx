@@ -31,7 +31,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/ConfigurationPage/AlertsTab/AlertsActionsPanel";
-import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog";
+import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog/AddEditAlertDialog";
 
 export const getRowId = (a: Alert) => a.id!;
 
