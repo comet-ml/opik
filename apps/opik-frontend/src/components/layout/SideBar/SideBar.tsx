@@ -238,9 +238,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     setQuickstartOpened,
   } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
-  const sidebarMenuItems = usePluginsStore(
-    (state) => state.useSidebarMenuItems,
-  )();
+  // const sidebarMenuItems = usePluginsStore(
+  //   (state) => state.useSidebarMenuItems,
+  // )();
 
   const { data: projectData } = useProjectsList(
     {
@@ -338,7 +338,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       label: "Quickstart guide",
       onClick: () => setQuickstartOpened(true),
     },
-    ...sidebarMenuItems,
+    // ...sidebarMenuItems,
     {
       id: "provideFeedback",
       type: MENU_ITEM_TYPE.button,

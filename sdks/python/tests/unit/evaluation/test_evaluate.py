@@ -86,6 +86,7 @@ def test_evaluate__happyflow(
             input={
                 "input": {"message": "say hello"},
                 "reference": "hello",
+                "id": "dataset-item-id-1",
             },
             output={
                 "output": "hello",
@@ -102,6 +103,7 @@ def test_evaluate__happyflow(
                         "dataset_item": {
                             "input": {"message": "say hello"},
                             "reference": "hello",
+                            "id": "dataset-item-id-1",
                         },
                     },
                     output={
@@ -129,7 +131,10 @@ def test_evaluate__happyflow(
                             type="general",
                             name="equals_metric",
                             input={
-                                "ignored_kwargs": {"input": {"message": "say hello"}},
+                                "ignored_kwargs": {
+                                    "input": {"message": "say hello"},
+                                    "id": "dataset-item-id-1",
+                                },
                                 "output": "hello",
                                 "reference": "hello",
                             },
@@ -157,6 +162,7 @@ def test_evaluate__happyflow(
             input={
                 "input": {"message": "say bye"},
                 "reference": "bye",
+                "id": "dataset-item-id-2",
             },
             output={
                 "output": "not bye",
@@ -173,6 +179,7 @@ def test_evaluate__happyflow(
                         "dataset_item": {
                             "input": {"message": "say bye"},
                             "reference": "bye",
+                            "id": "dataset-item-id-2",
                         }
                     },
                     output={"output": "not bye"},
@@ -196,7 +203,10 @@ def test_evaluate__happyflow(
                             type="general",
                             name="equals_metric",
                             input={
-                                "ignored_kwargs": {"input": {"message": "say bye"}},
+                                "ignored_kwargs": {
+                                    "input": {"message": "say bye"},
+                                    "id": "dataset-item-id-2",
+                                },
                                 "output": "not bye",
                                 "reference": "bye",
                             },
@@ -301,6 +311,7 @@ def test_evaluate_with_scoring_key_mapping(
             input={
                 "input": {"message": "say hello"},
                 "expected_output": {"message": "hello"},
+                "id": "dataset-item-id-1",
             },
             output={
                 "result": "hello",
@@ -317,6 +328,7 @@ def test_evaluate_with_scoring_key_mapping(
                         "dataset_item": {
                             "input": {"message": "say hello"},
                             "expected_output": {"message": "hello"},
+                            "id": "dataset-item-id-1",
                         },
                     },
                     output={
@@ -348,6 +360,7 @@ def test_evaluate_with_scoring_key_mapping(
                                     "expected_output": {"message": "hello"},
                                     "input": {"message": "say hello"},
                                     "result": "hello",
+                                    "id": "dataset-item-id-1",
                                 },
                                 "output": "hello",
                                 "reference": "hello",
@@ -376,6 +389,7 @@ def test_evaluate_with_scoring_key_mapping(
             input={
                 "input": {"message": "say bye"},
                 "expected_output": {"message": "bye"},
+                "id": "dataset-item-id-2",
             },
             output={
                 "result": "not bye",
@@ -392,6 +406,7 @@ def test_evaluate_with_scoring_key_mapping(
                         "dataset_item": {
                             "input": {"message": "say bye"},
                             "expected_output": {"message": "bye"},
+                            "id": "dataset-item-id-2",
                         },
                     },
                     output={
@@ -423,6 +438,7 @@ def test_evaluate_with_scoring_key_mapping(
                                     "expected_output": {"message": "bye"},
                                     "input": {"message": "say bye"},
                                     "result": "not bye",
+                                    "id": "dataset-item-id-2",
                                 },
                                 "output": "not bye",
                                 "reference": "bye",
@@ -559,6 +575,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         input={
             "input": {"message": "say hello"},
             "reference": "hello",
+            "id": "dataset-item-id-1",
         },
         output=None,
         start_time=ANY_BUT_NONE,
@@ -578,6 +595,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
                     "dataset_item": {
                         "input": {"message": "say hello"},
                         "reference": "hello",
+                        "id": "dataset-item-id-1",
                     }
                 },
                 error_info={
@@ -680,6 +698,7 @@ def test_evaluate_prompt_happyflow(
             input={
                 "question": "Hello, world!",
                 "reference": "Hello, world!",
+                "id": "dataset-item-id-1",
             },
             output={
                 "input": [{"role": "user", "content": "LLM response: {{input}}"}],
@@ -697,6 +716,7 @@ def test_evaluate_prompt_happyflow(
                         "prompt_variables": {
                             "question": "Hello, world!",
                             "reference": "Hello, world!",
+                            "id": "dataset-item-id-1",
                         }
                     },
                     output={
@@ -734,6 +754,7 @@ def test_evaluate_prompt_happyflow(
             input={
                 "question": "What is the capital of France?",
                 "reference": "Paris",
+                "id": "dataset-item-id-2",
             },
             output={
                 "input": [{"role": "user", "content": "LLM response: {{input}}"}],
@@ -751,6 +772,7 @@ def test_evaluate_prompt_happyflow(
                         "prompt_variables": {
                             "question": "What is the capital of France?",
                             "reference": "Paris",
+                            "id": "dataset-item-id-2",
                         }
                     },
                     output={
@@ -872,6 +894,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             input={
                 "input": {"message": "say hello"},
                 "reference": "hello",
+                "id": "dataset-item-id-1",
             },
             output={
                 "output": "hello",
@@ -888,6 +911,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                         "dataset_item": {
                             "input": {"message": "say hello"},
                             "reference": "hello",
+                            "id": "dataset-item-id-1",
                         },
                     },
                     output={
@@ -919,6 +943,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     "input": {"message": "say hello"},
                                     "reference": "hello",
                                     "output": "hello",
+                                    "id": "dataset-item-id-1",
                                 }
                             },
                             output={
@@ -933,7 +958,8 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     name="equals_metric",
                                     input={
                                         "ignored_kwargs": {
-                                            "input": {"message": "say hello"}
+                                            "input": {"message": "say hello"},
+                                            "id": "dataset-item-id-1",
                                         },
                                         "output": "hello",
                                         "reference": "hello",
@@ -953,7 +979,8 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     name="contains_metric",
                                     input={
                                         "ignored_kwargs": {
-                                            "input": {"message": "say hello"}
+                                            "input": {"message": "say hello"},
+                                            "id": "dataset-item-id-1",
                                         },
                                         "output": "hello",
                                         "reference": "hello",
@@ -987,6 +1014,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             input={
                 "input": {"message": "say bye"},
                 "reference": "bye",
+                "id": "dataset-item-id-2",
             },
             output={
                 "output": "not bye",
@@ -1003,6 +1031,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                         "dataset_item": {
                             "input": {"message": "say bye"},
                             "reference": "bye",
+                            "id": "dataset-item-id-2",
                         }
                     },
                     output={"output": "not bye"},
@@ -1030,6 +1059,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     "input": {"message": "say bye"},
                                     "reference": "bye",
                                     "output": "not bye",
+                                    "id": "dataset-item-id-2",
                                 }
                             },
                             output={
@@ -1044,7 +1074,8 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     name="equals_metric",
                                     input={
                                         "ignored_kwargs": {
-                                            "input": {"message": "say bye"}
+                                            "input": {"message": "say bye"},
+                                            "id": "dataset-item-id-2",
                                         },
                                         "reference": "bye",
                                         "output": "not bye",
@@ -1064,7 +1095,8 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     name="contains_metric",
                                     input={
                                         "ignored_kwargs": {
-                                            "input": {"message": "say bye"}
+                                            "input": {"message": "say bye"},
+                                            "id": "dataset-item-id-2",
                                         },
                                         "reference": "bye",
                                         "output": "not bye",
