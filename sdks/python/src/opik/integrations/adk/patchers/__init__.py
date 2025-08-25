@@ -62,3 +62,4 @@ def patch_adk(opik_client: opik_client.Opik) -> None:
             no_op_opik_tracer.start_as_current_span
         )
         base_agent.tracer.start_span = no_op_opik_tracer.start_span
+        LOGGER.debug("Patched ADK tracers")
