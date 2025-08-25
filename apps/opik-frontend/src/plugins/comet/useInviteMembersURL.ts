@@ -20,7 +20,7 @@ const useInviteMembersURL = () => {
   const workspace = allWorkspaces?.find(
     (workspace) => workspace.workspaceName === workspaceName,
   );
-  const organization = organizations.find((org) => {
+  const organization = organizations?.find((org) => {
     return org.id === workspace?.organizationId;
   });
 
@@ -34,10 +34,10 @@ const useInviteMembersURL = () => {
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
-  const workspacePermissions = userPermissions.find(
+  const workspacePermissions = userPermissions?.find(
     (userPermission) => userPermission.workspaceName === workspaceName,
   );
-  const invitePermission = workspacePermissions?.permissions.find(
+  const invitePermission = workspacePermissions?.permissions?.find(
     (permission) => permission.permissionName === "invite_users_to_workspace",
   );
   const canInviteMembers =

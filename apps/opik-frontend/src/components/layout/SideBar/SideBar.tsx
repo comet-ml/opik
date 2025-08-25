@@ -238,9 +238,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     setQuickstartOpened,
   } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
-  const sidebarMenuItems = usePluginsStore(
+  const useSidebarMenuItemsFn = usePluginsStore(
     (state) => state.useSidebarMenuItems,
-  )();
+  );
+  const sidebarMenuItems = useSidebarMenuItemsFn();
 
   const { data: projectData } = useProjectsList(
     {
