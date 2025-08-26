@@ -8872,6 +8872,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
       type: object
@@ -8881,6 +8882,8 @@ components:
         traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
+          type: boolean
+        opikAIEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -9294,6 +9297,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     SpanFilter_Public:
       type: object
       properties:
@@ -9795,6 +9800,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     FeedbackScoreBatchThread:
       required:
       - scores
