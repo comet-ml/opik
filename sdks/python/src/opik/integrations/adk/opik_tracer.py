@@ -152,6 +152,8 @@ class OpikTracer:
             provider, model = litellm_wrappers.parse_provider_and_model(
                 llm_request.model
             )
+            if provider is None:
+                provider = adk_helpers.get_adk_provider()
 
             # ADK runs `before_model_callback` before running `start_as_current_span` function for the LLM call,
             # which makes it impossible to update the Opik span from this method.
@@ -161,7 +163,7 @@ class OpikTracer:
                     name=adk_tracer_for_opik_context_management.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
                     project_name=self.project_name,
                     metadata=self.metadata,
-                    type="llm",  # for now
+                    type="llm",
                     model=model,
                     provider=provider,
                     input=input,
@@ -190,19 +192,26 @@ class OpikTracer:
 
         try:
             model = None
-            provider = None
             usage = None
             output = None
 
             if adk_helpers.has_empty_text_part_content(llm_response):
                 return
 
+            current_span = context_storage.top_span_data()
+            if current_span is None:
+                LOGGER.warning(
+                    "No current span found in context for model output update"
+                )
+                return
+
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-                usage_data = llm_response_wrapper.pop_llm_usage_data(output)
+                usage_data = llm_response_wrapper.pop_llm_usage_data(
+                    output, current_span.provider
+                )
                 if usage_data is not None:
                     model = usage_data.model
-                    provider = usage_data.provider
                     usage = usage_data.opik_usage
             except Exception as e:
                 LOGGER.debug(
@@ -210,27 +219,21 @@ class OpikTracer:
                     exc_info=True,
                 )
 
-            current_span = context_storage.top_span_data()
-            if current_span is not None:
-                current_span.update(
-                    output=output,
-                    name=model,
-                    type="llm",
-                    model=model,
-                    provider=provider,
-                    usage=usage,
-                    project_name=self.project_name,
-                )
-                context_storage.pop_span_data(ensure_id=current_span.id)
-                current_span.init_end_time()
-                # We close this span manually because otherwise ADK will close it too late,
-                # and it will also add tool spans inside of it, which we want to avoid.
-                self._opik_client.span(**current_span.as_parameters)
-                self._last_model_output = output
-            else:
-                LOGGER.warning(
-                    "No current span found in context for model output update"
-                )
+            current_span.update(
+                output=output,
+                name=model or current_span.model,
+                type="llm",
+                model=model,
+                usage=usage,
+                project_name=self.project_name,
+            )
+            context_storage.pop_span_data(ensure_id=current_span.id)
+            current_span.init_end_time()
+            # We close this span manually because otherwise ADK will close it too late,
+            # and it will also add tool spans inside of it, which we want to avoid.
+            self._opik_client.span(**current_span.as_parameters)
+            self._last_model_output = output
+
         except Exception as e:
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
