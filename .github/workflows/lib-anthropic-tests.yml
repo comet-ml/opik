@@ -4,6 +4,8 @@
 #
 name: SDK Lib Anthropic Tests
 run-name: "SDK Lib Anthropic Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
@@ -23,7 +25,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.8", "3.12"]
+        python_version: ["3.8", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code
