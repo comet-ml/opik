@@ -1,0 +1,68 @@
+{{- if index .Values "oauth2-proxy" "enabled" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opik-nginx-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: opik-nginx
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        upstream backend {
+            server {{ include "opik.name" . }}-backend.{{ .Release.Namespace }}.svc.cluster.local:8080;
+        }
+        
+        upstream python-backend {
+            server {{ include "opik.name" . }}-python-backend.{{ .Release.Namespace }}.svc.cluster.local:8000;
+        }
+        
+        upstream frontend {
+            server {{ include "opik.name" . }}-frontend.{{ .Release.Namespace }}.svc.cluster.local:5173;
+        }
+        
+        server {
+            listen 80;
+            
+            # Backend API routes
+            location /v1 {
+                proxy_pass http://backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            location /health-check {
+                proxy_pass http://backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # Python backend API routes
+            location /v1/private/evaluators {
+                proxy_pass http://python-backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # Frontend (default)
+            location / {
+                proxy_pass http://frontend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+    }
+{{- end }}

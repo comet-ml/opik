@@ -14,8 +14,11 @@ dependencies:
 - name: altinity-clickhouse-operator
   repository: https://docs.altinity.com/clickhouse-operator/
   version: 0.25.0
+- name: oauth2-proxy
+  repository: https://oauth2-proxy.github.io/manifests
+  version: 7.7.28
 - name: common
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 2.31.3
-digest: sha256:7d575a9269fa80bafbfd701b522c7477d144b266572bb0f41b16e81eeb07354e
-generated: "2025-06-25T13:12:46.083951584+02:00"
+  version: 2.31.4
+digest: sha256:44e134e6b3c6a63e96f8d7cd368e077a69f14ca960d5a6feeb80468e53263773
+generated: "2025-08-26T19:05:22.847647+01:00"

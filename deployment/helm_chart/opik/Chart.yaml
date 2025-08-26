@@ -49,6 +49,10 @@ dependencies:
   version: "0.25.0"
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
+- name: oauth2-proxy
+  version: "7.7.28"
+  repository: "https://oauth2-proxy.github.io/manifests"
+  condition: oauth2-proxy.enabled
 - name: common
   version: 2.x.x
   repository: oci://registry-1.docker.io/bitnamicharts

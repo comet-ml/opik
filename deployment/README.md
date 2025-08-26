@@ -372,18 +372,18 @@ This routing setup ensures that:
 ## 🌐 Public Access Through Ingress
 
 > [!IMPORTANT]
-> **All services are publicly accessible** through the Application Gateway at the public IP address. No authentication is required.
+> **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
 
-### 🔓 Publicly Available Endpoints
+### 🔓 Publicly Available Endpoints (with Authentication)
 
-Once deployed, the following endpoints are accessible from the internet:
+Once deployed, the following endpoints are accessible from the internet after Azure Entra ID authentication:
 
 | Endpoint | Service | Description | Example |
 |----------|---------|-------------|---------|
-| `http://PUBLIC_IP/` | **Frontend** | Complete Opik web interface | `http://20.166.21.214/` |
-| `http://PUBLIC_IP/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) | `http://20.166.21.214/v1/private/projects/` |
-| `http://PUBLIC_IP/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints | `http://20.166.21.214/v1/private/evaluators/code/run` |
-| `http://PUBLIC_IP/health-check` | **Java Backend** | Health monitoring endpoint | `http://20.166.21.214/health-check` |
+| `http://PUBLIC_IP/` | **Frontend** | Complete Opik web interface | `http://4.245.192.15/` |
+| `http://PUBLIC_IP/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) | `http://4.245.192.15/v1/private/projects/` |
+| `http://PUBLIC_IP/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints | `http://4.245.192.15/v1/private/evaluators/code/run` |
+| `http://PUBLIC_IP/health-check` | **Java Backend** | Health monitoring endpoint | `http://4.245.192.15/health-check` |
 
 ### 🔍 Accessing the API
 

@@ -267,6 +267,128 @@ fi
 PUBLIC_IP_ADDRESS=$(az network public-ip show --name $PUBLIC_IP_NAME --resource-group $RESOURCE_GROUP --query "ipAddress" --output tsv)
 print_success "Public IP address: $PUBLIC_IP_ADDRESS"
 
+# Setup Azure Entra ID authentication
+print_step "Setting up Azure Entra ID authentication"
+
+# Get tenant ID
+TENANT_ID=$(az account show --query tenantId -o tsv)
+print_success "Azure Tenant ID: $TENANT_ID"
+
+# Create Microsoft Entra ID group for Opik access (if specified)
+if [ -n "${OPIK_ACCESS_GROUP_NAME:-}" ]; then
+    print_step "Checking Microsoft Entra ID group for Opik access"
+    
+    # Check if group already exists
+    OPIK_ACCESS_GROUP_ID=$(az ad group list --display-name "$OPIK_ACCESS_GROUP_NAME" --query "[0].id" -o tsv)
+    
+    if [ -z "$OPIK_ACCESS_GROUP_ID" ] || [ "$OPIK_ACCESS_GROUP_ID" = "null" ]; then
+        # Create the group
+        OPIK_ACCESS_GROUP_ID=$(az ad group create \
+            --display-name "$OPIK_ACCESS_GROUP_NAME" \
+            --mail-nickname "$(echo "$OPIK_ACCESS_GROUP_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')" \
+            --query "id" -o tsv)
+        print_success "Created Microsoft Entra ID group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
+        print_warning "⚠️  Remember to add your team members to this group in the Azure Portal!"
+    else
+        print_success "Found existing Microsoft Entra ID group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
+    fi
+    
+    export OPIK_ACCESS_GROUP_ID
+else
+    print_warning "OPIK_ACCESS_GROUP_NAME not specified in .env.azure - authentication will allow any user in your tenant"
+fi
+
+# Create App Registration for Opik authentication
+OPIK_APP_NAME="${OPIK_APP_NAME:-opik-frontend-auth}"
+print_step "Creating App Registration for Opik authentication"
+
+# Check if app registration already exists
+APP_ID=$(az ad app list --display-name "$OPIK_APP_NAME" --query "[0].appId" -o tsv)
+
+if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
+    # Determine redirect URL based on domain or public IP
+    if [ -n "${DOMAIN_NAME:-}" ]; then
+        REDIRECT_URL="http://$DOMAIN_NAME/oauth2/callback"
+        HOME_PAGE_URL="http://$DOMAIN_NAME"
+    else
+        REDIRECT_URL="http://$PUBLIC_IP_ADDRESS/oauth2/callback"
+        HOME_PAGE_URL="http://$PUBLIC_IP_ADDRESS"
+    fi
+    
+    # Create the app registration
+    APP_ID=$(az ad app create \
+        --display-name "$OPIK_APP_NAME" \
+        --web-redirect-uris "$REDIRECT_URL" \
+        --web-home-page-url "$HOME_PAGE_URL" \
+        --sign-in-audience "AzureADMyOrg" \
+        --query "appId" -o tsv)
+    
+    print_success "Created App Registration: $OPIK_APP_NAME (App ID: $APP_ID)"
+    
+    # Create service principal
+    az ad sp create --id $APP_ID
+    print_success "Created service principal for app registration"
+    
+    # Generate client secret
+    CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
+    print_success "Generated client secret for app registration"
+    
+    echo ""
+    print_warning "⚠️  IMPORTANT: Save these authentication credentials securely:"
+    echo "   App ID (Client ID): $APP_ID"
+    echo "   Client Secret: $CLIENT_SECRET"
+    echo "   Tenant ID: $TENANT_ID"
+    echo "   Redirect URL: $REDIRECT_URL"
+    echo ""
+    
+else
+    print_warning "App Registration $OPIK_APP_NAME already exists (App ID: $APP_ID)"
+    
+    # Check if CLIENT_SECRET is already set
+    if [ -z "${CLIENT_SECRET:-}" ]; then
+        print_warning "CLIENT_SECRET not found in environment variables"
+        echo ""
+        read -p "Do you want to regenerate the client secret? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
+            print_success "Regenerated client secret: $CLIENT_SECRET"
+        else
+            print_error "Cannot proceed without CLIENT_SECRET. Please set it manually in .env.azure"
+            exit 1
+        fi
+    else
+        print_success "Using existing CLIENT_SECRET from environment"
+    fi
+fi
+
+# Generate OAuth2 cookie secret if not provided
+if [ -z "${OAUTH2_COOKIE_SECRET:-}" ]; then
+    OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)
+    print_success "Generated OAuth2 cookie secret"
+else
+    print_success "Using existing OAuth2 cookie secret from environment"
+fi
+
+# Export authentication variables for Helm values substitution
+export APP_ID
+export CLIENT_SECRET
+export TENANT_ID
+export OAUTH2_COOKIE_SECRET
+export OPIK_ACCESS_GROUP_ID
+
+# Persist authentication values to .env.azure for future use
+print_step "Updating .env.azure with generated authentication values..."
+sed -i.bak \
+    -e "s|^APP_ID=.*|APP_ID=\"$APP_ID\"|" \
+    -e "s|^CLIENT_SECRET=.*|CLIENT_SECRET=\"$CLIENT_SECRET\"|" \
+    -e "s|^TENANT_ID=.*|TENANT_ID=\"$TENANT_ID\"|" \
+    -e "s|^OAUTH2_COOKIE_SECRET=.*|OAUTH2_COOKIE_SECRET=\"$OAUTH2_COOKIE_SECRET\"|" \
+    .env.azure && rm .env.azure.bak
+print_success "Authentication values saved to .env.azure"
+
+print_success "Azure Entra ID authentication setup completed"
+
 # Create Application Gateway (if it doesn't exist)
 if az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
     print_warning "Application Gateway $APP_GATEWAY_NAME already exists"
@@ -389,9 +511,13 @@ cd helm_chart/opik
 # Add required Helm repositories
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo add altinity https://docs.altinity.com/clickhouse-operator/
+helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
 helm repo update
 
-# Build dependencies
+# Update dependencies to latest versions and rebuild lock file
+helm dependency update
+
+# Build dependencies from updated lock file (ensures consistency)
 helm dependency build
 
 cd ../../
@@ -409,6 +535,7 @@ export OPIK_VERSION
 export TOGGLE_GUARDRAILS_ENABLED
 export DOMAIN_NAME
 export PUBLIC_IP_ADDRESS
+export NAMESPACE
 
 # Create a temporary values file with substituted variables
 envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
@@ -444,7 +571,17 @@ kubectl get services -n $NAMESPACE
 # Print access instructions
 print_step "Access Instructions"
 echo ""
-print_success "Opik deployment has been initiated on your AKS cluster with Application Gateway!"
+print_success "Opik deployment has been initiated on your AKS cluster with Application Gateway and Azure Entra ID authentication!"
+echo ""
+echo "🔐 Authentication Setup:"
+echo "   • Azure Entra ID authentication is enabled"
+echo "   • App Registration: $OPIK_APP_NAME (ID: $APP_ID)"
+if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
+    echo "   • Access restricted to group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
+    echo "   • ⚠️  Add team members to this group in Azure Portal!"
+else
+    echo "   • Access allowed for all users in tenant: $TENANT_ID"
+fi
 echo ""
 echo "Access Options:"
 echo ""
@@ -458,13 +595,17 @@ fi
 echo "2. Direct IP Access:"
 echo "   http://$PUBLIC_IP_ADDRESS"
 echo ""
-echo "3. Port forward to your local machine (if ingress issues):"
+echo "   • Users will be redirected to Microsoft login"
+echo "   • After authentication, they'll be redirected back to Opik"
+echo ""
+echo "3. Port forward to your local machine (bypasses authentication):"
 echo "   kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
 echo "   Then open: http://localhost:5173"
 echo ""
 echo "To check the status of your deployment:"
 echo "   kubectl get pods -n $NAMESPACE"
 echo "   kubectl get ingress -n $NAMESPACE"
+echo "   kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
 echo ""
 echo "To check Application Gateway status:"
 echo "   az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
@@ -473,7 +614,14 @@ echo "To view logs:"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-backend"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-frontend"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-python-backend"
+echo "   kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
 echo "   kubectl logs -n kube-system -l app=ingress-appgw"
+echo ""
+echo "To manage team access:"
+echo "   # Add user to access group"
+echo "   az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email-or-object-id>"
+echo "   # List current group members"
+echo "   az ad group member list --group '$OPIK_ACCESS_GROUP_NAME' --query '[].userPrincipalName'"
 echo ""
 echo "To uninstall Opik:"
 echo "   helm uninstall opik -n $NAMESPACE"
