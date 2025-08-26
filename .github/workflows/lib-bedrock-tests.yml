@@ -2,11 +2,12 @@
 #
 # Please read inputs to provide correct values.
 #
-name: SDK Lib LLama Index Tests
-run-name: "SDK Lib LLama Index Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: SDK Lib Bedrock Tests
+run-name: "SDK Lib Bedrock Tests ${{ github.ref_name }} by @${{ github.actor }}"
 env:
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
 on:
@@ -14,7 +15,7 @@ on:
 
 jobs:
   tests:
-    name: LLamaIndex Python ${{matrix.python_version}}
+    name: Bedrock Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -46,9 +47,19 @@ jobs:
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/llama_index/requirements.txt
+          pip install --no-cache-dir --disable-pip-version-check -r library_integration/bedrock/requirements.txt
+
+      - name: change aws role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.BEDROCK_ROLE }}
+          aws-region: us-east-1
+          role-chaining: true
+          role-skip-session-tagging: true
 
       - name: Run tests
         run: |
-          cd ./tests/library_integration/llama_index/
+          cd ./tests/library_integration/bedrock/
           python -m pytest  -vv .
