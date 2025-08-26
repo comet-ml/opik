@@ -1,28 +1,31 @@
 # Custom values for Azure deployment
-# This file should be customized with your specific ACR and configuration
-# Update the registry value with your actual ACR login server
+# This file uses environment variables from .env.azure
+# Variables are substituted by the deployment script
+#
+# DO NOT EDIT VERSION NUMBERS HERE - Change OPIK_VERSION in .env.azure instead
+# This is a TEMPLATE file processed by deploy-opik-helm-azure.sh
 
-registry: &registry opikacr.azurecr.io
+registry: &registry $ACR_LOGIN_SERVER
 
 component:
   backend:
     image:
       repository: opik-backend
-      tag: latest
+      tag: $OPIK_VERSION
     env:
-      OPIK_VERSION: "latest"
+      OPIK_VERSION: "$OPIK_VERSION"
       TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
       OPIK_USAGE_REPORT_ENABLED: "true"
       
   python-backend:
     image:
       repository: opik-python-backend
-      tag: latest
+      tag: $OPIK_VERSION
     env:
-      OPIK_VERSION: "latest"
+      OPIK_VERSION: "$OPIK_VERSION"
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "$OPIK_VERSION"
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
       OPIK_REVERSE_PROXY_URL: ""
@@ -30,7 +33,7 @@ component:
   frontend:
     image:
       repository: opik-frontend
-      tag: latest
+      tag: $OPIK_VERSION
     ingress:
       enabled: false
 

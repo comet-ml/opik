@@ -94,11 +94,11 @@ echo ""
 # Check prerequisites
 print_step "Checking prerequisites"
 
-# Check if helm-values-azure.yaml exists
-if [ ! -f "helm-values-azure.yaml" ]; then
-    print_error "helm-values-azure.yaml file not found!"
+# Check if helm-values-azure-template.yaml exists
+if [ ! -f "helm-values-azure-template.yaml" ]; then
+    print_error "helm-values-azure-template.yaml file not found!"
     print_error "Please ensure this file exists in the deployment directory."
-    print_error "This file should contain the custom Helm values for your Azure deployment."
+    print_error "This file should contain the custom Helm values template for your Azure deployment."
     exit 1
 fi
 
@@ -129,6 +129,15 @@ fi
 # Check if Helm is installed
 if ! command -v helm &> /dev/null; then
     print_error "Helm not found. Please install it from https://helm.sh/docs/intro/install/"
+    exit 1
+fi
+
+# Check if envsubst is installed (for environment variable substitution)
+if ! command -v envsubst &> /dev/null; then
+    print_error "envsubst not found. Please install gettext package:"
+    print_error "  macOS: brew install gettext"
+    print_error "  Ubuntu/Debian: apt-get install gettext-base"
+    print_error "  CentOS/RHEL: yum install gettext"
     exit 1
 fi
 
@@ -266,14 +275,28 @@ print_step "Installing Opik using Helm"
 # Create namespace if it doesn't exist
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
+# Substitute environment variables in helm-values-azure-template.yaml
+print_step "Preparing Helm values with environment variables"
+export ACR_LOGIN_SERVER
+export OPIK_VERSION
+export TOGGLE_GUARDRAILS_ENABLED
+
+# Create a temporary values file with substituted variables
+envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
+
+print_success "Environment variables substituted in Helm values"
+
 # Install or upgrade Opik without --wait for better monitoring
 helm upgrade --install opik ./helm_chart/opik \
     --namespace $NAMESPACE \
-    --values helm-values-azure.yaml \
+    --values helm-values-azure-resolved.yaml \
     --debug \
     --timeout 5m
 
 print_success "Helm installation initiated"
+
+# Clean up temporary file
+rm -f helm-values-azure-resolved.yaml
 
 # Monitor deployment progress
 print_step "Monitoring deployment progress"
