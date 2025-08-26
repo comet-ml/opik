@@ -11,7 +11,7 @@ from google.adk import sessions as adk_sessions
 from google.adk import events as adk_events
 from google.adk.models import lite_llm as adk_lite_llm
 from google.adk.tools import agent_tool as adk_agent_tool
-
+from google.adk.agents import run_config
 from google.genai import types as genai_types
 
 from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
@@ -705,13 +705,15 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
     fake_backend,
 ):
+    model_name = "openai/gpt-5-mini"
+
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm("openai/gpt-4o-mini"),
+        model=adk_lite_llm.LiteLlm(model_name),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
@@ -770,7 +772,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.containing("gpt-4o-mini"),
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -779,7 +781,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING.starting_with("gpt-4o-mini"),
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
             ),
             SpanModel(
@@ -798,7 +800,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name=ANY_STRING.containing("gpt-4o-mini"),
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -807,7 +809,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING.starting_with("gpt-4o-mini"),
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
             ),
         ],
@@ -821,6 +823,138 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         "original_usage.prompt_tokens",
         "original_usage.completion_tokens",
         "original_usage.total_tokens",
+    ]
+    assert_dict_has_keys(
+        trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
+    )
+    assert_dict_has_keys(
+        trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
+    )
+
+
+def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
+    fake_backend,
+):
+    model_name = "openai/gpt-5-mini"
+
+    opik_tracer = OpikTracer(
+        tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_time_agent",
+        model=adk_lite_llm.LiteLlm(model_name),
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        run_config=run_config.RunConfig(streaming_mode=run_config.StreamingMode.SSE),
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    final_response = _extract_final_response_text(events)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_time_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
+        },
+        tags=["adk-test"],
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": "What is the weather in New York?"}],
+        },
+        thread_id=SESSION_ID,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
+                usage=ANY_DICT,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="get_weather",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="tool",
+                input={"city": "New York"},
+                output={
+                    "status": "success",
+                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
+                },
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=ANY_STRING.containing(model_name.split("/")[-1]),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
+                model=ANY_STRING.starting_with(model_name.split("/")[-1]),
+                usage=ANY_DICT,
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+    EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT = [
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        # TODO: add back when ADK will support it. For now ADK converts LiteLLM usage to Google format
+        # "original_usage.prompt_tokens",
+        # "original_usage.completion_tokens",
+        # "original_usage.total_tokens",
     ]
     assert_dict_has_keys(
         trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
