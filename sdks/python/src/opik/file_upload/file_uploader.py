@@ -37,7 +37,7 @@ def upload_attachment(
             e,
             exc_info=True,
         )
-        raise e
+        raise
 
 
 def _do_upload_attachment(
