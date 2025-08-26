@@ -16,9 +16,11 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
   GPT_4_1 = "gpt-4.1",
   GPT_4_1_MINI = "gpt-4.1-mini",
+  GPT_4_1_NANO = "gpt-4.1-nano",
   GPT_5 = "gpt-5",
   GPT_5_MINI = "gpt-5-mini",
   GPT_5_NANO = "gpt-5-nano",
+  GPT_5_CHAT_LATEST = "gpt-5-chat-latest",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -29,6 +31,11 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_3_5_TURBO = "gpt-3.5-turbo",
   GPT_3_5_TURBO_1106 = "gpt-3.5-turbo-1106",
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
+  GPT_O1 = "o1",
+  GPT_O1_MINI = "o1-mini",
+  GPT_O3 = "o3",
+  GPT_O3_MINI = "o3-mini",
+  GPT_O4_MINI = "o4-mini",
 
   //  <----- anthropic
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
@@ -358,11 +365,13 @@ export enum PROVIDER_MODEL_TYPE {
 
   //   <----- gemini
   GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
+  GEMINI_2_0_FLASH_LITE = "gemini-2.0-flash-lite",
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
   GEMINI_2_5_PRO = "gemini-2.5-pro",
   GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite",
   GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
