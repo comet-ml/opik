@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Function to print colored output
 print_step() {
-    echo -e "${BLUE}==== $1 ====${NC}"
+    echo -e "\n${BLUE}==== $1 ====${NC}"
 }
 
 print_success() {
@@ -27,6 +27,26 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}✗ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ $1${NC}"
+}
+
+print_header() {
+    echo -e "\n${BLUE}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║ $1${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+}
+
+print_section() {
+    echo -e "\n${YELLOW}┌─ $1 ─${NC}"
+}
+
+print_key_value() {
+    local key="$1"
+    local value="$2"
+    printf "   %-20s: %s\n" "$key" "$value"
 }
 
 # Load environment variables from .env.azure
@@ -259,6 +279,7 @@ else
         --name $PUBLIC_IP_NAME \
         --allocation-method Static \
         --sku Standard \
+        --zone 1 \
         --location $LOCATION
     print_success "Created public IP $PUBLIC_IP_NAME"
 fi
@@ -333,13 +354,13 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
     CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
     print_success "Generated client secret for app registration"
     
-    echo ""
-    print_warning "⚠️  IMPORTANT: Save these authentication credentials securely:"
-    echo "   App ID (Client ID): $APP_ID"
-    echo "   Client Secret: $CLIENT_SECRET"
-    echo "   Tenant ID: $TENANT_ID"
-    echo "   Redirect URL: $REDIRECT_URL"
-    echo ""
+    # Display authentication credentials in a standardized format
+    print_section "Authentication Credentials Created"
+    print_key_value "App ID" "$APP_ID"
+    print_key_value "Client Secret" "$CLIENT_SECRET"
+    print_key_value "Tenant ID" "$TENANT_ID"
+    print_key_value "Redirect URL" "$REDIRECT_URL"
+    print_warning "⚠️  IMPORTANT: Save these credentials securely - they will not be stored in files!"
     
 else
     print_warning "App Registration $OPIK_APP_NAME already exists (App ID: $APP_ID)"
@@ -352,13 +373,26 @@ else
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
-            print_success "Regenerated client secret: $CLIENT_SECRET"
+            print_success "Regenerated client secret"
+            
+            # Display updated credentials
+            print_section "Authentication Credentials (Updated)"
+            print_key_value "App ID" "$APP_ID"
+            print_key_value "Client Secret" "$CLIENT_SECRET"
+            print_key_value "Tenant ID" "$TENANT_ID"
+            print_warning "⚠️  IMPORTANT: Client secret has been regenerated - update your records!"
         else
-            print_error "Cannot proceed without CLIENT_SECRET. Please set it manually in .env.azure"
+            print_error "Cannot proceed without CLIENT_SECRET. Please regenerate or provide manually."
             exit 1
         fi
     else
         print_success "Using existing CLIENT_SECRET from environment"
+        
+        # Display existing credentials (without showing the secret)
+        print_section "Authentication Credentials (Existing)"
+        print_key_value "App ID" "$APP_ID"
+        print_key_value "Client Secret" "****** (existing)"
+        print_key_value "Tenant ID" "$TENANT_ID"
     fi
 fi
 
@@ -366,6 +400,8 @@ fi
 if [ -z "${OAUTH2_COOKIE_SECRET:-}" ]; then
     OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)
     print_success "Generated OAuth2 cookie secret"
+    print_section "OAuth2 Configuration"
+    print_key_value "Cookie Secret" "$OAUTH2_COOKIE_SECRET"
 else
     print_success "Using existing OAuth2 cookie secret from environment"
 fi
@@ -376,16 +412,6 @@ export CLIENT_SECRET
 export TENANT_ID
 export OAUTH2_COOKIE_SECRET
 export OPIK_ACCESS_GROUP_ID
-
-# Persist authentication values to .env.azure for future use
-print_step "Updating .env.azure with generated authentication values..."
-sed -i.bak \
-    -e "s|^APP_ID=.*|APP_ID=\"$APP_ID\"|" \
-    -e "s|^CLIENT_SECRET=.*|CLIENT_SECRET=\"$CLIENT_SECRET\"|" \
-    -e "s|^TENANT_ID=.*|TENANT_ID=\"$TENANT_ID\"|" \
-    -e "s|^OAUTH2_COOKIE_SECRET=.*|OAUTH2_COOKIE_SECRET=\"$OAUTH2_COOKIE_SECRET\"|" \
-    .env.azure && rm .env.azure.bak
-print_success "Authentication values saved to .env.azure"
 
 print_success "Azure Entra ID authentication setup completed"
 
@@ -568,89 +594,90 @@ kubectl get pods -n $NAMESPACE
 print_step "Getting service information"
 kubectl get services -n $NAMESPACE
 
-# Print access instructions
-print_step "Access Instructions"
-echo ""
-print_success "Opik deployment has been initiated on your AKS cluster with Application Gateway and Azure Entra ID authentication!"
-echo ""
-echo "🔐 Authentication Setup:"
-echo "   • Azure Entra ID authentication is enabled"
-echo "   • App Registration: $OPIK_APP_NAME (ID: $APP_ID)"
-if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
-    echo "   • Access restricted to group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
-    echo "   • ⚠️  Add team members to this group in Azure Portal!"
-else
-    echo "   • Access allowed for all users in tenant: $TENANT_ID"
-fi
-echo ""
-echo "Access Options:"
-echo ""
-if [ -n "$DOMAIN_NAME" ]; then
-    echo "1. Domain Access (after DNS configuration):"
-    echo "   http://$DOMAIN_NAME"
-    echo ""
-    echo "   To configure DNS, point your domain to: $PUBLIC_IP_ADDRESS"
-    echo ""
-fi
-echo "2. Direct IP Access:"
-echo "   http://$PUBLIC_IP_ADDRESS"
-echo ""
-echo "   • Users will be redirected to Microsoft login"
-echo "   • After authentication, they'll be redirected back to Opik"
-echo ""
-echo "3. Port forward to your local machine (bypasses authentication):"
-echo "   kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
-echo "   Then open: http://localhost:5173"
-echo ""
-echo "To check the status of your deployment:"
-echo "   kubectl get pods -n $NAMESPACE"
-echo "   kubectl get ingress -n $NAMESPACE"
-echo "   kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
-echo ""
-echo "To check Application Gateway status:"
-echo "   az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
-echo ""
-echo "To view logs:"
-echo "   kubectl logs -n $NAMESPACE deployment/opik-backend"
-echo "   kubectl logs -n $NAMESPACE deployment/opik-frontend"
-echo "   kubectl logs -n $NAMESPACE deployment/opik-python-backend"
-echo "   kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
-echo "   kubectl logs -n kube-system -l app=ingress-appgw"
-echo ""
-echo "To manage team access:"
-echo "   # Add user to access group"
-echo "   az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email-or-object-id>"
-echo "   # List current group members"
-echo "   az ad group member list --group '$OPIK_ACCESS_GROUP_NAME' --query '[].userPrincipalName'"
-echo ""
-echo "To uninstall Opik:"
-echo "   helm uninstall opik -n $NAMESPACE"
-echo ""
+# Print comprehensive deployment information
+print_header "🎉 OPIK DEPLOYMENT COMPLETED SUCCESSFULLY"
 
-# Optionally start port forwarding or show access info
+print_section "Infrastructure Summary"
+print_key_value "Resource Group" "$RESOURCE_GROUP"
+print_key_value "AKS Cluster" "$AKS_CLUSTER_NAME"
+print_key_value "Application Gateway" "$APP_GATEWAY_NAME"
+print_key_value "Public IP" "$PUBLIC_IP_ADDRESS"
+print_key_value "Container Registry" "$ACR_NAME"
+print_key_value "Namespace" "$NAMESPACE"
+
+print_section "Authentication Configuration"
+print_key_value "App Registration" "$OPIK_APP_NAME"
+print_key_value "App ID" "$APP_ID"
+print_key_value "Tenant ID" "$TENANT_ID"
+print_key_value "Client Secret" "$CLIENT_SECRET"
+print_key_value "OAuth2 Cookie Secret" "$OAUTH2_COOKIE_SECRET"
+if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
+    print_key_value "Access Group" "$OPIK_ACCESS_GROUP_NAME"
+    print_warning "⚠️  Add team members to the access group in Azure Portal!"
+else
+    print_info "Access allowed for all users in tenant"
+fi
+
+print_section "Access Information"
+if [ -n "$DOMAIN_NAME" ]; then
+    print_key_value "Primary URL" "http://$DOMAIN_NAME"
+    print_warning "Configure DNS: $DOMAIN_NAME → $PUBLIC_IP_ADDRESS"
+else
+    print_key_value "Primary URL" "http://$PUBLIC_IP_ADDRESS"
+fi
+
+print_section "Available Endpoints"
+print_key_value "Frontend" "/"
+print_key_value "Backend API" "/v1/private/*"
+print_key_value "Python Backend" "/v1/private/evaluators/*"
+print_key_value "Health Check" "/health-check"
+
+print_section "Useful Commands"
+echo "Check deployment status:"
+print_info "kubectl get pods -n $NAMESPACE"
+print_info "kubectl get ingress -n $NAMESPACE"
+echo ""
+echo "View application logs:"
+print_info "kubectl logs -n $NAMESPACE deployment/opik-backend"
+print_info "kubectl logs -n $NAMESPACE deployment/opik-frontend"
+print_info "kubectl logs -n $NAMESPACE deployment/opik-python-backend"
+print_info "kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
+echo ""
+echo "Port forward (bypass authentication):"
+print_info "kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
+echo ""
+echo "Manage team access:"
+print_info "az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email>"
+print_info "az ad group member list --group '$OPIK_ACCESS_GROUP_NAME'"
+echo ""
+echo "Uninstall deployment:"
+print_info "helm uninstall opik -n $NAMESPACE"
+
+print_warning "🔒 Authentication is required - all users will be redirected to Microsoft login"
+
+print_section "Next Steps"
 echo "Choose how you want to access Opik:"
-echo "1. Use Application Gateway (recommended) - Access via public IP or domain"
-echo "2. Use port forwarding - Access via localhost"
+echo "1. Use Application Gateway (recommended) - Access via public IP with authentication"
+echo "2. Use port forwarding - Access via localhost (bypasses authentication)"
 echo ""
 read -p "Enter your choice (1 or 2): " -n 1 -r
 echo
+
 if [[ $REPLY == "2" ]]; then
-    print_step "Starting port forwarding"
-    echo "Opik will be available at http://localhost:5173"
-    echo "Press Ctrl+C to stop port forwarding"
+    print_step "Starting Port Forwarding"
+    print_info "Opik will be available at: http://localhost:5173"
+    print_warning "Press Ctrl+C to stop port forwarding"
     kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173
 else
-    print_step "Application Gateway Access Information"
-    echo ""
+    print_step "Application Gateway Ready"
     if [ -n "$DOMAIN_NAME" ]; then
-        print_success "Your application will be available at: http://$DOMAIN_NAME"
-        echo "Make sure to configure DNS to point $DOMAIN_NAME to $PUBLIC_IP_ADDRESS"
+        print_success "Application available at: http://$DOMAIN_NAME"
+        print_warning "Configure DNS: $DOMAIN_NAME → $PUBLIC_IP_ADDRESS"
     else
-        print_success "Your application will be available at: http://$PUBLIC_IP_ADDRESS"
+        print_success "Application available at: http://$PUBLIC_IP_ADDRESS"
     fi
-    echo ""
-    echo "It may take a few minutes for the Application Gateway to configure the backend pools."
-    echo "If you get 502 errors, wait a few minutes and try again."
+    print_info "It may take a few minutes for Application Gateway to configure backend pools"
+    print_info "If you get 502 errors, wait a few minutes and try again"
 fi
 
-print_success "Deployment script completed successfully!"
+print_header "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY"
