@@ -37,6 +37,8 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
+import AnnotationPage from "@/components/pages/AnnotationPage/AnnotationPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -349,6 +351,26 @@ const configurationRoute = createRoute({
   component: ConfigurationPage,
 });
 
+// --------- human feedback
+
+const annotationQueuesRoute = createRoute({
+  path: "/annotation-queues",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Human Feedback",
+  },
+  component: AnnotationQueuesPage,
+});
+
+const annotationRoute = createRoute({
+  path: "/annotation/$queueId",
+  getParentRoute: () => rootRoute,
+  staticData: {
+    title: "Annotation",
+  },
+  component: AnnotationPage,
+});
+
 // --------- production
 
 const onlineEvaluationRoute = createRoute({
@@ -369,6 +391,7 @@ const automationLogsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  annotationRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -408,6 +431,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       playgroundRoute,
       configurationRoute,
+      annotationQueuesRoute,
       onlineEvaluationRoute,
     ]),
   ]),

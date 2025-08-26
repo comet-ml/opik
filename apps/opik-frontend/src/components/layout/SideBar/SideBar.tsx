@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  Users,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -117,6 +118,20 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Database,
         label: "Datasets",
         count: "datasets",
+      },
+    ],
+  },
+  {
+    id: "human_feedback",
+    label: "Human Feedback",
+    items: [
+      {
+        id: "annotation_queues",
+        path: "/$workspaceName/annotation-queues",
+        type: MENU_ITEM_TYPE.router,
+        icon: Users,
+        label: "Queues",
+        count: "annotation_queues",
       },
     ],
   },

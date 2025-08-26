@@ -29,6 +29,12 @@ export const WORKSPACE_CONFIG_REST_ENDPOINT =
   "/v1/private/workspaces/configurations/";
 export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
 
+// Human Feedback endpoints
+export const ANNOTATION_QUEUES_REST_ENDPOINT = "/v1/private/annotation-queues/";
+export const QUEUE_ITEMS_REST_ENDPOINT = "/v1/private/queue-items/";
+export const ANNOTATIONS_REST_ENDPOINT = "/v1/private/annotations/";
+export const PUBLIC_ANNOTATION_QUEUES_REST_ENDPOINT = "/v1/public/annotation-queues/";
+
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
 export const TRACES_KEY = "traces";
