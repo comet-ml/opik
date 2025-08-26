@@ -1,0 +1,136 @@
+permissions:
+  contents: read
+  pull-requests: write
+name: PR Linter
+
+# This workflow runs on pull requests that are opened, edited, or have new commits pushed.
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  lint-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate PR Title, Description, and Commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get the PR context
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed("Could not get PR from context.");
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            let errors = [];
+
+            // 1. Validate PR Title
+            const title = pr.title;
+            const titleRegex = /^\[(OPIK-\d+|issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
+            if (!titleRegex.test(title)) {
+              errors.push(
+                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and at least one component tag (`[FE]`, `[BE]`, etc.).\n\n" +
+                "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx] [COMPONENT] Your change`\n" +
+                "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n\n" +
+                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug`*"
+              );
+            }
+
+            // 2. Validate PR Description
+            const body = pr.body || "";
+            const requiredHeadings = ["## Details", "## Change checklist", "## Issues", "## Testing", "## Documentation"];
+            if (body.length === 0) {
+              errors.push("❌ **Missing Description.** The PR description cannot be empty.");
+            } else {
+              for (const heading of requiredHeadings) {
+                if (!body.includes(heading)) {
+                  errors.push(`❌ **Missing Section.** The description is missing the \`${heading}\` section.`);
+                }
+              }
+
+              // Helper function to get content of a markdown section
+              const getSectionContent = (sectionTitle) => {
+                const startIndex = body.indexOf(sectionTitle);
+                if (startIndex === -1) return null;
+                const nextHeaderIndex = body.indexOf("## ", startIndex + sectionTitle.length);
+                const endIndex = nextHeaderIndex !== -1 ? nextHeaderIndex : body.length;
+                return body.substring(startIndex + sectionTitle.length, endIndex).trim();
+              };
+              
+              const detailsContent = getSectionContent("## Details");
+              if (detailsContent !== null && detailsContent.length === 0) {
+                  errors.push("❌ **Incomplete Details Section.** The `## Details` section cannot be empty.");
+              }
+
+              const issuesContent = getSectionContent("## Issues");
+              const issuesRegex = /(#\d+|OPIK-\d+)/;
+              if (issuesContent !== null && !issuesRegex.test(issuesContent)) {
+                 errors.push(
+                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`) or Jira ticket (`OPIK-xxxx`) under the `## Issues` section."
+                 );
+              }
+            }
+
+            // 3. Validate Commit Messages
+            const author = pr.user.login;
+            let ticketPattern = 'OPIK-\\d+|#\\d+'; // Changed Issue-\\d+ to #\\d+
+            if (author === 'github-actions[bot]') {
+              ticketPattern += '|NA';
+            }
+            const commitMessageRegex = new RegExp(
+              `^(\\[(${ticketPattern})\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
+            );
+            
+            const commits = await github.rest.pulls.listCommits({ owner, repo, pull_number: pr.number });
+            const invalidCommits = [];
+
+            for (const { sha, commit, parents } of commits.data) {
+              if (parents.length > 1) { continue; }
+              const message = commit.message || ""; 
+              if (!commitMessageRegex.test(message)) {
+                invalidCommits.push(
+                  `  - \`${sha.substring(0, 7)}\`: ${message.split('\n')[0]}`
+                );
+              }
+            }
+
+            if (invalidCommits.length > 0) {
+              const baseRef = pr.base.ref;
+              const rebaseCommand = `git rebase -i ${baseRef}`;
+              errors.push(
+                "❌ **Invalid Commit Message Format.** One or more commits do not follow the required format.\n\n" +
+                "   - **Task Commits:** Must start with JIRA ticket ID `[OPIK-xxxx]` (internal) or GitHub issue ID `[#xxxx]` (external).\n" +
+                "   - **Revision Commits:** Must start with `Revision X:`.\n\n" +
+                "   **Invalid Commits:**\n" +
+                invalidCommits.join('\n') +
+                " **To fix this:**\n\n" +
+                `  1. **Run Interactive Rebase:** Open your terminal and run \`${rebaseCommand}\`.\n` +
+                "  2. **Edit Commits:** An editor will open. For each invalid commit listed below, change the word **`pick`** to **`reword`**.\n" +
+                "  3. **Save and Push:** Save the file. Your editor will then prompt you to rewrite each message. Once you are done, force-push the changes with **`git push --force`**.\n\n"
+              );
+            }
+            
+            // 4. Final step: Comment on PR and/or fail the job
+            if (errors.length > 0) {
+              const commentBody = "### 📋 PR Linter Failed\n\n" + errors.join("\n\n---\n\n");
+              
+              const logMessage = "PR Linter Failed:\n\n" + errors.join("\n\n")
+                  .replace(/❌ \*\*/g, '❌ ')
+                  .replace(/\*\*`/g, '`')
+                  .replace(/`\*\*/g, '`')
+                  .replace(/###\s/g, '')
+                  .replace(/---\n\n/g, '');
+
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: commentBody });
+              
+              core.setFailed(logMessage);
+            } else {
+               console.log("✅ PR linting passed!");
+            }
+    continue-on-error: true
