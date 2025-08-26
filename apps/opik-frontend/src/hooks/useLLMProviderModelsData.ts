@@ -34,6 +34,32 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       label: "GPT 5 Nano",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+      label: "GPT 5 Chat Latest",
+    },
+
+    // GPT O Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O1,
+      label: "GPT o1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+      label: "GPT o1 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O3,
+      label: "GPT o3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O3_MINI,
+      label: "GPT o3 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      label: "GPT o4 Mini",
+    },
 
     // GPT-4.0 Models
     {
@@ -65,6 +91,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
       label: "GPT 4.1 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
+      label: "GPT 4.1 Nano",
     },
 
     // GPT-4 Models
@@ -1413,10 +1443,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
       label: "Gemini 2.5 Pro",
     },
@@ -1425,8 +1451,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 2.5 Flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
-      label: "Gemini 2.5 Flash Lite Preview 06-17",
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      label: "Gemini 2.5 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      label: "Gemini 2.0 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
+      label: "Gemini 2.0 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
