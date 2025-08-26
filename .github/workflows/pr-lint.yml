@@ -32,13 +32,13 @@ jobs:
 
             // 1. Validate PR Title
             const title = pr.title;
-            const titleRegex = /^\[(OPIK-\d+|#\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
+            const titleRegex = /^\[(OPIK-\d+|issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
             if (!titleRegex.test(title)) {
               errors.push(
                 "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and at least one component tag (`[FE]`, `[BE]`, etc.).\n\n" +
                 "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx] [COMPONENT] Your change`\n" +
-                "  - **External contributors: Open a Github Issue and link to it via its number:** `[#xxxx] [COMPONENT] Your change`\n\n" +
-                "  *Example: `[#3108] [BE] [FE] Fix authentication bug`*"
+                "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n\n" +
+                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug`*"
               );
             }
 
