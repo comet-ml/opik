@@ -21,7 +21,7 @@ import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMuta
 const USERNAME_MIN_LENGTH = 3;
 const USERNAME_MAX_LENGTH = 64;
 const usernameRegex = new RegExp(
-  `^[a-zA-Z0-9_]{${USERNAME_MIN_LENGTH},${USERNAME_MAX_LENGTH}}$`,
+  `^[a-zA-Z0-9_.+-]{${USERNAME_MIN_LENGTH},${USERNAME_MAX_LENGTH}}$`,
 );
 
 const isEmail = (val: string) => z.string().email().safeParse(val).success;
