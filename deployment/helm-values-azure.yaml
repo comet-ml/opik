@@ -1,4 +1,7 @@
 # Custom values for Azure deployment
+# This file should be customized with your specific ACR and configuration
+# Update the registry value with your actual ACR login server
+
 registry: &registry opikacr.azurecr.io
 
 component:
@@ -31,7 +34,7 @@ component:
     ingress:
       enabled: false
 
-# Disable demo data generation for now
+# Disable demo data generation for production
 demoDataJob:
   enabled: false
 

@@ -39,10 +39,29 @@ Before running the deployment script, make sure you have:
    cd /Users/luisarteiro/Documents/opik/deployment
    ```
 
-2. **Run the deployment script:**
+2. **Configure your deployment:**
+   ```bash
+   # Edit the Helm values file with your specific settings:
+   # - Update the registry with your actual ACR server
+   # - Adjust image tags, resource sizes, etc.
+   vim helm-values-azure.yaml
+   ```
+
+3. **Configure environment variables:**
+   ```bash
+   # Edit .env.azure with your specific Azure configuration
+   # All configuration is now centralized in this file
+   vim .env.azure
+   ```
+
+4. **Run the deployment script:**
    ```bash
    ./deploy-opik-helm-azure.sh
    ```
+
+> [!IMPORTANT]
+> You need to use the `DevScope` account so this script runs correctly.
+> Do `az login` and select the `DevScope` account before the script.
 
 ## What the Script Does
 
@@ -63,22 +82,45 @@ The deployment script automatically:
 - 📤 Pushes all images to your Azure Container Registry
 
 ### 3. **Helm Deployment**
-- 📋 Creates custom `helm-values-azure.yaml` with your ACR images
-- ⚙️ Configures all services according to your `.env.azure` settings
+- ✅ Validates that `helm-values-azure.yaml` exists
+- ⚙️ Uses your pre-configured Helm values file
 - 🚀 Deploys Opik using the local Helm chart
 - ⏳ Waits for all pods to be ready
 - 🌐 Sets up ingress for external access
 
 ## Configuration
 
-The script uses settings from `docker-compose/.env.azure`:
+All configuration is now centralized in two files:
 
+### 1. Azure Infrastructure Settings (`.env.azure`)
 ```bash
-ACR_NAME="opikacr"                    # Azure Container Registry name
-OPIK_VERSION="latest"                 # Version tag for the build Docker images
-TOGGLE_GUARDRAILS_ENABLED="false"     # Enable/disable guardrails
-CREATE_DEMO_DATA="true"               # Generate demo data on startup
+# Azure Infrastructure Configuration
+RESOURCE_GROUP="opik-rg"              # Azure Resource Group name
+LOCATION="northeurope"                # Azure region
+AKS_CLUSTER_NAME="opik-aks"          # AKS cluster name
+ACR_NAME="opikacr"                   # Azure Container Registry name
+NAMESPACE="opik"                     # Kubernetes namespace
+
+# Application Configuration
+OPIK_VERSION="latest"                # Version tag for Docker images
+DEPLOYMENT_ENVIRONMENT="production"   # Environment type
+
+# Feature Toggles
+TOGGLE_GUARDRAILS_ENABLED="false"    # Enable/disable guardrails
 # ... and other settings
+```
+
+### 2. Helm Values Configuration (`helm-values-azure.yaml`)
+This file contains Kubernetes-specific configuration:
+- Container image repositories and tags
+- Resource limits and requests  
+- Persistence settings
+- Service configurations
+- Ingress settings
+
+Edit the file to customize for your environment:
+```bash
+vim helm-values-azure.yaml
 ```
 
 ## Accessing Opik

@@ -31,31 +31,76 @@ print_error() {
 
 # Load environment variables from .env.azure
 if [ -f ".env.azure" ]; then
-    export $(cat .env.azure | xargs)
-    print_success "Loaded environment variables from .env.azure"
+    print_step "Loading environment variables from .env.azure"
+    
+    # Source the file directly after filtering out comments and empty lines
+    set -a  # Automatically export all variables
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+            # If line contains =, evaluate it to handle quotes properly
+            if [[ "$line" =~ = ]]; then
+                eval "$line"
+            fi
+        fi
+    done < .env.azure
+    set +a  # Turn off automatic export
+    
+    # Validate required variables
+    REQUIRED_VARS=(
+        "RESOURCE_GROUP"
+        "LOCATION" 
+        "AKS_CLUSTER_NAME"
+        "ACR_NAME"
+        "NAMESPACE"
+        "OPIK_VERSION"
+    )
+    
+    MISSING_VARS=()
+    for var in "${REQUIRED_VARS[@]}"; do
+        if [ -z "${!var}" ]; then
+            MISSING_VARS+=("$var")
+        fi
+    done
+    
+    if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+        print_error "Missing required environment variables in .env.azure:"
+        for var in "${MISSING_VARS[@]}"; do
+            print_error "  - $var"
+        done
+        print_error ""
+        print_error "Current values loaded:"
+        for var in "${REQUIRED_VARS[@]}"; do
+            echo "  $var='${!var}'"
+        done
+        exit 1
+    fi
+    
+    print_success "Loaded and validated environment variables from .env.azure"
 else
     print_error ".env.azure file not found! Please make sure you're running this from the deployment directory."
     exit 1
 fi
 
-# Configuration
-RESOURCE_GROUP="opik-rg"
-LOCATION="northeurope"
-AKS_CLUSTER_NAME="opik-aks"
-ACR_NAME="${ACR_NAME:-opikacr}"
-OPIK_VERSION="${OPIK_VERSION:-latest}"
-NAMESPACE="opik"
-
 print_step "Starting Opik Helm deployment to Azure"
-echo "Resource Group: $RESOURCE_GROUP"
-echo "ACR Name: $ACR_NAME"
-echo "AKS Cluster: $AKS_CLUSTER_NAME"
-echo "Location: $LOCATION"
-echo "Version: $OPIK_VERSION"
+echo "Azure Resource Group (ARG) Name: $RESOURCE_GROUP"
+echo "Azure Container Registry (ACR) Name: $ACR_NAME"
+echo "Azure Kubernetes Service (AKS) Cluster Name: $AKS_CLUSTER_NAME"
+echo "Azure Location: $LOCATION"
+echo "Built Images Version: $OPIK_VERSION"
+echo "Kubernetes Namespace: $NAMESPACE"
 echo ""
 
 # Check prerequisites
 print_step "Checking prerequisites"
+
+# Check if helm-values-azure.yaml exists
+if [ ! -f "helm-values-azure.yaml" ]; then
+    print_error "helm-values-azure.yaml file not found!"
+    print_error "Please ensure this file exists in the deployment directory."
+    print_error "This file should contain the custom Helm values for your Azure deployment."
+    exit 1
+fi
 
 # Check if Azure CLI is installed and logged in
 if ! command -v az &> /dev/null; then
@@ -200,70 +245,6 @@ fi
 
 # Return to deployment directory
 cd deployment
-
-# Create custom values file for Azure deployment
-print_step "Creating custom Helm values file"
-cat > helm-values-azure.yaml << EOF
-# Custom values for Azure deployment
-registry: &registry $ACR_LOGIN_SERVER
-
-component:
-  backend:
-    image:
-      repository: opik-backend
-      tag: $OPIK_VERSION
-    env:
-      OPIK_VERSION: "$OPIK_VERSION"
-      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
-      OPIK_USAGE_REPORT_ENABLED: "true"
-      
-  python-backend:
-    image:
-      repository: opik-python-backend
-      tag: $OPIK_VERSION
-    env:
-      OPIK_VERSION: "$OPIK_VERSION"
-      PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
-      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "$OPIK_VERSION"
-      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
-      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
-      OPIK_REVERSE_PROXY_URL: ""
-      
-  frontend:
-    image:
-      repository: opik-frontend
-      tag: $OPIK_VERSION
-    ingress:
-      enabled: false
-
-# Disable demo data generation for now
-demoDataJob:
-  enabled: false
-
-# Configure resources for Azure
-clickhouse:
-  enabled: true
-  persistence:
-    enabled: true
-    size: 20Gi
-    
-mysql:
-  enabled: true
-  primary:
-    persistence:
-      enabled: true
-      size: 10Gi
-
-redis:
-  enabled: true
-  master:
-    persistence:
-      enabled: true
-      size: 5Gi
-EOF
-
-print_success "Created helm-values-azure.yaml"
 
 # Add Helm repositories and update dependencies
 print_step "Setting up Helm dependencies"
