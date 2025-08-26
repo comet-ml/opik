@@ -1,0 +1,88 @@
+---
+title: "✨ Trace Inspector (Beta)"
+description: "AI-powered trace analysis and debugging assistant for your LLM applications"
+---
+
+<img src="/img/tracing/trace_inspector_with_response.png" alt="Trace Inspector AI response with recommendations" />
+
+<Warning>
+**Beta Feature**: Trace Inspector is currently in beta and available exclusively on Opik Cloud (www.comet.com). Features and functionality may change as we continue to improve the experience.
+</Warning>
+
+Trace Inspector is an AI-powered assistant that helps you quickly analyze, debug, and optimize your LLM application traces. By conversing with the AI agent, you can identify performance bottlenecks, understand error patterns, and get actionable recommendations to improve your application.
+
+## What is Trace Inspector?
+
+Trace Inspector provides an intelligent interface to your trace data, allowing you to:
+
+- **Ask natural language questions** about your current trace and its spans
+- **Identify performance issues** and bottlenecks automatically  
+- **Get debugging recommendations** for failed or slow operations
+- **Analyze patterns** within the selected trace
+- **Understand cost implications** of your LLM calls
+
+## How to Use Trace Inspector
+
+1. **Navigate to your project** in Opik Cloud
+2. **Open any trace** you want to analyze
+3. **Click the "Inspect trace" button** (marked with a Beta badge)
+4. **Use the chat interface** on the right panel to ask questions
+5. **Type your message** in the chat input and get instant analysis and recommendations
+
+<img src="/img/tracing/trace_inspector_initial_view.png" alt="Trace Inspector interface" />
+
+## Data Privacy & Security
+
+Your trace data security and privacy are our top priorities. Here's exactly how your data is handled:
+
+### Privacy Guarantees
+- **No Training**: Your trace data is **never used** to train AI models
+- **Quality Assurance Only**: Comet retains logs of prompts and responses solely for internal quality assurance and debugging
+- **No Third-Party Training**: These logs are not used for training third-party models
+
+### What Data is Shared with OpenAI
+To provide intelligent analysis, Trace Inspector sends the following to OpenAI's AI models:
+- **Trace and span metadata**: Names, timestamps, latency information
+- **Input/output content**: The actual prompts, responses, and tool outputs from your trace
+- **Performance metrics**: Token counts, costs, and timing data
+- **Error information**: Any error messages or status codes in the trace
+
+### What Data is NOT Shared
+- **Opik system identifiers**: No API keys, or authentication tokens from Opik
+- **Account information**: No workspace or project identifying information
+- **Historical data**: Only the current trace being analyzed
+
+<Warning>
+**Important**: While Opik doesn't send system identifiers, your trace data (inputs/outputs) may contain personal or sensitive information that you've included in prompts or responses. This content will be sent to OpenAI as part of the trace analysis.
+</Warning>
+
+## Current Limitations (Beta)
+
+As a beta feature, Trace Inspector currently has some limitations:
+
+- **Cloud Only**: Available exclusively on Opik Cloud, not in self-hosted deployments
+- **Single Trace Analysis**: Can only analyze one trace at a time, no cross-trace comparisons or aggregations
+- **Rate Limits**: Usage may be subject to rate limiting during peak times
+
+## Getting Started
+
+To start using Trace Inspector:
+
+1. Ensure you have an active [Opik Cloud account](https://www.comet.com/opik)
+2. Navigate to any project with trace data
+3. Look for the "✨ Trace Inspector" option in your trace views
+4. Start asking questions about your traces!
+
+## Feedback & Support
+
+Since this is a beta feature, we'd love to hear your feedback:
+
+- Share your experience on our [GitHub Discussions](https://github.com/comet-ml/opik/discussions)
+- Report issues via [GitHub Issues](https://github.com/comet-ml/opik/issues)
+- Join our [Slack community](https://join.slack.com/t/opik-community/shared_invite/zt-2d0aq7ok6-6l4pLc6NvjZ8l5pkZGhCGg) for real-time support
+
+---
+
+<Info>
+**Coming Soon**: We're working on expanding Trace Inspector to self-hosted deployments and adding support for advanced analysis capabilities.
+</Info> 
