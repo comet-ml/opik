@@ -41,8 +41,6 @@ import SidebarMenuItem, {
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 
-type BottomMenuItem = MenuItem | (() => React.ReactNode);
-
 const HOME_PATH = "/$workspaceName/home";
 
 const MENU_ITEMS: MenuItemGroup[] = [
@@ -254,58 +252,53 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     optimizations: optimizationsData?.total,
   };
 
-  const inviteDevButton = () => {
-    if (!SidebarInviteDevButton) {
-      return null;
-    }
-    return <SidebarInviteDevButton expanded={expanded} />;
-  };
-
-  const bottomMenuItems: BottomMenuItem[] = [
-    {
-      id: "documentation",
-      path: buildDocsUrl(),
-      type: MENU_ITEM_TYPE.link,
-      icon: Book,
-      label: "Documentation",
-    },
-    {
-      id: "quickstart",
-      type: MENU_ITEM_TYPE.button,
-      icon: GraduationCap,
-      label: "Quickstart guide",
-      onClick: () => setQuickstartOpened(true),
-    },
-    inviteDevButton,
-    {
-      id: "provideFeedback",
-      type: MENU_ITEM_TYPE.button,
-      icon: MessageCircleQuestion,
-      label: "Provide feedback",
-      onClick: () => setOpenProvideFeedback(true),
-    },
-  ];
-
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
     <Logo expanded={expanded} />
   );
 
-  const renderItems = (items: BottomMenuItem[]) => {
-    return items.map((item) => {
-      if (typeof item === "function") {
-        return item();
-      }
-      return (
-        <SidebarMenuItem
-          key={item.id}
-          item={item}
-          expanded={expanded}
-          count={countDataMap[item.count!]}
-        />
-      );
-    });
+  const renderItems = (items: MenuItem[]) => {
+    return items.map((item) => (
+      <SidebarMenuItem
+        key={item.id}
+        item={item}
+        expanded={expanded}
+        count={countDataMap[item.count!]}
+      />
+    ));
+  };
+
+  const renderBottomItems = () => {
+    const bottomItems = renderItems([
+      {
+        id: "documentation",
+        path: buildDocsUrl(),
+        type: MENU_ITEM_TYPE.link,
+        icon: Book,
+        label: "Documentation",
+      },
+      {
+        id: "quickstart",
+        type: MENU_ITEM_TYPE.button,
+        icon: GraduationCap,
+        label: "Quickstart guide",
+        onClick: () => setQuickstartOpened(true),
+      },
+      {
+        id: "provideFeedback",
+        type: MENU_ITEM_TYPE.button,
+        icon: MessageCircleQuestion,
+        label: "Provide feedback",
+        onClick: () => setOpenProvideFeedback(true),
+      },
+    ]);
+
+    if (SidebarInviteDevButton) {
+      bottomItems.splice(2, 0, <SidebarInviteDevButton expanded={expanded} />);
+    }
+
+    return bottomItems;
   };
 
   const renderGroups = (groups: MenuItemGroup[]) => {
@@ -363,7 +356,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
               <Separator />
               <ul className="flex flex-col gap-1">
                 <GitHubStarListItem expanded={expanded} />
-                {renderItems(bottomMenuItems)}
+                {renderBottomItems()}
               </ul>
             </div>
           </div>
