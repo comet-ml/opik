@@ -76,47 +76,8 @@ jobs:
                  );
               }
             }
-
-            // 3. Validate Commit Messages
-            const author = pr.user.login;
-            let ticketPattern = 'OPIK-\\d+|#\\d+'; // Changed Issue-\\d+ to #\\d+
-            if (author === 'github-actions[bot]') {
-              ticketPattern += '|NA';
-            }
-            const commitMessageRegex = new RegExp(
-              `^(\\[(${ticketPattern})\\](\\s\\[(BE|FE|DOCS|SDK|GHA)\\])*\\s.+|Revision \\d+:.+)`
-            );
             
-            const commits = await github.rest.pulls.listCommits({ owner, repo, pull_number: pr.number });
-            const invalidCommits = [];
-
-            for (const { sha, commit, parents } of commits.data) {
-              if (parents.length > 1) { continue; }
-              const message = commit.message || ""; 
-              if (!commitMessageRegex.test(message)) {
-                invalidCommits.push(
-                  `  - \`${sha.substring(0, 7)}\`: ${message.split('\n')[0]}`
-                );
-              }
-            }
-
-            if (invalidCommits.length > 0) {
-              const baseRef = pr.base.ref;
-              const rebaseCommand = `git rebase -i ${baseRef}`;
-              errors.push(
-                "❌ **Invalid Commit Message Format.** One or more commits do not follow the required format.\n\n" +
-                "   - **Task Commits:** Must start with JIRA ticket ID `[OPIK-xxxx]` (internal) or GitHub issue ID `[#xxxx]` (external).\n" +
-                "   - **Revision Commits:** Must start with `Revision X:`.\n\n" +
-                "   **Invalid Commits:**\n" +
-                invalidCommits.join('\n') +
-                " **To fix this:**\n\n" +
-                `  1. **Run Interactive Rebase:** Open your terminal and run \`${rebaseCommand}\`.\n` +
-                "  2. **Edit Commits:** An editor will open. For each invalid commit listed below, change the word **`pick`** to **`reword`**.\n" +
-                "  3. **Save and Push:** Save the file. Your editor will then prompt you to rewrite each message. Once you are done, force-push the changes with **`git push --force`**.\n\n"
-              );
-            }
-            
-            // 4. Final step: Comment on PR and/or fail the job
+            // 3. Final step: Comment on PR and/or fail the job
             if (errors.length > 0) {
               const commentBody = "### 📋 PR Linter Failed\n\n" + errors.join("\n\n---\n\n");
               
