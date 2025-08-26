@@ -1,3 +1,6 @@
+permissions:
+  contents: read
+  pull-requests: write
 name: PR Linter
 
 # This workflow runs on pull requests that are opened, edited, or have new commits pushed.
