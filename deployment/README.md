@@ -369,6 +369,48 @@ This routing setup ensures that:
 | **App Gateway** | appgw-subnet | 10.0.2.0/24 | Load balancer |
 | **Virtual Network** | opik-vnet | 10.0.0.0/16 | Network isolation |
 
+## 🌐 Public Access Through Ingress
+
+> [!IMPORTANT]
+> **All services are publicly accessible** through the Application Gateway at the public IP address. No authentication is required.
+
+### 🔓 Publicly Available Endpoints
+
+Once deployed, the following endpoints are accessible from the internet:
+
+| Endpoint | Service | Description | Example |
+|----------|---------|-------------|---------|
+| `http://PUBLIC_IP/` | **Frontend** | Complete Opik web interface | `http://20.166.21.214/` |
+| `http://PUBLIC_IP/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) | `http://20.166.21.214/v1/private/projects/` |
+| `http://PUBLIC_IP/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints | `http://20.166.21.214/v1/private/evaluators/code/run` |
+| `http://PUBLIC_IP/health-check` | **Java Backend** | Health monitoring endpoint | `http://20.166.21.214/health-check` |
+
+### 🔍 Accessing the API
+
+**Web Interface:**
+```bash
+# Open in browser
+open http://PUBLIC_IP_ADDRESS
+```
+
+**API Examples:**
+```bash
+# Get API health
+curl http://PUBLIC_IP_ADDRESS/health-check
+
+# List projects (if any exist)
+curl http://PUBLIC_IP_ADDRESS/v1/private/projects/
+
+# Get feature toggles
+curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/
+
+# Code evaluation endpoint
+curl -X POST http://PUBLIC_IP_ADDRESS/v1/private/evaluators/code/run \
+  -H "Content-Type: application/json" \
+  -d '{"code": "print(\"Hello World\")", "language": "python"}'
+```
+
+
 ## 🧹 Cleanup
 
 ### Remove Application Only
@@ -383,36 +425,5 @@ kubectl delete namespace opik
 az group delete --name opik-rg --yes --no-wait
 ```
 
-## 🔒 Security Features
-
-- **Network Isolation**: VNet with subnet segmentation
-- **Private Container Registry**: Images stored securely in ACR
-- **RBAC**: Kubernetes role-based access control
-- **Health Probes**: Automatic health monitoring
-- **SSL Ready**: Easy HTTPS configuration with certificates
-
-## 📈 Production Readiness
-
-This deployment includes:
-
-- ✅ **High Availability**: Multi-replica services with auto-scaling
-- ✅ **External Access**: Production-grade Application Gateway
-- ✅ **Persistent Storage**: Data survives pod restarts
-- ✅ **Health Monitoring**: Built-in health checks and probes
-- ✅ **Logging**: Centralized logging with kubectl
-- ✅ **Scalability**: Horizontal pod autoscaling ready
-- ✅ **Security**: Network policies and RBAC configured
-
-## 📞 Support
-
-For issues:
-
-1. **Check this README** for troubleshooting steps
-2. **Run validation**: The deployment script shows detailed status
-3. **Check logs**: Use kubectl commands provided above
-4. **Verify configuration**: Ensure all prerequisites are met
-
 ---
 
-> **🎉 The Opik deployment is now ready for production use!**  
-> Access the application at the public IP address provided after deployment.
