@@ -4,6 +4,8 @@
 #
 name: SDK Lib Bedrock Tests
 run-name: "SDK Lib Bedrock Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   AWS_DEFAULT_REGION: us-east-1
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

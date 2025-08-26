@@ -4,6 +4,8 @@
 #
 name: SDK Lib GenAI (Google) Tests
 run-name: "SDK Lib GenAI Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1

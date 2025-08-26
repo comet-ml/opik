@@ -4,6 +4,8 @@
 #
 name: SDK Lib Langchain Tests
 run-name: "SDK Lib Langchain Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
