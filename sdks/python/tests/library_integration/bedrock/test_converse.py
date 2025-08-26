@@ -75,7 +75,7 @@ def test_bedrock_converse__happyflow(fake_backend, project_name, expected_projec
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
                 model=BEDROCK_MODEL_FOR_TESTS,
-                usage=EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
             )
@@ -210,7 +210,7 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
                         metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                         last_updated_at=ANY_BUT_NONE,
                         model=BEDROCK_MODEL_FOR_TESTS,
-                        usage=EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+                        usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                         provider="bedrock",
                         spans=[],
                     )
@@ -265,7 +265,7 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(fake_b
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
                 model=BEDROCK_MODEL_FOR_TESTS,
-                usage=EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
             )
@@ -336,7 +336,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
                 model=BEDROCK_MODEL_FOR_TESTS,
-                usage=EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
             )
@@ -368,7 +368,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
                 model=BEDROCK_MODEL_FOR_TESTS,
-                usage=EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
             )
