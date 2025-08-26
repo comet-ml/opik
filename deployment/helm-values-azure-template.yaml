@@ -16,6 +16,24 @@ component:
       OPIK_VERSION: "$OPIK_VERSION"
       TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
       OPIK_USAGE_REPORT_ENABLED: "true"
+    ingress:
+      enabled: true
+      ingressClassName: "azure-application-gateway"
+      annotations:
+        appgw.ingress.kubernetes.io/ssl-redirect: "false"
+        appgw.ingress.kubernetes.io/use-private-ip: "false"
+        appgw.ingress.kubernetes.io/backend-protocol: "http"
+        appgw.ingress.kubernetes.io/health-probe-path: "/health-check"
+      hosts:
+        - paths:
+            - path: /v1
+              port: 8080
+              pathType: Prefix
+            - path: /health-check
+              port: 8080
+              pathType: Prefix
+      tls:
+        enabled: false
       
   python-backend:
     image:
@@ -29,13 +47,40 @@ component:
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
       OPIK_REVERSE_PROXY_URL: ""
+    ingress:
+      enabled: true
+      ingressClassName: "azure-application-gateway"
+      annotations:
+        appgw.ingress.kubernetes.io/ssl-redirect: "false"
+        appgw.ingress.kubernetes.io/use-private-ip: "false"
+        appgw.ingress.kubernetes.io/backend-protocol: "http"
+        appgw.ingress.kubernetes.io/health-probe-path: "/healthcheck"
+      hosts:
+        - paths:
+            - path: /v1/private/evaluators
+              port: 8000
+              pathType: Prefix
+      tls:
+        enabled: false
       
   frontend:
     image:
       repository: opik-frontend
       tag: $OPIK_VERSION
     ingress:
-      enabled: false
+      enabled: true
+      ingressClassName: "azure-application-gateway"
+      annotations:
+        appgw.ingress.kubernetes.io/ssl-redirect: "false"
+        appgw.ingress.kubernetes.io/use-private-ip: "false"
+        appgw.ingress.kubernetes.io/backend-protocol: "http"
+      hosts:
+        - paths:
+            - path: /
+              port: 5173
+              pathType: Prefix
+      tls:
+        enabled: false
 
 # Disable demo data generation for production
 demoDataJob:

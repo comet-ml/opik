@@ -54,6 +54,14 @@ if [ -f ".env.azure" ]; then
         "ACR_NAME"
         "NAMESPACE"
         "OPIK_VERSION"
+        "APP_GATEWAY_NAME"
+        "VNET_NAME"
+        "AKS_SUBNET_NAME"
+        "APP_GATEWAY_SUBNET_NAME"
+        "PUBLIC_IP_NAME"
+        "VNET_ADDRESS_PREFIX"
+        "AKS_SUBNET_PREFIX"
+        "APPGW_SUBNET_PREFIX"
     )
     
     MISSING_VARS=()
@@ -170,12 +178,62 @@ print_step "Logging into Azure Container Registry"
 az acr login --name $ACR_NAME
 print_success "Logged into ACR"
 
+# Create networking infrastructure for Application Gateway
+print_step "Setting up networking infrastructure"
+
+# Create virtual network (if it doesn't exist)
+if az network vnet show --name $VNET_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
+    print_warning "Virtual network $VNET_NAME already exists"
+else
+    az network vnet create \
+        --resource-group $RESOURCE_GROUP \
+        --name $VNET_NAME \
+        --address-prefix $VNET_ADDRESS_PREFIX \
+        --location $LOCATION
+    print_success "Created virtual network $VNET_NAME"
+fi
+
+# Create subnet for AKS (if it doesn't exist)
+if az network vnet subnet show --vnet-name $VNET_NAME --name $AKS_SUBNET_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
+    print_warning "AKS subnet $AKS_SUBNET_NAME already exists"
+else
+    az network vnet subnet create \
+        --resource-group $RESOURCE_GROUP \
+        --vnet-name $VNET_NAME \
+        --name $AKS_SUBNET_NAME \
+        --address-prefix $AKS_SUBNET_PREFIX
+    print_success "Created AKS subnet $AKS_SUBNET_NAME"
+fi
+
+# Create subnet for Application Gateway (if it doesn't exist)
+if az network vnet subnet show --vnet-name $VNET_NAME --name $APP_GATEWAY_SUBNET_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
+    print_warning "Application Gateway subnet $APP_GATEWAY_SUBNET_NAME already exists"
+else
+    az network vnet subnet create \
+        --resource-group $RESOURCE_GROUP \
+        --vnet-name $VNET_NAME \
+        --name $APP_GATEWAY_SUBNET_NAME \
+        --address-prefix $APPGW_SUBNET_PREFIX
+    print_success "Created Application Gateway subnet $APP_GATEWAY_SUBNET_NAME"
+fi
+
+# Get subnet ID for AKS
+AKS_SUBNET_ID=$(az network vnet subnet show --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --name $AKS_SUBNET_NAME --query id -o tsv)
+
 # Create AKS cluster (if it doesn't exist)
 print_step "Creating AKS Cluster"
 if az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
     print_warning "AKS cluster $AKS_CLUSTER_NAME already exists"
+    
+    # Check if AKS is using the correct VNet
+    AKS_VNET_SUBNET_ID=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "agentPoolProfiles[0].vnetSubnetId" -o tsv)
+    if [ "$AKS_VNET_SUBNET_ID" != "$AKS_SUBNET_ID" ] && [ "$AKS_VNET_SUBNET_ID" != "null" ]; then
+        print_warning "AKS cluster is using a different VNet. This may affect AGIC functionality."
+    elif [ "$AKS_VNET_SUBNET_ID" == "null" ]; then
+        print_warning "AKS cluster was created without VNet integration. Consider recreating for optimal AGIC functionality."
+    fi
 else
-    print_step "Creating AKS cluster (this may take 10-15 minutes)..."
+    print_step "Creating AKS cluster with VNet integration (this may take 10-15 minutes)..."
     az aks create \
         --resource-group $RESOURCE_GROUP \
         --name $AKS_CLUSTER_NAME \
@@ -184,8 +242,51 @@ else
         --enable-addons monitoring \
         --generate-ssh-keys \
         --attach-acr $ACR_NAME \
+        --location $LOCATION \
+        --vnet-subnet-id $AKS_SUBNET_ID \
+        --network-plugin azure \
+        --service-cidr 10.1.0.0/16 \
+        --dns-service-ip 10.1.0.10
+    print_success "Created AKS cluster $AKS_CLUSTER_NAME with VNet integration"
+fi
+
+# Create public IP for Application Gateway (if it doesn't exist)
+if az network public-ip show --name $PUBLIC_IP_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
+    print_warning "Public IP $PUBLIC_IP_NAME already exists"
+else
+    az network public-ip create \
+        --resource-group $RESOURCE_GROUP \
+        --name $PUBLIC_IP_NAME \
+        --allocation-method Static \
+        --sku Standard \
         --location $LOCATION
-    print_success "Created AKS cluster $AKS_CLUSTER_NAME"
+    print_success "Created public IP $PUBLIC_IP_NAME"
+fi
+
+# Get the public IP address
+PUBLIC_IP_ADDRESS=$(az network public-ip show --name $PUBLIC_IP_NAME --resource-group $RESOURCE_GROUP --query "ipAddress" --output tsv)
+print_success "Public IP address: $PUBLIC_IP_ADDRESS"
+
+# Create Application Gateway (if it doesn't exist)
+if az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
+    print_warning "Application Gateway $APP_GATEWAY_NAME already exists"
+else
+    print_step "Creating Application Gateway (this may take 5-10 minutes)..."
+    az network application-gateway create \
+        --name $APP_GATEWAY_NAME \
+        --location $LOCATION \
+        --resource-group $RESOURCE_GROUP \
+        --capacity 2 \
+        --sku Standard_v2 \
+        --http-settings-cookie-based-affinity Disabled \
+        --frontend-port 80 \
+        --http-settings-port 80 \
+        --http-settings-protocol Http \
+        --public-ip-address $PUBLIC_IP_NAME \
+        --vnet-name $VNET_NAME \
+        --subnet $APP_GATEWAY_SUBNET_NAME \
+        --priority 1000
+    print_success "Created Application Gateway $APP_GATEWAY_NAME"
 fi
 
 # Get AKS credentials
@@ -196,6 +297,32 @@ print_success "Retrieved AKS credentials"
 # Test cluster connection
 kubectl cluster-info
 print_success "Connected to AKS cluster"
+
+# Install and configure Azure Application Gateway Ingress Controller (AGIC)
+print_step "Installing Azure Application Gateway Ingress Controller (AGIC)"
+
+# Enable AGIC add-on for AKS
+APP_GATEWAY_ID=$(az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP --query "id" --output tsv)
+
+# Check if AGIC is already enabled
+AGIC_ENABLED=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "addonProfiles.ingressApplicationGateway.enabled" --output tsv 2>/dev/null || echo "false")
+
+if [ "$AGIC_ENABLED" = "true" ]; then
+    print_warning "AGIC add-on is already enabled on AKS cluster"
+else
+    print_step "Enabling AGIC add-on on AKS cluster..."
+    az aks enable-addons \
+        --resource-group $RESOURCE_GROUP \
+        --name $AKS_CLUSTER_NAME \
+        --addons ingress-appgw \
+        --appgw-id $APP_GATEWAY_ID
+    print_success "Enabled AGIC add-on on AKS cluster"
+fi
+
+# Wait for AGIC to be ready
+print_step "Waiting for AGIC to be ready..."
+kubectl wait --for=condition=Ready pod -l app=ingress-appgw -n kube-system --timeout=300s
+print_success "AGIC is ready"
 
 # Build and push all images
 print_step "Building and pushing Docker images"
@@ -280,6 +407,8 @@ print_step "Preparing Helm values with environment variables"
 export ACR_LOGIN_SERVER
 export OPIK_VERSION
 export TOGGLE_GUARDRAILS_ENABLED
+export DOMAIN_NAME
+export PUBLIC_IP_ADDRESS
 
 # Create a temporary values file with substituted variables
 envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
@@ -315,34 +444,65 @@ kubectl get services -n $NAMESPACE
 # Print access instructions
 print_step "Access Instructions"
 echo ""
-print_success "Opik deployment has been initiated on your AKS cluster!"
+print_success "Opik deployment has been initiated on your AKS cluster with Application Gateway!"
 echo ""
-echo "To access Opik frontend:"
-echo "1. Port forward to your local machine:"
+echo "Access Options:"
+echo ""
+if [ -n "$DOMAIN_NAME" ]; then
+    echo "1. Domain Access (after DNS configuration):"
+    echo "   http://$DOMAIN_NAME"
+    echo ""
+    echo "   To configure DNS, point your domain to: $PUBLIC_IP_ADDRESS"
+    echo ""
+fi
+echo "2. Direct IP Access:"
+echo "   http://$PUBLIC_IP_ADDRESS"
+echo ""
+echo "3. Port forward to your local machine (if ingress issues):"
 echo "   kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
-echo ""
-echo "2. Open your browser and go to: http://localhost:5173"
+echo "   Then open: http://localhost:5173"
 echo ""
 echo "To check the status of your deployment:"
 echo "   kubectl get pods -n $NAMESPACE"
+echo "   kubectl get ingress -n $NAMESPACE"
+echo ""
+echo "To check Application Gateway status:"
+echo "   az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
 echo ""
 echo "To view logs:"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-backend"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-frontend"
 echo "   kubectl logs -n $NAMESPACE deployment/opik-python-backend"
+echo "   kubectl logs -n kube-system -l app=ingress-appgw"
 echo ""
 echo "To uninstall Opik:"
 echo "   helm uninstall opik -n $NAMESPACE"
 echo ""
 
-# Optionally start port forwarding
-read -p "Would you like to start port forwarding now? (y/n): " -n 1 -r
+# Optionally start port forwarding or show access info
+echo "Choose how you want to access Opik:"
+echo "1. Use Application Gateway (recommended) - Access via public IP or domain"
+echo "2. Use port forwarding - Access via localhost"
+echo ""
+read -p "Enter your choice (1 or 2): " -n 1 -r
 echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $REPLY == "2" ]]; then
     print_step "Starting port forwarding"
     echo "Opik will be available at http://localhost:5173"
     echo "Press Ctrl+C to stop port forwarding"
     kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173
+else
+    print_step "Application Gateway Access Information"
+    echo ""
+    if [ -n "$DOMAIN_NAME" ]; then
+        print_success "Your application will be available at: http://$DOMAIN_NAME"
+        echo "Make sure to configure DNS to point $DOMAIN_NAME to $PUBLIC_IP_ADDRESS"
+    else
+        print_success "Your application will be available at: http://$PUBLIC_IP_ADDRESS"
+    fi
+    echo ""
+    echo "It may take a few minutes for the Application Gateway to configure the backend pools."
+    echo "If you get 502 errors, wait a few minutes and try again."
 fi
 
 print_success "Deployment script completed successfully!"
