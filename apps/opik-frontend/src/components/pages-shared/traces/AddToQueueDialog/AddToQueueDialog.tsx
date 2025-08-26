@@ -29,7 +29,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Span, Trace } from "@/types/traces";
 import useAnnotationQueuesList from "@/api/annotationQueues/useAnnotationQueuesList";
 import useAddItemsToQueueMutation from "@/api/annotationQueues/useAddItemsToQueueMutation";
-import { useWorkspaceName } from "@/hooks/useWorkspaceName";
+import { useWorkspaceNameFromURL } from "@/hooks/useWorkspaceNameFromURL";
 
 type AddToQueueDialogProps = {
   rows: Array<Trace | Span>;
@@ -50,7 +50,7 @@ const AddToQueueDialog: React.FC<AddToQueueDialogProps> = ({
   setOpen,
   onSuccess,
 }) => {
-  const workspaceName = useWorkspaceName();
+  const workspaceName = useWorkspaceNameFromURL();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<AddToQueueFormValues>({

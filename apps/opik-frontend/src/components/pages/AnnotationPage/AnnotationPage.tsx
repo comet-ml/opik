@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+// Progress component - using a simple div for now
 import { Separator } from "@/components/ui/separator";
 import { 
   ArrowRight, 
@@ -322,7 +322,12 @@ const AnnotationPage: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <div className="text-sm font-medium">{Math.round(progress)}% Complete</div>
-                <Progress value={progress} className="w-32" />
+                <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-500 transition-all duration-300" 
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
               <Button
                 variant="outline"
