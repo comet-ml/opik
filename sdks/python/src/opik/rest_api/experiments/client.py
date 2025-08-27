@@ -166,6 +166,23 @@ class ExperimentsClient:
         )
         return _response.data
 
+    def update_experiment(
+            self,
+            id,
+            newName,
+            newMetadata
+    ) -> None:
+        """
+        Update Experiment
+
+        Parameter
+        -------------------
+        id:  str
+        newName: typing:Optional[str]
+        newMetadata: typing:Optional[str]
+        """
+        _response = self._raw_client.update_experiment(id, newName, newMetadata)
+
     def create_experiment_items(
         self,
         *,
