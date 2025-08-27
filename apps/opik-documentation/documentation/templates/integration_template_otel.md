@@ -1,22 +1,26 @@
-[Agno](https://github.com/agno-agi/agno) is a lightweight, high-performance library for building AI agents.
+---
+description: How to send [FRAMEWORK_NAME] telemetry data to Opik using OpenTelemetry
+---
 
-Agno's primary advantage is its minimal overhead and efficient execution, making it ideal for production environments where performance is critical while maintaining simplicity in agent development.
+# [FRAMEWORK_NAME] Integration via OpenTelemetry
+
+[Brief description of the framework and what it's used for. For example: "[FRAMEWORK_NAME] is a Python framework designed to build production-grade AI applications."]
+
+[Brief explanation of the framework's primary advantage or key feature that makes it valuable for AI development.]
 
 <Frame>
-  <img src="/img/tracing/agno_integration.png" alt="Agno tracing" />
+  <img src="/img/tracing/[framework_name]_integration.png" alt="[FRAMEWORK_NAME] tracing" />
 </Frame>
 
 ## Getting started
 
-To use the Agno integration with Opik, you will need to have the following
-packages installed:
+To use the [FRAMEWORK_NAME] integration with Opik, you will need to have [FRAMEWORK_NAME] and the required OpenTelemetry packages installed:
 
 ```bash
-pip install -U agno openai opentelemetry-sdk opentelemetry-exporter-otlp openinference-instrumentation-agno yfinance
+pip install --upgrade [framework_package] [framework_otel_packages] opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
-In addition, you will need to set the following environment variables to
-configure the OpenTelemetry integration:
+In addition, you will need to set the following environment variables to configure OpenTelemetry to send data to Opik:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
@@ -85,40 +89,39 @@ configure the OpenTelemetry integration:
 
 </Tabs>
 
-## Using Opik with Agno
+## Using Opik with [FRAMEWORK_NAME]
 
-The example below shows how to use the Agno integration with Opik:
+To track your [FRAMEWORK_NAME] applications, you will need to configure OpenTelemetry to instrument your framework:
 
-```python {pytest_codeblocks_skip=true}
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-from agno.tools.yfinance import YFinanceTools
-from openinference.instrumentation.agno import AgnoInstrumentor
-from opentelemetry import trace as trace_api
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
-# Configure the tracer provider
-tracer_provider = TracerProvider()
-tracer_provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
-trace_api.set_tracer_provider(tracer_provider=tracer_provider)
-
-# Start instrumenting agno
-AgnoInstrumentor().instrument()
-
-# Create and configure the agent
-agent = Agent(
-    name="Stock Price Agent",
-    model=OpenAIChat(id="gpt-4o-mini"),
-    tools=[YFinanceTools()],
-    instructions="You are a stock price agent. Answer questions in the style of a stock analyst.",
-    debug_mode=True,
-)
-
-# Use the agent
-agent.print_response("What is the current price of Apple?")
+```python
+[framework_specific_instrumentation_code]
 ```
+
+## Advanced usage
+
+<!--
+⚠️  DO NOT AUTO-GENERATE THIS SECTION ⚠️
+Only include this section if the framework has genuine advanced features to showcase.
+Examples of legitimate advanced features:
+- Framework-specific configuration options
+- Multi-agent workflows
+- Custom tool integrations
+- Production-ready enterprise configurations
+
+❌ DO NOT include:
+- Generic OpenTelemetry configurations
+- Batch vs Simple span processors
+- Generic resource configurations
+- Standard tracer provider setups
+-->
+
+You can customize [FRAMEWORK_NAME] for more advanced use cases:
+
+```python
+[framework_specific_advanced_features]
+```
+
+[Description of framework-specific advanced features, not generic OpenTelemetry configurations.]
 
 ## Further improvements
 
