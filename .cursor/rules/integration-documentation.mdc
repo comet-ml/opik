@@ -260,9 +260,10 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 #### 1. Main README Files
 **Files**: `README.md`, `readme_CN.md`, `readme_JP.md`, `readme_KO.md`
 **Section**: "📝 Logging Traces with Integrations"
-- Update the integrations table/list
-- Ensure all integration names are consistent
-- Update any integration-specific descriptions
+- Update the integrations table/list in ALL README files (including translated versions)
+- Ensure all integration names are consistent across all languages
+- Ensure all documentation links are consistent and use the correct paths
+- Update any integration-specific descriptions in all translations
 
 #### 2. Integration Overview Documentation
 **File**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx`
@@ -303,7 +304,7 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 
 When modifying integrations, verify:
 
-- [ ] README.md integration list is updated
+- [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
 - [ ] Integration overview table is updated
 - [ ] Cookbook overview cards are updated (if applicable)
 - [ ] Navigation structure in docs.yml is updated (for cookbook integrations)
@@ -326,6 +327,7 @@ When modifying integrations, verify:
 
 ### Common Maintenance Mistakes to Avoid
 
+- ❌ Updating main README.md but forgetting translated README files (readme_CN.md, readme_JP.md, readme_KO.md)
 - ❌ Adding integration to README but forgetting integration overview
 - ❌ Updating integration overview but forgetting cookbook overview
 - ❌ Inconsistent naming between locations
