@@ -87,7 +87,7 @@ def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions(
     assert OpikTracer is opik_tracer.OpikTracer
 
 
-def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
+def test_adk__single_agent__single_tool__happyflow(fake_backend):
     opik_tracer = OpikTracer(
         project_name="adk-test",
         tags=["adk-test"],
@@ -95,7 +95,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
     )
 
     root_agent = adk_agents.Agent(
-        name="weather_time_agent",
+        name="weather_agent",
         model=MODEL_NAME,
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
@@ -131,7 +131,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="weather_time_agent",
+        name="weather_agent",
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -1518,3 +1518,91 @@ def test_adk__agent_with_response_schema__happyflow(
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=adk_lite_llm.LiteLlm("openai/invalid-model-name"),
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    with pytest.raises(Exception):
+        _ = _extract_final_response_text(events)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
+        },
+        tags=["adk-test"],
+        output=None,
+        input={
+            "role": "user",
+            "parts": [{"text": "What is the weather in New York?"}],
+        },
+        thread_id=SESSION_ID,
+        project_name="adk-test",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="invalid-model-name",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=None,
+                model="invalid-model-name",
+                usage=None,
+                provider="openai",
+                project_name="adk-test",
+                error_info=ANY_DICT,
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)

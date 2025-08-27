@@ -4,7 +4,7 @@ from opik.api_objects import span
 SPAN_STATUS = "_OPIK_SPAN_STATUS"
 
 
-class LLMSpanStatus(enum.Enum, str):
+class LLMSpanStatus(str, enum.Enum):
     STARTED = "started"
     READY_FOR_FINALIZATION = "ready_for_finalization"
 
