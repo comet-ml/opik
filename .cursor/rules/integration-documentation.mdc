@@ -340,6 +340,7 @@ When modifying integrations, verify:
 - ❌ Auto-generating "Advanced usage" sections instead of only including when genuine framework features exist
 - ❌ Including generic OpenTelemetry configurations in Advanced usage instead of framework-specific features
 - ❌ Adding Advanced usage section when no framework-specific features exist
+- ❌ Including redundant text like "This combined with the environment variables above will log your traces to Opik"
 
 ## 📖 Integration-Specific Guidance
 
