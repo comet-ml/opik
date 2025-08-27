@@ -153,7 +153,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
-import static com.comet.opik.api.filter.SpanField.CUSTOM;
+import static com.comet.opik.api.filter.TraceField.CUSTOM;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
