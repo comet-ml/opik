@@ -858,6 +858,23 @@ class Opik:
 
         return experiment_
 
+    def update_experiment(
+        self,
+        id: str,
+        newName: str,
+        newMetadata: Dict[str, Any],
+    ) -> None:
+        """
+        Update an experiment's name and metadata
+        
+        Args:
+            id: the id of the
+
+        Returns:
+            experiment.Experiment: The newly created experiment object.
+        """
+        res = self._rest_client.experiments.update_experiment(id, newName, newMetadata)
+
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
         Returns an existing experiment by its name.
