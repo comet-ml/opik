@@ -1,0 +1,169 @@
+---
+description: How to send VoltAgent telemetry data to Opik using OpenTelemetry
+---
+
+# VoltAgent Integration via OpenTelemetry
+
+VoltAgent is an agent framework designed to simplify the creation and management of AI agents with built-in support for tool usage, memory management, and multi-agent coordination. It provides a flexible architecture for building production-ready AI agent systems.
+
+VoltAgent's primary advantage is its modular design that allows developers to easily create, customize, and deploy AI agents with comprehensive tool integration and memory capabilities.
+
+<Frame>
+  <img src="/img/tracing/voltagent_integration.png" alt="VoltAgent tracing" />
+</Frame>
+
+## Getting started
+
+To use the VoltAgent integration with Opik, you will need to have VoltAgent and the required OpenTelemetry packages installed.
+
+### Installation
+
+```bash
+npm install @voltagent/core @voltagent/langfuse-exporter @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
+```
+
+## Environment configuration
+
+Set up your environment variables based on your Opik deployment:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+
+## Using Opik with VoltAgent
+
+VoltAgent offers built-in OpenTelemetry support, making it easy to send traces and logs to observability platforms like Opik. This integration uses VoltAgent's telemetry exporter system to automatically capture all agent operations.
+
+### Basic Configuration
+
+Here's a simple example of enabling telemetry with VoltAgent:
+
+```typescript
+import { Agent, VoltAgent } from "@voltagent/core";
+import { VercelAIProvider } from "@voltagent/vercel-ai";
+import { openai } from "@ai-sdk/openai";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+
+// Set up the OpenTelemetry SDK
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    headers: process.env.OTEL_EXPORTER_OTLP_HEADERS
+      ? Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS.split(",").map((h) => h.split("=")))
+      : undefined,
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+
+// Define your agent(s)
+const agent = new Agent({
+  name: "my-voltagent-app",
+  instructions: "A helpful assistant that answers questions without using tools",
+  llm: new VercelAIProvider(),
+});
+
+// Initialize VoltAgent with telemetry enabled
+new VoltAgent({
+  agents: {
+    agent, // Register your agent(s)
+  },
+  // Telemetry is automatically enabled when OpenTelemetry SDK is running
+});
+```
+
+### How it Works
+
+By running the OpenTelemetry SDK alongside VoltAgent, you activate VoltAgent's automatic OpenTelemetry integration:
+
+- A global OpenTelemetry `NodeTracerProvider` is configured
+- The OTLP exporter sends traces to your Opik instance
+- All operations within any `Agent` instance managed by VoltAgent will automatically create and export OpenTelemetry spans
+- These spans include relevant attributes like prompts, responses, tool calls, usage data, user IDs, and session IDs
+
+### Using Multiple Exporters
+
+You can send telemetry data to multiple systems simultaneously by configuring multiple exporters:
+
+```typescript
+import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-base";
+
+const sdk = new NodeSDK({
+  traceExporter: [
+    new OTLPTraceExporter({
+      url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+      headers: process.env.OTEL_EXPORTER_OTLP_HEADERS
+        ? Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS.split(",").map((h) => h.split("=")))
+        : undefined,
+    }),
+    new ConsoleSpanExporter(), // Also log spans to the console
+  ],
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+### Custom Instrumentation
+
+For more advanced use cases, you can create custom instrumentation files:
+
+```typescript
+// instrumentation.ts
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    headers: process.env.OTEL_EXPORTER_OTLP_HEADERS
+      ? Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS.split(",").map((h) => h.split("=")))
+      : undefined,
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+Then run your application with:
+
+```bash
+node --import=./instrumentation.ts --import=@opentelemetry/instrumentation/hook.mjs src/index.js
+```
+
+## Results viewing
+
+Once configured, all your VoltAgent operations will automatically create traces in Opik. You can view these traces in the Opik dashboard to monitor:
+
+- Agent operations and their performance
+- LLM interactions with timing and token usage
+- Tool executions and their results
+- Multi-agent coordination and communication
+- Memory operations and their performance
+- User interactions and session tracking
+
+## Further improvements
+
+If you have any suggestions for improving this integration, please [open an issue on GitHub](https://github.com/comet-ml/opik/issues/new/choose).

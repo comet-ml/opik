@@ -1,0 +1,93 @@
+---
+description: How to send BeeAI telemetry data to Opik using OpenTelemetry
+---
+
+# BeeAI Integration via OpenTelemetry
+
+BeeAI is an agent framework designed to simplify the development of AI agents with a focus on simplicity and performance. It provides a clean API for building agents with built-in support for tool usage, conversation management, and extensible architecture.
+
+BeeAI's primary advantage is its lightweight design that makes it easy to create and deploy AI agents without unnecessary complexity, while maintaining powerful capabilities for production use.
+
+<Frame>
+  <img src="/img/tracing/beeai_integration.png" alt="BeeAI tracing" />
+</Frame>
+
+## Getting started
+
+To use the BeeAI integration with Opik, you will need to have BeeAI and the required OpenTelemetry packages installed.
+
+### Installation
+
+Install the required packages:
+
+```bash
+pip install beeai openinference-instrumentation-beeai opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+### Environment configuration
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+
+## Using Opik with BeeAI
+
+Set up OpenTelemetry instrumentation for BeeAI:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from openinference.instrumentation.beeai import BeeAIInstrumentor
+import os
+
+# Set up the tracer provider
+trace.set_tracer_provider(TracerProvider())
+
+# Configure the OTLP exporter
+otlp_exporter = OTLPSpanExporter()
+
+# Add the span processor
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(otlp_exporter))
+
+# Instrument BeeAI
+BeeAIInstrumentor().instrument()
+
+# Now use BeeAI normally - all calls will be automatically traced
+from beeai import Agent
+
+agent = Agent()
+response = agent.run("Hello, how are you?")
+```
+
+## Results viewing
+
+After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the BeeAI integration. You'll see:
+
+- Agent creation and configuration
+- Tool usage and execution
+- Conversation flows and responses
+- Performance metrics and timing
+- Error details if any occur
+
+## Further improvements
+
+If you have any feature requests or encounter issues with the BeeAI integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).

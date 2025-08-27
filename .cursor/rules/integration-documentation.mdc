@@ -14,7 +14,8 @@ Use this matrix to determine which template to use:
 
 | Integration Type | Requirements | Template to Use | Examples |
 |------------------|--------------|-----------------|----------|
-| **Code Integration** | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration | `integration_template_code.md` | OpenAI, Anthropic, LangChain, CrewAI, DSPy, Haystack |
+| **Code Integration** | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration | `integration_template_code.md` | LangChain, CrewAI, DSPy, Haystack |
+| **LiteLLM Integration** | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
 | **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md` | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python |
 
 ## 🔧 Code Integration Requirements
@@ -108,6 +109,51 @@ Use the standardized tab structure for all deployment types:
 
 Each integration must include framework-specific setup code in the "Using Opik with [Framework]" section.
 
+## 🚀 LiteLLM Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with provider link** - Provider name with link and brief description
+2. **Colab notebook link** - Styled div with link to notebook (if exists)
+3. **Getting started** - Installation and configuration instructions
+4. **Configuring Opik** - Standard Opik setup with pip install and configure
+5. **Configuring [Provider]** - Provider-specific API key setup
+6. **Logging LLM calls** - Basic usage example with OpikLogger
+7. **Logging LLM calls within a tracked function** - Advanced usage with @track decorator
+
+### Required Code Patterns
+
+```python
+# LiteLLM OpikLogger setup
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+opik_logger = OpikLogger()
+litellm.callbacks = [opik_logger]
+
+# Basic completion call
+response = litellm.completion(
+    model="[provider_model_name]",
+    messages=[{"role": "user", "content": "Your message"}]
+)
+
+# Within tracked function
+from opik import track, opik_context
+
+@track
+def my_function(prompt):
+    response = litellm.completion(
+        model="[provider_model_name]",
+        messages=[{"role": "user", "content": prompt}],
+        metadata={
+            "opik": {
+                "current_span_data": opik_context.get_current_span_data(),
+            },
+        },
+    )
+    return response.choices[0].message.content
+```
+
 ## 📝 Content Standards
 
 ### Required Placeholders
@@ -121,6 +167,15 @@ Replace these placeholders in templates:
 - `[integration_package]` → Package to install (e.g., "openai")
 - `[ClientClass]` → Main client class (e.g., "OpenAI")
 - `[INTEGRATION_API_KEY_NAME]` → Environment variable name (e.g., "OPENAI_API_KEY")
+
+**LiteLLM Integrations:**
+- `[PROVIDER_NAME]` → Full provider name (e.g., "Groq", "Fireworks AI", "xAI Grok")
+- `[provider_api_key_url]` → URL where users can create/manage API keys
+- `[PROVIDER_API_KEY_NAME]` → Environment variable name (e.g., "GROQ_API_KEY", "FIREWORKS_API_KEY")
+- `[provider_model_name]` → Example model name (e.g., "groq/llama3-8b-8192", "accounts/fireworks/models/llama-v3p1-8b-instruct")
+- `[provider_model_name_2]` → Different model name for advanced example (optional, can be same)
+- `[provider_notebook_name]` → Name for Colab notebook file (e.g., "groq", "fireworks-ai")
+- `[provider_screenshot_name]` → Base name for screenshot files (e.g., "groq", "fireworks_ai")
 
 **OpenTelemetry Integrations:**
 - `[FRAMEWORK_NAME]` → Framework name (e.g., "PydanticAI")  
@@ -204,18 +259,39 @@ Only include "Advanced usage" if the framework has genuine advanced features wor
 
 ### Documentation Locations
 
+**⚠️ CRITICAL: Integration Documentation Structure**
+
+There are TWO types of integration documentation:
+
+#### 1. Integration Documentation (Short format)
+**Location**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/[integration_name].mdx`
+**Navigation**: Added to `docs.yml` under `tracing` > `Integrations` section  
+**Purpose**: Concise integration guides with links to detailed cookbook notebooks
+**Format**: Short, focused on setup and basic usage (similar to anthropic.mdx)
+
+#### 2. Cookbook Documentation (Long format)  
+**Location**: `apps/opik-documentation/documentation/fern/docs/cookbook/[integration_name].mdx`
+**Navigation**: Added to `docs.yml` under `cookbook` > `Integrations` section
+**Purpose**: Comprehensive tutorials with detailed examples and notebooks
+**Format**: Detailed, comprehensive guides with advanced usage examples
+
+#### Integration Type Mapping:
+
 **Code Integrations:**
-- Doc: `apps/opik-documentation/documentation/fern/docs/cookbook/[integration_name].mdx`
+- Integration Doc: `docs/tracing/integrations/[integration_name].mdx` (required)
+- Cookbook Doc: `docs/cookbook/[integration_name].mdx` (optional, for detailed tutorials)
 - Notebook: `apps/opik-documentation/documentation/docs/cookbook/[integration_name].ipynb` (optional)
 
 **OpenTelemetry Integrations:**
-- Doc: `apps/opik-documentation/documentation/fern/docs/tracing/opentelemetry/[framework_name].mdx`
-- Primary: `apps/opik-documentation/documentation/fern/docs/cookbook/[framework_name]_otel_integration.mdx`
+- Integration Doc: `docs/tracing/integrations/[framework_name].mdx` (required)
+- Cookbook Doc: `docs/cookbook/[framework_name]_otel_integration.mdx` (optional)
+- Alternative Location: `docs/tracing/opentelemetry/[framework_name].mdx` (for pure OTel frameworks)
 
 ### Templates Location
 
 Templates are available at:
 - `apps/opik-documentation/documentation/templates/integration_template_code.md`
+- `apps/opik-documentation/documentation/templates/integration_template_litellm.md`
 - `apps/opik-documentation/documentation/templates/integration_template_otel.md`
 
 ## 📚 Cookbook Architecture
@@ -262,7 +338,7 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 **Section**: "📝 Logging Traces with Integrations"
 - Update the integrations table/list in ALL README files (including translated versions)
 - Ensure all integration names are consistent across all languages
-- Ensure all documentation links are consistent and use the correct paths
+- **Documentation Links**: Point to `/tracing/integrations/[integration_name]` (NOT cookbook links)
 - Update any integration-specific descriptions in all translations
 
 #### 2. Integration Overview Documentation
@@ -270,8 +346,8 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 **Section**: Main integrations table
 - Update the integrations table with consistent naming
 - Ensure all columns are populated (Integration, Description, Documentation, Try in Colab)
-- Add documentation links for new integrations
-- Add Colab badges for integrations with notebooks
+- **Documentation Links**: Point to `/tracing/integrations/[integration_name]` (NOT cookbook links)
+- Add Colab badges for integrations with cookbook notebooks
 
 #### 3. Cookbook Overview
 **File**: `apps/opik-documentation/documentation/fern/docs/cookbook/overview.mdx`
@@ -282,10 +358,16 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 
 #### 4. Navigation Structure
 **File**: `apps/opik-documentation/documentation/fern/docs.yml`
-**Section**: `cookbook` tab > `Integrations` section
-- Must define navigation entries for all cookbook integrations
-- Slug must match the href used in cookbook overview cards
-- Path must point to the converted `.mdx` file in `fern/docs/cookbook/`
+
+**For Integration Documentation** (Required for ALL integrations):
+- **Section**: `tracing` > `Integrations` section
+- **Path**: `docs/tracing/integrations/[integration_name].mdx`
+- **Slug**: `[integration_name]` (matches the filename)
+
+**For Cookbook Documentation** (Optional, only if detailed cookbook exists):
+- **Section**: `cookbook` > `Integrations` section  
+- **Path**: `docs/cookbook/[integration_name].mdx`
+- **Slug**: Must match the href used in cookbook overview cards
 
 ### Integration Information Requirements
 

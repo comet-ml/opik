@@ -1,0 +1,384 @@
+[Cleanlab](https://cleanlab.ai/) is a data-centric AI platform that automatically detects and fixes errors in datasets, helping you build more reliable AI applications. It provides tools for finding label errors, outliers, near duplicates, and other data quality issues that can impact the performance of your LLM applications.
+
+This guide explains how to integrate Opik with Cleanlab to improve the quality of your LLM training data and evaluation datasets. By combining Opik's observability capabilities with Cleanlab's data quality insights, you can systematically improve your AI workflows.
+
+
+## Getting Started
+
+### Configuring Opik
+
+First, configure Opik to track your LLM applications:
+
+```bash
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+You can also call the `opik.configure` method:
+
+```python
+import opik
+
+opik.configure(
+    project_name="your-project-name",
+    workspace="your-workspace-name",
+)
+```
+
+### Installing Cleanlab
+
+Install the required packages:
+
+```bash
+pip install opik cleanlab cleanlab-studio
+```
+
+For enhanced functionality with LLMs, also install:
+
+```bash
+pip install "cleanlab[all]"
+```
+
+### Authentication
+
+Set up your Cleanlab Studio credentials:
+
+```bash
+export CLEANLAB_API_KEY="your-cleanlab-api-key"
+```
+
+You can obtain a Cleanlab API key from the [Cleanlab Studio dashboard](https://app.cleanlab.ai/).
+
+## Data Quality Assessment
+
+### Analyzing LLM Training Data
+
+Use Cleanlab to identify quality issues in your LLM training datasets:
+
+```python
+import pandas as pd
+from cleanlab.datalab import Datalab
+import opik
+
+# Configure Opik for tracking
+opik.configure()
+
+# Load your training dataset
+df = pd.read_csv("llm_training_data.csv")
+
+# Create a Cleanlab Datalab instance
+lab = Datalab(data=df, label_name="labels")
+
+# Find issues in the dataset
+lab.find_issues()
+
+# Log findings to Opik
+@opik.track(name="data_quality_analysis")
+def analyze_data_quality(issues_summary):
+    return {
+        "total_issues": len(issues_summary),
+        "issue_types": list(issues_summary.columns),
+        "severity_scores": issues_summary.describe().to_dict()
+    }
+
+# Track the analysis
+quality_results = analyze_data_quality(lab.get_issues())
+```
+
+### Detecting Problematic Examples
+
+Identify specific examples that may hurt model performance:
+
+```python
+from cleanlab.datalab import Datalab
+
+# Analyze text data for LLM fine-tuning
+def find_problematic_examples(texts, labels):
+    # Create datalab instance
+    lab = Datalab({"text": texts, "label": labels}, label_name="label")
+    
+    # Find various types of issues
+    lab.find_issues(
+        issue_types=[
+            "label",           # Label errors
+            "outlier",         # Outliers
+            "near_duplicate",  # Near duplicates
+            "data_valuation"   # Data valuation scores
+        ]
+    )
+    
+    # Get issues summary
+    issues = lab.get_issues()
+    
+    return issues
+
+# Track with Opik
+@opik.track(name="detect_problematic_examples")
+def track_data_issues(dataset_name, issues_df):
+    num_label_issues = issues_df['is_label_issue'].sum()
+    num_outliers = issues_df['is_outlier_issue'].sum()
+    num_duplicates = issues_df['is_near_duplicate_issue'].sum()
+    
+    return {
+        "dataset": dataset_name,
+        "label_issues": int(num_label_issues),
+        "outliers": int(num_outliers),
+        "duplicates": int(num_duplicates),
+        "total_examples": len(issues_df)
+    }
+
+# Example usage
+issues = find_problematic_examples(texts, labels)
+results = track_data_issues("training_set_v1", issues)
+```
+
+## LLM Fine-tuning Data Improvement
+
+### Cleaning Instruction-Response Pairs
+
+Improve the quality of instruction-response datasets for LLM fine-tuning:
+
+```python
+from cleanlab.datalab import Datalab
+import opik
+
+@opik.track(name="clean_instruction_data")
+def clean_instruction_response_data(instruction_data):
+    """
+    Clean instruction-response pairs for better LLM fine-tuning
+    """
+    
+    # Prepare data for Cleanlab
+    df = pd.DataFrame({
+        'instruction': instruction_data['instructions'],
+        'response': instruction_data['responses'],
+        'quality_score': instruction_data.get('quality_scores', [1.0] * len(instruction_data['instructions']))
+    })
+    
+    # Create Datalab instance
+    lab = Datalab(df, label_name='quality_score')
+    
+    # Find issues
+    lab.find_issues(issue_types=["outlier", "near_duplicate"])
+    
+    # Get clean subset
+    issues = lab.get_issues()
+    clean_indices = ~(issues['is_outlier_issue'] | issues['is_near_duplicate_issue'])
+    
+    clean_data = {
+        'instructions': [instruction_data['instructions'][i] for i in range(len(instruction_data['instructions'])) if clean_indices.iloc[i]],
+        'responses': [instruction_data['responses'][i] for i in range(len(instruction_data['responses'])) if clean_indices.iloc[i]]
+    }
+    
+    return {
+        "original_count": len(instruction_data['instructions']),
+        "cleaned_count": len(clean_data['instructions']),
+        "removed_count": len(instruction_data['instructions']) - len(clean_data['instructions']),
+        "clean_data": clean_data
+    }
+```
+
+### Automatic Data Correction
+
+Use Cleanlab's TLM (Trustworthy Language Model) for automatic data correction:
+
+```python
+from cleanlab_studio import Studio
+
+@opik.track(name="auto_correct_data")
+def auto_correct_with_tlm(dataset_path, correction_type="label_issues"):
+    """
+    Automatically correct data issues using Cleanlab Studio
+    """
+    
+    # Initialize Cleanlab Studio
+    studio = Studio()
+    
+    # Upload dataset
+    dataset_id = studio.upload_dataset(dataset_path)
+    
+    # Create project and find issues
+    project_id = studio.create_project(
+        dataset_id=dataset_id,
+        project_name="LLM_Data_Cleaning"
+    )
+    
+    # Get suggestions for corrections
+    suggestions = studio.get_suggestions(project_id)
+    
+    # Apply automatic corrections
+    corrected_dataset = studio.apply_corrections(
+        project_id=project_id,
+        corrections=suggestions[correction_type]
+    )
+    
+    return {
+        "project_id": project_id,
+        "corrections_applied": len(suggestions[correction_type]),
+        "corrected_dataset_id": corrected_dataset.id
+    }
+```
+
+## Evaluation Data Quality
+
+### Cleaning Evaluation Datasets
+
+Ensure your evaluation datasets are high-quality for reliable LLM assessment:
+
+```python
+@opik.track(name="clean_evaluation_data")
+def clean_evaluation_dataset(eval_data):
+    """
+    Clean evaluation datasets to ensure reliable LLM assessment
+    """
+    
+    df = pd.DataFrame(eval_data)
+    
+    # Create Datalab for evaluation data
+    lab = Datalab(df, label_name="expected_output")
+    
+    # Focus on finding duplicates and outliers in eval data
+    lab.find_issues(issue_types=["near_duplicate", "outlier"])
+    
+    issues = lab.get_issues()
+    
+    # Remove problematic examples from evaluation
+    clean_mask = ~(issues['is_near_duplicate_issue'] | issues['is_outlier_issue'])
+    clean_eval_data = df[clean_mask].to_dict('records')
+    
+    return {
+        "original_size": len(eval_data),
+        "cleaned_size": len(clean_eval_data),
+        "duplicates_removed": issues['is_near_duplicate_issue'].sum(),
+        "outliers_removed": issues['is_outlier_issue'].sum(),
+        "clean_data": clean_eval_data
+    }
+```
+
+## Integration with Opik Evaluation
+
+### Using Cleaned Data for Evaluation
+
+Combine Cleanlab's data cleaning with Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination, AnswerRelevance
+import cleanlab
+
+@opik.track(name="evaluate_with_clean_data")
+def evaluate_llm_with_cleaned_data(model_function, original_dataset):
+    """
+    Evaluate LLM using Cleanlab-cleaned dataset
+    """
+    
+    # Clean the dataset first
+    cleaning_results = clean_evaluation_dataset(original_dataset)
+    clean_dataset = cleaning_results["clean_data"]
+    
+    # Run Opik evaluation on cleaned data
+    evaluation_results = evaluate(
+        experiment_name="llm_eval_cleaned_data",
+        dataset=clean_dataset,
+        task=model_function,
+        scoring_metrics=[
+            Hallucination(),
+            AnswerRelevance()
+        ]
+    )
+    
+    return {
+        "data_cleaning": cleaning_results,
+        "evaluation_results": evaluation_results,
+        "improvement_metrics": {
+            "data_quality_boost": f"{(1 - cleaning_results['cleaned_size'] / cleaning_results['original_size']) * 100:.1f}% data removed",
+            "evaluation_reliability": "Improved due to cleaner evaluation set"
+        }
+    }
+```
+
+## Advanced Features
+
+### Confidence Scoring
+
+Use Cleanlab's confidence scores to improve LLM outputs:
+
+```python
+from cleanlab.rank import get_label_quality_scores
+
+@opik.track(name="confidence_scoring")
+def score_llm_outputs(model_outputs, ground_truth):
+    """
+    Score the quality of LLM outputs using Cleanlab
+    """
+    
+    # Calculate confidence scores
+    quality_scores = get_label_quality_scores(
+        labels=ground_truth,
+        pred_probs=model_outputs  # Model prediction probabilities
+    )
+    
+    # Identify low-confidence outputs
+    low_confidence_threshold = 0.3
+    low_confidence_indices = quality_scores < low_confidence_threshold
+    
+    return {
+        "average_confidence": float(quality_scores.mean()),
+        "low_confidence_count": int(low_confidence_indices.sum()),
+        "quality_scores": quality_scores.tolist(),
+        "needs_review": low_confidence_indices.tolist()
+    }
+```
+
+### Active Learning for Data Collection
+
+Use Cleanlab for intelligent data collection strategies:
+
+```python
+@opik.track(name="active_learning")
+def select_examples_for_annotation(unlabeled_data, model, budget=100):
+    """
+    Select the most informative examples for human annotation
+    """
+    
+    from cleanlab.active_learning import get_active_learning_scores
+    
+    # Get model predictions on unlabeled data
+    pred_probs = model.predict_proba(unlabeled_data)
+    
+    # Calculate active learning scores
+    al_scores = get_active_learning_scores(pred_probs)
+    
+    # Select top examples for annotation
+    top_indices = al_scores.argsort()[-budget:]
+    
+    return {
+        "selected_indices": top_indices.tolist(),
+        "selection_scores": al_scores[top_indices].tolist(),
+        "annotation_budget": budget,
+        "expected_improvement": "High-impact examples selected"
+    }
+```
+
+## Environment Variables
+
+Set up the following environment variables:
+
+```bash
+# Cleanlab Configuration
+export CLEANLAB_API_KEY="your-cleanlab-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+## Best Practices
+
+1. **Start with Data Quality**: Always assess data quality before training or fine-tuning LLMs
+2. **Iterative Improvement**: Use Cleanlab continuously throughout your ML pipeline
+3. **Combine with Opik**: Track data quality improvements alongside model performance
+4. **Focus on High-Impact Issues**: Prioritize fixing label errors and removing duplicates
+5. **Validate Improvements**: Use clean evaluation sets to measure actual performance gains
+
+For more advanced features and detailed documentation, visit the [Cleanlab documentation](https://docs.cleanlab.ai/). 

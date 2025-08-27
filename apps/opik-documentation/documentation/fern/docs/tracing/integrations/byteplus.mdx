@@ -1,0 +1,296 @@
+[BytePlus](https://www.byteplus.com/) is ByteDance's AI-native enterprise platform offering ModelArk, a comprehensive Platform-as-a-Service (PaaS) solution for deploying and utilizing powerful large language models. It provides access to SkyLark models, DeepSeek V3.1, Kimi-K2, and other cutting-edge AI models with enterprise-grade security and scalability.
+
+This guide explains how to integrate Opik with BytePlus via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your BytePlus API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+
+
+## Getting Started
+
+### Configuring Opik
+
+To get started, you need to configure Opik to send traces to your Comet project. You can do this by setting the `OPIK_PROJECT_NAME` environment variable:
+
+```bash
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+You can also call the `opik.configure` method:
+
+```python
+import opik
+
+opik.configure(
+    project_name="your-project-name",
+    workspace="your-workspace-name",
+)
+```
+
+### Configuring LiteLLM
+
+Install the required packages:
+
+```bash
+pip install opik litellm
+```
+
+Create a LiteLLM configuration file (e.g., `litellm_config.yaml`):
+
+```yaml
+model_list:
+  - model_name: skylark-pro
+    litellm_params:
+      model: byteplus/skylark-pro
+      api_key: os.environ/BYTEPLUS_API_KEY
+      api_base: os.environ/BYTEPLUS_API_BASE
+  - model_name: deepseek-v3.1
+    litellm_params:
+      model: byteplus/deepseek-v3.1
+      api_key: os.environ/BYTEPLUS_API_KEY
+      api_base: os.environ/BYTEPLUS_API_BASE
+  - model_name: kimi-k2
+    litellm_params:
+      model: byteplus/kimi-k2
+      api_key: os.environ/BYTEPLUS_API_KEY
+      api_base: os.environ/BYTEPLUS_API_BASE
+
+litellm_settings:
+  callbacks: ["opik"]
+```
+
+### Authentication
+
+Set your BytePlus API credentials as environment variables:
+
+```bash
+export BYTEPLUS_API_KEY="your-byteplus-api-key"
+export BYTEPLUS_API_BASE="your-byteplus-api-base-url"
+```
+
+You can obtain your BytePlus API credentials from the [BytePlus ModelArk console](https://console.byteplus.com/ark/).
+
+## Usage
+
+### Using LiteLLM Proxy Server
+
+Start the LiteLLM proxy server:
+
+```bash
+litellm --config litellm_config.yaml
+```
+
+Use the proxy server to make requests:
+
+```python
+import openai
+
+client = openai.OpenAI(
+    api_key="anything",  # can be anything
+    base_url="http://0.0.0.0:4000"
+)
+
+response = client.chat.completions.create(
+    model="skylark-pro",
+    messages=[
+        {"role": "user", "content": "What are the benefits of enterprise AI platforms?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+### Direct Integration
+
+You can also use LiteLLM directly in your Python code:
+
+```python
+import os
+from litellm import completion
+
+# Configure Opik
+import opik
+opik.configure()
+
+# Configure LiteLLM for Opik
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+litellm.callbacks = ["opik"]
+
+os.environ["BYTEPLUS_API_KEY"] = "your-byteplus-api-key"
+os.environ["BYTEPLUS_API_BASE"] = "your-byteplus-api-base-url"
+
+response = completion(
+    model="byteplus/skylark-pro",
+    messages=[
+        {"role": "user", "content": "How can enterprise AI platforms improve business operations?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Supported Models
+
+BytePlus ModelArk provides access to a comprehensive range of AI models including:
+
+- **SkyLark Models**: `skylark-pro`, `skylark-lite` - BytePlus's proprietary LLMs
+- **DeepSeek Models**: `deepseek-v3.1`, `deepseek-r1` - Advanced reasoning models
+- **Kimi Models**: `kimi-k2-preview` - Mixture-of-Experts models with superior performance
+- **ByteDance Models**: `bytedance-seed-1.6`, `bytedance-seed-1.6-flash` - Multimodal models
+- **Video Generation**: `seedance-1.0-pro`, `seedance-1.0-lite` - Text-to-video models
+- **Image Generation**: `seedream-3.0`, `seededit-3.0` - Text-to-image and image editing models
+
+For the complete list of available models, visit the [BytePlus ModelArk documentation](https://docs.byteplus.com/en/docs/ModelArk/).
+
+## Advanced Features
+
+### Vision Capabilities
+
+BytePlus supports multimodal models for vision tasks:
+
+```python
+from litellm import completion
+
+response = completion(
+    model="byteplus/bytedance-seed-1.6",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What do you see in this image?"},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+            ]
+        }
+    ]
+)
+```
+
+### Function Calling
+
+BytePlus models support function calling capabilities:
+
+```python
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_business_metrics",
+            "description": "Get business performance metrics",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric_type": {
+                        "type": "string",
+                        "description": "Type of metric to retrieve",
+                    },
+                    "period": {"type": "string", "enum": ["daily", "weekly", "monthly"]},
+                },
+                "required": ["metric_type"],
+            },
+        },
+    }
+]
+
+response = completion(
+    model="byteplus/skylark-pro",
+    messages=[{"role": "user", "content": "Show me the weekly revenue metrics"}],
+    tools=tools,
+)
+```
+
+### Context Caching
+
+BytePlus supports context caching for improved performance:
+
+```python
+response = completion(
+    model="byteplus/skylark-pro",
+    messages=[
+        {"role": "system", "content": "You are a helpful business assistant."},
+        {"role": "user", "content": "Analyze this business report..."}
+    ],
+    extra_body={
+        "context_cache": True,
+        "cache_ttl": 3600  # Cache for 1 hour
+    }
+)
+```
+
+## Enterprise Features
+
+### Token-Based Billing
+
+BytePlus offers flexible token-based billing with transparent pricing:
+
+```python
+# Track usage with detailed metrics
+response = completion(
+    model="byteplus/skylark-pro",
+    messages=[{"role": "user", "content": "Generate a business proposal"}],
+    extra_body={
+        "track_usage": True,
+        "project_id": "your-project-id"
+    }
+)
+
+print(f"Tokens used: {response.usage.total_tokens}")
+print(f"Cost: ${response.usage.total_tokens * 0.001}")  # Example pricing
+```
+
+### Security and Compliance
+
+BytePlus is designed with enterprise security standards:
+
+```python
+response = completion(
+    model="byteplus/skylark-pro",
+    messages=[{"role": "user", "content": "Process sensitive business data"}],
+    extra_body={
+        "encryption": "aes-256",
+        "audit_log": True,
+        "compliance_mode": "enterprise"
+    }
+)
+```
+
+## Feedback Scores and Evaluation
+
+Once your BytePlus calls are logged with Opik, you can evaluate your LLM application using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["message"],
+        "output": x["output"],
+        "reference": x["reference"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="byteplus-evaluation",
+    dataset=your_dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# BytePlus Configuration
+export BYTEPLUS_API_KEY="your-byteplus-api-key"
+export BYTEPLUS_API_BASE="your-byteplus-api-base-url"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+``` 

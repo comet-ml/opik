@@ -1,0 +1,102 @@
+---
+description: How to send LiveKit telemetry data to Opik using OpenTelemetry
+---
+
+# LiveKit Integration via OpenTelemetry
+
+LiveKit is a real-time communication framework designed to power live video, audio, and data experiences in web and mobile applications. It provides scalable infrastructure for building real-time communication features with built-in support for WebRTC, room management, and media processing.
+
+LiveKit's primary advantage is its production-ready infrastructure that makes it easy to add real-time communication capabilities to applications without managing complex WebRTC implementations.
+
+<Frame>
+  <img src="/img/tracing/livekit_integration.png" alt="LiveKit tracing" />
+</Frame>
+
+## Getting started
+
+To use the LiveKit integration with Opik, you will need to have LiveKit and the required OpenTelemetry packages installed.
+
+### Installation
+
+Install the required packages:
+
+```bash
+npm install livekit-client livekit-server-sdk @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
+```
+
+### Environment configuration
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+
+## Using Opik with LiveKit
+
+Set up OpenTelemetry instrumentation for LiveKit:
+
+```typescript
+import { trace } from "@opentelemetry/api";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { LiveKitInstrumentation } from "@opentelemetry/instrumentation-livekit";
+
+// Set up the tracer provider
+const provider = new NodeTracerProvider();
+trace.setGlobalTracerProvider(provider);
+
+// Configure the OTLP exporter
+const otlpExporter = new OTLPTraceExporter({
+  url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  headers: Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS?.split(",").map((h) => h.split("=")) || []),
+});
+
+// Add the span processor
+provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+
+// Instrument LiveKit
+const livekitInstrumentation = new LiveKitInstrumentation();
+livekitInstrumentation.enable();
+
+// Now use LiveKit normally - all calls will be automatically traced
+import { Room, RoomEvent } from "livekit-client";
+
+const room = new Room();
+room.on(RoomEvent.MediaDevicesChanged, () => {
+  console.log("Media devices changed");
+});
+
+await room.connect("wss://your-livekit-server.com", "your-token");
+```
+
+## Results viewing
+
+After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the LiveKit integration. You'll see:
+
+- Room connections and disconnections
+- Media device changes and permissions
+- WebRTC connection establishment
+- Audio/video stream handling
+- Performance metrics and timing
+- Error details if any occur
+
+## Further improvements
+
+If you have any feature requests or encounter issues with the LiveKit integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).

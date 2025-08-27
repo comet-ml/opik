@@ -1,0 +1,173 @@
+[Fireworks AI](https://fireworks.ai/) provides fast inference for popular open-source models, offering high-performance API access to models like Llama, Mistral, and Qwen with optimized inference infrastructure.
+
+This guide explains how to integrate Opik with Fireworks AI via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your Fireworks AI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+
+
+## Getting Started
+
+### Configuring Opik
+
+To get started, you need to configure Opik to send traces to your Comet project. You can do this by setting the `OPIK_PROJECT_NAME` environment variable:
+
+```bash
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+You can also call the `opik.configure` method:
+
+```python
+import opik
+
+opik.configure(
+    project_name="your-project-name",
+    workspace="your-workspace-name",
+)
+```
+
+### Configuring LiteLLM
+
+Install the required packages:
+
+```bash
+pip install opik litellm
+```
+
+Create a LiteLLM configuration file (e.g., `litellm_config.yaml`):
+
+```yaml
+model_list:
+  - model_name: llama-v3-70b-instruct
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/llama-v3-70b-instruct
+      api_key: os.environ/FIREWORKS_API_KEY
+  - model_name: mixtral-8x7b-instruct
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/mixtral-8x7b-instruct-hf
+      api_key: os.environ/FIREWORKS_API_KEY
+
+litellm_settings:
+  callbacks: ["opik"]
+```
+
+### Authentication
+
+Set your Fireworks AI API key as an environment variable:
+
+```bash
+export FIREWORKS_API_KEY="your-fireworks-api-key"
+```
+
+You can obtain a Fireworks AI API key from the [Fireworks AI dashboard](https://fireworks.ai/api-keys).
+
+## Usage
+
+### Using LiteLLM Proxy Server
+
+Start the LiteLLM proxy server:
+
+```bash
+litellm --config litellm_config.yaml
+```
+
+Use the proxy server to make requests:
+
+```python
+import openai
+
+client = openai.OpenAI(
+    api_key="anything",  # can be anything
+    base_url="http://0.0.0.0:4000"
+)
+
+response = client.chat.completions.create(
+    model="llama-v3-70b-instruct",
+    messages=[
+        {"role": "user", "content": "What are the benefits of using fast inference platforms?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+### Direct Integration
+
+You can also use LiteLLM directly in your Python code:
+
+```python
+import os
+from litellm import completion
+
+# Configure Opik
+import opik
+opik.configure()
+
+# Configure LiteLLM for Opik
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+litellm.callbacks = ["opik"]
+
+os.environ["FIREWORKS_API_KEY"] = "your-fireworks-api-key"
+
+response = completion(
+    model="fireworks_ai/accounts/fireworks/models/llama-v3-70b-instruct",
+    messages=[
+        {"role": "user", "content": "What are the advantages of fast LLM inference?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Supported Models
+
+Fireworks AI provides fast inference for a wide range of popular open-source models. Some of the popular models available include:
+
+- **Llama Models**: `llama-v3-70b-instruct`, `llama-v3-8b-instruct`
+- **Mistral Models**: `mixtral-8x7b-instruct-hf`, `mistral-7b-instruct-v0.1`
+- **Qwen Models**: `qwen-72b-chat`, `qwen-14b-chat`
+- **Code Models**: `starcoder-16b`, `codellama-34b-instruct-hf`
+
+For the complete list of available models, visit the [Fireworks AI model catalog](https://fireworks.ai/models).
+
+## Feedback Scores and Evaluation
+
+Once your Fireworks AI calls are logged with Opik, you can evaluate your LLM application using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["message"],
+        "output": x["output"],
+        "reference": x["reference"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="fireworks-ai-evaluation",
+    dataset=your_dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# Fireworks AI Configuration
+export FIREWORKS_API_KEY="your-fireworks-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+``` 
