@@ -1,5 +1,4 @@
 import logging
-import enum
 from typing import Iterator, Optional, Tuple
 
 import opentelemetry.trace
@@ -12,15 +11,10 @@ from opik.decorator import (
 )
 from opik.api_objects import opik_client
 
+from . import llm_span_helpers
+
 
 LOGGER = logging.getLogger(__name__)
-
-SPAN_STATUS = "_OPIK_SPAN_STATUS"
-
-
-class LLMSpanStatus(enum.Enum, str):
-    STARTED = "started"
-    READY_FOR_FINALIZATION = "ready_for_finalization"
 
 
 class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
@@ -97,7 +91,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
         if (
             current_span_data is not None
-            and _is_externally_created_llm_span_ready_for_immediate_finalization(
+            and llm_span_helpers.is_externally_created_llm_span_ready_for_immediate_finalization(
                 current_span_data
             )
         ):
@@ -161,27 +155,6 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
             self.opik_client.span(**span_data.as_parameters)
 
 
-def _is_externally_created_llm_span_ready_for_immediate_finalization(
-    span_data: span.SpanData,
-) -> bool:
-    return (
-        span_data.type == "llm"
-        and span_data.metadata is not None
-        and span_data.metadata.get(SPAN_STATUS, None)
-        == LLMSpanStatus.READY_FOR_FINALIZATION
-    )
-
-
-def _is_externally_created_llm_span_that_just_started(
-    span_data: span.SpanData,
-) -> bool:
-    return (
-        span_data.type == "llm"
-        and span_data.metadata is not None
-        and span_data.metadata.get(SPAN_STATUS, None) == LLMSpanStatus.STARTED
-    )
-
-
 def _prepare_trace_and_span_to_be_finalized(
     name: str,
     current_trace_data: Optional[trace.TraceData],
@@ -199,7 +172,9 @@ def _prepare_trace_and_span_to_be_finalized(
         opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
     elif (
         current_span_data is not None
-        and _is_externally_created_llm_span_that_just_started(current_span_data)
+        and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+            current_span_data
+        )
     ):
         # LLM span has just been created and put into context storage from the OpikTracer.before_model_call
         # Not need to create a new one, just remember it to close it in finally block
