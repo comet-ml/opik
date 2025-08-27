@@ -15,6 +15,7 @@ import {
   METRIC_NAME_TYPE,
   INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
+import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatCost } from "@/lib/money";
 import { generateVisibilityFilters } from "@/lib/filters";
@@ -170,9 +171,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             if (
               filter.key &&
               filter.value &&
-              !/^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/.test(
-                filter.key,
-              )
+              !CUSTOM_FILTER_VALIDATION_REGEXP.test(filter.key)
             ) {
               return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
             }
@@ -250,7 +249,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalEnd={intervalEnd}
             projectId={projectId}
             chartType="line"
-            traceFilters={traceFilters}
+            traceFilters={processedTracesFilters}
           />
         </div>
         <div>
