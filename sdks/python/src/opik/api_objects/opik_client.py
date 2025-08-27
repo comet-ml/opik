@@ -1194,6 +1194,94 @@ class Opik:
         ]
         return result
 
+    def get_prompts(
+        self,
+        filters: Optional[str] = None,
+        name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[Prompt]:
+        """
+        Retrieve prompts with optional filtering support.
+
+        This method allows you to search and filter prompts based on tags and other attributes.
+
+        Args:
+            filters: Optional filter string to narrow down the search. 
+                    Uses the same query language as other Opik filtering methods.
+                    Examples:
+                    - 'tags contains "production"' - Filter by tags
+                    - 'tags not_contains "staging"' - Filter out prompts with specific tags
+                    - 'tags is_empty' - Filter prompts with no tags
+                    - 'tags is_not_empty' - Filter prompts that have tags
+                    - 'name = "my-prompt"' - Filter by exact name match
+                    - 'name contains "chatbot"' - Filter by name pattern
+            name: Optional prompt name filter (exact match or substring)
+            max_results: Maximum number of prompts to return (default: 1000)
+
+        Returns:
+            List[Prompt]: A list of Prompt objects that match the specified filters.
+
+        Examples:
+            Get prompts with specific tags:
+            >>> prompts = client.get_prompts(filters='tags contains "production"')
+
+            Get prompts by name pattern:
+            >>> prompts = client.get_prompts(name="chatbot")
+
+            Get prompts without specific tags:
+            >>> prompts = client.get_prompts(filters='tags not_contains "deprecated"')
+
+            Get prompts with no tags:
+            >>> prompts = client.get_prompts(filters='tags is_empty')
+        """
+        prompt_client = PromptClient(self._rest_client)
+        
+        # Use pagination to respect max_results
+        all_prompts = []
+        page = 1
+        page_size = min(100, max_results)  # Use smaller page size for efficiency
+
+        while len(all_prompts) < max_results:
+            current_size = min(page_size, max_results - len(all_prompts))
+
+            try:
+                result = prompt_client.get_prompts_with_filters(
+                    filters=filters,
+                    name=name,
+                    page=page,
+                    size=current_size,
+                    get_latest_versions=True, # Always fetch latest versions for OpikClient.get_prompts
+                )
+            except Exception as e:
+                raise e
+
+            if not result:
+                break # No more results
+
+            for item in result:
+                if item["latest_version"] is not None:
+                    prompt = Prompt.from_fern_prompt_version(
+                        item["prompt_public"].name,
+                        item["latest_version"],
+                        item["prompt_public"].id,
+                        getattr(item["prompt_public"], 'created_by', None),
+                        getattr(item["prompt_public"], 'version_count', None),
+                        getattr(item["prompt_public"], 'created_at', None),
+                        getattr(item["prompt_public"], 'last_updated_at', None),
+                        getattr(item["prompt_public"], 'last_updated_by', None)
+                    )
+                    all_prompts.append(prompt)
+                else:
+                    # Skip prompts without latest version
+                    continue
+
+            if len(result) < current_size:
+                break # Partial page, no more results
+
+            page += 1
+
+        return all_prompts
+
     def create_optimization(
         self,
         dataset_name: str,

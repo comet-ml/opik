@@ -64,6 +64,7 @@ def _prepare_headers(
         "X-OPIK-DEBUG-SDK-VERSION": package_version.VERSION,
         "X-OPIK-DEBUG-PY-VERSION": platform.python_version(),
         "Accept-Encoding": "gzip",
+        "Accept": "application/json",
     }
 
     if workspace is not None:
