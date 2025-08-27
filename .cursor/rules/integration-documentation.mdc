@@ -66,37 +66,47 @@ Customize these sections based on integration type:
 
 ### Minimum Required Sections
 
-1. **Header with description**
-2. **Framework description** (what it is, why OTEL)
-3. **Prerequisites** (account, framework installed)
-4. **Dependencies installation** (OTEL packages)
-5. **Environment configuration** (cloud vs self-hosted)
-6. **OTEL SDK setup** (tracer provider, exporters)
-7. **Framework instrumentation** (framework-specific config)
-8. **Verification** (test code)
-9. **Environment variable alternative** (production setup)
-10. **Framework-specific config** (advanced options)
-11. **Results viewing** (screenshot)
-12. **Troubleshooting** (OTEL-specific issues)
+1. **Header with description** - Clear title and framework description
+2. **Framework overview** - Brief description of what the framework is and its primary advantages
+3. **Results viewing** - Screenshot showing traces in Opik UI (positioned after framework overview)
+4. **Getting started** - Installation instructions with all required packages
+5. **Environment configuration** - Tabs for Cloud/Enterprise/Self-hosted deployment
+6. **Using Opik with [Framework]** - Dedicated setup section with instrumentation code
+7. **Advanced usage** - ONLY include if framework has genuine advanced features (DO NOT auto-generate)
+8. **Further improvements** - GitHub call-to-action for feature requests
 
 ### Required Configuration Patterns
 
-```python
-# Environment variables pattern
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=api-key,projectName=project,Comet-Workspace=workspace"
+#### Environment Variables with Tabs Structure
 
-# OTEL SDK setup pattern
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+Use the standardized tab structure for all deployment types:
 
-provider = TracerProvider()
-processor = BatchSpanProcessor(OTLPSpanExporter())
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+```markdown
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
 ```
+
+#### Framework-Specific Instrumentation
+
+Each integration must include framework-specific setup code in the "Using Opik with [Framework]" section.
 
 ## 📝 Content Standards
 
@@ -113,9 +123,13 @@ Replace these placeholders in templates:
 - `[INTEGRATION_API_KEY_NAME]` → Environment variable name (e.g., "OPENAI_API_KEY")
 
 **OpenTelemetry Integrations:**
-- `[FRAMEWORK_NAME]` → Framework name (e.g., "PydanticAI")
+- `[FRAMEWORK_NAME]` → Framework name (e.g., "PydanticAI")  
 - `[framework_name]` → Lowercase version (e.g., "pydantic-ai")
-- `[framework_otel_packages]` → Required OTEL packages
+- `[framework_package]` → Main framework package to install (e.g., "pydantic-ai")
+- `[framework_otel_packages]` → Required OTEL packages (e.g., "logfire")
+- `[framework_specific_instrumentation_code]` → Framework-specific setup code
+- `[advanced_configuration_examples]` → Framework-specific advanced features (NOT generic OTel configurations)
+- `/img/tracing/[framework_name]_integration.png` → Screenshot path for tracing results
 
 ### Code Examples Requirements
 
@@ -145,10 +159,39 @@ Before publishing integration documentation, verify:
 
 ### Content Requirements
 - [ ] All placeholder text is replaced with actual values
-- [ ] Examples are realistic and useful
-- [ ] Troubleshooting covers common issues
-- [ ] Advanced usage shows integration-specific features
-- [ ] Installation instructions are complete
+- [ ] Framework overview explains purpose and advantages clearly
+- [ ] Installation instructions include all required packages
+- [ ] Environment configuration uses standardized tab structure
+- [ ] Framework-specific instrumentation code is provided
+- [ ] Advanced usage section contains genuine framework-specific features (or is omitted entirely if no advanced features exist)
+- [ ] GitHub call-to-action is included
+
+### Advanced Usage Section Guidelines
+
+**⚠️ CRITICAL: DO NOT AUTO-GENERATE THIS SECTION**
+
+Only include "Advanced usage" if the framework has genuine advanced features worth showcasing.
+
+**✅ Include ONLY when framework has these features:**
+- Framework-specific configuration options
+- Multi-agent workflows (AG2, Autogen)
+- Custom tool integrations (Smolagents, Agno)
+- Advanced routing and workflows (Strands Agents)
+- Production-ready enterprise configurations
+- Framework-specific parameters and options
+
+**❌ NEVER include generic OpenTelemetry content:**
+- Batch vs Simple span processors
+- Generic resource configuration
+- Standard OpenTelemetry SDK setup
+- Generic tracer provider customization
+- Custom span attributes (unless framework-specific)
+
+**✅ Examples of integrations that SHOULD have Advanced usage:**
+- Pydantic AI (has `capture_all` configuration)
+
+**❌ Examples of integrations that should NOT have Advanced usage:**
+- Most basic OpenTelemetry integrations without framework-specific advanced features
 
 ### Style Requirements
 - [ ] Consistent formatting with existing docs
@@ -271,6 +314,7 @@ When modifying integrations, verify:
 - [ ] Categories are properly assigned
 - [ ] Descriptions are clear and consistent
 - [ ] No duplicate navigation entries exist
+- [ ] Enterprise deployment configuration is included for OTel integrations
 
 ### Example Integration Entry
 
@@ -291,6 +335,11 @@ When modifying integrations, verify:
 - ❌ Cookbook overview href doesn't match docs.yml slug
 - ❌ Missing navigation entries in docs.yml for cookbook integrations
 - ❌ Duplicate entries in docs.yml navigation structure
+- ❌ Screenshot positioned at the bottom instead of near the top (after framework overview)
+- ❌ Using `--quiet` flag in pip install commands (removes user feedback)
+- ❌ Auto-generating "Advanced usage" sections instead of only including when genuine framework features exist
+- ❌ Including generic OpenTelemetry configurations in Advanced usage instead of framework-specific features
+- ❌ Adding Advanced usage section when no framework-specific features exist
 
 ## 📖 Integration-Specific Guidance
 
@@ -338,6 +387,21 @@ When modifying integrations, verify:
 - Complex pipeline with multiple steps
 - Integration with evaluation
 - Custom component tracking
+
+### OpenTelemetry Framework Integrations
+
+**Focus Areas:**
+- Framework-specific instrumentation setup
+- Environment variable configuration
+- Deployment-specific instructions (Cloud/Enterprise/Self-hosted)
+- Advanced configuration options
+- Clear integration examples
+
+**Required Examples:**
+- Basic framework instrumentation
+- Environment variable setup for all deployment types
+- Framework-specific configuration
+- Advanced usage patterns
 
 ### Validation Framework Integrations (Guardrails, etc.)
 
