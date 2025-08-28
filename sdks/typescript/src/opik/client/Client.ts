@@ -22,6 +22,7 @@ import { parseNdjsonStreamToArray } from "@/utils/stream";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
+  threadId?: string;
 }
 
 export const clients: OpikClient[] = [];
