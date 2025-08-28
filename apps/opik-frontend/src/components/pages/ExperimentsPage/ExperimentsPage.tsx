@@ -529,7 +529,7 @@ const ExperimentsPage: React.FC = () => {
             noDataComponent={
               <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
                 <ChartLine className="size-4 shrink-0 text-light-slate" />
-                <div className="comet-body-s-accented text-foreground">
+                <div className="comet-body-s-accented text-text-primary">
                   No charts to show
                 </div>
                 <div className="comet-body-s text-muted-slate">

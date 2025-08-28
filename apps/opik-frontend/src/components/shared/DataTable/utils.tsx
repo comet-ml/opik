@@ -112,7 +112,7 @@ export const getCommonPinningClasses = <TData,>({
 }: GetCommonPinningClassesProps<TData>): string => {
   const isPinned = column.getIsPinned();
 
-  return isPinned || forceGroup ? (isHeader ? "bg-soft-background" : "bg-white") : "";
+  return isPinned || forceGroup ? (isHeader ? "bg-layout-soft-background" : "bg-layout-background") : "";
 };
 
 const getRowRange = <TData,>(

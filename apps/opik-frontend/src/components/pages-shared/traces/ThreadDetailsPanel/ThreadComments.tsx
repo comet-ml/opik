@@ -97,7 +97,7 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
                   <UserComment.CreatedAt />
                 </>
               }
-              className="px-6 hover:bg-soft-background"
+              className="px-6 hover:bg-muted"
             >
               <UserComment.Text />
               <UserComment.Form onSubmit={onEditSubmit} />

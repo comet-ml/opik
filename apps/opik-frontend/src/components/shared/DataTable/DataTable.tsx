@@ -408,7 +408,7 @@ const DataTable = <TData, TValue>({
                 <TableRow
                   key={headerGroup.id}
                   className={cn(
-                    "bg-soft-background",
+                    "bg-layout-soft-background",
                     !isLastRow && "!border-b-0",
                   )}
                 >

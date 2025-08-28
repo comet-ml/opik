@@ -89,7 +89,7 @@ const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
                   <UserComment.CreatedAt />
                 </>
               }
-              className="px-3 py-2 hover:bg-soft-background"
+              className="px-3 py-2 hover:bg-muted"
             >
               <UserComment.Text />
               <UserComment.Form onSubmit={onEditSubmit} />

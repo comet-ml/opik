@@ -21,14 +21,13 @@
     /* Navigation colors */
     --navigation-background: 0 0% 100%;
     --navigation-border: 214.3 31.8% 91.4%;
-    --navigation-text: 224 17% 26%;
     --navigation-text-secondary: 215 20% 65%;
     --navigation-hover: 210 40% 98%;
     --navigation-active: 235 85% 97%;
     --navigation-active-text: 239 89% 64%;
 
     /* Legacy variables (for backward compatibility) */
-    --soft-background: #FCFCFD;
+    //--soft-background: #FCFCFD;
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
     --foreground-secondary: 224 71% 4%;
@@ -86,7 +85,7 @@
     /* CodeMirror theme colors */
     --codemirror-background: #F8FAFC;
     --codemirror-gutter: #94A3B8;
-    --codemirror-line-highlight: #F1F5F9;
+    --codemirror-line-highlight: #e6e6fe;
     --codemirror-syntax-blue: #005CC5;
 
     /* Chart colors */
@@ -104,6 +103,7 @@
     /* Action cards */
     --action-card-background: 0 0% 100%;
     --action-card-border: 214.3 31.8% 91.4%;
+    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 
     /* Action types */
     --action-trace-background: #DAFBF0;
@@ -182,7 +182,6 @@
     /* Navigation colors - Dark Mode */
     --navigation-background: 222 84% 4.9%;
     --navigation-border: 217.2 32.6% 17.5%;
-    --navigation-text: 210 40% 98%;
     --navigation-text-secondary: 215.4 16.3% 46.9%;
     --navigation-hover: 217.2 32.6% 17.5%;
     --navigation-active: 217.2 32.6% 25.5%;
@@ -190,7 +189,7 @@
 
     /* Text colors - Dark Mode */
     --text-primary: 210 40% 87%;
-    --text-secondary: 210 40% 98%;
+    --text-secondary: 210 40% 75%;
 
     /* Legacy variables - Dark Mode (for backward compatibility) */
     --soft-background: #1a1a1a;
@@ -198,6 +197,7 @@
     --foreground: 210 40% 98%;
     --foreground-secondary: 210 40% 87%;
     --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
     --lite-slate: 215.4 16.3% 46.9%;
 
     /* Primary colors - Dark Mode */
@@ -218,6 +218,7 @@
     /* Action cards - Dark Mode */
     --action-card-background: 222 84% 4.9%;
     --action-card-border: 217.2 32.6% 17.5%;
+    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1), 0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
     --action-trace-background: #1a332a;
@@ -233,11 +234,45 @@
     --feature-experiment-management: #8A8EFF;
     --feature-llm: #6BD4C9;
 
+    /* Muted colors - Dark Mode */
+    --muted: 217.2 32.6% 17.5%;
+    --muted-gray: 217.2 32.6% 35%;
+    --muted-disabled: 217.2 32.6% 25%;
+
+    /* Thread colors - Dark Mode */
+    --thread-active: #2a3f2f;
+    --thread-inactive: #2a3447;
+    --message-input-background: #2a2f47;
+
+    /* Toggle colors - Dark Mode */
+    --toggle-outline-active: #2a2f47;
+
     /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
     --codemirror-background: #0d1117;
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+
+    /* Tag variant background and text colors - Dark Mode */
+    --tag-gray-bg: #374151;
+    --tag-purple-bg: #4C1D95;
+    --tag-purple-text: #C4B5FD;
+    --tag-burgundy-bg: #7E1065;
+    --tag-burgundy-text: #F3E8FF;
+    --tag-pink-bg: #9D174D;
+    --tag-pink-text: #FECDD3;
+    --tag-red-bg: #7F1D1D;
+    --tag-red-text: #FEF2F2;
+    --tag-orange-bg: #9A3412;
+    --tag-orange-text: #FED7AA;
+    --tag-yellow-bg: #A16207;
+    --tag-yellow-text: #FEF3C7;
+    --tag-green-bg: #14532D;
+    --tag-green-text: #BBF7D0;
+    --tag-turquoise-bg: #155E75;
+    --tag-turquoise-text: #A7F3D0;
+    --tag-blue-bg: #1E3A8A;
+    --tag-blue-text: #DBEAFE;
   }
 
   .comet-expanded {
@@ -389,6 +424,10 @@
   .comet-no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .action-card-shadow {
+    box-shadow: var(--action-card-shadow);
   }
 }
 
