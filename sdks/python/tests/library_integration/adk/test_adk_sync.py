@@ -1564,8 +1564,8 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         # `events_generator` generator will not produce a single event and finish immediately
         # because first llm call fails.
         # `_extract_final_response_text` will raise an exception because it is
-        # programmed to do so when there are no events_generator (we still have to try extraction though,
-        # because an attempt of the events_generator generator exhausting is necessary for agent to work)
+        # programmed to do so when there are no events (we still have to try to exhaust the generator though,
+        # because it is necessary for agent to actuallyexecute)
         _ = _extract_final_response_text(events_generator)
 
     opik.flush_tracker()
