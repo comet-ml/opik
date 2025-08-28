@@ -1269,7 +1269,16 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
                 countDistinct(t.id) AS trace_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(t.duration)) AS duration,
+                arrayMap(
+                  v -> toDecimal64(
+                         greatest(
+                           least(if(isFinite(v), v, 0),  999999999.999999999),
+                           -999999999.999999999
+                         ),
+                         9
+                       ),
+                  quantiles(0.5, 0.9, 0.99)(t.duration)
+                ) AS duration,
                 sum(input_count) AS input,
                 sum(output_count) AS output,
                 sum(metadata_count) AS metadata,
