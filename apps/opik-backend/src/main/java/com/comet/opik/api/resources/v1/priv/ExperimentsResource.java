@@ -41,7 +41,9 @@ import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -76,6 +78,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -502,7 +505,20 @@ public class ExperimentsResource {
 
         if (!plan.changed()) {
             log.info("No-op update for experiment id='{}' (nothing changed).", id);
-            return Response.noContent().build();
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode meta;
+            try {
+                meta = mapper.readTree(plan.targetMetadata());
+            } catch (JsonProcessingException e) {
+                log.error("Invalid metadata JSON stored for experiment {}: {}", id, plan.targetMetadata(), e);
+                meta = mapper.createObjectNode().put("raw", plan.targetMetadata());
+            }
+            Map<String, Object> response = Map.of(
+                    "id", id.toString(),
+                    "name", plan.targetName(),
+                    "metadata", meta,
+                    "changed", false);
+            return Response.ok(response).build();
         }
 
         experimentService.applyUpdatePlan(id, plan)
@@ -510,7 +526,21 @@ public class ExperimentsResource {
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode meta;
 
-        return Response.noContent().build();
+            try {
+                meta = mapper.readTree(plan.targetMetadata());
+            } catch (JsonProcessingException e) {
+                log.error("Invalid metadata JSON stored for experiment {}: {}", id, plan.targetMetadata(), e);
+                meta = mapper.createObjectNode().put("raw", plan.targetMetadata());
+            }
+        Map<String, Object> response = Map.of(
+                "id", id.toString(),
+                "name", plan.targetName(),
+                "metadata", meta,
+                "changed", true,
+                "last_updated_by", userName);
+        return Response.ok(response).build();
     }
 }
