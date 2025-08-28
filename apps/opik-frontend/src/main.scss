@@ -6,6 +6,9 @@
 @import "./styles/themes/dark-high-contrast";
 @import "./styles/themes/dark-midnight";
 
+/* Import theme overrides for component libraries */
+@import "./styles/theme-overrides";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -54,6 +57,7 @@
     --warning: 348 86% 61%;
     --success: 129 100% 42%;
     --lite-slate: 215 20% 65%;
+    --soft-background: 0 0% 99%;
 
     --radius: 0.5rem;
 
@@ -68,39 +72,56 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 224 17% 26%;
+    --background: 220 13% 9%;
+    --foreground: 220 10% 95%;
+    --foreground-secondary: 220 10% 88%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 13% 11%;
+    --card-foreground: 220 10% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --tooltip: 220 15% 12%;
+    --tooltip-foreground: 220 10% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --popover: 220 13% 11%;
+    --popover-gray: 220 13% 13%;
+    --popover-foreground: 220 10% 95%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-hover: 217 91% 55%;
+    --primary-active: 217 91% 50%;
+    --primary-100: 217 50% 15%;
+    --primary-foreground: 0 0% 100%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --secondary: 220 13% 18%;
+    --secondary-foreground: 220 10% 88%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --muted: 220 13% 16%;
+    --muted-slate: 220 8% 50%;
+    --muted-gray: 220 8% 60%;
+    --muted-disabled: 220 13% 14%;
+    --muted-foreground: 220 8% 65%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 220 13% 25%;
+    --accent-foreground: 220 10% 95%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --border: 220 13% 20%;
+    --input: 220 13% 16%;
+    --ring: 217 91% 60%;
+
+    --warning: 38 92% 50%;
+    --success: 142 76% 36%;
+    --lite-slate: 220 8% 65%;
+    --soft-background: 220 13% 12%;
+
+    /* Chart colors optimized for dark theme */
+    --chart-1: 239 89% 64%;
+    --chart-2: 160 84% 55%;
+    --chart-3: 30 100% 60%;
+    --chart-4: 280 85% 65%;
+    --chart-5: 340 82% 62%;
   }
 
   .comet-expanded {
@@ -217,27 +238,27 @@
 
   .comet-custom-scrollbar {
     &.firefox {
-      scrollbar-color: #babac0 transparent;
+      scrollbar-color: hsl(var(--muted-foreground)) transparent;
       scrollbar-width: thin;
     }
 
     ::-webkit-scrollbar {
-      background-color: #fff;
+      background-color: hsl(var(--background));
       width: 16px;
     }
 
     ::-webkit-scrollbar-track {
-      background-color: #fff;
+      background-color: hsl(var(--background));
     }
 
     ::-webkit-scrollbar-thumb {
-      background-color: #babac0;
+      background-color: hsl(var(--muted-foreground));
       border-radius: 16px;
-      border: 4px solid #fff;
+      border: 4px solid hsl(var(--background));
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #7d7d7d;
+      background-color: hsl(var(--foreground) / 0.8);
     }
 
     ::-webkit-scrollbar-button {
@@ -362,17 +383,17 @@
 }
 
 .json-view_github.dark {
-  color: white;
-  --json-property: white;
-  --json-index: white;
-  --json-number: white;
-  --json-string: white;
-  --json-boolean: white;
-  --json-null: white;
+  color: hsl(var(--foreground));
+  --json-property: hsl(var(--foreground));
+  --json-index: hsl(var(--muted-foreground));
+  --json-number: hsl(var(--primary));
+  --json-string: hsl(var(--success));
+  --json-boolean: hsl(var(--warning));
+  --json-null: hsl(var(--muted-foreground));
 }
 
 div.cm-theme div.cm-search.cm-panel {
-  @apply px-2 py-1;
+  @apply px-2 py-1 bg-card;
 
   input {
     @apply h-8 px-3 pb-1.5 pt-1 rounded-md bg-background text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
@@ -389,4 +410,14 @@ div.cm-theme div.cm-search.cm-panel {
   button[name="close"] {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
   }
+}
+
+/* Fix CodeMirror theme for dark mode */
+div.cm-theme {
+  @apply bg-card text-card-foreground;
+}
+
+.dark div.cm-theme {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
 }

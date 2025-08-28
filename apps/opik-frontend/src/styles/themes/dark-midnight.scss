@@ -1,7 +1,7 @@
 /* Midnight Dark Theme - OLED-friendly with true blacks */
 .dark.theme-midnight {
-  --background: 0 0% 0%;
-  --foreground: 220 10% 90%;
+  --background: 0 0% 0% !important;
+  --foreground: 220 10% 90% !important;
   --foreground-secondary: 220 10% 85%;
 
   --card: 220 15% 5%;
@@ -42,6 +42,7 @@
   --warning: 30 70% 50%;
   --success: 120 70% 40%;
   --lite-slate: 220 10% 60%;
+  --soft-background: 220 15% 3%;
 
   /* Midnight chart colors - muted for OLED */
   --chart-1: 220 70% 50%;

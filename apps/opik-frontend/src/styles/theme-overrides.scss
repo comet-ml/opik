@@ -1,0 +1,416 @@
+/* Theme overrides for hardcoded colors from component libraries */
+
+/* Fix hardcoded table header backgrounds */
+.bg-\[#FBFCFD\] {
+  background-color: hsl(var(--soft-background)) !important;
+}
+
+/* Fix hardcoded white backgrounds */
+.bg-white {
+  background-color: hsl(var(--background)) !important;
+}
+
+/* Fix hardcoded black backgrounds */
+.bg-black {
+  background-color: hsl(var(--foreground)) !important;
+}
+
+/* Fix hardcoded text colors */
+.text-white {
+  color: hsl(var(--background)) !important;
+}
+
+.text-black {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Fix hardcoded border colors */
+.border-white {
+  border-color: hsl(var(--background)) !important;
+}
+
+.border-black {
+  border-color: hsl(var(--foreground)) !important;
+}
+
+/* Fix hardcoded box shadows with theme-aware colors */
+[style*="box-shadow: rgb(226, 232, 240)"] {
+  box-shadow: hsl(var(--border)) -1px 0px 0px 0px inset !important;
+}
+
+/* Fix hover states for gray colors */
+.group-hover\:bg-gray-600:hover {
+  background-color: hsl(var(--muted-foreground)) !important;
+}
+
+.group-active\:bg-blue-600:active {
+  background-color: hsl(var(--primary)) !important;
+}
+
+.hover\:bg-gray-600:hover {
+  background-color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Fix slate text colors to be theme-aware */
+.text-slate-300 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.text-slate-400 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.text-slate-500 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.text-slate-600 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Fix any other hardcoded gray colors */
+.bg-gray-50 {
+  background-color: hsl(var(--soft-background)) !important;
+}
+
+.bg-gray-100 {
+  background-color: hsl(var(--muted)) !important;
+}
+
+.bg-gray-200 {
+  background-color: hsl(var(--border)) !important;
+}
+
+.border-gray-200 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.border-gray-300 {
+  border-color: hsl(var(--border)) !important;
+}
+
+/* Fix button hover and active states */
+button:hover,
+.hover\:shadow-md:hover {
+  box-shadow: 0 4px 6px -1px hsl(var(--foreground) / 0.1), 0 2px 4px -1px hsl(var(--foreground) / 0.06) !important;
+}
+
+/* Fix more comprehensive hover effects */
+.hover\:bg-white:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.hover\:bg-gray-50:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.hover\:bg-gray-100:hover {
+  background-color: hsl(var(--muted)) !important;
+}
+
+.hover\:bg-slate-50:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.hover\:bg-slate-100:hover {
+  background-color: hsl(var(--muted)) !important;
+}
+
+/* Fix white text on hover */
+.hover\:text-white:hover {
+  color: hsl(var(--background)) !important;
+}
+
+/* Fix card hover effects */
+.hover\:shadow-sm:hover {
+  box-shadow: 0 1px 2px 0 hsl(var(--foreground) / 0.05) !important;
+}
+
+.hover\:shadow-lg:hover {
+  box-shadow: 0 10px 15px -3px hsl(var(--foreground) / 0.1), 0 4px 6px -2px hsl(var(--foreground) / 0.05) !important;
+}
+
+/* Fix border hover effects */
+.hover\:border-white:hover {
+  border-color: hsl(var(--background)) !important;
+}
+
+.hover\:border-gray-200:hover {
+  border-color: hsl(var(--border)) !important;
+}
+
+.hover\:border-gray-300:hover {
+  border-color: hsl(var(--border)) !important;
+}
+
+/* Fix any remaining hardcoded colors in dynamic styles */
+[class*="bg-[#"] {
+  background-color: hsl(var(--background)) !important;
+}
+
+[style*="background-color: rgb(251, 252, 253)"] {
+  background-color: hsl(var(--soft-background)) !important;
+}
+
+[style*="background-color: rgb(255, 255, 255)"] {
+  background-color: hsl(var(--background)) !important;
+}
+
+[style*="background-color: white"] {
+  background-color: hsl(var(--background)) !important;
+}
+
+[style*="color: white"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+[style*="color: black"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Universal hover effect fixes - catch any remaining white hover effects */
+*:hover {
+  /* Override any remaining hardcoded white backgrounds on hover */
+  &[style*="background-color: white"],
+  &[style*="background-color: rgb(255, 255, 255)"] {
+    background-color: hsl(var(--accent)) !important;
+  }
+  
+  /* Override any remaining hardcoded white text on hover */
+  &[style*="color: white"],
+  &[style*="color: rgb(255, 255, 255)"] {
+    color: hsl(var(--background)) !important;
+  }
+}
+
+/* Specific overrides for common UI patterns */
+[role="button"]:hover,
+button:hover,
+.cursor-pointer:hover {
+  /* Ensure buttons don't have white backgrounds on hover */
+  &.bg-white,
+  &[style*="background-color: white"] {
+    background-color: hsl(var(--accent)) !important;
+  }
+}
+
+/* Table-specific hover fixes */
+th:hover,
+td:hover,
+tr:hover {
+  &.bg-white,
+  &[style*="background-color: white"],
+  &[style*="background-color: rgb(255, 255, 255)"] {
+    background-color: hsl(var(--accent)) !important;
+  }
+}
+
+/* Card and panel hover fixes */
+.hover\\:shadow-md:hover,
+.hover\\:shadow-lg:hover,
+.hover\\:shadow-sm:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* Fix specific group hover patterns */
+.group\/row:hover .group-hover\/row\\:bg-primary-foreground {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* More comprehensive group hover fixes */
+.group:hover .group-hover\\:bg-primary-foreground,
+.group\\:hover .group-hover\\:bg-primary-foreground {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* Fix any remaining primary-foreground hover states */
+.hover\\:bg-primary-foreground:hover,
+.group-hover\\:bg-primary-foreground:group-hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* Fix specific navigation hover patterns that use primary-foreground */
+nav a:hover,
+nav button:hover,
+.sidebar a:hover,
+.sidebar button:hover,
+[class*="hover:bg-primary-foreground"]:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Navigation and Button Improvements */
+
+/* Better hover states for interactive elements - ONLY on hover */
+button:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
+[role="button"]:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
+.cursor-pointer:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Primary button states */
+.bg-primary:hover {
+  background-color: hsl(var(--primary-hover)) !important;
+}
+
+.bg-primary:active {
+  background-color: hsl(var(--primary-active)) !important;
+}
+
+/* Secondary button improvements */
+.bg-secondary:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Navigation selected states - only for nav items */
+nav .bg-primary-100,
+nav [data-state="active"],
+nav [aria-selected="true"],
+nav .active,
+.sidebar-item[data-state="active"],
+.sidebar-item[aria-selected="true"],
+.sidebar-item.active,
+[role="tab"][data-state="active"],
+[role="tab"][aria-selected="true"] {
+  background-color: hsl(var(--primary-100)) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* Disabled/Greyed out button fixes */
+button:disabled,
+.disabled,
+[aria-disabled="true"] {
+  background-color: hsl(var(--muted-disabled)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border-color: hsl(var(--muted-disabled)) !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Filter button states */
+.filter-button,
+.filter-active {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.filter-button:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Outline button improvements */
+.border:hover {
+  border-color: hsl(var(--primary)) !important;
+  background-color: hsl(var(--primary-100)) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* Ghost button improvements */
+.bg-transparent:hover,
+.ghost:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Fix contrast issues with navigation - only affect hover states */
+nav button:hover:not(.active):not([data-state="active"]),
+nav [role="button"]:hover:not(.active):not([data-state="active"]) {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Better transitions - only for interactive elements */
+button,
+[role="button"],
+.cursor-pointer,
+input,
+select,
+textarea,
+a {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 0.15s !important;
+  transition-timing-function: ease-in-out !important;
+}
+
+/* Specific UI Pattern Fixes */
+
+/* Table row hover improvements */
+tr:hover,
+.table-row:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* Tab navigation improvements */
+.tab,
+[role="tab"] {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.tab:hover,
+[role="tab"]:hover {
+  color: hsl(var(--foreground)) !important;
+  background-color: hsl(var(--accent)) !important;
+}
+
+.tab[data-state="active"],
+[role="tab"][aria-selected="true"] {
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+}
+
+/* Dropdown and select improvements */
+.select-item:hover,
+.dropdown-item:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Card hover improvements */
+.card:hover {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  box-shadow: 0 4px 6px -1px hsl(var(--foreground) / 0.1) !important;
+}
+
+/* Input focus improvements */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
+}
+
+/* Badge improvements */
+.badge {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.badge-primary {
+  background-color: hsl(var(--primary-100)) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* Loading and skeleton improvements */
+.skeleton {
+  background-color: hsl(var(--muted)) !important;
+}
+
+.loading {
+  background-color: hsl(var(--muted-disabled)) !important;
+}
+
+/* Sidebar navigation improvements */
+.sidebar-item:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.sidebar-item.active {
+  background-color: hsl(var(--primary-100)) !important;
+  color: hsl(var(--primary)) !important;
+}

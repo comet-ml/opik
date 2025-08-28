@@ -1,7 +1,7 @@
 /* High Contrast Dark Theme - WCAG AAA compliant with sharp borders */
 .dark.theme-high-contrast {
-  --background: 0 0% 0%;
-  --foreground: 0 0% 100%;
+  --background: 0 0% 0% !important;
+  --foreground: 0 0% 100% !important;
   --foreground-secondary: 0 0% 95%;
 
   --card: 0 0% 5%;
@@ -42,6 +42,7 @@
   --warning: 45 100% 70%;
   --success: 120 100% 50%;
   --lite-slate: 0 0% 75%;
+  --soft-background: 0 0% 3%;
 
   /* High contrast chart colors */
   --chart-1: 205 100% 70%;
