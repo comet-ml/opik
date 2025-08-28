@@ -1,5 +1,6 @@
 import React from "react";
 import Breadcrumbs from "@/components/layout/Breadcrumbs/Breadcrumbs";
+import ThemeToggle from "@/components/layout/ThemeToggle/ThemeToggle";
 import usePluginsStore from "@/store/PluginsStore";
 
 const TopBar = () => {
@@ -11,7 +12,10 @@ const TopBar = () => {
         <Breadcrumbs />
       </div>
 
-      {UserMenu ? <UserMenu /> : null}
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        {UserMenu ? <UserMenu /> : null}
+      </div>
     </nav>
   );
 };
