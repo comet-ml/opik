@@ -1,6 +1,11 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;700;900&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@100;300;400;500;700;900&display=swap");
 
+/* Import theme variants */
+@import "./styles/themes/dark-default";
+@import "./styles/themes/dark-high-contrast";
+@import "./styles/themes/dark-midnight";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

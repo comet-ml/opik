@@ -1,0 +1,52 @@
+/* Default Dark Theme - Balanced contrast with blue accents */
+.dark.theme-default {
+  --background: 224 17% 10%;
+  --foreground: 210 20% 98%;
+  --foreground-secondary: 220 13% 91%;
+
+  --card: 224 17% 12%;
+  --card-foreground: 210 20% 98%;
+
+  --tooltip: 224 17% 16%;
+  --tooltip-foreground: 210 20% 98%;
+
+  --popover: 224 17% 12%;
+  --popover-gray: 224 17% 14%;
+  --popover-foreground: 210 20% 98%;
+
+  --primary: 239 89% 64%;
+  --primary-hover: 238 62% 51%;
+  --primary-active: 238 65% 43%;
+  --primary-100: 235 85% 20%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 224 17% 16%;
+  --secondary-foreground: 210 20% 98%;
+
+  --muted: 224 17% 20%;
+  --muted-slate: 215 16% 47%;
+  --muted-gray: 218 11% 65%;
+  --muted-disabled: 224 17% 18%;
+  --muted-foreground: 215 20% 65%;
+
+  --accent: 224 17% 20%;
+  --accent-foreground: 210 20% 98%;
+
+  --destructive: 348 86% 61%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 224 17% 20%;
+  --input: 224 17% 20%;
+  --ring: 239 89% 64%;
+
+  --warning: 45 100% 65%;
+  --success: 129 100% 42%;
+  --lite-slate: 215 20% 65%;
+
+  /* Chart colors optimized for dark theme */
+  --chart-1: 239 89% 64%;
+  --chart-2: 160 84% 55%;
+  --chart-3: 30 100% 60%;
+  --chart-4: 280 85% 65%;
+  --chart-5: 340 82% 62%;
+}

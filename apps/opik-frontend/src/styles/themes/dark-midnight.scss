@@ -1,0 +1,52 @@
+/* Midnight Dark Theme - OLED-friendly with true blacks */
+.dark.theme-midnight {
+  --background: 0 0% 0%;
+  --foreground: 220 10% 90%;
+  --foreground-secondary: 220 10% 85%;
+
+  --card: 220 15% 5%;
+  --card-foreground: 220 10% 90%;
+
+  --tooltip: 220 15% 8%;
+  --tooltip-foreground: 220 10% 90%;
+
+  --popover: 220 15% 5%;
+  --popover-gray: 220 15% 7%;
+  --popover-foreground: 220 10% 90%;
+
+  --primary: 220 100% 60%;
+  --primary-hover: 220 100% 50%;
+  --primary-active: 220 100% 40%;
+  --primary-100: 220 30% 10%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 15% 10%;
+  --secondary-foreground: 220 10% 90%;
+
+  --muted: 220 15% 15%;
+  --muted-slate: 220 10% 45%;
+  --muted-gray: 220 10% 55%;
+  --muted-disabled: 220 15% 12%;
+  --muted-foreground: 220 10% 60%;
+
+  --accent: 220 15% 15%;
+  --accent-foreground: 220 10% 90%;
+
+  --destructive: 350 70% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 15% 15%;
+  --input: 220 15% 10%;
+  --ring: 220 100% 60%;
+
+  --warning: 30 70% 50%;
+  --success: 120 70% 40%;
+  --lite-slate: 220 10% 60%;
+
+  /* Midnight chart colors - muted for OLED */
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 70% 50%;
+  --chart-4: 280 60% 55%;
+  --chart-5: 340 60% 50%;
+}
