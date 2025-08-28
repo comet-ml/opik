@@ -5,236 +5,412 @@ description: "Complete list of models supported for automatic cost tracking in O
 
 # Supported Models for Cost Tracking
 
-This page lists all models that Opik supports for automatic cost tracking. The cost data is automatically loaded from the latest pricing information.
+This page lists all models that Opik supports for automatic cost tracking. Cost tracking is automatically enabled when using any of the [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations) with these models.
 
 <Note>
-  Cost tracking is automatically enabled when using any of the [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations) with these models. The costs shown are per token and may vary based on your specific pricing agreement with the provider.
+  This page is automatically generated from the latest model pricing data and shows which models have cost tracking support.
 </Note>
 
+## Overview
 
+Opik supports cost tracking for **301 models** across **6 providers**:
 
-<div id="supported-models-container">
-  <div id="loading-message">Loading model data...</div>
-</div>
+- **[AWS Bedrock](#aws-bedrock)**: 105 models
+- **[Anthropic](#anthropic)**: 16 models
+- **[Anthropic on Vertex AI](#anthropic-on-vertex-ai)**: 19 models
+- **[Google AI](#google-ai)**: 30 models
+- **[Google Vertex AI](#google-vertex-ai)**: 36 models
+- **[OpenAI](#openai)**: 95 models
 
-<script>
-{`
-// Provider mapping to Opik provider names
-const PROVIDER_MAPPING = {
-  "openai": "openai",
-  "vertex_ai-language-models": "google_vertexai",
-  "gemini": "google_ai",
-  "anthropic": "anthropic",
-  "vertex_ai-anthropic_models": "anthropic_vertexai",
-  "bedrock": "bedrock",
-  "bedrock_converse": "bedrock"
-};
+## AWS Bedrock {#aws-bedrock}
 
-// Provider display information
-const PROVIDER_INFO = {
-  "openai": {
-    "name": "OpenAI",
-    "description": "Models hosted by OpenAI",
-    "url": "https://platform.openai.com"
-  },
-  "google_vertexai": {
-    "name": "Google Vertex AI", 
-    "description": "Gemini models hosted in Google Vertex AI",
-    "url": "https://cloud.google.com/vertex-ai"
-  },
-  "google_ai": {
-    "name": "Google AI",
-    "description": "Gemini models hosted in Google AI Studio", 
-    "url": "https://ai.google.dev/aistudio"
-  },
-  "anthropic": {
-    "name": "Anthropic",
-    "description": "Models hosted by Anthropic",
-    "url": "https://www.anthropic.com"
-  },
-  "anthropic_vertexai": {
-    "name": "Anthropic on Vertex AI",
-    "description": "Anthropic models hosted by Google Vertex AI",
-    "url": "https://cloud.google.com/vertex-ai"
-  },
-  "bedrock": {
-    "name": "AWS Bedrock",
-    "description": "Models hosted by AWS Bedrock", 
-    "url": "https://aws.amazon.com/bedrock"
-  }
-};
+Models hosted by AWS Bedrock • [Learn more](https://aws.amazon.com/bedrock)
 
+**105 models supported**
 
+<details>
+<summary>View all AWS Bedrock models</summary>
 
-function formatCost(cost) {
-  if (cost === 0) return "Free";
-  if (cost < 1e-6) return "$" + cost.toExponential(2);
-  if (cost < 1e-3) return "$" + cost.toFixed(6);
-  return "$" + cost.toFixed(4);
-}
+- `amazon.nova-lite-v1:0`
+- `amazon.nova-lite-v1:0`
+- `amazon.nova-lite-v1:0`
+- `amazon.nova-micro-v1:0`
+- `amazon.nova-micro-v1:0`
+- `amazon.nova-micro-v1:0`
+- `amazon.nova-premier-v1:0`
+- `amazon.nova-pro-v1:0`
+- `amazon.nova-pro-v1:0`
+- `amazon.nova-pro-v1:0`
+- `anthropic.claude-3-5-haiku-20241022-v1:0`
+- `anthropic.claude-3-5-haiku-20241022-v1:0`
+- `anthropic.claude-3-5-sonnet-20240620-v1:0`
+- `anthropic.claude-3-5-sonnet-20240620-v1:0`
+- `anthropic.claude-3-5-sonnet-20240620-v1:0`
+- `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- `anthropic.claude-3-7-sonnet-20250219-v1:0`
+- `anthropic.claude-3-7-sonnet-20250219-v1:0`
+- `anthropic.claude-3-haiku-20240307-v1:0`
+- `anthropic.claude-3-haiku-20240307-v1:0`
+- `anthropic.claude-3-haiku-20240307-v1:0`
+- `anthropic.claude-3-opus-20240229-v1:0`
+- `anthropic.claude-3-opus-20240229-v1:0`
+- `anthropic.claude-3-sonnet-20240229-v1:0`
+- `anthropic.claude-3-sonnet-20240229-v1:0`
+- `anthropic.claude-3-sonnet-20240229-v1:0`
+- `anthropic.claude-opus-4-1-20250805-v1:0`
+- `anthropic.claude-opus-4-1-20250805-v1:0`
+- `anthropic.claude-opus-4-20250514-v1:0`
+- `anthropic.claude-opus-4-20250514-v1:0`
+- `anthropic.claude-sonnet-4-20250514-v1:0`
+- `anthropic.claude-sonnet-4-20250514-v1:0`
+- `anthropic.claude-sonnet-4-20250514-v1:0`
+- `claude-3-5-haiku-20241022-v1:0`
+- `claude-3-5-sonnet-20240620-v1:0`
+- `claude-3-5-sonnet-20241022-v2:0`
+- `claude-3-7-sonnet-20250219-v1:0`
+- `claude-3-haiku-20240307-v1:0`
+- `claude-3-opus-20240229-v1:0`
+- `claude-3-sonnet-20240229-v1:0`
+- `claude-instant-v1`
+- `claude-opus-4-1-20250805-v1:0`
+- `claude-opus-4-20250514-v1:0`
+- `claude-sonnet-4-20250514-v1:0`
+- `claude-v1`
+- `claude-v2`
+- `claude-v2:1`
+- `command-light-text-v14`
+- `command-r-plus-v1:0`
+- `command-r-v1:0`
+- `command-text-v14`
+- `deepseek.r1-v1:0`
+- `embed-english-v3`
+- `embed-multilingual-v3`
+- `j2-mid-v1`
+- `j2-ultra-v1`
+- `jamba-1-5-large-v1:0`
+- `jamba-1-5-mini-v1:0`
+- `jamba-instruct-v1:0`
+- `llama2-13b-chat-v1`
+- `llama2-70b-chat-v1`
+- `llama3-1-405b-instruct-v1:0`
+- `llama3-1-70b-instruct-v1:0`
+- `llama3-1-8b-instruct-v1:0`
+- `llama3-2-11b-instruct-v1:0`
+- `llama3-2-1b-instruct-v1:0`
+- `llama3-2-3b-instruct-v1:0`
+- `llama3-2-90b-instruct-v1:0`
+- `llama3-3-70b-instruct-v1:0`
+- `llama3-70b-instruct-v1:0`
+- `llama3-8b-instruct-v1:0`
+- `llama4-maverick-17b-instruct-v1:0`
+- `llama4-scout-17b-instruct-v1:0`
+- `meta.llama3-1-405b-instruct-v1:0`
+- `meta.llama3-1-70b-instruct-v1:0`
+- `meta.llama3-1-8b-instruct-v1:0`
+- `meta.llama3-2-11b-instruct-v1:0`
+- `meta.llama3-2-1b-instruct-v1:0`
+- `meta.llama3-2-1b-instruct-v1:0`
+- `meta.llama3-2-3b-instruct-v1:0`
+- `meta.llama3-2-3b-instruct-v1:0`
+- `meta.llama3-2-90b-instruct-v1:0`
+- `meta.llama3-3-70b-instruct-v1:0`
+- `meta.llama4-maverick-17b-instruct-v1:0`
+- `meta.llama4-scout-17b-instruct-v1:0`
+- `mistral-7b-instruct-v0:2`
+- `mistral-large-2402-v1:0`
+- `mistral-large-2407-v1:0`
+- `mistral-small-2402-v1:0`
+- `mistral.pixtral-large-2502-v1:0`
+- `mistral.pixtral-large-2502-v1:0`
+- `mixtral-8x7b-instruct-v0:1`
+- `nova-lite-v1:0`
+- `nova-micro-v1:0`
+- `nova-pro-v1:0`
+- `openai.gpt-oss-120b-1:0`
+- `openai.gpt-oss-20b-1:0`
+- `titan-embed-image-v1`
+- `titan-embed-text-v1`
+- `titan-embed-text-v2:0`
+- `titan-text-express-v1`
+- `titan-text-lite-v1`
+- `titan-text-premier-v1:0`
 
-function processModelData(rawData) {
-  const supportedModels = {};
-  const providerCounts = {};
+</details>
 
-  Object.entries(rawData).forEach(([modelName, modelInfo]) => {
-    // Skip sample_spec and non-model entries
-    if (modelName === "sample_spec" || typeof modelInfo !== 'object') {
-      return;
-    }
+## Anthropic {#anthropic}
 
-    const provider = modelInfo.litellm_provider;
-    
-    // Check if provider is supported
-    if (!PROVIDER_MAPPING[provider]) {
-      return;
-    }
+Anthropic models hosted by Anthropic • [Learn more](https://www.anthropic.com)
 
-    // Exception: Skip bedrock models with "/" in name (considered old)
-    if ((provider === "bedrock" || provider === "bedrock_converse") && 
-        modelName.includes("/")) {
-      return;
-    }
+**16 models supported**
 
-    // Check if model has cost information
-    const inputCost = modelInfo.input_cost_per_token || 0;
-    const outputCost = modelInfo.output_cost_per_token || 0;
+<details>
+<summary>View all Anthropic models</summary>
 
-    if (inputCost > 0 || outputCost > 0) {
-      const opikProvider = PROVIDER_MAPPING[provider];
-      
-      if (!supportedModels[opikProvider]) {
-        supportedModels[opikProvider] = [];
-        providerCounts[opikProvider] = 0;
-      }
+- `claude-3-5-haiku-20241022`
+- `claude-3-5-haiku-latest`
+- `claude-3-5-sonnet-20240620`
+- `claude-3-5-sonnet-20241022`
+- `claude-3-5-sonnet-latest`
+- `claude-3-7-sonnet-20250219`
+- `claude-3-7-sonnet-latest`
+- `claude-3-haiku-20240307`
+- `claude-3-opus-20240229`
+- `claude-3-opus-latest`
+- `claude-4-opus-20250514`
+- `claude-4-sonnet-20250514`
+- `claude-opus-4-1`
+- `claude-opus-4-1-20250805`
+- `claude-opus-4-20250514`
+- `claude-sonnet-4-20250514`
 
-      supportedModels[opikProvider].push({
-        name: modelName,
-        inputCost: inputCost,
-        outputCost: outputCost,
-        inputCacheCost: modelInfo.input_cost_per_token_above_128k_tokens || modelInfo.input_cost_per_cached_token || null,
-        outputCacheCost: modelInfo.output_cost_per_token_above_128k_tokens || modelInfo.output_cost_per_cached_token || null,
-        reasoningTokensCost: modelInfo.reasoning_cost_per_token || null
-      });
+</details>
 
-      providerCounts[opikProvider]++;
-    }
-  });
+## Anthropic on Vertex AI {#anthropic-on-vertex-ai}
 
-  // Sort models within each provider
-  Object.keys(supportedModels).forEach(provider => {
-    supportedModels[provider].sort((a, b) => a.name.localeCompare(b.name));
-  });
+Anthropic models hosted in Google Vertex AI • [Learn more](https://cloud.google.com/vertex-ai)
 
-  return {
-    models: supportedModels,
-    counts: providerCounts,
-    totalModels: Object.values(providerCounts).reduce((sum, count) => sum + count, 0),
-    totalProviders: Object.keys(supportedModels).length
-  };
-}
+**19 models supported**
 
-function renderSupportedModels(modelData) {
-  const sortedProviders = Object.keys(modelData.models).sort();
-  
-  let html = '<div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 16px; margin: 24px 0;">';
-  html += '<h2 style="margin-top: 0;">Overview</h2>';
-  html += '<p>Opik currently supports cost tracking for <strong>' + modelData.totalModels + '</strong> models across <strong>' + modelData.totalProviders + '</strong> providers:</p>';
-  html += '<ul>';
-  
-  sortedProviders.forEach(provider => {
-    html += '<li><strong>' + PROVIDER_INFO[provider].name + '</strong>: ' + modelData.counts[provider] + ' models</li>';
-  });
-  
-  html += '</ul></div>';
+<details>
+<summary>View all Anthropic on Vertex AI models</summary>
 
-  sortedProviders.forEach(provider => {
-    const models = modelData.models[provider];
-    const providerInfo = PROVIDER_INFO[provider];
-    
-    html += '<div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 24px 0;">';
-    html += '<h2>' + providerInfo.name + ' (<code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 14px;">' + provider + '</code>)</h2>';
-    html += '<p>' + providerInfo.description + ' - <a href="' + providerInfo.url + '" style="color: #2563eb;">' + providerInfo.url + '</a></p>';
-    html += '<p><strong>' + models.length + ' models supported</strong></p>';
-    
-    html += '<details style="margin-top: 16px;">';
-    html += '<summary style="cursor: pointer; color: #2563eb; font-weight: 500;">View all ' + providerInfo.name + ' models</summary>';
-    
-    html += '<div style="margin-top: 16px; overflow-x: auto;">';
-    html += '<table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db;">';
-    html += '<thead style="background: #f9fafb;">';
-    html += '<tr>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Model Name</th>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Input Cost/Token</th>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Output Cost/Token</th>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Input Cache Cost/Token</th>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Output Cache Cost/Token</th>';
-    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Reasoning Tokens Cost/Token</th>';
-    html += '</tr>';
-    html += '</thead>';
-    html += '<tbody>';
-    
-    models.forEach(model => {
-      html += '<tr style="border-bottom: 1px solid #e5e7eb;">';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;"><code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 13px;">' + model.name + '</code></td>';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + formatCost(model.inputCost) + '</td>';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + formatCost(model.outputCost) + '</td>';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.inputCacheCost ? formatCost(model.inputCacheCost) : 'N/A') + '</td>';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.outputCacheCost ? formatCost(model.outputCacheCost) : 'N/A') + '</td>';
-      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.reasoningTokensCost ? formatCost(model.reasoningTokensCost) : 'N/A') + '</td>';
-      html += '</tr>';
-    });
-    
-    html += '</tbody>';
-    html += '</table>';
-    html += '</div>';
-    html += '</details>';
-    html += '</div>';
-  });
+- `claude-3-5-haiku`
+- `claude-3-5-haiku@20241022`
+- `claude-3-5-sonnet`
+- `claude-3-5-sonnet-v2`
+- `claude-3-5-sonnet-v2@20241022`
+- `claude-3-5-sonnet@20240620`
+- `claude-3-7-sonnet@20250219`
+- `claude-3-haiku`
+- `claude-3-haiku@20240307`
+- `claude-3-opus`
+- `claude-3-opus@20240229`
+- `claude-3-sonnet`
+- `claude-3-sonnet@20240229`
+- `claude-opus-4`
+- `claude-opus-4-1`
+- `claude-opus-4-1@20250805`
+- `claude-opus-4@20250514`
+- `claude-sonnet-4`
+- `claude-sonnet-4@20250514`
 
-  return html;
-}
+</details>
 
-// Load and process the model data
-async function loadModelData() {
-  try {
-    const response = await fetch('/model_prices_and_context_window.json');
-    if (!response.ok) {
-      throw new Error('Failed to fetch model data');
-    }
-    const data = await response.json();
-    
-    const processedData = processModelData(data);
-    const html = renderSupportedModels(processedData);
-    
-    document.getElementById('supported-models-container').innerHTML = html;
-  } catch (error) {
-    console.error('Error loading model data:', error);
-    document.getElementById('supported-models-container').innerHTML = 
-      '<div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; color: #991b1b;">' +
-      '<strong>Error:</strong> Failed to load model data. Please check if the model pricing data is available.' +
-      '</div>';
-  }
-}
+## Google AI {#google-ai}
 
-// Load data when the page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', loadModelData);
-} else {
-  loadModelData();
-}
-`}
-</script>
+Gemini models hosted in Google AI Studio • [Learn more](https://ai.google.dev/aistudio)
+
+**30 models supported**
+
+<details>
+<summary>View all Google AI models</summary>
+
+- `gemini-1.5-flash`
+- `gemini-1.5-flash-001`
+- `gemini-1.5-flash-002`
+- `gemini-1.5-flash-latest`
+- `gemini-1.5-pro`
+- `gemini-1.5-pro-001`
+- `gemini-1.5-pro-002`
+- `gemini-1.5-pro-exp-0801`
+- `gemini-1.5-pro-latest`
+- `gemini-2.0-flash`
+- `gemini-2.0-flash-001`
+- `gemini-2.0-flash-lite`
+- `gemini-2.0-flash-lite-preview-02-05`
+- `gemini-2.0-flash-live-001`
+- `gemini-2.0-flash-preview-image-generation`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+- `gemini-2.5-flash-lite-preview-06-17`
+- `gemini-2.5-flash-preview-04-17`
+- `gemini-2.5-flash-preview-05-20`
+- `gemini-2.5-flash-preview-tts`
+- `gemini-2.5-pro`
+- `gemini-2.5-pro-preview-03-25`
+- `gemini-2.5-pro-preview-05-06`
+- `gemini-2.5-pro-preview-06-05`
+- `gemini-2.5-pro-preview-tts`
+- `gemini-gemma-2-27b-it`
+- `gemini-gemma-2-9b-it`
+- `gemini-pro`
+- `gemini-pro-vision`
+
+</details>
+
+## Google Vertex AI {#google-vertex-ai}
+
+Gemini models hosted in Google Vertex AI • [Learn more](https://cloud.google.com/vertex-ai)
+
+**36 models supported**
+
+<details>
+<summary>View all Google Vertex AI models</summary>
+
+- `gemini-1.0-pro`
+- `gemini-1.0-pro-001`
+- `gemini-1.0-pro-002`
+- `gemini-1.0-ultra`
+- `gemini-1.0-ultra-001`
+- `gemini-1.5-flash`
+- `gemini-1.5-flash-001`
+- `gemini-1.5-flash-002`
+- `gemini-1.5-flash-exp-0827`
+- `gemini-1.5-flash-preview-0514`
+- `gemini-1.5-pro`
+- `gemini-1.5-pro-001`
+- `gemini-1.5-pro-002`
+- `gemini-1.5-pro-preview-0215`
+- `gemini-1.5-pro-preview-0409`
+- `gemini-1.5-pro-preview-0514`
+- `gemini-2.0-flash`
+- `gemini-2.0-flash-001`
+- `gemini-2.0-flash-exp`
+- `gemini-2.0-flash-lite`
+- `gemini-2.0-flash-lite-001`
+- `gemini-2.0-flash-live-preview-04-09`
+- `gemini-2.0-flash-preview-image-generation`
+- `gemini-2.0-pro-exp-02-05`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+- `gemini-2.5-flash-lite-preview-06-17`
+- `gemini-2.5-flash-preview-04-17`
+- `gemini-2.5-flash-preview-05-20`
+- `gemini-2.5-pro`
+- `gemini-2.5-pro-exp-03-25`
+- `gemini-2.5-pro-preview-03-25`
+- `gemini-2.5-pro-preview-05-06`
+- `gemini-2.5-pro-preview-06-05`
+- `gemini-2.5-pro-preview-tts`
+- `gemini-pro`
+
+</details>
+
+## OpenAI {#openai}
+
+Models hosted by OpenAI • [Learn more](https://platform.openai.com)
+
+**95 models supported**
+
+<details>
+<summary>View all OpenAI models</summary>
+
+- `chatgpt-4o-latest`
+- `codex-mini-latest`
+- `ft:gpt-3.5-turbo`
+- `ft:gpt-3.5-turbo-0125`
+- `ft:gpt-3.5-turbo-0613`
+- `ft:gpt-3.5-turbo-1106`
+- `ft:gpt-4-0613`
+- `ft:gpt-4o-2024-08-06`
+- `ft:gpt-4o-2024-11-20`
+- `ft:gpt-4o-mini-2024-07-18`
+- `gpt-3.5-turbo`
+- `gpt-3.5-turbo-0125`
+- `gpt-3.5-turbo-0301`
+- `gpt-3.5-turbo-0613`
+- `gpt-3.5-turbo-1106`
+- `gpt-3.5-turbo-16k`
+- `gpt-3.5-turbo-16k-0613`
+- `gpt-4`
+- `gpt-4-0125-preview`
+- `gpt-4-0314`
+- `gpt-4-0613`
+- `gpt-4-1106-preview`
+- `gpt-4-1106-vision-preview`
+- `gpt-4-32k`
+- `gpt-4-32k-0314`
+- `gpt-4-32k-0613`
+- `gpt-4-turbo`
+- `gpt-4-turbo-2024-04-09`
+- `gpt-4-turbo-preview`
+- `gpt-4-vision-preview`
+- `gpt-4.1`
+- `gpt-4.1-2025-04-14`
+- `gpt-4.1-mini`
+- `gpt-4.1-mini-2025-04-14`
+- `gpt-4.1-nano`
+- `gpt-4.1-nano-2025-04-14`
+- `gpt-4.5-preview`
+- `gpt-4.5-preview-2025-02-27`
+- `gpt-4o`
+- `gpt-4o-2024-05-13`
+- `gpt-4o-2024-08-06`
+- `gpt-4o-2024-11-20`
+- `gpt-4o-audio-preview`
+- `gpt-4o-audio-preview-2024-10-01`
+- `gpt-4o-audio-preview-2024-12-17`
+- `gpt-4o-audio-preview-2025-06-03`
+- `gpt-4o-mini`
+- `gpt-4o-mini-2024-07-18`
+- `gpt-4o-mini-audio-preview`
+- `gpt-4o-mini-audio-preview-2024-12-17`
+- `gpt-4o-mini-realtime-preview`
+- `gpt-4o-mini-realtime-preview-2024-12-17`
+- `gpt-4o-mini-search-preview`
+- `gpt-4o-mini-search-preview-2025-03-11`
+- `gpt-4o-mini-transcribe`
+- `gpt-4o-mini-tts`
+- `gpt-4o-realtime-preview`
+- `gpt-4o-realtime-preview-2024-10-01`
+- `gpt-4o-realtime-preview-2024-12-17`
+- `gpt-4o-realtime-preview-2025-06-03`
+- `gpt-4o-search-preview`
+- `gpt-4o-search-preview-2025-03-11`
+- `gpt-4o-transcribe`
+- `gpt-5`
+- `gpt-5-2025-08-07`
+- `gpt-5-chat`
+- `gpt-5-chat-latest`
+- `gpt-5-mini`
+- `gpt-5-mini-2025-08-07`
+- `gpt-5-nano`
+- `gpt-5-nano-2025-08-07`
+- `o1`
+- `o1-2024-12-17`
+- `o1-mini`
+- `o1-mini-2024-09-12`
+- `o1-preview`
+- `o1-preview-2024-09-12`
+- `o1-pro`
+- `o1-pro-2025-03-19`
+- `o3`
+- `o3-2025-04-16`
+- `o3-deep-research`
+- `o3-deep-research-2025-06-26`
+- `o3-mini`
+- `o3-mini-2025-01-31`
+- `o3-pro`
+- `o3-pro-2025-06-10`
+- `o4-mini`
+- `o4-mini-2025-04-16`
+- `o4-mini-deep-research`
+- `o4-mini-deep-research-2025-06-26`
+- `text-embedding-3-large`
+- `text-embedding-3-small`
+- `text-embedding-ada-002`
+- `text-embedding-ada-002-v2`
+
+</details>
 
 ---
 
-## Notes
+## How Cost Tracking Works
 
-- **Cost Calculation**: Costs are calculated based on token usage and the rates shown above
-- **Real-time Updates**: Cost data is regularly updated to reflect the latest provider pricing
-- **Integration Required**: Automatic cost tracking requires using one of the [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations)
-- **Manual Override**: You can manually set costs for unsupported models using the [manual cost setting](/tracing/cost_tracking#manually-setting-span-costs) feature
+Opik automatically calculates costs for the models listed above when using [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations). The cost calculation is handled by backend services that:
 
+1. **Detect the model** used in your LLM calls
+2. **Count tokens** in inputs and outputs  
+3. **Apply current pricing** from our model database
+4. **Store cost information** with your traces and spans
+
+## Technical Implementation
+
+- **Backend Services**: Cost calculation is implemented in the [Opik backend services](https://github.com/comet-ml/opik/tree/main/apps/opik-backend/src/main/java/com/comet/opik/domain)
+- **Pricing Data**: Model prices are sourced from the [model pricing JSON file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json) as a fallback mechanism
+- **Real-time Updates**: This page is automatically updated when model pricing data changes
 
 ## Need Support for Additional Models?
 
