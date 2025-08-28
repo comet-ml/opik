@@ -14,8 +14,74 @@
 # 2. OAuth2 reliability: Improved secret management and environment variable handling
 # 3. Connectivity verification: Tests HTTPS and authentication redirection
 # 4. Improved error handling: Better retry logic and conflict resolution
+# 5. AGIC permission handling: Automatic detection and fixing of AGIC permission issues
 
 set -e  # Exit on error
+
+# Quick fix function for AGIC permission issues
+# Usage: fix_agic_permissions
+fix_agic_permissions() {
+    echo "🔧 Quick Fix: AGIC Permission Issues"
+    echo "This function fixes AGIC permission issues by granting permissions to the actual AGIC identity found in logs"
+    echo ""
+    
+    # Load environment variables if .env.azure exists
+    if [ -f ".env.azure" ]; then
+        source .env.azure
+    else
+        echo "❌ .env.azure not found. Please run from deployment directory."
+        return 1
+    fi
+    
+    # Get AGIC logs and extract the actual identity being used
+    echo "📋 Checking AGIC logs for permission errors..."
+    AGIC_LOGS=$(kubectl logs -l app=ingress-appgw -n kube-system --tail=50 2>/dev/null || echo "")
+    
+    if echo "$AGIC_LOGS" | grep -q "AuthorizationFailed\|Forbidden\|403"; then
+        echo "🔍 Found permission issues in AGIC logs"
+        
+        # Extract the actual identity being used by AGIC
+        ACTUAL_AGIC_IDENTITY=$(echo "$AGIC_LOGS" | grep -o "client '[^']*'" | head -1 | sed "s/client '//;s/'//")
+        
+        if [ -n "$ACTUAL_AGIC_IDENTITY" ]; then
+            echo "✅ Found actual AGIC identity: $ACTUAL_AGIC_IDENTITY"
+            
+            SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+            
+            echo "🔑 Granting Reader permission on resource group..."
+            az role assignment create \
+                --role Reader \
+                --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+                --assignee "$ACTUAL_AGIC_IDENTITY" \
+                --only-show-errors || echo "   (Permission may already exist)"
+            
+            echo "🔑 Granting Contributor permission on Application Gateway..."
+            az role assignment create \
+                --role Contributor \
+                --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
+                --assignee "$ACTUAL_AGIC_IDENTITY" \
+                --only-show-errors || echo "   (Permission may already exist)"
+            
+            echo "🔄 Restarting AGIC deployment..."
+            kubectl rollout restart deployment -l app=ingress-appgw -n kube-system
+            
+            echo "✅ AGIC permission fix completed!"
+            echo "🕐 Wait 1-2 minutes for AGIC to restart and retry with new permissions"
+        else
+            echo "❌ Could not extract AGIC identity from logs"
+            echo "📋 Recent AGIC logs:"
+            echo "$AGIC_LOGS" | tail -10
+        fi
+    else
+        echo "✅ No permission issues found in AGIC logs"
+        echo "📋 Recent AGIC logs:"
+        echo "$AGIC_LOGS" | tail -5
+    fi
+}
+
+# Uncomment the line below and run: source deploy-opik-helm-azure.sh
+# to load the fix_agic_permissions function into your shell
+# Then run: fix_agic_permissions
 
 # Function to cleanup resources from failed runs
 cleanup_failed_deployment() {
@@ -435,6 +501,8 @@ else
 fi
 
 # Create App Registration for Opik authentication
+# Preserve OPIK_APP_NAME from .env.azure if set, otherwise use default pattern
+ORIGINAL_OPIK_APP_NAME="${OPIK_APP_NAME:-}"
 OPIK_APP_NAME="${OPIK_APP_NAME:-opik-frontend-auth-${RESOURCE_GROUP}}"
 print_step "Creating App Registration for Opik authentication"
 print_info "App Registration Name: $OPIK_APP_NAME"
@@ -442,6 +510,18 @@ print_info "App Registration Name: $OPIK_APP_NAME"
 # Check if app registration already exists
 print_step "Searching for existing App Registration with name: $OPIK_APP_NAME"
 APP_ID=$(az ad app list --display-name "$OPIK_APP_NAME" --query "[0].appId" -o tsv)
+
+# If not found with full name, try searching for the base name from .env.azure
+if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
+    if [ -n "$ORIGINAL_OPIK_APP_NAME" ] && [ "$ORIGINAL_OPIK_APP_NAME" != "$OPIK_APP_NAME" ]; then
+        print_info "Trying alternative search with base name from .env.azure: $ORIGINAL_OPIK_APP_NAME"
+        APP_ID=$(az ad app list --display-name "$ORIGINAL_OPIK_APP_NAME" --query "[0].appId" -o tsv)
+        if [ -n "$APP_ID" ] && [ "$APP_ID" != "null" ]; then
+            print_info "Found existing app registration with base name: $ORIGINAL_OPIK_APP_NAME"
+            OPIK_APP_NAME="$ORIGINAL_OPIK_APP_NAME"  # Use the found name
+        fi
+    fi
+fi
 
 print_info "Search result for APP_ID: '$APP_ID'"
 
@@ -470,14 +550,37 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
     # Note:
     # 00000003-0000-0000-c000-000000000000 = Microsoft Graph API (fixed GUID)
     # e1fe6dd8-ba31-4d61-89e7-88639da4683d = User.Read permission (fixed GUID)
+    # 64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0 = email permission (fixed GUID)
+    # 14dad69e-099b-42c9-810b-d002981feec1 = profile permission (fixed GUID)
+    # 37f7f235-527c-4136-accd-4a02d197296e = openid permission (fixed GUID)
     # Scope = Delegated permission (acts on behalf of signed-in user)
     print_step "Configuring Microsoft Graph permissions"
+    
+    # Add User.Read permission
     az ad app permission add \
         --id $APP_ID \
         --api 00000003-0000-0000-c000-000000000000 \
         --api-permissions e1fe6dd8-ba31-4d61-89e7-88639da4683d=Scope
     
-    print_success "Added Microsoft Graph User.Read permission"
+    # Add email permission for OAuth2 user profile access
+    az ad app permission add \
+        --id $APP_ID \
+        --api 00000003-0000-0000-c000-000000000000 \
+        --api-permissions 64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0=Scope
+    
+    # Add profile permission for OAuth2 user profile access
+    az ad app permission add \
+        --id $APP_ID \
+        --api 00000003-0000-0000-c000-000000000000 \
+        --api-permissions 14dad69e-099b-42c9-810b-d002981feec1=Scope
+    
+    # Add openid permission for OAuth2 authentication
+    az ad app permission add \
+        --id $APP_ID \
+        --api 00000003-0000-0000-c000-000000000000 \
+        --api-permissions 37f7f235-527c-4136-accd-4a02d197296e=Scope
+    
+    print_success "Added Microsoft Graph permissions: User.Read, email, profile, openid"
     
     # Grant admin consent for the permissions with retry logic for propagation delays
     print_step "Granting admin consent for permissions (waiting for Azure AD propagation)"
@@ -540,33 +643,88 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
 else
     print_warning "App Registration $OPIK_APP_NAME already exists (App ID: $APP_ID)"
     print_info "Found existing App Registration with ID: $APP_ID"
+    print_info "DEBUG: Entering existing app registration branch"
+    
+    # Validate that we have a valid APP_ID
+    if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
+        print_error "Failed to retrieve valid APP_ID for existing app registration"
+        print_error "This should not happen - something is wrong with the Azure AD query"
+        exit 1
+    fi
+    
+    print_info "DEBUG: APP_ID validation passed, proceeding with permission checks"
     
     # Check and add Microsoft Graph permissions if missing
     print_step "Checking Microsoft Graph permissions"
-    EXISTING_PERMISSIONS=$(az ad app permission list --id $APP_ID --query "[?resourceAppId=='00000003-0000-0000-c000-000000000000'].resourceAccess[?id=='e1fe6dd8-ba31-4d61-89e7-88639da4683d']" -o tsv)
-    # Query explanation: Check if Microsoft Graph API (00000003...) has User.Read permission (e1fe6dd8...)
     
-    if [ -z "$EXISTING_PERMISSIONS" ]; then
-        print_warning "Microsoft Graph User.Read permission missing - adding it now"
-        az ad app permission add \
-            --id $APP_ID \
-            --api 00000003-0000-0000-c000-000000000000 \
-            --api-permissions e1fe6dd8-ba31-4d61-89e7-88639da4683d=Scope
-
+    # Define required permissions with their GUIDs using a shell-compatible approach
+    # Using arrays with formatted strings instead of associative arrays
+    REQUIRED_PERMISSIONS=(
+        "e1fe6dd8-ba31-4d61-89e7-88639da4683d:User.Read"
+        "64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0:email"
+        "14dad69e-099b-42c9-810b-d002981feec1:profile"
+        "37f7f235-527c-4136-accd-4a02d197296e:openid"
+        "62a82d76-70ea-41e2-9197-370581804d09:GroupMember.Read.All"
+    )
+    
+    MISSING_PERMISSIONS=()
+    
+    # Check each required permission
+    for permission_entry in "${REQUIRED_PERMISSIONS[@]}"; do
+        permission_id="${permission_entry%%:*}"
+        permission_name="${permission_entry##*:}"
+        EXISTING=$(az ad app permission list --id $APP_ID --query "[?resourceAppId=='00000003-0000-0000-c000-000000000000'].resourceAccess[?id=='$permission_id']" -o tsv)
+        if [ -z "$EXISTING" ]; then
+            MISSING_PERMISSIONS+=("$permission_id:$permission_name")
+            print_warning "Microsoft Graph $permission_name permission missing"
+        else
+            print_success "Microsoft Graph $permission_name permission already configured"
+        fi
+    done
+    
+    # Add missing permissions
+    if [ ${#MISSING_PERMISSIONS[@]} -gt 0 ]; then
+        print_step "Adding missing Microsoft Graph permissions"
+        for permission_entry in "${MISSING_PERMISSIONS[@]}"; do
+            permission_id="${permission_entry%%:*}"
+            permission_name="${permission_entry##*:}"
+            print_info "Adding $permission_name permission..."
+            az ad app permission add \
+                --id $APP_ID \
+                --api 00000003-0000-0000-c000-000000000000 \
+                --api-permissions "$permission_id=Scope"
+        done
+        
         # Grant admin consent with retry (reuse the function defined above)
         print_step "Granting admin consent for added permissions"
         grant_admin_consent_with_retry "$APP_ID"
-        print_success "Added and consented Microsoft Graph User.Read permission"
+        print_success "Added and consented missing Microsoft Graph permissions"
     else
-        print_success "Microsoft Graph permissions already configured"
+        print_success "All required Microsoft Graph permissions already configured"
     fi
     
     # Check if CLIENT_SECRET is already set
+    print_info "DEBUG: Checking CLIENT_SECRET status before conditional:"
+    print_info "  CLIENT_SECRET value: '${CLIENT_SECRET:-UNDEFINED}'"
+    print_info "  CLIENT_SECRET length: ${#CLIENT_SECRET}"
+    print_info "  Conditional test [-z]: $([ -z "${CLIENT_SECRET:-}" ] && echo "TRUE (empty)" || echo "FALSE (has value)")"
+    
     if [ -z "${CLIENT_SECRET:-}" ]; then
         print_warning "CLIENT_SECRET not found in environment variables - regenerating client secret"
         
+        # Validate APP_ID before trying to reset credentials
+        if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
+            print_error "Cannot regenerate client secret: APP_ID is empty or invalid"
+            print_error "This indicates an issue with app registration detection"
+            exit 1
+        fi
+        
+        print_info "DEBUG: About to generate CLIENT_SECRET for APP_ID: $APP_ID"
+        
         # Generate new client secret
         CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
+        
+        print_info "DEBUG: CLIENT_SECRET generation completed, length: ${#CLIENT_SECRET}"
         
         if [ -n "$CLIENT_SECRET" ]; then
             print_success "Regenerated client secret for existing app registration"
@@ -620,6 +778,13 @@ print_info "APP_ID being exported: $APP_ID"
 print_info "CLIENT_SECRET length: ${#CLIENT_SECRET} characters"
 print_info "TENANT_ID being exported: $TENANT_ID"
 print_info "PUBLIC_IP_ADDRESS being exported: $PUBLIC_IP_ADDRESS"
+
+# Debug: Show CLIENT_SECRET status before export
+if [ -z "${CLIENT_SECRET:-}" ]; then
+    print_warning "DEBUG: CLIENT_SECRET is empty at export time - this should not happen!"
+else
+    print_success "DEBUG: CLIENT_SECRET is set with ${#CLIENT_SECRET} characters at export time"
+fi
 
 export APP_ID
 export CLIENT_SECRET
@@ -723,38 +888,165 @@ fi
 # Configure AGIC permissions
 print_step "Configuring AGIC permissions"
 
-# Get AGIC identity client ID
+# Get AGIC identity client ID from AKS configuration
 AGIC_IDENTITY_CLIENT_ID=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "addonProfiles.ingressApplicationGateway.identity.clientId" --output tsv)
 
 if [ -n "$AGIC_IDENTITY_CLIENT_ID" ] && [ "$AGIC_IDENTITY_CLIENT_ID" != "null" ]; then
-    print_info "AGIC Identity Client ID: $AGIC_IDENTITY_CLIENT_ID"
+    print_info "AGIC Identity Client ID from AKS: $AGIC_IDENTITY_CLIENT_ID"
+    
+    # Get the subscription ID
+    SUBSCRIPTION_ID=$(az account show --query id -o tsv)
     
     # Grant Reader permission on resource group
     print_step "Granting Reader permission to AGIC on resource group"
     az role assignment create \
         --role Reader \
-        --scope "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP" \
+        --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
         --assignee "$AGIC_IDENTITY_CLIENT_ID" \
-        --only-show-errors || print_warning "Reader permission may already exist"
+        --only-show-errors || print_warning "Reader permission may already exist or failed to assign"
     
     # Grant Contributor permission on Application Gateway
     print_step "Granting Contributor permission to AGIC on Application Gateway"
     az role assignment create \
         --role Contributor \
-        --scope "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
+        --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
         --assignee "$AGIC_IDENTITY_CLIENT_ID" \
-        --only-show-errors || print_warning "Contributor permission may already exist"
+        --only-show-errors || print_warning "Contributor permission may already exist or failed to assign"
     
-    print_success "AGIC permissions configured"
+    print_success "AGIC permissions configured for identity: $AGIC_IDENTITY_CLIENT_ID"
+    
+    # Additional check: Get all managed identities in the resource group to identify potential mismatches
+    print_step "Verifying AGIC identity configuration"
+    print_info "Checking for additional managed identities that might be used by AGIC..."
+    
+    # Look for managed identities in the MC_ resource group (where AKS resources are actually created)
+    MC_RESOURCE_GROUP=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "nodeResourceGroup" -o tsv)
+    if [ -n "$MC_RESOURCE_GROUP" ]; then
+        print_info "Checking managed identities in MC resource group: $MC_RESOURCE_GROUP"
+        
+        # List all managed identities in the MC resource group
+        MANAGED_IDENTITIES=$(az identity list --resource-group "$MC_RESOURCE_GROUP" --query "[?contains(name, 'agentpool') || contains(name, 'appgw') || contains(name, 'ingressappgw')].{name:name, clientId:clientId, principalId:principalId}" -o json 2>/dev/null || echo "[]")
+        
+        if [ "$MANAGED_IDENTITIES" != "[]" ] && [ -n "$MANAGED_IDENTITIES" ]; then
+            print_info "Found additional managed identities in MC resource group:"
+            echo "$MANAGED_IDENTITIES" | jq -r '.[] | "  - \(.name): \(.clientId)"' 2>/dev/null || echo "$MANAGED_IDENTITIES"
+            
+            # Grant permissions to all relevant identities to ensure AGIC works
+            echo "$MANAGED_IDENTITIES" | jq -r '.[].clientId' 2>/dev/null | while read -r identity_id; do
+                if [ -n "$identity_id" ] && [ "$identity_id" != "null" ]; then
+                    print_info "Granting permissions to additional identity: $identity_id"
+                    
+                    # Grant Reader permission on resource group
+                    az role assignment create \
+                        --role Reader \
+                        --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+                        --assignee "$identity_id" \
+                        --only-show-errors 2>/dev/null || true
+                    
+                    # Grant Contributor permission on Application Gateway
+                    az role assignment create \
+                        --role Contributor \
+                        --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
+                        --assignee "$identity_id" \
+                        --only-show-errors 2>/dev/null || true
+                fi
+            done
+        fi
+    fi
+    
+    print_success "AGIC permissions verification completed"
 else
-    print_warning "Could not retrieve AGIC identity - permissions may need manual configuration"
+    print_warning "Could not retrieve AGIC identity from AKS configuration"
+    print_info "AGIC permissions may need manual configuration after deployment"
+    print_info "Check AGIC logs with: kubectl logs -l app=ingress-appgw -n kube-system"
 fi
 
 
-# Wait for AGIC to be ready
+# Wait for AGIC to be ready with improved error handling
 print_step "Waiting for AGIC to be ready..."
-kubectl wait --for=condition=Ready pod -l app=ingress-appgw -n kube-system --timeout=300s
-print_success "AGIC is ready"
+
+# First, check if AGIC pods exist and are starting
+AGIC_POD_COUNT=$(kubectl get pods -l app=ingress-appgw -n kube-system --no-headers 2>/dev/null | wc -l || echo "0")
+if [ "$AGIC_POD_COUNT" -eq 0 ]; then
+    print_warning "No AGIC pods found. AGIC may not be properly enabled."
+    print_info "Checking AGIC deployment status..."
+    kubectl get deployment -l app=ingress-appgw -n kube-system 2>/dev/null || print_warning "AGIC deployment not found"
+    
+    # Try to find AGIC-related pods with alternative labels
+    print_info "Looking for AGIC pods with alternative labels..."
+    kubectl get pods -n kube-system | grep -i agic || kubectl get pods -n kube-system | grep -i appgw || print_warning "No AGIC-related pods found"
+fi
+
+# Wait for AGIC pods to be ready, but don't fail if they have permission issues
+print_info "Waiting for AGIC pods to start (timeout: 300s)..."
+if kubectl wait --for=condition=Ready pod -l app=ingress-appgw -n kube-system --timeout=300s 2>/dev/null; then
+    print_success "AGIC pods are ready"
+else
+    print_warning "AGIC pods did not become ready within timeout. Checking pod status and logs..."
+    
+    # Show AGIC pod status
+    print_info "AGIC pod status:"
+    kubectl get pods -l app=ingress-appgw -n kube-system 2>/dev/null || echo "No AGIC pods found"
+    
+    # Check AGIC logs for specific permission issues
+    print_info "Checking AGIC logs for permission issues..."
+    AGIC_LOGS=$(kubectl logs -l app=ingress-appgw -n kube-system --tail=10 2>/dev/null || echo "")
+    
+    if echo "$AGIC_LOGS" | grep -q "AuthorizationFailed\|Forbidden\|403"; then
+        print_warning "AGIC has permission issues. Attempting to fix permissions..."
+        
+        # Extract the actual identity being used by AGIC from the logs
+        ACTUAL_AGIC_IDENTITY=$(echo "$AGIC_LOGS" | grep -o "client '[^']*'" | head -1 | sed "s/client '//;s/'//")
+        
+        if [ -n "$ACTUAL_AGIC_IDENTITY" ]; then
+            print_info "Found actual AGIC identity in logs: $ACTUAL_AGIC_IDENTITY"
+            print_step "Granting permissions to the actual AGIC identity"
+            
+            SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+            
+            # Grant Reader permission on resource group
+            az role assignment create \
+                --role Reader \
+                --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+                --assignee "$ACTUAL_AGIC_IDENTITY" \
+                --only-show-errors 2>/dev/null || print_info "Reader permission assignment completed (may already exist)"
+            
+            # Grant Contributor permission on Application Gateway
+            az role assignment create \
+                --role Contributor \
+                --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
+                --assignee "$ACTUAL_AGIC_IDENTITY" \
+                --only-show-errors 2>/dev/null || print_info "Contributor permission assignment completed (may already exist)"
+            
+            print_success "Granted permissions to actual AGIC identity: $ACTUAL_AGIC_IDENTITY"
+            
+            # Restart AGIC deployment to retry with new permissions
+            print_step "Restarting AGIC deployment to apply new permissions"
+            kubectl rollout restart deployment -l app=ingress-appgw -n kube-system 2>/dev/null || print_warning "Failed to restart AGIC deployment"
+            
+            # Wait for the restart to take effect
+            print_info "Waiting 60 seconds for AGIC to restart with new permissions..."
+            sleep 60
+            
+            # Try waiting again with a shorter timeout
+            if kubectl wait --for=condition=Ready pod -l app=ingress-appgw -n kube-system --timeout=120s 2>/dev/null; then
+                print_success "AGIC is now ready after permission fix"
+            else
+                print_warning "AGIC still not ready after permission fix. It may take more time to stabilize."
+                print_info "AGIC will continue running in the background and should eventually become functional."
+            fi
+        else
+            print_warning "Could not extract AGIC identity from logs"
+            print_info "AGIC may need manual permission configuration"
+        fi
+    else
+        print_warning "AGIC not ready due to other issues (not permissions). Check logs:"
+        kubectl logs -l app=ingress-appgw -n kube-system --tail=20 2>/dev/null || echo "Could not retrieve AGIC logs"
+    fi
+    
+    print_info "Continuing deployment despite AGIC readiness issues..."
+    print_info "AGIC functionality can be verified after deployment completion"
+fi
 
 # Build and push all images
 print_step "Building and pushing Docker images"
@@ -1014,6 +1306,39 @@ export DOMAIN_NAME
 export PUBLIC_IP_ADDRESS
 export NAMESPACE
 
+# Re-export authentication variables to ensure they're available for envsubst
+print_step "Re-exporting authentication variables for envsubst"
+
+# Debug: Check the status of each variable before validation
+print_info "DEBUG: Variable status before validation:"
+print_info "  APP_ID: '${APP_ID:-EMPTY}'"
+print_info "  CLIENT_SECRET: '${CLIENT_SECRET:+SET(${#CLIENT_SECRET} chars)}${CLIENT_SECRET:-EMPTY}'"
+print_info "  TENANT_ID: '${TENANT_ID:-EMPTY}'"
+
+export APP_ID
+export CLIENT_SECRET
+export TENANT_ID
+export OAUTH2_COOKIE_SECRET
+
+# Validate critical variables before substitution
+if [ -z "$APP_ID" ]; then
+    print_error "APP_ID is empty - authentication configuration will fail"
+    exit 1
+fi
+
+if [ -z "$CLIENT_SECRET" ]; then
+    print_error "CLIENT_SECRET is empty - OAuth2 proxy will fail to start"
+    print_error "This indicates the authentication setup did not complete properly"
+    exit 1
+fi
+
+if [ -z "$TENANT_ID" ]; then
+    print_error "TENANT_ID is empty - Azure authentication will fail"
+    exit 1
+fi
+
+print_info "Authentication variables validated: APP_ID=${APP_ID}, CLIENT_SECRET length=${#CLIENT_SECRET}, TENANT_ID=${TENANT_ID}"
+
 # Create a temporary values file with substituted variables
 envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
 
@@ -1095,9 +1420,25 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if kubectl get secret opik-oauth2-proxy -n $NAMESPACE &>/dev/null; then
         # Check if the secret has the correct cookie-secret
         DEPLOYED_COOKIE_SECRET=$(kubectl get secret opik-oauth2-proxy -n $NAMESPACE -o jsonpath='{.data.cookie-secret}' | base64 -d 2>/dev/null || echo "")
+        DEPLOYED_CLIENT_SECRET=$(kubectl get secret opik-oauth2-proxy -n $NAMESPACE -o jsonpath='{.data.client-secret}' | base64 -d 2>/dev/null || echo "")
+        
         if [ ${#DEPLOYED_COOKIE_SECRET} -eq 32 ]; then
-            print_success "OAuth2 secret validated successfully (32-byte cookie secret)"
-            break
+            if [ -n "$DEPLOYED_CLIENT_SECRET" ] && [ ${#DEPLOYED_CLIENT_SECRET} -gt 10 ]; then
+                print_success "OAuth2 secret validated successfully (32-byte cookie secret, ${#DEPLOYED_CLIENT_SECRET}-char client secret)"
+                break
+            else
+                print_warning "OAuth2 secret exists but client-secret is missing or too short: ${#DEPLOYED_CLIENT_SECRET} chars"
+                print_warning "This will cause OAuth2 proxy to crash - fixing the secret..."
+                
+                # Fix the client-secret in the deployed secret
+                kubectl patch secret opik-oauth2-proxy -n $NAMESPACE --type='json' -p='[{"op": "replace", "path": "/data/client-secret", "value":"'$(echo -n "$CLIENT_SECRET" | base64)'"}]'
+                print_success "Fixed client-secret in deployed OAuth2 secret"
+                
+                # Restart OAuth2 proxy to pick up the fix
+                kubectl rollout restart deployment/opik-oauth2-proxy -n $NAMESPACE
+                print_success "Restarted OAuth2 proxy to apply the fix"
+                break
+            fi
         else
             print_warning "OAuth2 secret exists but cookie-secret is wrong length: ${#DEPLOYED_COOKIE_SECRET} bytes"
         fi
@@ -1111,7 +1452,24 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     print_error "OAuth2 secret validation failed after $MAX_RETRIES attempts"
-    print_info "This may cause OAuth2 proxy startup issues"
+    print_error "This will cause OAuth2 proxy startup issues and 502 errors"
+    exit 1
+fi
+
+# Wait for OAuth2 proxy to be ready
+print_step "Waiting for OAuth2 proxy to be ready"
+kubectl wait --for=condition=available deployment/opik-oauth2-proxy -n $NAMESPACE --timeout=300s
+
+# Verify OAuth2 proxy is actually running
+print_step "Verifying OAuth2 proxy status"
+OAUTH2_READY=$(kubectl get pods -n $NAMESPACE -l app=oauth2-proxy --no-headers | grep Running | wc -l)
+if [ "$OAUTH2_READY" -gt 0 ]; then
+    print_success "OAuth2 proxy is running successfully"
+else
+    print_error "OAuth2 proxy is not running - this will cause 502 errors"
+    print_info "Checking OAuth2 proxy logs:"
+    kubectl logs -n $NAMESPACE -l app=oauth2-proxy --tail=10
+    exit 1
 fi
 
 # Clean up temporary file
@@ -1281,6 +1639,8 @@ print_key_value "Client Secret" "$CLIENT_SECRET"
 print_key_value "OAuth2 Cookie Secret" "$OAUTH2_COOKIE_SECRET"
 if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
     print_key_value "Access Group" "$OPIK_ACCESS_GROUP_NAME"
+    print_key_value "Group ID" "$OPIK_ACCESS_GROUP_ID"
+    print_warning "⚠️  Only members of '$OPIK_ACCESS_GROUP_NAME' group can access Opik!"
     print_warning "⚠️  Add team members to the access group in Azure Portal!"
 else
     print_info "Access allowed for all users in tenant"
@@ -1318,8 +1678,16 @@ echo "Port forward (bypass authentication):"
 print_info "kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
 echo ""
 echo "Manage team access:"
-print_info "az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email>"
-print_info "az ad group member list --group '$OPIK_ACCESS_GROUP_NAME'"
+if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
+    print_info "# Add users to the Opik Users group:"
+    print_info "az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email-or-object-id>"
+    print_info "# List current group members:"
+    print_info "az ad group member list --group '$OPIK_ACCESS_GROUP_NAME'"
+    print_info "# View group in Azure Portal:"
+    print_info "https://portal.azure.com/#view/Microsoft_AAD_Groups/GroupDetailsMenuBlade/~/Overview/groupId/$OPIK_ACCESS_GROUP_ID"
+else
+    print_info "Group-based access control is not configured - all tenant users can access Opik"
+fi
 echo ""
 echo "Uninstall deployment:"
 print_info "helm uninstall opik -n $NAMESPACE"
@@ -1337,6 +1705,20 @@ echo "If Application Gateway shows 502 errors:"
 print_info "kubectl get pods -l app=ingress-appgw -n kube-system"
 print_info "kubectl logs -l app=ingress-appgw -n kube-system --tail=50"
 print_info "kubectl get ingress -n $NAMESPACE"
+echo ""
+echo "If AGIC has permission issues (403 Forbidden errors):"
+print_info "# Check AGIC logs for permission errors:"
+print_info "kubectl logs -l app=ingress-appgw -n kube-system | grep -E 'Forbidden|AuthorizationFailed|403'"
+echo ""
+print_info "# Get the actual AGIC identity from logs:"
+print_info "kubectl logs -l app=ingress-appgw -n kube-system | grep \"client '\" | head -1"
+echo ""
+print_info "# Grant permissions to AGIC identity (replace CLIENT_ID with actual ID from logs):"
+print_info "az role assignment create --role Reader --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP --assignee CLIENT_ID"
+print_info "az role assignment create --role Contributor --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME --assignee CLIENT_ID"
+echo ""
+print_info "# Restart AGIC after fixing permissions:"
+print_info "kubectl rollout restart deployment -l app=ingress-appgw -n kube-system"
 echo ""
 echo "Check Application Gateway backend health:"
 print_info "az network application-gateway show-backend-health --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"

@@ -32,9 +32,16 @@ oauth2-proxy:
     cookie-samesite: "lax"
     # Route to our nginx proxy which handles the routing to backend services
     upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80"
+    # Azure AD scopes to request user information including email, profile, and groups
+    scope: "openid email profile groups"
+    # Set user ID claim to use userPrincipalName from Azure AD
+    user-id-claim: "preferred_username"
     
-    # Group-based access control (uncomment and set if you want group restriction)
-    # allowed-group: "$OPIK_ACCESS_GROUP_ID"
+    # Group-based access control - restrict access to members of the Opik Users group
+    # For Azure AD, use allowed-group with the group object ID
+    allowed-group: "$OPIK_ACCESS_GROUP_ID"
+    # Alternative: use allowed-groups (comma-separated) if multiple groups needed
+    # allowed-groups: "$OPIK_ACCESS_GROUP_ID"
   
   service:
     type: ClusterIP
