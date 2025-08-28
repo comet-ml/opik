@@ -140,7 +140,7 @@ const InviteUsersForm = () => {
               className="shrink-0"
               size="sm"
             >
-              <Send className="mr-2 size-3.5" />
+              <Send className="mr-1.5 size-3.5" />
               Send invite
             </Button>
           </div>
