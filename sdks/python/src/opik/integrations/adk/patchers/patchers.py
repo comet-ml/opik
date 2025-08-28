@@ -4,7 +4,7 @@ from opik import semantic_version
 from opik.api_objects import opik_client
 from . import llm_response_wrapper
 from . import litellm_wrappers
-from . import adk_tracer_for_opik_context_management
+from .adk_otel_tracer import opik_adk_otel_tracer
 
 import google.adk.models
 from google.adk.models import lite_llm
@@ -54,11 +54,7 @@ def _patch_adk_lite_llm() -> None:
 
 
 def _patch_adk_opentelemetry_tracers(opik_client: opik_client.Opik) -> None:
-    no_op_opik_tracer = (
-        adk_tracer_for_opik_context_management.ADKTracerForOpikContextManagement(
-            opik_client
-        )
-    )
+    no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(opik_client)
 
     adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
     adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span

@@ -20,8 +20,8 @@ from . import (
 from .patchers import (
     litellm_wrappers,
     llm_response_wrapper,
-    adk_tracer_for_opik_context_management,
 )
+from .patchers.adk_otel_tracer import llm_span_helpers
 from .graph import mermaid_graph_builder
 
 LOGGER = logging.getLogger(__name__)
@@ -160,9 +160,12 @@ class OpikTracer:
             # So we create a span manually here. This flow is handled inside ADKTracerWrapper.
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
-                    name=adk_tracer_for_opik_context_management.NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER,
+                    name=model,
                     project_name=self.project_name,
-                    metadata=self.metadata,
+                    metadata={
+                        **self.metadata,
+                        llm_span_helpers.SPAN_STATUS: llm_span_helpers.LLMSpanStatus.STARTED,
+                    },
                     type="llm",
                     model=model,
                     provider=provider,
@@ -227,6 +230,11 @@ class OpikTracer:
                 usage=usage,
                 project_name=self.project_name,
             )
+            if current_span.metadata is not None:
+                current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
+                    llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION
+                )
+
             context_storage.pop_span_data(ensure_id=current_span.id)
             current_span.init_end_time()
             # We close this span manually because otherwise ADK will close it too late,
