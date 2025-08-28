@@ -11,6 +11,7 @@ import {
   Settings,
   Shield,
   UserPlus,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -121,6 +122,8 @@ const UserMenu = () => {
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
+  const isAcademic = organization?.academic;
+
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
@@ -145,6 +148,29 @@ const UserMenu = () => {
         <AvatarFallback>{user.userName.charAt(0).toUpperCase()}</AvatarFallback>
       </Avatar>
     );
+  };
+
+  const renderUpgradeButton = () => {
+    if (isOrganizationAdmin && !isAcademic) {
+      return (
+        <a
+          href={buildUrl(
+            `organizations/${organization.id}/billing`,
+            workspaceName,
+            "&initialOpenUpgradeCard=true",
+          )}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Button size="sm" variant="special">
+            <Zap className="mr-1.5 size-3.5 shrink-0" />
+            Upgrade
+          </Button>
+        </a>
+      );
+    }
+
+    return null;
   };
 
   const renderAppSelector = () => {
@@ -383,7 +409,8 @@ const UserMenu = () => {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-4">
+    <div className="flex shrink-0 items-center gap-3">
+      {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
 
