@@ -173,16 +173,6 @@ button,
     color: hsl(var(--foreground)) !important;
   }
 
-  /* Disabled/Greyed out button fixes */
-  button:disabled,
-  .disabled,
-  [aria-disabled="true"] {
-    background-color: hsl(var(--muted-disabled)) !important;
-    color: hsl(var(--muted-foreground)) !important;
-    border-color: hsl(var(--muted-disabled)) !important;
-    opacity: 0.6 !important;
-    cursor: not-allowed !important;
-  }
 
   /* Outline button improvements - only for interactive elements */
   button.border:hover,
