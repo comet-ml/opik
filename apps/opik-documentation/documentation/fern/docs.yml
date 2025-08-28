@@ -532,9 +532,6 @@ navigation:
           - page: Ollama
             path: docs/cookbook/ollama.mdx
             slug: ollama
-          - page: OpenAI Agents
-            path: docs/cookbook/openai-agents.mdx
-            slug: openai-agents
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
