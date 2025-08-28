@@ -189,14 +189,14 @@ const UserMenu = () => {
               className="flex cursor-pointer flex-row gap-3"
               onClick={handleSwitchToEM}
             >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#6C6FF7] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
                 EM
               </span>
               <span>Experiment management</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#52AEA4] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
                 LLM
               </span>
 
@@ -216,7 +216,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-secondary-foreground">
+              <span className="comet-body-s-accented truncate text-text-primary">
                 {user.userName}
               </span>
             </TooltipWrapper>
@@ -345,7 +345,7 @@ const UserMenu = () => {
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-black text-xs">
+                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-layout-border text-xs">
                   {organization?.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="comet-body-s truncate">
@@ -390,7 +390,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-muted-slate"
+                className="cursor-pointer justify-center text-navigation-text-secondary"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });

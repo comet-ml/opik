@@ -7,39 +7,164 @@
 
 @layer base {
   :root {
+    --white: #FFFFFF;
+
+    /* Layout colors */
+    --layout-background: 0 0% 100%;
+    --layout-soft-background: #FCFCFD;
+    --layout-border: 214.3 31.8% 91.4%;
+
+    /* Text colors */
+    --text-primary: 224 71% 4%;
+    --text-secondary: 224 17% 26%;
+
+    /* Navigation colors */
+    --navigation-background: 0 0% 100%;
+    --navigation-border: 214.3 31.8% 91.4%;
+    --navigation-text: 224 17% 26%;
+    --navigation-text-secondary: 215 20% 65%;
+    --navigation-hover: 210 40% 98%;
+    --navigation-active: 235 85% 97%;
+    --navigation-active-text: 239 89% 64%;
+
+    /* Legacy variables (for backward compatibility) */
+    --soft-background: #FCFCFD;
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
     --foreground-secondary: 224 71% 4%;
+    --border: 214.3 31.8% 91.4%;
+    --lite-slate: 215 20% 65%;
 
     --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
 
     --tooltip: 224 17% 26%;
+    --tooltip-foreground: 0 0% 100%;
 
     --popover: 0 0% 100%;
     --popover-gray: 240 14% 99%;
+    --popover-foreground: 222.2 84% 4.9%;
 
     --primary: 239 89% 64%;
     --primary-hover: 238 62% 51%;
     --primary-active: 238 65% 43%;
     --primary-100: 235 85% 97%;
+    --primary-foreground: 210 40% 98%;
 
     --secondary: 240 93% 95%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
     --muted-slate: 215 16%, 47%;
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
     --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 348 86% 61%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 239 89% 64%;
 
     --warning: 348 86% 61%;
-    --lite-slate: 215 20% 65%;
+    --success: 129 100% 42%;
+    
+    /* Gray scale for utility classes */
+    --gray-100: #F3F4F6;
+
+    /* Special button colors */
+    --special-button: #19A979;
+    --special-button-hover: #1E8A66;
+    --special-button-active: #1A7557;
+
+    /* Toggle colors */
+    --toggle-outline-active: #F3F4FE;
+
+    /* CodeMirror theme colors */
+    --codemirror-background: #F8FAFC;
+    --codemirror-gutter: #94A3B8;
+    --codemirror-line-highlight: #F1F5F9;
+    --codemirror-syntax-blue: #005CC5;
+
+    /* Chart colors */
+    --chart-tick-stroke: #373D4D;
+
+    /* DataTable colors */
+
+    /* Trace thread colors */
+    --thread-active: #EBF2F5;
+    --thread-inactive: #E2EFFD;
+    --thread-icon-background: #DEDEFD;
+    --thread-icon-text: #1B1C7E;
+    --message-input-background: #E7ECFF;
+
+    /* Action cards */
+    --action-card-background: 0 0% 100%;
+    --action-card-border: 214.3 31.8% 91.4%;
+
+    /* Action types */
+    --action-trace-background: #DAFBF0;
+    --action-trace-text: #295747;
+    --action-experiment-background: #FDE2F6;
+    --action-experiment-text: #72275F;
+    --action-guardrail-background: #FEE3D7;
+    --action-guardrail-text: #73422B;
+    --action-playground-background: #EFE2FD;
+    --action-playground-text: #491B7E;
+
+    /* Feature/brand colors */
+    --feature-experiment-management: #6C6FF7;
+    --feature-llm: #52AEA4;
+
+    /* Error indicator colors */
+    --error-indicator-background: #FFD2D2;
+    --error-indicator-text: #822C45;
+
+    /* Search highlight colors */
+    --search-highlight: #FFDF20;
+    --search-current-highlight: #FF8904;
+
+    /* Modern color variants for tags and charts */
+    --color-gray: #64748B;
+    --color-purple: #8B5CF6;
+    --color-burgundy: #BF399E;
+    --color-pink: #F43F5E;
+    --color-red: #EF4444;
+    --color-orange: #F97316;
+    --color-yellow: #EAB308;
+    --color-green: #10B981;
+    --color-turquoise: #06B6D4;
+    --color-blue: #3B82F6;
+    --color-primary: #6366F1;
+    --color-indigo: #6366F1;
+    --color-violet: #8B5CF6;
+    --color-emerald: #10B981;
+    --color-cyan: #06B6D4;
+    --color-rose: #F43F5E;
+
+    /* Tag variant background and text colors */
+    --tag-gray-bg: #F3F4F6;
+    --tag-purple-bg: #EFE2FD;
+    --tag-purple-text: #491B7E;
+    --tag-burgundy-bg: #FDE2F6;
+    --tag-burgundy-text: #72275F;
+    --tag-pink-bg: #FDE2EA;
+    --tag-pink-text: #822C45;
+    --tag-red-bg: #FDC9C9;
+    --tag-red-text: #4E1D1D;
+    --tag-orange-bg: #FEE3D7;
+    --tag-orange-text: #73422B;
+    --tag-yellow-bg: #FEF0C8;
+    --tag-yellow-text: #675523;
+    --tag-green-bg: #DAFBF0;
+    --tag-green-text: #295747;
+    --tag-turquoise-bg: #CDF5F9;
+    --tag-turquoise-text: #15545B;
+    --tag-blue-bg: #E2EFFD;
+    --tag-blue-text: #19426B;
 
     --radius: 0.5rem;
 
@@ -48,6 +173,66 @@
 
   }
 
+  .dark {
+    /* Layout colors - Dark Mode */
+    --layout-background: 222 84% 4.9%;
+    --layout-soft-background: hsl(222, 84%, 6%);
+    --layout-border: 217.2 32.6% 17.5%;
+
+    /* Navigation colors - Dark Mode */
+    --navigation-background: 222 84% 4.9%;
+    --navigation-border: 217.2 32.6% 17.5%;
+    --navigation-text: 210 40% 98%;
+    --navigation-text-secondary: 215.4 16.3% 46.9%;
+    --navigation-hover: 217.2 32.6% 17.5%;
+    --navigation-active: 217.2 32.6% 25.5%;
+    --navigation-active-text: 217.2 91.2% 79.8%;
+
+    /* Text colors - Dark Mode */
+    --text-primary: 210 40% 87%;
+    --text-secondary: 210 40% 98%;
+
+    /* Legacy variables - Dark Mode (for backward compatibility) */
+    --soft-background: #1a1a1a;
+    --background: 222 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --foreground-secondary: 210 40% 87%;
+    --border: 217.2 32.6% 17.5%;
+    --lite-slate: 215.4 16.3% 46.9%;
+
+    /* Primary colors - Dark Mode */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 217.2 32.6% 25.5%;
+    --primary-hover: 217.2 91.2% 69.8%;
+    --primary-active: 217.2 91.2% 49.8%;
+    --primary-100: 217.2 32.6% 17.5%;
+
+    /* Card colors - Dark Mode */
+    --card: 217.2 32.6% 17.5%;
+    --card-foreground: 210 40% 98%;
+
+    /* Popover colors - Dark Mode */
+    --popover: 222 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Action cards - Dark Mode */
+    --action-card-background: 222 84% 4.9%;
+    --action-card-border: 217.2 32.6% 17.5%;
+
+    /* Action types - Dark Mode (darker backgrounds, lighter text) */
+    --action-trace-background: #1a332a;
+    --action-trace-text: #52c794;
+    --action-experiment-background: #3d1a36;
+    --action-experiment-text: #e48cc7;
+    --action-guardrail-background: #3d2a1a;
+    --action-guardrail-text: #e8a567;
+    --action-playground-background: #2a1a3d;
+    --action-playground-text: #b88ce8;
+
+    /* Feature colors - Dark Mode */
+    --feature-experiment-management: #8A8EFF;
+    --feature-llm: #6BD4C9;
+  }
 
   .comet-expanded {
     --sidebar-width: 240px;
@@ -60,34 +245,34 @@
   }
 
   body {
-    @apply bg-background text-foreground comet-body;
+    @apply bg-background text-text-secondary comet-body;
   }
 }
 
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-3xl tracking-normal text-text-primary;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-2xl tracking-normal text-text-primary;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-xl tracking-normal text-text-primary;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-normal text-foreground-secondary;
+    @apply font-medium text-lg tracking-normal text-text-primary;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-normal text-foreground-secondary;
+    @apply font-medium text-sm tracking-normal text-text-primary;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-normal text-foreground-secondary;
+    @apply font-normal text-base tracking-normal text-text-primary;
   }
 
   .comet-body-accented {
@@ -168,18 +353,18 @@
     }
 
     ::-webkit-scrollbar {
-      background-color: #fff;
+      background-color: var(--white);
       width: 16px;
     }
 
     ::-webkit-scrollbar-track {
-      background-color: #fff;
+      background-color: var(--white);
     }
 
     ::-webkit-scrollbar-thumb {
       background-color: #babac0;
       border-radius: 16px;
-      border: 4px solid #fff;
+      border: 4px solid var(--white);
     }
 
     ::-webkit-scrollbar-thumb:hover {
