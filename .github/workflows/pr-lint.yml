@@ -70,7 +70,8 @@ jobs:
 
               const issuesContent = getSectionContent("## Issues");
               const issuesRegex = /(#\d+|OPIK-\d+)/;
-              if (issuesContent !== null && !issuesRegex.test(issuesContent)) {
+              const isNATicket = title.startsWith("[NA]");
+              if (issuesContent !== null && !isNATicket && !issuesRegex.test(issuesContent)) {
                  errors.push(
                    "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`) or Jira ticket (`OPIK-xxxx`) under the `## Issues` section."
                  );
