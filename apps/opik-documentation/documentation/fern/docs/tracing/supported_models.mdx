@@ -1,0 +1,245 @@
+---
+title: "Supported Models for Cost Tracking"
+description: "Complete list of models supported for automatic cost tracking in Opik"
+---
+
+# Supported Models for Cost Tracking
+
+This page lists all models that Opik supports for automatic cost tracking. The cost data is automatically loaded from the latest pricing information.
+
+<Note>
+  Cost tracking is automatically enabled when using any of the [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations) with these models. The costs shown are per token and may vary based on your specific pricing agreement with the provider.
+</Note>
+
+
+
+<div id="supported-models-container">
+  <div id="loading-message">Loading model data...</div>
+</div>
+
+<script>
+{`
+// Provider mapping to Opik provider names
+const PROVIDER_MAPPING = {
+  "openai": "openai",
+  "vertex_ai-language-models": "google_vertexai",
+  "gemini": "google_ai",
+  "anthropic": "anthropic",
+  "vertex_ai-anthropic_models": "anthropic_vertexai",
+  "bedrock": "bedrock",
+  "bedrock_converse": "bedrock"
+};
+
+// Provider display information
+const PROVIDER_INFO = {
+  "openai": {
+    "name": "OpenAI",
+    "description": "Models hosted by OpenAI",
+    "url": "https://platform.openai.com"
+  },
+  "google_vertexai": {
+    "name": "Google Vertex AI", 
+    "description": "Gemini models hosted in Google Vertex AI",
+    "url": "https://cloud.google.com/vertex-ai"
+  },
+  "google_ai": {
+    "name": "Google AI",
+    "description": "Gemini models hosted in Google AI Studio", 
+    "url": "https://ai.google.dev/aistudio"
+  },
+  "anthropic": {
+    "name": "Anthropic",
+    "description": "Models hosted by Anthropic",
+    "url": "https://www.anthropic.com"
+  },
+  "anthropic_vertexai": {
+    "name": "Anthropic on Vertex AI",
+    "description": "Anthropic models hosted by Google Vertex AI",
+    "url": "https://cloud.google.com/vertex-ai"
+  },
+  "bedrock": {
+    "name": "AWS Bedrock",
+    "description": "Models hosted by AWS Bedrock", 
+    "url": "https://aws.amazon.com/bedrock"
+  }
+};
+
+
+
+function formatCost(cost) {
+  if (cost === 0) return "Free";
+  if (cost < 1e-6) return "$" + cost.toExponential(2);
+  if (cost < 1e-3) return "$" + cost.toFixed(6);
+  return "$" + cost.toFixed(4);
+}
+
+function processModelData(rawData) {
+  const supportedModels = {};
+  const providerCounts = {};
+
+  Object.entries(rawData).forEach(([modelName, modelInfo]) => {
+    // Skip sample_spec and non-model entries
+    if (modelName === "sample_spec" || typeof modelInfo !== 'object') {
+      return;
+    }
+
+    const provider = modelInfo.litellm_provider;
+    
+    // Check if provider is supported
+    if (!PROVIDER_MAPPING[provider]) {
+      return;
+    }
+
+    // Exception: Skip bedrock models with "/" in name (considered old)
+    if ((provider === "bedrock" || provider === "bedrock_converse") && 
+        modelName.includes("/")) {
+      return;
+    }
+
+    // Check if model has cost information
+    const inputCost = modelInfo.input_cost_per_token || 0;
+    const outputCost = modelInfo.output_cost_per_token || 0;
+
+    if (inputCost > 0 || outputCost > 0) {
+      const opikProvider = PROVIDER_MAPPING[provider];
+      
+      if (!supportedModels[opikProvider]) {
+        supportedModels[opikProvider] = [];
+        providerCounts[opikProvider] = 0;
+      }
+
+      supportedModels[opikProvider].push({
+        name: modelName,
+        inputCost: inputCost,
+        outputCost: outputCost,
+        inputCacheCost: modelInfo.input_cost_per_token_above_128k_tokens || modelInfo.input_cost_per_cached_token || null,
+        outputCacheCost: modelInfo.output_cost_per_token_above_128k_tokens || modelInfo.output_cost_per_cached_token || null,
+        reasoningTokensCost: modelInfo.reasoning_cost_per_token || null
+      });
+
+      providerCounts[opikProvider]++;
+    }
+  });
+
+  // Sort models within each provider
+  Object.keys(supportedModels).forEach(provider => {
+    supportedModels[provider].sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  return {
+    models: supportedModels,
+    counts: providerCounts,
+    totalModels: Object.values(providerCounts).reduce((sum, count) => sum + count, 0),
+    totalProviders: Object.keys(supportedModels).length
+  };
+}
+
+function renderSupportedModels(modelData) {
+  const sortedProviders = Object.keys(modelData.models).sort();
+  
+  let html = '<div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 16px; margin: 24px 0;">';
+  html += '<h2 style="margin-top: 0;">Overview</h2>';
+  html += '<p>Opik currently supports cost tracking for <strong>' + modelData.totalModels + '</strong> models across <strong>' + modelData.totalProviders + '</strong> providers:</p>';
+  html += '<ul>';
+  
+  sortedProviders.forEach(provider => {
+    html += '<li><strong>' + PROVIDER_INFO[provider].name + '</strong>: ' + modelData.counts[provider] + ' models</li>';
+  });
+  
+  html += '</ul></div>';
+
+  sortedProviders.forEach(provider => {
+    const models = modelData.models[provider];
+    const providerInfo = PROVIDER_INFO[provider];
+    
+    html += '<div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 24px 0;">';
+    html += '<h2>' + providerInfo.name + ' (<code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 14px;">' + provider + '</code>)</h2>';
+    html += '<p>' + providerInfo.description + ' - <a href="' + providerInfo.url + '" style="color: #2563eb;">' + providerInfo.url + '</a></p>';
+    html += '<p><strong>' + models.length + ' models supported</strong></p>';
+    
+    html += '<details style="margin-top: 16px;">';
+    html += '<summary style="cursor: pointer; color: #2563eb; font-weight: 500;">View all ' + providerInfo.name + ' models</summary>';
+    
+    html += '<div style="margin-top: 16px; overflow-x: auto;">';
+    html += '<table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db;">';
+    html += '<thead style="background: #f9fafb;">';
+    html += '<tr>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Model Name</th>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Input Cost/Token</th>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Output Cost/Token</th>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Input Cache Cost/Token</th>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Output Cache Cost/Token</th>';
+    html += '<th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Reasoning Tokens Cost/Token</th>';
+    html += '</tr>';
+    html += '</thead>';
+    html += '<tbody>';
+    
+    models.forEach(model => {
+      html += '<tr style="border-bottom: 1px solid #e5e7eb;">';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;"><code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 13px;">' + model.name + '</code></td>';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + formatCost(model.inputCost) + '</td>';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + formatCost(model.outputCost) + '</td>';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.inputCacheCost ? formatCost(model.inputCacheCost) : 'N/A') + '</td>';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.outputCacheCost ? formatCost(model.outputCacheCost) : 'N/A') + '</td>';
+      html += '<td style="border: 1px solid #d1d5db; padding: 12px;">' + (model.reasoningTokensCost ? formatCost(model.reasoningTokensCost) : 'N/A') + '</td>';
+      html += '</tr>';
+    });
+    
+    html += '</tbody>';
+    html += '</table>';
+    html += '</div>';
+    html += '</details>';
+    html += '</div>';
+  });
+
+  return html;
+}
+
+// Load and process the model data
+async function loadModelData() {
+  try {
+    const response = await fetch('/model_prices_and_context_window.json');
+    if (!response.ok) {
+      throw new Error('Failed to fetch model data');
+    }
+    const data = await response.json();
+    
+    const processedData = processModelData(data);
+    const html = renderSupportedModels(processedData);
+    
+    document.getElementById('supported-models-container').innerHTML = html;
+  } catch (error) {
+    console.error('Error loading model data:', error);
+    document.getElementById('supported-models-container').innerHTML = 
+      '<div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; color: #991b1b;">' +
+      '<strong>Error:</strong> Failed to load model data. Please check if the model pricing data is available.' +
+      '</div>';
+  }
+}
+
+// Load data when the page loads
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadModelData);
+} else {
+  loadModelData();
+}
+`}
+</script>
+
+---
+
+## Notes
+
+- **Cost Calculation**: Costs are calculated based on token usage and the rates shown above
+- **Real-time Updates**: Cost data is regularly updated to reflect the latest provider pricing
+- **Integration Required**: Automatic cost tracking requires using one of the [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations)
+- **Manual Override**: You can manually set costs for unsupported models using the [manual cost setting](/tracing/cost_tracking#manually-setting-span-costs) feature
+
+
+## Need Support for Additional Models?
+
+If you need cost tracking support for additional models or providers, please [open a feature request](https://github.com/comet-ml/opik/issues) on our GitHub repository.
+
+<Tip>
+  For the most up-to-date list of supported providers and their enum values, check the `opik.LLMProvider` enum in the Python SDK.
+</Tip>
