@@ -148,6 +148,12 @@ server:
     # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
     # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
+  # HTTP connector configuration for handling large request headers
+  # Default: 16KB (16000 bytes) - matches ALB/Nginx request line limit
+  # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
+  applicationConnectors:
+    - type: http
+      maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-8KB}
 
 # Configuration for batch operations
 batchOperations:
