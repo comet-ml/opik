@@ -48,6 +48,19 @@ li[class*="last:text-[#475569]"] {
   color: hsl(var(--foreground)) !important;
 }
 
+/* Base interactive element styles - must come first */
+button,
+[role="button"],
+.cursor-pointer,
+input,
+select,
+textarea,
+a {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 0.15s !important;
+  transition-timing-function: ease-in-out !important;
+}
+
 /* Disabled/Greyed out button fixes - must come before hover rules */
 button:disabled,
 .disabled,
@@ -80,19 +93,6 @@ button:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
 .bg-secondary:hover {
   background-color: hsl(var(--accent)) !important;
   color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Better transitions - only for interactive elements */
-input,
-select,
-textarea,
-a,
-button,
-[role="button"],
-.cursor-pointer {
-  transition-property: background-color, border-color, color, fill, stroke !important;
-  transition-duration: 0.15s !important;
-  transition-timing-function: ease-in-out !important;
 }
 
 /* DARK MODE SPECIFIC OVERRIDES - Only apply when .dark class is present */
@@ -172,7 +172,6 @@ button,
     background-color: transparent !important;
     color: hsl(var(--foreground)) !important;
   }
-
 
   /* Outline button improvements - only for interactive elements */
   button.border:hover,
