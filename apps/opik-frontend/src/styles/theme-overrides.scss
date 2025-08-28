@@ -224,8 +224,8 @@ tr:hover {
 
 /* Additional patterns for group hover primary-foreground */
 *[class*="group-hover"][class*="bg-primary-foreground"] {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
+  background-color: hsl(var(--foreground) / 0.05) !important;
+  color: hsl(var(--card-foreground)) !important;
 }
 
 /* More comprehensive group hover fixes */
