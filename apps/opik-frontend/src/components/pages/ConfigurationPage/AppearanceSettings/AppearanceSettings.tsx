@@ -278,8 +278,8 @@ export const AppearanceSettings: React.FC = () => {
         </Card>
       </div>
 
-      {/* Theme Preview */}
-      <div className="sticky top-4">
+      {/* Theme Preview - Hidden but kept for debug */}
+      <div className="sticky top-4 hidden">
         <ThemePreview />
       </div>
     </div>
