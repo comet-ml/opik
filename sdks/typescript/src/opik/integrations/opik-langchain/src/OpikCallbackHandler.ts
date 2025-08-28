@@ -69,8 +69,7 @@ export class OpikCallbackHandler
   private client: Opik;
   private rootTraceId?: string;
   private tracerMap: Map<string, Trace | Span> = new Map();
-  private threadId?: string;
-
+  
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
 
@@ -78,16 +77,15 @@ export class OpikCallbackHandler
       ...options,
     };
     this.client = options?.client ?? new Opik(options?.clientConfig);
-    this.threadId = options?.threadId;
+    if (options?.threadId) {
+      this.options.metadata = {
+        ...this.options.metadata,
+        threadId: options.threadId,
+      };
+    }
 
     if (options?.projectName) {
       this.client.config.projectName = options?.projectName;
-    }
-  }
-
-  private updateThreadIdFromMetadata(metadata?: JsonNode) {
-    if (!this.threadId && metadata?.thread_id) {
-      this.threadId = metadata.thread_id as string;
     }
   }
 
@@ -121,14 +119,13 @@ export class OpikCallbackHandler
     }
 
     if (!parentRunId) {
-      this.updateThreadIdFromMetadata(metadata);
       this.rootTraceId = runId;
       const trace = this.client.trace({
         name,
         input,
         tags: this.options.tags,
         metadata,
-        threadId: this.threadId,
+        threadId: this.options.metadata?.threadId as string | undefined,
       });
       this.tracerMap.set(runId, trace);
 
