@@ -34,6 +34,7 @@ export interface OpikCallbackHandlerOptions {
   projectName?: string;
   client?: Opik;
   clientConfig?: OpikConfig;
+  threadId?: string;
 }
 
 type StartTracingArgs = {
@@ -68,7 +69,7 @@ export class OpikCallbackHandler
   private client: Opik;
   private rootTraceId?: string;
   private tracerMap: Map<string, Trace | Span> = new Map();
-
+  
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
 
@@ -76,6 +77,12 @@ export class OpikCallbackHandler
       ...options,
     };
     this.client = options?.client ?? new Opik(options?.clientConfig);
+    if (options?.threadId) {
+      this.options.metadata = {
+        ...this.options.metadata,
+        threadId: options.threadId,
+      };
+    }
 
     if (options?.projectName) {
       this.client.config.projectName = options?.projectName;
@@ -118,6 +125,7 @@ export class OpikCallbackHandler
         input,
         tags: this.options.tags,
         metadata,
+        threadId: this.options.metadata?.threadId as string | undefined,
       });
       this.tracerMap.set(runId, trace);
 

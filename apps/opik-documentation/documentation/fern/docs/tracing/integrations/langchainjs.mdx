@@ -83,3 +83,29 @@ Or alternatively, you can use the environment variable:
 ```bash
 export OPIK_PROJECT_NAME="my-project"
 ```
+
+## Setting thread_id for conversation tracking
+
+You can set a `threadId` to group related traces together, which is useful for tracking conversations or multi-turn interactions:
+
+```js {pytest_codeblocks_skip=true}
+const opikHandler = new OpikCallbackHandler({
+  threadId: "conversation-123",
+  tags: ["langchain"],
+  metadata: { "use-case": "conversation-tracking" },
+});
+```
+
+You can also provide the `thread_id` dynamically via chain metadata, which will be used if no `threadId` was set in the constructor:
+
+```js {pytest_codeblocks_skip=true}
+const result = await chain.invoke(
+  { product: "colorful socks" },
+  {
+    callbacks: [opikHandler],
+    metadata: { thread_id: "conversation-456" },
+  },
+);
+```
+
+Note: If both constructor `threadId` and metadata `thread_id` are provided, the constructor value takes precedence.
