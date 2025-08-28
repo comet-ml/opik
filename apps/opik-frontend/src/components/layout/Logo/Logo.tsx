@@ -2,8 +2,6 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import imageLogoUrl from "/images/opik-logo.png";
-import imageDarkLogoUrl from "/images/opik-logo-dark-alt.png";
-//opik-logo-dark-alt.png and opik-logo-dark.png
 
 type LogoProps = {
   expanded: boolean;
