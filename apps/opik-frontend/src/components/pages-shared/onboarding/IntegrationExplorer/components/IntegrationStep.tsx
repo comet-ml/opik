@@ -16,7 +16,7 @@ export const IntegrationStep: FC<IntegrationStepProps> = ({
 }) => {
   return (
     <div
-      className={cn("flex flex-col rounded-md border bg-white p-4", className)}
+      className={cn("flex flex-col rounded-md border bg-action-card-background p-4", className)}
     >
       <div className="space-y-1">
         <div className="comet-body-s-accented">{title}</div>

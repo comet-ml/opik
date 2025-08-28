@@ -232,6 +232,12 @@
     /* Feature colors - Dark Mode */
     --feature-experiment-management: #8A8EFF;
     --feature-llm: #6BD4C9;
+
+    /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
+    --codemirror-background: #0d1117;
+    --codemirror-gutter: #7d8590;
+    --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
+    --codemirror-syntax-blue: #79c0ff;
   }
 
   .comet-expanded {
@@ -245,7 +251,7 @@
   }
 
   body {
-    @apply bg-background text-text-secondary comet-body;
+    @apply bg-background text-text-primary comet-body;
   }
 }
 
@@ -454,7 +460,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: hsl(var(--secondary));
+    background: var(--codemirror-line-highlight);
   }
 }
 
