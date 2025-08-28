@@ -26,17 +26,9 @@ type ThemeProviderProps = {
   defaultVariant?: ThemeVariant;
 };
 
-const initialState: ThemeProviderState = {
-  theme: "system",
-  themeMode: "light",
-  variant: "default",
-  preferences: DEFAULT_THEME_PREFERENCES,
-  setTheme: () => null,
-  setVariant: () => null,
-  setPreferences: () => null,
-};
-
-const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(
+  undefined,
+);
 
 export function ThemeProvider({
   children,
@@ -46,7 +38,10 @@ export function ThemeProvider({
   const [preferences, setPreferencesState] = useState<ThemePreferences>(() => {
     const stored = getStoredThemePreferences();
     // Only use stored preferences if they exist, otherwise use defaults
-    if (stored.mode === DEFAULT_THEME_PREFERENCES.mode && stored.variant === DEFAULT_THEME_PREFERENCES.variant) {
+    if (
+      stored.mode === DEFAULT_THEME_PREFERENCES.mode &&
+      stored.variant === DEFAULT_THEME_PREFERENCES.variant
+    ) {
       return {
         mode: defaultTheme,
         variant: defaultVariant,

@@ -1,18 +1,26 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { ThemeProvider, useTheme } from '../ThemeProvider';
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
+import { ThemeProvider, useTheme } from "../ThemeProvider";
 
 // Mock the utils
-vi.mock('@/lib/themes/utils', () => ({
+vi.mock("@/lib/themes/utils", () => ({
   calculateThemeMode: vi.fn((theme) => {
-    if (theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    if (theme === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
     }
     return theme;
   }),
   getStoredThemePreferences: vi.fn(() => ({
-    mode: 'system',
-    variant: 'default',
+    mode: "system",
+    variant: "default",
   })),
   storeThemePreferences: vi.fn(),
   applyThemeToDocument: vi.fn(),
@@ -23,7 +31,7 @@ const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
 };
-Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+Object.defineProperty(window, "localStorage", { value: localStorageMock });
 
 // Mock matchMedia
 const matchMediaMock = vi.fn(() => ({
@@ -33,28 +41,28 @@ const matchMediaMock = vi.fn(() => ({
   addListener: vi.fn(),
   removeListener: vi.fn(),
 }));
-Object.defineProperty(window, 'matchMedia', { value: matchMediaMock });
+Object.defineProperty(window, "matchMedia", { value: matchMediaMock });
 
 // Test component that uses the theme
 const TestComponent = () => {
   const { theme, themeMode, variant, setTheme, setVariant } = useTheme();
-  
+
   return (
     <div>
       <div data-testid="theme">{theme}</div>
       <div data-testid="theme-mode">{themeMode}</div>
       <div data-testid="variant">{variant}</div>
-      <button onClick={() => setTheme('dark')} data-testid="set-dark">
+      <button onClick={() => setTheme("dark")} data-testid="set-dark">
         Set Dark
       </button>
-      <button onClick={() => setVariant('midnight')} data-testid="set-midnight">
+      <button onClick={() => setVariant("midnight")} data-testid="set-midnight">
         Set Midnight
       </button>
     </div>
   );
 };
 
-describe('ThemeProvider', () => {
+describe("ThemeProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     matchMediaMock.mockReturnValue({
@@ -66,48 +74,48 @@ describe('ThemeProvider', () => {
     });
   });
 
-  it('should provide theme context values', () => {
+  it("should provide theme context values", () => {
     render(
       <ThemeProvider>
         <TestComponent />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
 
-    expect(screen.getByTestId('theme')).toHaveTextContent('system');
-    expect(screen.getByTestId('theme-mode')).toHaveTextContent('light');
-    expect(screen.getByTestId('variant')).toHaveTextContent('default');
+    expect(screen.getByTestId("theme")).toHaveTextContent("system");
+    expect(screen.getByTestId("theme-mode")).toHaveTextContent("light");
+    expect(screen.getByTestId("variant")).toHaveTextContent("default");
   });
 
-  it('should update theme when setTheme is called', async () => {
+  it("should update theme when setTheme is called", async () => {
     render(
       <ThemeProvider>
         <TestComponent />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
 
-    fireEvent.click(screen.getByTestId('set-dark'));
+    fireEvent.click(screen.getByTestId("set-dark"));
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme')).toHaveTextContent('dark');
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
+      expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+      expect(screen.getByTestId("theme-mode")).toHaveTextContent("dark");
     });
   });
 
-  it('should update variant when setVariant is called', async () => {
+  it("should update variant when setVariant is called", async () => {
     render(
       <ThemeProvider>
         <TestComponent />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
 
-    fireEvent.click(screen.getByTestId('set-midnight'));
+    fireEvent.click(screen.getByTestId("set-midnight"));
 
     await waitFor(() => {
-      expect(screen.getByTestId('variant')).toHaveTextContent('midnight');
+      expect(screen.getByTestId("variant")).toHaveTextContent("midnight");
     });
   });
 
-  it('should respond to system theme changes', async () => {
+  it("should respond to system theme changes", async () => {
     const mockMediaQuery = {
       matches: false,
       addEventListener: vi.fn(),
@@ -120,7 +128,7 @@ describe('ThemeProvider', () => {
     render(
       <ThemeProvider>
         <TestComponent />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
 
     // Simulate system theme change to dark
@@ -133,33 +141,33 @@ describe('ThemeProvider', () => {
     }
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
+      expect(screen.getByTestId("theme-mode")).toHaveTextContent("dark");
     });
   });
 
-  it('should throw error when used outside provider', () => {
+  it("should throw error when used outside provider", () => {
     const TestComponentWithoutProvider = () => {
       useTheme();
       return <div>Should not render</div>;
     };
 
     // Suppress console.error for this test
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     expect(() => render(<TestComponentWithoutProvider />)).toThrow();
 
     consoleSpy.mockRestore();
   });
 
-  it('should use default props when provided', () => {
+  it("should use default props when provided", () => {
     render(
       <ThemeProvider defaultTheme="dark" defaultVariant="high-contrast">
         <TestComponent />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
 
-    expect(screen.getByTestId('theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
-    expect(screen.getByTestId('variant')).toHaveTextContent('high-contrast');
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+    expect(screen.getByTestId("theme-mode")).toHaveTextContent("dark");
+    expect(screen.getByTestId("variant")).toHaveTextContent("high-contrast");
   });
 });

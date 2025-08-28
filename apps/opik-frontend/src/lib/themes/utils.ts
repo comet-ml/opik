@@ -62,4 +62,3 @@ export const applyThemeToDocument = (
     root.classList.add(`theme-${variant}`);
   }
 };
-

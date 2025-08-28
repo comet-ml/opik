@@ -83,7 +83,6 @@ export const AppearanceSettings: React.FC = () => {
     [themeMode, setTheme],
   );
 
-
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-6">
@@ -93,7 +92,7 @@ export const AppearanceSettings: React.FC = () => {
             <CardTitle>Theme Mode</CardTitle>
             <CardDescription>
               Choose your preferred color scheme. Press{" "}
-              <kbd 
+              <kbd
                 className="rounded border px-1 py-0.5 text-xs"
                 aria-label="Keyboard shortcut: Command plus Shift plus D"
               >
@@ -116,8 +115,8 @@ export const AppearanceSettings: React.FC = () => {
                       theme === option.value && "border-primary bg-primary/5",
                     )}
                   >
-                    <RadioGroupItem 
-                      value={option.value} 
+                    <RadioGroupItem
+                      value={option.value}
                       id={option.value}
                       aria-describedby={`${option.value}-description`}
                     />
@@ -126,7 +125,10 @@ export const AppearanceSettings: React.FC = () => {
                         {option.icon}
                         <span className="font-medium">{option.label}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground" id={`${option.value}-description`}>
+                      <p
+                        className="text-sm text-muted-foreground"
+                        id={`${option.value}-description`}
+                      >
                         {option.description}
                       </p>
                     </div>
@@ -173,7 +175,10 @@ export const AppearanceSettings: React.FC = () => {
                           {option.icon}
                           <span className="font-medium">{option.label}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground" id={`variant-${option.value}-description`}>
+                        <p
+                          className="text-sm text-muted-foreground"
+                          id={`variant-${option.value}-description`}
+                        >
                           {option.description}
                         </p>
                       </div>
@@ -184,7 +189,6 @@ export const AppearanceSettings: React.FC = () => {
             </CardContent>
           </Card>
         )}
-
       </div>
 
       {/* Theme Preview - Hidden but kept for debug */}
