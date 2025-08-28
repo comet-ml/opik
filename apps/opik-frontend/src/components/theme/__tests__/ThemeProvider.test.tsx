@@ -138,7 +138,7 @@ describe('ThemeProvider', () => {
   it('should throw error when used outside provider', () => {
     const TestComponentWithoutProvider = () => {
       useTheme();
-      return null;
+      return <div>Should not render</div>;
     };
 
     // Suppress console.error for this test
