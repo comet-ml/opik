@@ -68,7 +68,7 @@ print(trace.total_estimated_cost)
 If you are not using one of Opik's integration, Opik can still compute the cost. For you will need to ensure the
 span type is `llm` and you will need to pass:
 
-1. `provider`: The name of the provider, typically `openai`, `anthropic` or `google_ai` for example
+1. `provider`: The name of the provider, typically `openai`, `anthropic` or `google_ai` for example (the most recent providers list can be found in `opik.LLMProvider` enum object)
 2. `model`: The name of the model
 3. `usage`: The input, output and total tokens for this LLM call.
 
@@ -225,12 +225,32 @@ This approach is particularly useful when:
   essential.
 </Tip>
 
-## Supported Models and Integrations
+## Supported models, providers, and integrations
 
-Opik currently calculates costs automatically for:
+Opik currently calculates costs automatically for all LLM calls in the following Python SDK integrations:
 
-- [OpenAI Integration](/tracing/integrations/openai) with Text Models hosted on openai.com
-- [Langchain Integration](/tracing/integrations/langchain) with Vertex AI Gemini text generation models
+- [ADK Integration](/tracing/integrations/adk) - Google ADK integration with cost tracking support
+- [AWS Bedrock Integration](/tracing/integrations/bedrock) - AWS Bedrock models integration
+- [LangChain Integration](/tracing/integrations/langchain) - LangChain framework with various providers
+- [OpenAI Integration](/tracing/integrations/openai) - Direct OpenAI API integration
+- [LiteLLM Integration](https://docs.litellm.ai/docs/observability/opik_integration) - LiteLLM unified interface for multiple providers
+- [Anthropic Integration](/tracing/integrations/anthropic) - Direct Anthropic API integration
+- [CrewAI Integration](/tracing/integrations/crewai) - CrewAI framework with LiteLLM backend
+- [Google AI Integration](/tracing/integrations/genai) - Google Generative AI models
+- [Haystack Integration](/tracing/integrations/haystack) - Haystack framework integration
+- [LlamaIndex Integration](/tracing/integrations/llama_index) - LlamaIndex framework (with OpenAI provider support)
+
+### Supported Providers
+
+Cost tracking is supported for the following LLM providers (as defined in `opik.LLMProvider` enum):
+
+- **OpenAI** (`openai`) - Models hosted by OpenAI (https://platform.openai.com)
+- **Anthropic** (`anthropic`) - Models hosted by Anthropic (https://www.anthropic.com)
+- **Anthropic on Vertex AI** (`anthropic_vertexai`) - Anthropic models hosted by Google Vertex AI
+- **Google AI** (`google_ai`) - Gemini models hosted in Google AI Studio (https://ai.google.dev/aistudio)
+- **Google Vertex AI** (`google_vertexai`) - Gemini models hosted in Google Vertex AI (https://cloud.google.com/vertex-ai)
+- **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
+- **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
 
 <Tip>
   We are actively expanding our cost tracking support. Need support for additional models or providers? Please [open a
