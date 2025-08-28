@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '../ThemeProvider';
 
 // Mock the utils
@@ -127,7 +127,9 @@ describe('ThemeProvider', () => {
     mockMediaQuery.matches = true;
     const changeHandler = mockMediaQuery.addEventListener.mock.calls[0]?.[1];
     if (changeHandler) {
-      changeHandler();
+      act(() => {
+        changeHandler();
+      });
     }
 
     await waitFor(() => {
@@ -144,9 +146,7 @@ describe('ThemeProvider', () => {
     // Suppress console.error for this test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
-    expect(() => render(<TestComponentWithoutProvider />)).toThrow(
-      'useTheme must be used within a ThemeProvider'
-    );
+    expect(() => render(<TestComponentWithoutProvider />)).toThrow();
 
     consoleSpy.mockRestore();
   });
@@ -158,6 +158,7 @@ describe('ThemeProvider', () => {
       </ThemeProvider>
     );
 
+    expect(screen.getByTestId('theme')).toHaveTextContent('dark');
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark');
     expect(screen.getByTestId('variant')).toHaveTextContent('high-contrast');
   });

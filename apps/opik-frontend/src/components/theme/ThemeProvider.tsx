@@ -36,7 +36,7 @@ const initialState: ThemeProviderState = {
   setPreferences: () => null,
 };
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 export function ThemeProvider({
   children,
@@ -45,11 +45,14 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [preferences, setPreferencesState] = useState<ThemePreferences>(() => {
     const stored = getStoredThemePreferences();
-    return {
-      ...stored,
-      mode: stored.mode || defaultTheme,
-      variant: stored.variant || defaultVariant,
-    };
+    // Only use stored preferences if they exist, otherwise use defaults
+    if (stored.mode === DEFAULT_THEME_PREFERENCES.mode && stored.variant === DEFAULT_THEME_PREFERENCES.variant) {
+      return {
+        mode: defaultTheme,
+        variant: defaultVariant,
+      };
+    }
+    return stored;
   });
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
