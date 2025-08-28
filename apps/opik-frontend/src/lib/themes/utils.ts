@@ -63,24 +63,3 @@ export const applyThemeToDocument = (
   }
 };
 
-export const shouldUseDarkMode = (preferences: ThemePreferences): boolean => {
-  if (!preferences.autoSwitch) {
-    return calculateThemeMode(preferences.mode) === "dark";
-  }
-
-  // Auto-switch based on time
-  const now = new Date();
-  const currentTime = now.getHours() * 60 + now.getMinutes();
-
-  const [dayHours, dayMinutes] = (preferences.switchTime?.day || "08:00")
-    .split(":")
-    .map(Number);
-  const [nightHours, nightMinutes] = (preferences.switchTime?.night || "20:00")
-    .split(":")
-    .map(Number);
-
-  const dayTime = dayHours * 60 + dayMinutes;
-  const nightTime = nightHours * 60 + nightMinutes;
-
-  return currentTime < dayTime || currentTime >= nightTime;
-};

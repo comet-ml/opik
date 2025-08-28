@@ -5,11 +5,6 @@ export type ThemeVariant = "default" | "high-contrast" | "midnight";
 export interface ThemePreferences {
   mode: Theme;
   variant: ThemeVariant;
-  autoSwitch?: boolean;
-  switchTime?: {
-    day: string;
-    night: string;
-  };
 }
 
 export interface ThemeProviderState {
@@ -25,11 +20,6 @@ export interface ThemeProviderState {
 export const DEFAULT_THEME_PREFERENCES: ThemePreferences = {
   mode: "system",
   variant: "default",
-  autoSwitch: false,
-  switchTime: {
-    day: "08:00",
-    night: "20:00",
-  },
 };
 
 export const THEME_STORAGE_KEY = "opik-theme-preferences";

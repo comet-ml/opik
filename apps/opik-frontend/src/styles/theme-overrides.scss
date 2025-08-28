@@ -1,59 +1,16 @@
 /* Theme overrides for hardcoded colors from component libraries */
 
-/* Fix hardcoded table header backgrounds */
-.bg-\[#FBFCFD\] {
+/* Universal fixes that apply to both light and dark modes */
+[class*="bg-[#FBFCFD]"] {
   background-color: hsl(var(--soft-background)) !important;
 }
 
-/* Fix hardcoded white backgrounds */
 .bg-white {
   background-color: hsl(var(--card)) !important;
 }
 
-/* Fix white hover backgrounds on cards and main content areas */
 .bg-white:hover {
   background-color: hsl(var(--card)) !important;
-}
-
-/* Fix hardcoded black backgrounds */
-.bg-black {
-  background-color: hsl(var(--foreground)) !important;
-}
-
-/* Fix hardcoded text colors */
-.text-white {
-  color: hsl(var(--background)) !important;
-}
-
-.text-black {
-  color: hsl(var(--foreground)) !important;
-}
-
-/* Fix hardcoded border colors */
-.border-white {
-  border-color: hsl(var(--background)) !important;
-}
-
-.border-black {
-  border-color: hsl(var(--foreground)) !important;
-}
-
-/* Fix hardcoded box shadows with theme-aware colors */
-[style*="box-shadow: rgb(226, 232, 240)"] {
-  box-shadow: hsl(var(--border)) -1px 0px 0px 0px inset !important;
-}
-
-/* Fix hover states for gray colors */
-.group-hover\:bg-gray-600:hover {
-  background-color: hsl(var(--muted-foreground)) !important;
-}
-
-.group-active\:bg-blue-600:active {
-  background-color: hsl(var(--primary)) !important;
-}
-
-.hover\:bg-gray-600:hover {
-  background-color: hsl(var(--muted-foreground)) !important;
 }
 
 /* Fix slate text colors to be theme-aware with better contrast */
@@ -70,292 +27,6 @@
 span[class*="text-muted-slate"],
 div[class*="text-muted-slate"] {
   color: hsl(var(--foreground) / 0.7) !important;
-}
-
-/* Fix any other hardcoded gray colors */
-.bg-gray-50 {
-  background-color: hsl(var(--soft-background)) !important;
-}
-
-.bg-gray-100 {
-  background-color: hsl(var(--muted)) !important;
-}
-
-.bg-gray-200 {
-  background-color: hsl(var(--border)) !important;
-}
-
-.border-gray-200 {
-  border-color: hsl(var(--border)) !important;
-}
-
-.border-gray-300 {
-  border-color: hsl(var(--border)) !important;
-}
-
-/* Fix button hover and active states */
-button:hover,
-.hover\:shadow-md:hover {
-  box-shadow: 0 4px 6px -1px hsl(var(--foreground) / 0.1), 0 2px 4px -1px hsl(var(--foreground) / 0.06) !important;
-}
-
-/* Fix more comprehensive hover effects */
-.hover\:bg-white:hover {
-  background-color: hsl(var(--accent)) !important;
-}
-
-.hover\:bg-gray-50:hover {
-  background-color: hsl(var(--accent)) !important;
-}
-
-.hover\:bg-gray-100:hover {
-  background-color: hsl(var(--muted)) !important;
-}
-
-.hover\:bg-slate-50:hover {
-  background-color: hsl(var(--accent)) !important;
-}
-
-.hover\:bg-slate-100:hover {
-  background-color: hsl(var(--muted)) !important;
-}
-
-/* Fix white text on hover */
-.hover\:text-white:hover {
-  color: hsl(var(--background)) !important;
-}
-
-/* Fix card hover effects */
-.hover\:shadow-sm:hover {
-  box-shadow: 0 1px 2px 0 hsl(var(--foreground) / 0.05) !important;
-}
-
-.hover\:shadow-lg:hover {
-  box-shadow: 0 10px 15px -3px hsl(var(--foreground) / 0.1), 0 4px 6px -2px hsl(var(--foreground) / 0.05) !important;
-}
-
-/* Fix border hover effects */
-.hover\:border-white:hover {
-  border-color: hsl(var(--background)) !important;
-}
-
-.hover\:border-gray-200:hover {
-  border-color: hsl(var(--border)) !important;
-}
-
-.hover\:border-gray-300:hover {
-  border-color: hsl(var(--border)) !important;
-}
-
-/* Fix any remaining hardcoded colors in dynamic styles */
-[class*="bg-[#"] {
-  background-color: hsl(var(--background)) !important;
-}
-
-[style*="background-color: rgb(251, 252, 253)"] {
-  background-color: hsl(var(--soft-background)) !important;
-}
-
-[style*="background-color: rgb(255, 255, 255)"] {
-  background-color: hsl(var(--background)) !important;
-}
-
-[style*="background-color: white"] {
-  background-color: hsl(var(--background)) !important;
-}
-
-[style*="color: white"] {
-  color: hsl(var(--foreground)) !important;
-}
-
-[style*="color: black"] {
-  color: hsl(var(--foreground)) !important;
-}
-
-/* Universal hover effect fixes - catch any remaining white hover effects */
-*:hover {
-  /* Override any remaining hardcoded white backgrounds on hover */
-  &[style*="background-color: white"],
-  &[style*="background-color: rgb(255, 255, 255)"] {
-    background-color: hsl(var(--accent)) !important;
-  }
-  
-  /* Override any remaining hardcoded white text on hover */
-  &[style*="color: white"],
-  &[style*="color: rgb(255, 255, 255)"] {
-    color: hsl(var(--background)) !important;
-  }
-}
-
-/* Specific overrides for common UI patterns */
-[role="button"]:hover,
-button:hover,
-.cursor-pointer:hover {
-  /* Ensure buttons don't have white backgrounds on hover */
-  &.bg-white,
-  &[style*="background-color: white"] {
-    background-color: hsl(var(--accent)) !important;
-  }
-}
-
-/* Table-specific hover fixes */
-th:hover,
-td:hover,
-tr:hover {
-  &.bg-white,
-  &[style*="background-color: white"],
-  &[style*="background-color: rgb(255, 255, 255)"] {
-    background-color: hsl(var(--accent)) !important;
-  }
-}
-
-/* Card and panel hover fixes */
-.hover\\:shadow-md:hover,
-.hover\\:shadow-lg:hover,
-.hover\\:shadow-sm:hover {
-  background-color: hsl(var(--accent)) !important;
-}
-
-/* Fix specific group hover patterns */
-.group\/row:hover .group-hover\/row\\:bg-primary-foreground {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Additional patterns for group hover primary-foreground */
-*[class*="group-hover"][class*="bg-primary-foreground"] {
-  background-color: hsl(var(--foreground) / 0.05) !important;
-  color: hsl(var(--card-foreground)) !important;
-}
-
-/* More comprehensive group hover fixes */
-.group:hover .group-hover\\:bg-primary-foreground,
-.group\\:hover .group-hover\\:bg-primary-foreground {
-  background-color: hsl(var(--accent)) !important;
-}
-
-/* Fix any remaining primary-foreground hover states */
-.hover\\:bg-primary-foreground:hover,
-.group-hover\\:bg-primary-foreground:group-hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Additional override for primary-foreground hover - make it more specific */
-*[class*="hover:bg-primary-foreground"]:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Fix specific navigation hover patterns that use primary-foreground */
-nav a:hover,
-nav button:hover,
-.sidebar a:hover,
-.sidebar button:hover,
-[class*="hover:bg-primary-foreground"]:hover,
-.hover\\:bg-primary-foreground:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Fix table and card hover states that show white/grey */
-.hover\\:bg-gray-50:hover,
-.hover\\:bg-slate-50:hover,
-.hover\\:bg-white:hover,
-tr:hover td,
-.table-row:hover,
-[role="row"]:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Fix any remaining white hover backgrounds */
-*[style*="background-color: white"]:hover,
-*[style*="background-color: rgb(255, 255, 255)"]:hover,
-*[style*="background-color: #ffffff"]:hover,
-*[style*="background-color: #FFFFFF"]:hover {
-  background-color: hsl(var(--accent)) !important;
-}
-
-/* Targeted fixes for specific hover issues only */
-
-/* Fix blue hover backgrounds on specific elements */
-.hover\\:bg-blue-600:hover,
-.hover\\:bg-blue-500:hover,
-.bg-blue-600:hover,
-.bg-blue-500:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Navigation and Button Improvements */
-
-/* Better hover states for interactive elements - ONLY on hover */
-button:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
-[role="button"]:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
-.cursor-pointer:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover {
-  background-color: transparent !important;
-  color: hsl(var(--foreground)) !important;
-}
-
-/* Primary button states */
-.bg-primary:hover {
-  background-color: hsl(var(--primary-hover)) !important;
-}
-
-.bg-primary:active {
-  background-color: hsl(var(--primary-active)) !important;
-}
-
-/* Fix blue backgrounds that should be themed */
-.bg-blue-600,
-.bg-blue-500,
-.bg-blue-700 {
-  background-color: hsl(var(--primary)) !important;
-  color: hsl(var(--primary-foreground)) !important;
-}
-
-.hover\\:bg-blue-600:hover,
-.hover\\:bg-blue-500:hover,
-.hover\\:bg-blue-700:hover {
-  background-color: hsl(var(--primary-hover)) !important;
-  color: hsl(var(--primary-foreground)) !important;
-}
-
-.active\\:bg-blue-600:active,
-.group-active\\:bg-blue-600:active {
-  background-color: hsl(var(--primary-active)) !important;
-  color: hsl(var(--primary-foreground)) !important;
-}
-
-/* Secondary button improvements */
-.bg-secondary:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Navigation selected states - only for nav items */
-nav .bg-primary-100,
-nav [data-state="active"],
-nav [aria-selected="true"],
-nav .active,
-.sidebar-item[data-state="active"],
-.sidebar-item[aria-selected="true"],
-.sidebar-item.active,
-[role="tab"][data-state="active"],
-[role="tab"][aria-selected="true"] {
-  background-color: transparent !important;
-  color: hsl(var(--primary)) !important;
-  border-color: hsl(var(--primary)) !important;
-}
-
-/* Fix breadcrumb active states - should not have blue background */
-.active[data-status="active"],
-[aria-current="page"],
-li a.active,
-a[data-status="active"] {
-  background-color: transparent !important;
-  color: hsl(var(--foreground)) !important;
 }
 
 /* Fix breadcrumb text contrast */
@@ -377,53 +48,27 @@ li[class*="last:text-[#475569]"] {
   color: hsl(var(--foreground)) !important;
 }
 
-/* Disabled/Greyed out button fixes */
-button:disabled,
-.disabled,
-[aria-disabled="true"] {
-  background-color: hsl(var(--muted-disabled)) !important;
-  color: hsl(var(--muted-foreground)) !important;
-  border-color: hsl(var(--muted-disabled)) !important;
-  opacity: 0.6 !important;
-  cursor: not-allowed !important;
-}
-
-/* Filter button states */
-.filter-button,
-.filter-active {
-  background-color: hsl(var(--muted)) !important;
-  color: hsl(var(--muted-foreground)) !important;
-  border-color: hsl(var(--border)) !important;
-}
-
-.filter-button:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Outline button improvements - only for interactive elements */
-button.border:hover,
-[role="button"].border:hover,
-.cursor-pointer.border:hover,
-a.border:hover {
-  border-color: hsl(var(--border)) !important;
+/* Navigation and button improvements */
+button:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
+[role="button"]:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover,
+.cursor-pointer:not(.bg-primary):not(.bg-secondary):not(.bg-destructive):hover {
   background-color: transparent !important;
   color: hsl(var(--foreground)) !important;
 }
 
-/* Ghost button improvements */
-.bg-transparent:hover,
-.ghost:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
+/* Primary button states */
+.bg-primary:hover {
+  background-color: hsl(var(--primary-hover)) !important;
 }
 
-/* Fix contrast issues with navigation - only affect hover states */
-nav button:hover:not(.active):not([data-state="active"]),
-nav [role="button"]:hover:not(.active):not([data-state="active"]) {
-  background-color: transparent !important;
-  color: hsl(var(--foreground)) !important;
-  border-color: hsl(var(--border)) !important;
+.bg-primary:active {
+  background-color: hsl(var(--primary-active)) !important;
+}
+
+/* Secondary button improvements */
+.bg-secondary:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
 }
 
 /* Better transitions - only for interactive elements */
@@ -439,115 +84,232 @@ a {
   transition-timing-function: ease-in-out !important;
 }
 
-/* Specific UI Pattern Fixes */
+/* DARK MODE SPECIFIC OVERRIDES - Only apply when .dark class is present */
+.dark {
+  /* Fix hardcoded black backgrounds */
+  .bg-black {
+    background-color: hsl(var(--foreground)) !important;
+  }
 
-/* Table row hover improvements */
-tr:hover,
-.table-row:hover {
-  background-color: hsl(var(--accent)) !important;
+  /* Fix hardcoded text colors */
+  .text-white {
+    color: hsl(var(--background)) !important;
+  }
+
+  .text-black {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Fix hardcoded border colors */
+  .border-white {
+    border-color: hsl(var(--background)) !important;
+  }
+
+  .border-black {
+    border-color: hsl(var(--foreground)) !important;
+  }
+
+  /* Fix any other hardcoded gray colors */
+  .bg-gray-50 {
+    background-color: hsl(var(--soft-background)) !important;
+  }
+
+  .bg-gray-100 {
+    background-color: hsl(var(--muted)) !important;
+  }
+
+  .bg-gray-200 {
+    background-color: hsl(var(--border)) !important;
+  }
+
+  .border-gray-200 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .border-gray-300 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Fix blue backgrounds that should be themed */
+  .bg-blue-600,
+  .bg-blue-500,
+  .bg-blue-700 {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Navigation selected states - only for nav items */
+  nav .bg-primary-100,
+  nav [data-state="active"],
+  nav [aria-selected="true"],
+  nav .active,
+  .sidebar-item[data-state="active"],
+  .sidebar-item[aria-selected="true"],
+  .sidebar-item.active,
+  [role="tab"][data-state="active"],
+  [role="tab"][aria-selected="true"] {
+    background-color: transparent !important;
+    color: hsl(var(--primary)) !important;
+    border-color: hsl(var(--primary)) !important;
+  }
+
+  /* Fix breadcrumb active states */
+  .active[data-status="active"],
+  [aria-current="page"],
+  li a.active,
+  a[data-status="active"] {
+    background-color: transparent !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Disabled/Greyed out button fixes */
+  button:disabled,
+  .disabled,
+  [aria-disabled="true"] {
+    background-color: hsl(var(--muted-disabled)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+    border-color: hsl(var(--muted-disabled)) !important;
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+  }
+
+  /* Outline button improvements - only for interactive elements */
+  button.border:hover,
+  [role="button"].border:hover,
+  .cursor-pointer.border:hover,
+  a.border:hover {
+    border-color: hsl(var(--border)) !important;
+    background-color: transparent !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Ghost button improvements */
+  .bg-transparent:hover,
+  .ghost:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Fix contrast issues with navigation - only affect hover states */
+  nav button:hover:not(.active):not([data-state="active"]),
+  nav [role="button"]:hover:not(.active):not([data-state="active"]) {
+    background-color: transparent !important;
+    color: hsl(var(--foreground)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Table row hover improvements */
+  tr:hover,
+  .table-row:hover {
+    background-color: hsl(var(--accent)) !important;
+  }
+
+  /* Tab navigation improvements */
+  .tab,
+  [role="tab"] {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .tab:hover,
+  [role="tab"]:hover {
+    color: hsl(var(--foreground)) !important;
+    background-color: transparent !important;
+  }
+
+  .tab[data-state="active"],
+  [role="tab"][aria-selected="true"] {
+    color: hsl(var(--primary)) !important;
+    border-color: hsl(var(--primary)) !important;
+  }
+
+  /* Dropdown and select improvements */
+  .select-item:hover,
+  .dropdown-item:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Card hover improvements */
+  .card:hover {
+    background-color: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Input focus improvements */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
+  }
+
+  /* Badge improvements */
+  .badge {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .badge-primary {
+    background-color: hsl(var(--primary-100)) !important;
+    color: hsl(var(--primary)) !important;
+  }
+
+  /* Loading and skeleton improvements */
+  .skeleton {
+    background-color: hsl(var(--muted)) !important;
+  }
+
+  .loading {
+    background-color: hsl(var(--muted-disabled)) !important;
+  }
+
+  /* Alert and message styling for dark/light themes */
+  [role="alert"] {
+    background-color: hsl(var(--muted) / 0.3) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--card-foreground)) !important;
+  }
+
+  /* Info messages - blue tint */
+  [role="alert"].bg-primary-foreground {
+    background-color: hsl(var(--primary) / 0.1) !important;
+    border-color: hsl(var(--primary) / 0.3) !important;
+  }
+
+  [role="alert"] .text-muted-slate {
+    color: hsl(var(--card-foreground) / 0.8) !important;
+  }
+
+  /* Warning/error variants */
+  [role="alert"].bg-destructive-foreground,
+  [role="alert"].border-destructive {
+    background-color: hsl(var(--destructive) / 0.1) !important;
+    border-color: hsl(var(--destructive) / 0.3) !important;
+    color: hsl(var(--card-foreground)) !important;
+  }
+
+  /* Success variants */
+  [role="alert"].bg-success-foreground,
+  [role="alert"].border-success {
+    background-color: hsl(var(--success) / 0.1) !important;
+    border-color: hsl(var(--success) / 0.3) !important;
+    color: hsl(var(--card-foreground)) !important;
+  }
+
+  /* Sidebar navigation improvements */
+  .sidebar-item:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  .sidebar-item.active {
+    background-color: hsl(var(--primary-100)) !important;
+    color: hsl(var(--primary)) !important;
+  }
+
+  /* Group hover fixes with subtle tint - DARK MODE ONLY */
+  .group:hover [class*="group-hover"][class*="bg-primary-foreground"] {
+    background-color: hsl(var(--foreground) / 0.05) !important;
+    color: hsl(var(--card-foreground)) !important;
+  }
 }
-
-/* Tab navigation improvements */
-.tab,
-[role="tab"] {
-  color: hsl(var(--muted-foreground)) !important;
-}
-
-.tab:hover,
-[role="tab"]:hover {
-  color: hsl(var(--foreground)) !important;
-  background-color: transparent !important;
-}
-
-.tab[data-state="active"],
-[role="tab"][aria-selected="true"] {
-  color: hsl(var(--primary)) !important;
-  border-color: hsl(var(--primary)) !important;
-}
-
-/* Dropdown and select improvements */
-.select-item:hover,
-.dropdown-item:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-/* Card hover improvements */
-.card:hover {
-  background-color: hsl(var(--card)) !important;
-  border-color: hsl(var(--border)) !important;
-  box-shadow: 0 4px 6px -1px hsl(var(--foreground) / 0.1) !important;
-}
-
-/* Input focus improvements */
-input:focus,
-textarea:focus,
-select:focus {
-  border-color: hsl(var(--ring)) !important;
-  box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
-}
-
-/* Badge improvements */
-.badge {
-  background-color: hsl(var(--muted)) !important;
-  color: hsl(var(--muted-foreground)) !important;
-}
-
-.badge-primary {
-  background-color: hsl(var(--primary-100)) !important;
-  color: hsl(var(--primary)) !important;
-}
-
-/* Loading and skeleton improvements */
-.skeleton {
-  background-color: hsl(var(--muted)) !important;
-}
-
-.loading {
-  background-color: hsl(var(--muted-disabled)) !important;
-}
-
-/* Alert and message styling for dark/light themes */
-[role="alert"] {
-  background-color: hsl(var(--muted) / 0.3) !important;
-  border-color: hsl(var(--border)) !important;
-  color: hsl(var(--card-foreground)) !important;
-}
-
-/* Info messages - blue tint */
-[role="alert"].bg-primary-foreground {
-  background-color: hsl(var(--primary) / 0.1) !important;
-  border-color: hsl(var(--primary) / 0.3) !important;
-}
-
-[role="alert"] .text-muted-slate {
-  color: hsl(var(--card-foreground) / 0.8) !important;
-}
-
-/* Warning/error variants */
-[role="alert"].bg-destructive-foreground,
-[role="alert"].border-destructive {
-  background-color: hsl(var(--destructive) / 0.1) !important;
-  border-color: hsl(var(--destructive) / 0.3) !important;
-  color: hsl(var(--card-foreground)) !important;
-}
-
-/* Success variants */
-[role="alert"].bg-success-foreground,
-[role="alert"].border-success {
-  background-color: hsl(var(--success) / 0.1) !important;
-  border-color: hsl(var(--success) / 0.3) !important;
-  color: hsl(var(--card-foreground)) !important;
-}
-
-/* Sidebar navigation improvements */
-.sidebar-item:hover {
-  background-color: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-.sidebar-item.active {
-  background-color: hsl(var(--primary-100)) !important;
-  color: hsl(var(--primary)) !important;
-}
-

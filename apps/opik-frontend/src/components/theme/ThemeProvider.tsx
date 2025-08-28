@@ -18,7 +18,6 @@ import {
   getStoredThemePreferences,
   storeThemePreferences,
   applyThemeToDocument,
-  shouldUseDarkMode,
 } from "@/lib/themes/utils";
 
 type ThemeProviderProps = {
@@ -54,19 +53,12 @@ export function ThemeProvider({
   });
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (preferences.autoSwitch) {
-      return shouldUseDarkMode(preferences) ? "dark" : "light";
-    }
     return calculateThemeMode(preferences.mode);
   });
 
   // Update theme mode when preferences change
   useEffect(() => {
-    const newThemeMode = preferences.autoSwitch
-      ? shouldUseDarkMode(preferences)
-        ? "dark"
-        : "light"
-      : calculateThemeMode(preferences.mode);
+    const newThemeMode = calculateThemeMode(preferences.mode);
     setThemeMode(newThemeMode);
   }, [preferences]);
 
@@ -77,7 +69,7 @@ export function ThemeProvider({
 
   // Listen for system theme changes
   useEffect(() => {
-    if (preferences.mode !== "system" && !preferences.autoSwitch) return;
+    if (preferences.mode !== "system") return;
 
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
@@ -94,23 +86,7 @@ export function ThemeProvider({
       mediaQuery.addListener(handleChange);
       return () => mediaQuery.removeListener(handleChange);
     }
-  }, [preferences.mode, preferences.autoSwitch]);
-
-  // Auto-switch based on time
-  useEffect(() => {
-    if (!preferences.autoSwitch) return;
-
-    const checkTime = () => {
-      const shouldBeDark = shouldUseDarkMode(preferences);
-      setThemeMode(shouldBeDark ? "dark" : "light");
-    };
-
-    // Check every minute
-    const interval = setInterval(checkTime, 60000);
-    checkTime(); // Check immediately
-
-    return () => clearInterval(interval);
-  }, [preferences]);
+  }, [preferences.mode]);
 
   const setTheme = useCallback(
     (theme: Theme) => {
