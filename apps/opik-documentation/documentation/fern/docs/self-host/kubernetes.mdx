@@ -233,6 +233,11 @@ Configuration snippet for using external Clickhouse:
 component:
     backend:
       ...
+      waitForClickhouse:
+        clickhouse:
+          host: <YOUR CLICKHOUSE HOST>
+          port: 8123
+          protocol: http
       env:
         ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
         ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
