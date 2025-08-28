@@ -413,11 +413,40 @@ div.cm-theme div.cm-search.cm-panel {
 }
 
 /* Fix CodeMirror theme for dark mode */
-div.cm-theme {
+div.cm-theme,
+.cm-theme,
+.cm-editor,
+.cm-focused,
+.cm-scroller,
+.cm-content {
   @apply bg-card text-card-foreground;
 }
 
-.dark div.cm-theme {
+.dark div.cm-theme,
+.dark .cm-theme,
+.dark .cm-editor,
+.dark .cm-focused,
+.dark .cm-scroller,
+.dark .cm-content {
   background-color: hsl(var(--card)) !important;
   color: hsl(var(--card-foreground)) !important;
+}
+
+/* Override any white CodeMirror backgrounds */
+.cm-editor.cm-focused,
+.cm-editor,
+.cm-scroller,
+.cm-content {
+  background-color: hsl(var(--card)) !important;
+}
+
+/* Fix CodeMirror line backgrounds */
+.cm-line {
+  background-color: transparent !important;
+}
+
+/* Fix CodeMirror selection colors */
+.cm-selectionBackground,
+.cm-focused .cm-selectionBackground {
+  background-color: hsl(var(--accent)) !important;
 }
