@@ -191,10 +191,16 @@ export const AppearanceSettings: React.FC = () => {
         )}
       </div>
 
-      {/* Theme Preview - Hidden but kept for debug */}
-      <div className="sticky top-4 hidden">
-        <ThemePreview />
-      </div>
+      {/* 
+        Theme Preview - This block is kept for development/debugging purposes.
+        It allows developers to preview theme changes without affecting the main UI.
+        It is only rendered in development mode.
+      */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="sticky top-4 hidden">
+          <ThemePreview />
+        </div>
+      )}
     </div>
   );
 };
