@@ -35,9 +35,6 @@ module.exports = {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         "light-slate": "hsl(var(--lite-slate))",
-        soft: {
-          background: "#FCFCFD",
-        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -47,35 +44,28 @@ module.exports = {
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           slate: "hsl(var(--muted-slate))",
           gray: "hsl(var(--muted-gray))",
           disabled: "hsl(var(--muted-disabled))",
-          foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           gray: "hsl(var(--popover-gray))",
-          foreground: "hsl(var(--popover-foreground))",
         },
         tooltip: {
           DEFAULT: "hsl(var(--tooltip))",
-          foreground: "hsl(var(--tooltip-foreground))",
         },
         card: {
           DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
         },
       },
       borderRadius: {
