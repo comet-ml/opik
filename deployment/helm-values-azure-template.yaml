@@ -22,12 +22,14 @@ oauth2-proxy:
     oidc-issuer-url: "https://login.microsoftonline.com/$TENANT_ID/v2.0"
     email-domain: "*"
     http-address: "0.0.0.0:4180"
-    redirect-url: "http://$PUBLIC_IP_ADDRESS/oauth2/callback"
+    redirect-url: "https://$PUBLIC_IP_ADDRESS/oauth2/callback"
     skip-provider-button: "true"
     pass-access-token: "true"
     pass-user-headers: "true"
     cookie-expire: "24h"
     cookie-refresh: "1h"
+    cookie-secure: "true"
+    cookie-samesite: "lax"
     # Route to our nginx proxy which handles the routing to backend services
     upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80"
     
