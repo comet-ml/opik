@@ -147,7 +147,7 @@ server:
   # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
   applicationConnectors:
     - type: http
-      maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
+      maxRequestHeaderSize: 16
 
 # Configuration for batch operations
 batchOperations:
