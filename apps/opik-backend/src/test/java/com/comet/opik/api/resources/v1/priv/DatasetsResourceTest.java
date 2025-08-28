@@ -4916,7 +4916,7 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(batch, workspaceName, apiKey);
 
-            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(20);
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
@@ -4986,6 +4986,92 @@ class DatasetsResourceTest {
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")));
 
+        }
+
+        @Test
+        void findWithDeletedDatasetItems() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating a trace with input and output
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            // Creating the dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Creating a dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Creating experiment and experiment item
+            var experimentId = GENERATOR.generate();
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .input(trace.input())
+                    .output(trace.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Delete the dataset item using the correct POST endpoint
+            var deleteRequest = new DatasetItemsDelete(List.of(datasetItem.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Create expected dataset item with null source and empty data since it was deleted
+            var expectedDatasetItem = datasetItem.toBuilder()
+                    .source(null)
+                    .data(Map.of()) // Data should be empty when dataset item is deleted
+                    .traceId(null) // NULL because dataset item was hard-deleted
+                    .spanId(null) // NULL because dataset item was hard-deleted
+                    .build();
+
+            // Create expected experiment item with adjusted fields to match API response
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .feedbackScores(null) // API returns null for feedback scores in this context
+                    .comments(null) // API returns null for comments in this context
+                    .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
+                    .usage(null) // API returns null for usage in this context
+                    // Don't set duration - let it be compared as-is from the API response
+                    .build();
+
+            // Query for dataset items with experiment items using assertion helper
+            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, List.of(),
+                    apiKey, workspaceName, Set.of(), List.of(expectedDatasetItem));
+
+            // Get the actual duration from the API response to use in expected experiment item
+            var actualExperimentItem = actualPage.content().get(0).experimentItems().get(0);
+            var expectedExperimentItemWithActualDuration = expectedExperimentItem.toBuilder()
+                    .duration(actualExperimentItem.duration()) // Use actual duration from API
+                    .build();
+
+            // Verify the experiment items are properly associated using assertion helper
+            assertDatasetItemExperiments(actualPage, List.of(expectedDatasetItem),
+                    List.of(expectedExperimentItemWithActualDuration));
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
