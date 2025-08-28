@@ -41,7 +41,7 @@ const AddFeedbackScorePopover: React.FunctionComponent<
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="2xs">
-          <Plus className="mr-2 size-3.5 shrink-0" /> Add score
+          <Plus className="mr-1.5 size-3.5 shrink-0" /> Add score
         </Button>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" className="p-0">

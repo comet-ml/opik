@@ -84,17 +84,16 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           size="sm"
           onClick={() => setOpenUseThisPrompt(true)}
         >
-          <Info className="mr-2 size-3.5" />
+          <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
         <TryInPlaygroundButton prompt={prompt} />
         <Button
           className="ml-auto"
-          variant="secondary"
           size="sm"
           onClick={() => handleOpenEditPrompt(true)}
         >
-          <Pencil className="mr-2 size-3.5" />
+          <Pencil className="mr-1.5 size-3.5" />
           Edit prompt
         </Button>
       </div>

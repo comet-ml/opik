@@ -61,7 +61,7 @@ const TracesPage = () => {
           </h1>
           {isGuardrailsEnabled && (
             <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
-              <Construction className="mr-2 size-3.5" />
+              <Construction className="mr-1.5 size-3.5" />
               Set a guardrail
             </Button>
           )}
