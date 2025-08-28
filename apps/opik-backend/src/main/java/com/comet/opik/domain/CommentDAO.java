@@ -39,6 +39,8 @@ public interface CommentDAO {
 
     Mono<Long> addComment(UUID commentId, UUID entityId, EntityType entityType, UUID projectId, Comment comment);
 
+    Mono<Long> addCommentsBatch(EntityType entityType, Set<UUID> entityIds, UUID projectId, Comment comment);
+
     Mono<Comment> findById(UUID entityId, UUID commentId);
 
     Mono<Void> updateComment(UUID commentId, Comment comment);
@@ -77,6 +79,30 @@ class CommentDAOImpl implements CommentDAO {
                  :user_name,
                  :user_name
             )
+            ;
+            """;
+
+    private static final String INSERT_COMMENTS_BATCH = """
+            INSERT INTO comments(
+                id,
+                entity_id,
+                entity_type,
+                project_id,
+                workspace_id,
+                text,
+                created_by,
+                last_updated_by
+            ) VALUES
+                <items:{item | (
+                    :id<item.index>,
+                    :entity_id<item.index>,
+                    :entity_type,
+                    :project_id,
+                    :workspace_id,
+                    :text,
+                    :user_name,
+                    :user_name
+                )<if(item.hasNext)>,<endif>}>
             ;
             """;
 
@@ -143,6 +169,30 @@ class CommentDAOImpl implements CommentDAO {
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
+    }
+
+    @Override
+    public Mono<Long> addCommentsBatch(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
+            @NonNull UUID projectId, @NonNull Comment comment) {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var items = com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
+            var template = new org.stringtemplate.v4.ST(INSERT_COMMENTS_BATCH).add("items", items);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("entity_type", entityType.getType())
+                    .bind("project_id", projectId)
+                    .bind("text", comment.text());
+
+            int i = 0;
+            for (UUID entityId : entityIds) {
+                statement.bind("id" + i, java.util.UUID.randomUUID())
+                        .bind("entity_id" + i, entityId);
+                i++;
+            }
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        }));
     }
 
     @Override
