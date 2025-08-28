@@ -1,40 +1,54 @@
 import React, { useCallback } from "react";
-import { ROW_HEIGHT } from "@/types/shared";
-import { Rows2, Rows3, Rows4 } from "lucide-react";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DropdownOption, ROW_HEIGHT } from "@/types/shared";
+import { Check, Rows3 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 type DataTableRowHeightSelectorProps = {
   type: string;
   setType: (type: ROW_HEIGHT) => void;
 };
 
+const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
+  { value: ROW_HEIGHT.small, label: "Small" },
+  { value: ROW_HEIGHT.medium, label: "Medium" },
+  { value: ROW_HEIGHT.large, label: "Large" },
+];
+
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
 > = ({ type, setType }) => {
-  const handleTypeChange = useCallback(
-    (value: string) => {
-      value && setType(value as ROW_HEIGHT);
+  const handleSelect = useCallback(
+    (value: ROW_HEIGHT) => {
+      setType(value);
     },
     [setType],
   );
 
   return (
-    <ToggleGroup
-      type="single"
-      value={type}
-      onValueChange={handleTypeChange}
-      size="icon-sm"
-    >
-      <ToggleGroupItem value={ROW_HEIGHT.small} aria-label="Small size">
-        <Rows4 />
-      </ToggleGroupItem>
-      <ToggleGroupItem value={ROW_HEIGHT.medium} aria-label="Medium size">
-        <Rows3 />
-      </ToggleGroupItem>
-      <ToggleGroupItem value={ROW_HEIGHT.large} aria-label="Large size">
-        <Rows2 />
-      </ToggleGroupItem>
-    </ToggleGroup>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Rows3 className="mr-1.5 size-3.5" />
+          Rows
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {OPTIONS.map(({ value, label }) => (
+          <DropdownMenuItem key={value} onClick={() => handleSelect(value)}>
+            <div className="relative flex w-full items-center pl-4">
+              {type === value && <Check className="absolute -left-2 size-4" />}
+              <span>{label}</span>
+            </div>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

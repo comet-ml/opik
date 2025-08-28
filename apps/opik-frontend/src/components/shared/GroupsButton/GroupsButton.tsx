@@ -61,7 +61,7 @@ const GroupsButton = <TColumnData,>({
   columns,
   onChange,
   layout = "standard",
-  variant = "secondary",
+  variant = "outline",
   align = "start",
   disabled,
 }: GroupsButtonProps<TColumnData>) => {
@@ -194,7 +194,7 @@ const GroupsButton = <TColumnData,>({
               <span className="ml-1.5">{validGroups.length}</span>
             ) : null
           ) : (
-            <span className="ml-2">{`Groups (${validGroups.length})`}</span>
+            <span className="ml-1.5">{`Groups (${validGroups.length})`}</span>
           )}
         </Button>
       </PopoverTrigger>
