@@ -73,6 +73,13 @@ The `OpikTracer` constructor accepts several parameters to customize its behavio
 
 ```python
 from opik.integrations.langchain import OpikTracer
+from opik.types import DistributedTraceHeadersDict
+
+# Example distributed headers (optional)
+distributed_headers = DistributedTraceHeadersDict(
+    opik_trace_id="trace-id-from-upstream",
+    opik_parent_span_id="parent-span-id-from-upstream"
+)
 
 opik_tracer = OpikTracer(
     tags=["langchain", "production"],           # List of tags for all traces
@@ -80,7 +87,7 @@ opik_tracer = OpikTracer(
     project_name="my-langchain-project",        # Project name for traces
     thread_id="conversation-123",               # Thread ID for grouping traces
     distributed_headers=distributed_headers,    # For distributed tracing
-    graph=graph                                 # LangGraph object for visualization
+    graph=graph                               # LangGraph object for visualization
 )
 ```
 
@@ -189,12 +196,12 @@ from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer(project_name="langchain-examples")
 
-# Calling Langchain object
+# ... calling Langchain object
 
 traces = opik_tracer.created_traces()
 
 for trace in traces:
-    trace.update(tag=["langchain"])
+    trace.update(tags=["my-tag"])
     trace.log_feedback_score(name="user-feedback", value=0.5)
 ```
 
