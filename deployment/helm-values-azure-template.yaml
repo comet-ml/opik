@@ -24,15 +24,18 @@ oauth2-proxy:
     http-address: "0.0.0.0:4180"
     redirect-url: "https://$PUBLIC_IP_ADDRESS/oauth2/callback"
     skip-provider-button: "true"
-    pass-access-token: "true"
-    pass-user-headers: "true"
+    # Minimize header size to fix 431 errors for users with many groups
+    pass-access-token: "false"
+    pass-user-headers: "false"
+    pass-authorization-header: "false"
+    set-xauthrequest: "true"
     cookie-expire: "24h"
     cookie-refresh: "1h"
     cookie-secure: "true"
     cookie-samesite: "lax"
     # Route to our nginx proxy which handles the routing to backend services
     upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80"
-    # Azure AD scopes to request user information including email, profile, and groups
+    # Minimal scope - only what's needed for group checking
     scope: "openid email profile groups"
     # Set user ID claim to use userPrincipalName from Azure AD
     user-id-claim: "preferred_username"
