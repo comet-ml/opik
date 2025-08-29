@@ -402,14 +402,13 @@ Models hosted by OpenAI • [Learn more](https://platform.openai.com)
 Opik automatically calculates costs for the models listed above when using [supported integrations](/tracing/cost_tracking#supported-models-providers-and-integrations). The cost calculation is handled by backend services that:
 
 1. **Detect the model** used in your LLM calls
-2. **Count tokens** in inputs and outputs  
+2. **Count tokens** in inputs, outputs, and cache if available
 3. **Apply current pricing** from our model database
 4. **Store cost information** with your traces and spans
 
-## Technical Implementation
+## Pricing Data
 
-- **Backend Services**: Cost calculation is implemented in the [Opik backend services](https://github.com/comet-ml/opik/tree/main/apps/opik-backend/src/main/java/com/comet/opik/domain)
-- **Pricing Data**: Model prices are sourced from the [model pricing JSON file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json) as a fallback mechanism
+- **Pricing Data**: Model prices are sourced from the [model pricing JSON file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json)
 - **Real-time Updates**: This page is automatically updated when model pricing data changes
 
 ## Need Support for Additional Models?
