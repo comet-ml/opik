@@ -1,19 +1,23 @@
 import logging
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Tuple
 
 import opentelemetry.trace
 import opik.context_storage
 from opik.api_objects import trace, span
-from opik.decorator import span_creation_handler, arguments_helpers
+from opik.decorator import (
+    span_creation_handler,
+    arguments_helpers,
+    error_info_collector,
+)
 from opik.api_objects import opik_client
+
+from . import llm_span_helpers
 
 
 LOGGER = logging.getLogger(__name__)
 
-NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER = "_OPIK_TRACER_STARTED_LLM_SPAN"
 
-
-class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
+class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
     """
     A patched OpenTelemetry tracer for ADK integration.
 
@@ -47,7 +51,7 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
     ]
 
     def __init__(self, opik_client: opik_client.Opik):
-        self._opik_client = opik_client
+        self.opik_client = opik_client
 
     def start_span(
         self,
@@ -75,19 +79,19 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
         set_status_on_exception: bool = True,
         end_on_exit: bool = True,
     ) -> Iterator["opentelemetry.trace.Span"]:
+        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
+            yield opentelemetry.trace.INVALID_SPAN
+            return
+
         trace_to_close_in_finally_block = None
         span_to_close_in_finally_block = None
 
         current_trace_data = opik.context_storage.get_trace_data()
         current_span_data = opik.context_storage.top_span_data()
 
-        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
-            yield opentelemetry.trace.INVALID_SPAN
-            return
-
         if (
             current_span_data is not None
-            and _is_externally_created_llm_span_ready_for_immediate_finalization(
+            and llm_span_helpers.is_externally_created_llm_span_ready_for_immediate_finalization(
                 current_span_data
             )
         ):
@@ -96,79 +100,97 @@ class ADKTracerForOpikContextManagement(opentelemetry.trace.NoOpTracer):
             # so we manually finalize it here to avoid incorrect span nesting.
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
             current_span_data.init_end_time()
-            self._opik_client.span(**current_span_data.as_parameters)
+            self.opik_client.span(**current_span_data.as_parameters)
             current_span_data = opik.context_storage.top_span_data()
 
         try:
-            if current_trace_data is None:
-                trace_to_close_in_finally_block = trace.TraceData(name=name)
-                opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
-            elif (
-                current_span_data is not None
-                and _is_externally_created_llm_span_that_just_started(current_span_data)
-            ):
-                # LLM span has just been created and put into context storage from the OpikTracer.before_model_call
-                # Not need to create a new one, just remember it to close it in finally block
-                span_to_close_in_finally_block = current_span_data
-                yield opentelemetry.trace.INVALID_SPAN
-                return
-            else:
-                start_span_arguments = arguments_helpers.StartSpanParameters(
+            trace_to_close_in_finally_block, span_to_close_in_finally_block = (
+                _prepare_trace_and_span_to_be_finalized(
                     name=name,
-                    type="general",
+                    current_trace_data=current_trace_data,
+                    current_span_data=current_span_data,
                 )
-
-                _, span_to_close_in_finally_block = (
-                    span_creation_handler.create_span_respecting_context(
-                        start_span_arguments=start_span_arguments,
-                        distributed_trace_headers=None,
-                    )
-                )
-                opik.context_storage.add_span_data(span_to_close_in_finally_block)
+            )
 
             yield opentelemetry.trace.INVALID_SPAN
+        except Exception as exception:
+            # The expected exception here is the exception that happened during the agent
+            # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
+            # `__exit__` method via the `gen.throw(...)` statement.
+            #
+            # More context: https://docs.python.org/3.12/reference/expressions.html#examples
+            error_info = error_info_collector.collect(exception)
+
+            if trace_to_close_in_finally_block is not None:
+                trace_to_close_in_finally_block.update(error_info=error_info)
+            if span_to_close_in_finally_block is not None:
+                span_to_close_in_finally_block.update(error_info=error_info)
         finally:
             if trace_to_close_in_finally_block is not None:
-                self._finalize_trace_if_its_not_finalized_yet(
-                    trace_to_close_in_finally_block.id
-                )
-            elif span_to_close_in_finally_block is not None:
-                self._finalize_span_if_its_not_finalized_yet(
-                    span_to_close_in_finally_block.id
-                )
-            else:
+                self._ensure_trace_is_finalized(trace_to_close_in_finally_block.id)
+
+            if span_to_close_in_finally_block is not None:
+                self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
+
+            if (
+                trace_to_close_in_finally_block is None
+                and span_to_close_in_finally_block is None
+            ):
                 LOGGER.warning(
                     "No span or trace to finalize in ADK tracer. This is unexpected."
                 )
 
-    def _finalize_trace_if_its_not_finalized_yet(self, trace_id: str) -> None:
+    def _ensure_trace_is_finalized(self, trace_id: str) -> None:
         trace_data = opik.context_storage.pop_trace_data(ensure_id=trace_id)
         if trace_data is not None:
             trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.as_parameters)
+            self.opik_client.trace(**trace_data.as_parameters)
 
-    def _finalize_span_if_its_not_finalized_yet(self, span_id: str) -> None:
+    def _ensure_span_is_finalized(self, span_id: str) -> None:
         opik.context_storage.trim_span_data_stack_to_certain_span(span_id)
 
         span_data = opik.context_storage.pop_span_data(ensure_id=span_id)
         if span_data is not None:
             span_data.init_end_time()
-            self._opik_client.span(**span_data.as_parameters)
+            self.opik_client.span(**span_data.as_parameters)
 
 
-def _is_externally_created_llm_span_ready_for_immediate_finalization(
-    span_data: span.SpanData,
-) -> bool:
-    return (
-        span_data.type == "llm"
-        and span_data.name != NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER
-    )
+def _prepare_trace_and_span_to_be_finalized(
+    name: str,
+    current_trace_data: Optional[trace.TraceData],
+    current_span_data: Optional[span.SpanData],
+) -> Tuple[Optional[trace.TraceData], Optional[span.SpanData]]:
+    """
+    Prepares a trace and a span to be finalized in the finally block.
+    """
 
+    trace_to_close_in_finally_block = None
+    span_to_close_in_finally_block = None
 
-def _is_externally_created_llm_span_that_just_started(
-    span_data: span.SpanData,
-) -> bool:
-    return (
-        span_data.type == "llm"
-        and span_data.name == NAME_OF_LLM_SPAN_JUST_STARTED_FROM_OPIK_TRACER
-    )
+    if current_trace_data is None:
+        trace_to_close_in_finally_block = trace.TraceData(name=name)
+        opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
+    elif (
+        current_span_data is not None
+        and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+            current_span_data
+        )
+    ):
+        # LLM span has just been created and put into context storage from the OpikTracer.before_model_call
+        # Not need to create a new one, just remember it to close it in finally block
+        span_to_close_in_finally_block = current_span_data
+    else:
+        start_span_arguments = arguments_helpers.StartSpanParameters(
+            name=name,
+            type="general",
+        )
+
+        _, span_to_close_in_finally_block = (
+            span_creation_handler.create_span_respecting_context(
+                start_span_arguments=start_span_arguments,
+                distributed_trace_headers=None,
+            )
+        )
+        opik.context_storage.add_span_data(span_to_close_in_finally_block)
+
+    return trace_to_close_in_finally_block, span_to_close_in_finally_block

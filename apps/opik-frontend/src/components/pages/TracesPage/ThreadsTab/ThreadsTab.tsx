@@ -109,23 +109,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: ThreadStatusCell as never,
   },
   {
-    id: `${COLUMN_USAGE_ID}.total_tokens`,
-    label: "Total tokens",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) =>
-      row.usage && isNumber(row.usage.total_tokens)
-        ? `${row.usage.total_tokens}`
-        : "-",
-  },
-  {
-    id: "total_estimated_cost",
-    label: "Estimated cost",
-    type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
-    size: 160,
-  },
-  {
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
@@ -150,10 +133,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.list,
     cell: ListCell as never,
   },
-];
-
-const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
-  ...SHARED_COLUMNS,
   {
     id: "start_time",
     label: "Start time",
@@ -165,6 +144,27 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     label: "End time",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.end_time),
+  },
+];
+
+const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
+  ...SHARED_COLUMNS,
+  {
+    id: `${COLUMN_USAGE_ID}.total_tokens`,
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? `${row.usage.total_tokens}`
+        : "-",
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
+    size: 160,
   },
   {
     id: "created_by",
