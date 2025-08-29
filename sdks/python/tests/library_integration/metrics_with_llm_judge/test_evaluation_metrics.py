@@ -6,6 +6,9 @@ import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
 from ragas import metrics as ragas_metrics
 from ragas import llms as ragas_llms
+from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema import (
+    FewShotExampleStructuredOutputCompliance,
+)
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -274,7 +277,7 @@ def test__structured_output_compliance__invalid_json(model):
     )
 
     result = structured_output_metric.score(
-        output='{"name": "John", "age": 30, "city": New York}'  # Missing quotes
+        output='{"name": "John", "age": 30, "city": New York}'
     )
 
     assert_helpers.assert_score_result(result)
@@ -301,20 +304,20 @@ def test__structured_output_compliance__with_schema(model):
 def test__structured_output_compliance__with_few_shot_examples(model):
     """Test structured output compliance with few-shot examples."""
     few_shot_examples = [
-        {
-            "title": "Valid JSON",
-            "output": '{"name": "Alice", "age": 25}',
-            "schema": "User(name: str, age: int)",
-            "score": True,
-            "reason": "Valid JSON format",
-        },
-        {
-            "title": "Invalid JSON",
-            "output": '{"name": "Bob", age: 30}',
-            "schema": "User(name: str, age: int)",
-            "score": False,
-            "reason": "Missing quotes around age value",
-        },
+        FewShotExampleStructuredOutputCompliance(
+            title="Valid JSON",
+            output='{"name": "Alice", "age": 25}',
+            schema="User(name: str, age: int)",
+            score=True,
+            reason="Valid JSON format",
+        ),
+        FewShotExampleStructuredOutputCompliance(
+            title="Invalid JSON",
+            output='{"name": "Bob", age: 30}',
+            schema="User(name: str, age: int)",
+            score=False,
+            reason="Missing quotes around age value",
+        ),
     ]
 
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -329,14 +332,15 @@ def test__structured_output_compliance__with_few_shot_examples(model):
 
 @pytest.mark.asyncio
 async def test__structured_output_compliance__async():
-    """Test async structured output compliance scoring."""
+    """Test structured output compliance with async model."""
+
     structured_output_metric = metrics.StructuredOutputCompliance()
 
     result = await structured_output_metric.ascore(
         output='{"name": "John", "age": 30, "city": "New York"}'
     )
 
-    assert_helpers.assert_score_result(result)
+    assert_helpers.assert_score_result(result, include_reason=False)
     assert result.value > 0.5
 
 

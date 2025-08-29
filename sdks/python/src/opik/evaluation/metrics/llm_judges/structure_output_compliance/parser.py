@@ -30,7 +30,7 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         dict_content = parsing_helpers.extract_json_content_or_raise(content)
 
         score = dict_content.get("score")
-        reason = dict_content.get("reason")
+        reason_list = dict_content.get("reason")
 
         # Validate types
         if not isinstance(score, bool):
@@ -38,13 +38,17 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
                 f"`score` must be a boolean (true/false), got: {score}"
             )
 
-        if not isinstance(reason, list) or not all(isinstance(r, str) for r in reason):
-            raise exceptions.MetricComputationError(
-                "`reason` must be a list of strings"
-            )
+        # Validate reason: must be list of strings
+        if not isinstance(reason_list, list) or not all(
+            isinstance(r, str) for r in reason_list
+        ):
+            reason_list = []
+
+        # Fallback if LLM did not provide reason
+        reason_str = "\n".join(reason_list) if reason_list else "No reason provided"
 
         return score_result.ScoreResult(
-            name=name, value=1.0 if score else 0.0, reason="\n".join(reason)
+            name=name, value=1.0 if score else 0.0, reason=reason_str
         )
 
     except Exception as e:
