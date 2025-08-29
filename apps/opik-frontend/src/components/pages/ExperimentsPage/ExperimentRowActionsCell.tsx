@@ -24,7 +24,6 @@ const ExperimentRowActionsCell: React.FunctionComponent<
   const [openEditPanel, setOpenEditPanel] = useState<boolean>(false);
   const experimentBatchDeleteMutation = useExperimentBatchDeleteMutation();
   const experimentUpdateMutation = useExperimentUpdateMutation();
-
   const deleteExperimentsHandler = useCallback(() => {
     experimentBatchDeleteMutation.mutate({
       ids: [experiment.id],
@@ -32,7 +31,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [experiment]);
 
-  const updateExperimentHandler = useCallback((name: string, metadata: string) => {
+  const updateExperimentHandler = useCallback((name: string, metadata: object) => {
     experimentUpdateMutation.mutate({
       id: experiment.id,
       name: name,
@@ -62,6 +61,8 @@ const ExperimentRowActionsCell: React.FunctionComponent<
       open={openEditPanel}
       setOpen={setOpenEditPanel}
       onConfirm={updateExperimentHandler}
+      latestName={experiment.name}
+      latestMetadata={experiment.metadata}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
