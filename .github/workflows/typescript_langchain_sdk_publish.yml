@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
@@ -60,7 +60,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push changes
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@v0.6.0
         with:
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
           branch: ${{ github.ref }}
