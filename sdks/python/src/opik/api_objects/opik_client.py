@@ -49,7 +49,6 @@ from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
 from .prompt.client import PromptClient
 from .trace import migration as trace_migration
-from experiment import Experiment
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
