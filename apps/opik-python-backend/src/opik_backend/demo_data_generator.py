@@ -334,7 +334,7 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
         experiments = [x for x in demo_experiments if x["name"] in ["opik-assistant-v1", "opik-assistant-v2"]]
 
         for item in experiments:
-            commits =  [item.decode() for sublist in item["prompt_versions"].values() for item in sublist]
+            commits =  [sub_item.decode() for sublist in item["prompt_versions"].values() for sub_item in sublist]
             
             prompts = []
             for version in commits:
@@ -589,7 +589,6 @@ def create_demo_optimizer_project(base_url: str, workspace_name, comet_api_key):
                 status="completed"
             )
 
-            client.flush()
     except Exception as e:
         logger.error(e)
     finally:
