@@ -7,6 +7,8 @@ import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { ProjectMetricRequestPublicMetricType } from "../../types/ProjectMetricRequestPublicMetricType";
 import { ProjectMetricRequestPublicInterval } from "../../types/ProjectMetricRequestPublicInterval";
+import { TraceFilterPublic } from "../../../../types/TraceFilterPublic";
+import { TraceThreadFilterPublic } from "../../../../types/TraceThreadFilterPublic";
 
 export const ProjectMetricRequestPublic: core.serialization.Schema<
     serializers.ProjectMetricRequestPublic.Raw,
@@ -16,6 +18,11 @@ export const ProjectMetricRequestPublic: core.serialization.Schema<
     interval: ProjectMetricRequestPublicInterval.optional(),
     intervalStart: core.serialization.property("interval_start", core.serialization.date().optional()),
     intervalEnd: core.serialization.property("interval_end", core.serialization.date().optional()),
+    traceFilters: core.serialization.property("trace_filters", core.serialization.list(TraceFilterPublic).optional()),
+    threadFilters: core.serialization.property(
+        "thread_filters",
+        core.serialization.list(TraceThreadFilterPublic).optional(),
+    ),
 });
 
 export declare namespace ProjectMetricRequestPublic {
@@ -24,5 +31,7 @@ export declare namespace ProjectMetricRequestPublic {
         interval?: ProjectMetricRequestPublicInterval.Raw | null;
         interval_start?: string | null;
         interval_end?: string | null;
+        trace_filters?: TraceFilterPublic.Raw[] | null;
+        thread_filters?: TraceThreadFilterPublic.Raw[] | null;
     }
 }
