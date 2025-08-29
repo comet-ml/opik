@@ -25,6 +25,7 @@ LOGGER = logging.getLogger(__name__)
 class UploadResult:
     future: Future
     monitor: file_upload_monitor.FileUploadMonitor
+    upload_options: upload_options.FileUploadOptions
 
     def ready(self) -> bool:
         """Allows to check if wrapped Future successfully finished"""
@@ -33,9 +34,28 @@ class UploadResult:
     def successful(self, timeout: Optional[float] = None) -> bool:
         """Allows to check if wrapped Future completed without raising an exception"""
         try:
-            return self.future.exception(timeout) is None
-        except (CancelledError, TimeoutError):
-            return False
+            exception = self.future.exception(timeout)
+            if exception is None:
+                return True
+
+            raise exception
+        except (CancelledError, TimeoutError) as e:
+            LOGGER.warning(
+                "Timeout while waiting for the result of file '%s' upload. Error: %s",
+                self.upload_options.file_name,
+                e,
+            )
+        except Exception as exception:
+            LOGGER.error(
+                "Failed to upload file with name '%s' from path [%s] with size [%s]. Error: %s",
+                self.upload_options.file_name,
+                self.upload_options.file_path,
+                format_helpers.format_bytes(self.upload_options.file_size),
+                exception,
+                exc_info=True,
+            )
+
+        return False
 
 
 class FileUploadManagerMonitor:
@@ -154,7 +174,9 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
             "upload_httpx_client": self._httpx_client,
         }
         future = self._executor.submit(uploader, **kwargs)
-        self._upload_results.append(UploadResult(future, monitor))
+        self._upload_results.append(
+            UploadResult(future, monitor=monitor, upload_options=options)
+        )
 
     def all_done(self) -> bool:
         return all(result.ready() for result in self._upload_results)

@@ -13,4 +13,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean traceThreadPythonEvaluatorEnabled;
     @JsonProperty
     @NotNull boolean guardrailsEnabled;
+    @JsonProperty
+    @NotNull boolean opikAIEnabled;
 }

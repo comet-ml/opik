@@ -68,6 +68,7 @@ export enum EXPLAINER_ID {
   metric_answer_relevance = "metric_answer_relevance",
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
+  trace_opik_ai = "trace_opik_ai",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -480,5 +481,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "The context recall metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
     docLink: "/evaluation/metrics/context_recall",
+  },
+  [EXPLAINER_ID.trace_opik_ai]: {
+    id: EXPLAINER_ID.trace_opik_ai,
+    description:
+      "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
   },
 };
