@@ -168,7 +168,7 @@ Opik supports cost tracking for **{total_models} models** across **{total_provid
         # Create anchor ID from provider name (lowercase, replace spaces with hyphens)
         anchor_id = provider_info['name'].lower().replace(' ', '-')
         
-        mdx_content += f"""## {provider_info['name']} {{#{anchor_id}}}
+        mdx_content += f"""<h2 id="{anchor_id}">{provider_info['name']}</h2>
 
 {provider_info['description']} • [Learn more]({provider_info['url']})
 
