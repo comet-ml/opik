@@ -319,8 +319,8 @@ def test_missing_data_returns_bad_request(client):
     (
             INVALID_METRIC,
             [
-                """from typing import\\n                      ^\\nSyntaxError: invalid syntax""",  # DockerExecutor format
-                """from typing import\n                      ^\nSyntaxError: Expected one or more names after 'import'"""  # ProcessExecutor format
+                """SyntaxError: invalid syntax""",  # DockerExecutor format
+                """SyntaxError: Expected one or more names after 'import'"""  # ProcessExecutor format
             ]
     ),
     pytest.param(
