@@ -567,3 +567,26 @@ div.cm-theme div.cm-search.cm-panel {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
   }
 }
+
+/* Dark mode image transformation utility - user optimized */
+.dark-mode-image-transform {
+  /* Light mode - no transformation */
+  filter: none;
+  transition: filter 0.2s ease;
+  border-radius: inherit;
+  
+  /* Dark mode - optimized values with theme color overlay */
+  .dark & {
+    filter: 
+      grayscale(0.1)
+      invert(1)
+      hue-rotate(220deg)
+      brightness(100%);
+    
+    border: none;
+    border-radius: inherit;
+    
+    /* Try box-shadow to add theme color overlay */
+    box-shadow: inset 0 0 0 1000px hsla(var(--layout-background), 0.3);
+  }
+}

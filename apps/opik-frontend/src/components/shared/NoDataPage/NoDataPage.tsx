@@ -37,7 +37,7 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
         </div>
         <div className="flex w-full flex-auto overflow-hidden">
           <img
-            className="m-auto max-h-full max-w-full rounded-md border object-cover"
+            className="m-auto max-h-full max-w-full rounded-md border object-cover dark-mode-image-transform"
             src={imageUrl}
             alt="no data image"
           />
