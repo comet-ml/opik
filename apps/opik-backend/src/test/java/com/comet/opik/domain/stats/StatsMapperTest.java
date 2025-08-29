@@ -85,6 +85,7 @@ class StatsMapperTest {
         values.put("metadata", 0L);
         values.put("tags", 0.0);
         values.put("llm_span_count_avg", 2.0);
+        values.put("span_count_avg", 3.0);
         values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
         values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
 
@@ -97,6 +98,7 @@ class StatsMapperTest {
                         ProjectStats.ProjectStatItem::getValue));
 
         assertThat(mapped.get(StatsMapper.LLM_SPAN_COUNT)).isEqualTo(2.0);
+        assertThat(mapped.get(StatsMapper.SPAN_COUNT)).isEqualTo(3.0);
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST)).isEqualTo(1.25);
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST_SUM)).isEqualTo(2.50);
     }
