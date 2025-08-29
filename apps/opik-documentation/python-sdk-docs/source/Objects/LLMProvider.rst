@@ -1,6 +1,5 @@
 LLMProvider
 =============
 
-.. autoclass:: opik.LLMProvider
+.. autoclass:: opik.types.LLMProvider
     :members:
-    :inherited-members:
