@@ -2,128 +2,200 @@
 description: Cookbook that showcases Opik's integration with [INTEGRATION_NAME]
 ---
 
-# Using Opik with [INTEGRATION_NAME]
+# Integration Documentation Guidelines
 
-Opik integrates with [INTEGRATION_NAME] to provide a simple way to log traces for all [LLM/Agent/Framework] calls. [Add brief description of what gets tracked]
+This document provides comprehensive guidelines for creating and maintaining integration documentation for Opik. It covers both code integrations (requiring Python SDK) and OpenTelemetry configuration-only integrations.
 
-## Creating an account on Comet.com
+## 📋 Integration Type Decision Matrix
 
-[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) and grab you API Key.
+Use this matrix to determine which template to use:
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) for more information.
+| Integration Type              | Requirements                                                                                                                            | Template to Use                   | Examples                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| **Code Integration**          | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration     | `integration_template_code.md`    | LangChain, CrewAI, DSPy, Haystack                                   |
+| **OpenAI-Based Integration**  | • Uses OpenAI-compatible API<br>• Users install Opik Python SDK<br>• Uses `track_openai()` wrapper<br>• Compatible with OpenAI SDK      | `integration_template_openai.md`  | BytePlus, OpenRouter, Any OpenAI-compatible API                     |
+| **LiteLLM Integration**       | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required    | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
+| **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md`    | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python             |
 
-## Installation
+# Integration Template: Code Integration
+
+**Use this template for**: Code integrations that require users to install Opik Python SDK and modify their code to use `track_*()` wrapper functions.
+
+**Requirements**:
+
+- Users install Opik Python SDK
+- Users modify their code
+- Uses `track_*()` wrapper functions
+- Direct Python integration
+
+**Examples**: LangChain, CrewAI, DSPy, Haystack, etc.
+
+---
+
+## Template Structure
+
+[INTEGRATION_NAME]([INTEGRATION_WEBSITE_URL]) is [INTEGRATION_DESCRIPTION].
+
+This guide explains how to integrate Opik with [INTEGRATION_NAME] using the [INTEGRATION_NAME] integration provided by Opik. By using the [INTEGRATION_NAME] integration provided by Opik, you can easily track and evaluate your [INTEGRATION_NAME] API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+
+<!--
+OPTIONAL: Include Colab notebook link only if a cookbook notebook exists.
+If no notebook exists, remove this entire section.
+-->
+
+[OPTIONAL_COLAB_NOTEBOOK_SECTION]
+
+## Getting Started
+
+### Installation
 
 Install the required packages:
 
-```python
-%pip install --upgrade opik [integration_package_name]
+```bash
+pip install opik [integration_package]
 ```
 
-## Configuration
+### Configuring Opik
 
-Configure Opik to point to your desired backend:
+Configure Opik to send traces to your Comet project:
 
 ```python
 import opik
 
-opik.configure(use_local=False)  # For Comet.com cloud
-# opik.configure(use_local=True)  # For local self-hosted
+opik.configure(
+    project_name="your-project-name",
+    workspace="your-workspace-name",
+)
 ```
 
-## Environment Setup
+You can also set environment variables:
 
-Set up your API keys:
-
-```python
-import os
-import getpass
-
-# [INTEGRATION_NAME] API key
-if "[INTEGRATION_API_KEY_NAME]" not in os.environ:
-    os.environ["[INTEGRATION_API_KEY_NAME]"] = getpass.getpass("Enter your [INTEGRATION_NAME] API key: ")
-
-# Set project name (optional)
-os.environ["OPIK_PROJECT_NAME"] = "[integration_name]-integration-demo"
+```bash
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
 ```
 
-## Basic Usage
+### Configuring [INTEGRATION_NAME]
 
-Import the integration and wrap your client:
+[INTEGRATION_NAME_SPECIFIC_CONFIGURATION_INSTRUCTIONS]
+
+## Usage
+
+### Basic Usage
+
+Set up [INTEGRATION_NAME] with Opik tracking:
 
 ```python
 from opik.integrations.[integration_module] import track_[integration_name]
-from [integration_package] import [ClientClass]
+from [package] import [ClientClass]
 
-# Create your original client
-client = [ClientClass]([constructor_params])
+# Initialize the [INTEGRATION_NAME] client
+client = [ClientClass]()
+tracked_client = track_[integration_name](client, project_name="optional")
 
-# Wrap with Opik tracking
-tracked_client = track_[integration_name](client)
-# OR for global tracking:
-# track_[integration_name](project_name="my-project")
+# Make API calls
+response = tracked_client.some_method()
 ```
 
-### Simple Example
+### Using with @track decorator
 
-```python
-# Example usage
-[example_code_with_tracked_client]
-
-# The calls are automatically logged to Opik
-```
-
-## Advanced Usage
-
-### Using with `@track` decorator
-
-If you have multiple steps in your pipeline, combine with Opik's `@track` decorator:
+Use the `@track` decorator to create comprehensive traces:
 
 ```python
 from opik import track
+from opik.integrations.[integration_module] import track_[integration_name]
+from [package] import [ClientClass]
+
+client = [ClientClass]()
+tracked_client = track_[integration_name](client)
 
 @track
-def my_pipeline_step(input_data):
-    # Your [INTEGRATION_NAME] calls here
-    result = tracked_client.[some_method](input_data)
-    return result
+def my_function(input_data):
+    """Process data using [INTEGRATION_NAME]."""
 
-@track  
-def full_pipeline():
-    step1_result = my_pipeline_step("input")
-    # Additional processing...
-    return final_result
+    response = tracked_client.some_method(input_data)
+    return response
 
-full_pipeline()
+# Call the tracked function
+result = my_function("example input")
 ```
 
-### [Integration-Specific Advanced Features]
+## [INTEGRATION_NAME]-Specific Features
 
-[Add any integration-specific advanced usage patterns, like:
-- Streaming support
-- Async support  
-- Multi-agent workflows
-- Custom metadata
-- Error handling
-- etc.]
+[DESCRIBE_SPECIFIC_FEATURES_OF_THE_INTEGRATION]
 
-## Viewing Results
+## Results viewing
 
-The traces will be automatically logged to Opik and can be viewed in the UI:
+Once your [INTEGRATION_NAME] calls are logged with Opik, you can view them in the Opik UI. Each API call will create a trace with detailed information including:
 
-![Integration Screenshot](https://path/to/screenshot.png)
+- Input messages and parameters
+- Model used and configuration
+- Response content
+- Token usage and cost information
+- Timing and performance metrics
+
+## Feedback Scores and Evaluation
+
+Once your [INTEGRATION_NAME] calls are logged with Opik, you can evaluate your LLM application using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["message"],
+        "output": x["output"],
+        "reference": x["reference"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="[integration_name]-evaluation",
+    dataset=your_dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# [INTEGRATION_NAME] Configuration
+export [INTEGRATION_API_KEY_NAME]="your-[integration-name]-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Missing API Key**: Ensure your [INTEGRATION_NAME] API key is set correctly
-2. **Import Errors**: Make sure both `opik` and `[integration_package]` are installed
-3. **No Traces Appearing**: Verify your Opik configuration with `opik configure`
+1. **Authentication Errors**: Ensure your API key is correct and has the necessary permissions
+2. **Model Not Found**: Verify the model name is available on [INTEGRATION_NAME]
+3. **Rate Limiting**: [INTEGRATION_NAME] may have rate limits; implement appropriate retry logic
+4. **Base URL Issues**: Ensure the base URL is correct for your [INTEGRATION_NAME] deployment
 
 ### Getting Help
 
-If you encounter issues:
-- Check the [Opik documentation](https://www.comet.com/docs/opik/)
-- Join our [Slack community](https://chat.comet.com)
-- Report issues on [GitHub](https://github.com/comet-ml/opik/issues) 
+- Check the [INTEGRATION_NAME] API documentation for detailed error codes
+- Review the [INTEGRATION_NAME] status page for service issues
+- Contact [INTEGRATION_NAME] support for API-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have [INTEGRATION_NAME] integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/datasets/overview) to test and improve your models
+- [Set up feedback collection](/feedback/overview) to gather human evaluations
+- [Monitor performance](/tracing/overview) across different models and configurations
