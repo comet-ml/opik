@@ -34,16 +34,21 @@ RUN yum update -y && \
     yum install -y nginx-1.26.3 && \
     yum clean all
 
-# Copy and install Fluent Bit using installer from builder stage
-COPY --from=builder /tmp/fluent-bit-install.sh /tmp/fluent-bit-install.sh
-RUN /tmp/fluent-bit-install.sh && \
-    rm /tmp/fluent-bit-install.sh && \
-    mkdir -p /etc/fluent-bit /var/log/fluent-bit && \
-    chown -R nginx:nginx /etc/fluent-bit /var/log/fluent-bit
-
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
+
+# Copy and install Fluent Bit using installer from builder stage
+COPY --from=builder /tmp/fluent-bit-install.sh /tmp/fluent-bit-install.sh
+RUN if [ "$BUILD_MODE" != "comet" ]; then \
+      /tmp/fluent-bit-install.sh && \
+      rm /tmp/fluent-bit-install.sh && \
+      mkdir -p /etc/fluent-bit /var/log/fluent-bit && \
+      chown -R nginx:nginx /etc/fluent-bit /var/log/fluent-bit; \
+    else \
+      echo "Skipping Fluent Bit installation"; \
+      rm /tmp/fluent-bit-install.sh; \
+    fi
 
 # implement changes required to run NGINX as an unprivileged user
 RUN rm -f /etc/nginx/nginx.conf.default && \

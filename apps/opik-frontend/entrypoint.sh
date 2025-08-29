@@ -33,8 +33,16 @@ if [ "${ENABLE_OTEL_LOG_EXPORT:-false}" = "true" ]; then
     # Set collector endpoint from HOST/PORT
     echo "  📊 Collector endpoint: ${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}"
     
-    /opt/fluent-bit/bin/fluent-bit --config=/etc/fluent-bit/fluent-bit.conf &
-    FLUENT_BIT_PID=$!
+
+    if [ -x "/opt/fluent-bit/bin/fluent-bit" ] && [ -f "/etc/fluent-bit/fluent-bit.conf" ]; then
+        /opt/fluent-bit/bin/fluent-bit --config=/etc/fluent-bit/fluent-bit.conf &
+        FLUENT_BIT_PID=$!
+        echo "Fluent Bit started with PID $FLUENT_BIT_PID"
+    else
+        echo "[ERROR] Fluent Bit not started — Fluent Bit is not installed"
+    fi
+
+
 else
     echo "📝 OTEL log export disabled - nginx logs locally only"
 fi
