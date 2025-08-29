@@ -590,7 +590,7 @@ const ExperimentsPage: React.FC = () => {
             sections={columnSections}
           ></ColumnsButton>
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={handleNewExperimentClick}
           >
