@@ -509,8 +509,8 @@ public class ExperimentService {
                     // target name
                     String targetName = current.name();
                     if (incomingName != null) {
-                        targetName = org.apache.commons.lang3.StringUtils.isBlank(incomingName)
-                                ? nameGenerator.generateName()
+                        targetName = StringUtils.isBlank(incomingName)
+                                ? current.name()
                                 : incomingName;
                     }
 

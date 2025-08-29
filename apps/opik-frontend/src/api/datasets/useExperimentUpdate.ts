@@ -6,7 +6,7 @@ import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 type UseExperimentUpdate = {
     id: string,
     name: string,
-    metadata:string
+    metadata:object
 };
 
 const useExperimentUpdateMutation = () => {
@@ -31,7 +31,7 @@ const useExperimentUpdateMutation = () => {
       toast({
         title: "Error",
         description: message,
-        variant: "destructive",
+        variant: "destructive", 
       });
     },
     onSettled: () => {
