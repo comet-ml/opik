@@ -28,13 +28,13 @@ export function UpdateExperimentDialog({
     open={open}
     onOpenChange={setOpen}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Enter Details</DialogTitle>
+          <DialogTitle>Edit experiment</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody className="space-y-4">
           {/* Name Input */}
-          <div>
+          <div className="flex flex-col gap-2 pb-4">
             <label className="block text-sm font-medium mb-1">Name</label>
             <input
               type="text"
@@ -47,10 +47,10 @@ export function UpdateExperimentDialog({
           </div>
 
           {/* Metadata Input */}
-          <div>
+          <div className="flex flex-col gap-2 pb-4">
             <label className="block text-sm font-medium mb-1">Metadata</label>
             <textarea
-              className="w-full border rounded-md px-3 py-2 text-sm h-32 resize-y focus:outline-none focus:ring focus:ring-ring"
+              className="w-full border rounded-md px-3 py-2 text-sm h-32 resize-y focus:outline"
               placeholder={JSON.stringify(latestMetadata, null, 2)}
               onChange={(val) => {
                 setMetadata(val.target.value)
@@ -58,7 +58,13 @@ export function UpdateExperimentDialog({
             />
           </div>
         </DialogAutoScrollBody>
-        <DialogClose>
+        <DialogFooter>
+          <DialogClose>
+            <Button variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
+          <DialogClose>
           <Button type="submit"
             onClick={() => {
               let parsedMetadata: object = {};
@@ -71,10 +77,11 @@ export function UpdateExperimentDialog({
 
               // fallback: use latestName/Metadata if input is empty
               onConfirm(name || latestName, parsedMetadata || latestMetadata);
-              onConfirm(name, metadata)
             }}
-          >Save</Button>
+          >Update Experiment</Button>
         </DialogClose>
+        </DialogFooter>
+        
       </DialogContent>
     </Dialog>
   );
