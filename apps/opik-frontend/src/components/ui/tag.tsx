@@ -16,7 +16,8 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
       orange: "bg-[var(--tag-orange-bg)] text-[var(--tag-orange-text)]",
       yellow: "bg-[var(--tag-yellow-bg)] text-[var(--tag-yellow-text)]",
       green: "bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]",
-      turquoise: "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
+      turquoise:
+        "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
       blue: "bg-[var(--tag-blue-bg)] text-[var(--tag-blue-text)]",
     },
     size: {
