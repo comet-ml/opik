@@ -1,5 +1,6 @@
 LLMProvider
 ===========
 
-.. autoclass:: opik.types.LLMProvider
-    :members:
+.. automodule:: opik.types
+   :members: LLMProvider
+   :undoc-members:
