@@ -238,7 +238,8 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst
    Objects/DistributedTraceHeadersDict.rst
-   
+   Objects/LLMProvider.rst
+
 .. toctree::
    :maxdepth: 1
    :caption: Command Line Interface
