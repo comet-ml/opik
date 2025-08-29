@@ -5,13 +5,13 @@
 # The evaluation is going to be tracked into a separate project from the demo traces.
 # It was run using a simple context with 3 sentences, and 3 questions asking about it.
 
-from click import prompt
 import opik
 import json
 import urllib.request
 import uuid6
 import logging
 import datetime
+import time
 import uuid
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -428,25 +428,49 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
                 logger.warning("Skipping thread scoring because thread_id is None")
                 return
 
-            if thread not in demo_thread_feedback_scores:
-                logger.info("Thread %s not found in demo_thread_feedback_scores", thread)
+            threads_data = demo_thread_feedback_scores.get(thread, [])
+            done = False
+            max_attempts = 10
+            attempts = 0
+
+            while not done and attempts < max_attempts:
+                try:
+                    thread_data = client.rest_client.traces.get_trace_thread(thread_id=thread, project_name=project_name)
+                    if thread_data.status == "inactive":
+                        done = True
+                    else:
+                        client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                except Exception as e:
+                    logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
+
+            if len(threads_data) == 0:
+                logger.info("No feedback scores for thread %s", thread)
                 return
 
-            threads_data = demo_thread_feedback_scores[thread]
-            client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
-            client.rest_client.traces.score_batch_of_threads(
-                scores = [
-                    opik.rest_api.types.FeedbackScoreBatchItemThread(
-                        thread_id=thread,
-                        project_name=project_name,
-                        name=item['name'],
-                        category_name=item.get('category_name'),
-                        value=item['value'],
-                        reason=item.get('reason'),
-                        source=item.get('source', 'sdk')
-                    ) for item in threads_data
-                ]
-            )
+            done = False
+            attempts = 0
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.score_batch_of_threads(
+                        scores = [
+                            opik.rest_api.types.FeedbackScoreBatchItemThread(
+                                thread_id=thread,
+                                project_name=project_name,
+                                name=item['name'],
+                                category_name=item.get('category_name'),
+                                value=item['value'],
+                                reason=item.get('reason'),
+                                source=item.get('source', 'sdk')
+                            ) for item in threads_data
+                        ]
+                    )
+                    done = True
+                except Exception as e:
+                    logger.error(f"Error scoring thread {thread} attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
 
         # Process all threads concurrently using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=min(len(threads), 10)) as executor:
@@ -601,9 +625,9 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
     try:
         create_demo_evaluation_project(base_url, workspace_name, comet_api_key)
 
-        create_demo_chatbot_project(base_url, workspace_name, comet_api_key)
-
         create_demo_optimizer_project(base_url, workspace_name, comet_api_key)
+
+        create_demo_chatbot_project(base_url, workspace_name, comet_api_key)
 
         create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
 
