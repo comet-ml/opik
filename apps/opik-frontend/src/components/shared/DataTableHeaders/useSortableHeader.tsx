@@ -37,7 +37,7 @@ export const useSortableHeader = <TData,>({
         )}
         <Icon
           className={cn(
-            "shrink-0 hidden size-3.5 group-hover:inline",
+            "shrink-0 hidden size-3.5 group-hover:inline text-muted-foreground",
             direction && "inline",
           )}
         />

@@ -30,14 +30,14 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
         className,
       )}
     >
-      <div className="flex size-full flex-col items-center rounded-md border bg-white px-6 py-14">
+      <div className="flex size-full flex-col items-center rounded-md border bg-layout-background px-6 py-14">
         <h2 className="comet-title-m">{title}</h2>
         <div className="comet-body-s max-w-[570px] px-4 pb-8 pt-4 text-center text-muted-slate">
           {description}
         </div>
         <div className="flex w-full flex-auto overflow-hidden">
           <img
-            className="m-auto max-h-full max-w-full rounded-md border object-cover"
+            className="m-auto max-h-full max-w-full rounded-md border object-cover dark-mode-image-transform"
             src={imageUrl}
             alt="no data image"
           />

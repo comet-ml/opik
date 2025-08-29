@@ -26,6 +26,39 @@ module.exports = {
         ],
       },
       colors: {
+        white: "var(--white)",
+        
+        /* Layout colors */
+        "layout-background": "hsl(var(--layout-background))",
+        "layout-soft-background": "var(--layout-soft-background)",
+        "layout-border": "hsl(var(--layout-border))",
+
+        /* Text colors */
+        "text-primary": "hsl(var(--text-primary))",
+        "text-secondary": "hsl(var(--text-secondary))",
+
+        /* Navigation colors */
+        "navigation-background": "hsl(var(--navigation-background))",
+        "navigation-border": "hsl(var(--navigation-border))",
+        "navigation-text": "hsl(var(--navigation-text))",
+        "navigation-text-secondary": "hsl(var(--navigation-text-secondary))",
+        "navigation-hover": "hsl(var(--navigation-hover))",
+        "navigation-active": "hsl(var(--navigation-active))",
+        "navigation-active-text": "hsl(var(--navigation-active-text))",
+
+        /* Action cards */
+        "action-card-background": "hsl(var(--action-card-background))",
+        "action-card-border": "hsl(var(--action-card-border))",
+        "action-trace-background": "var(--action-trace-background)",
+        "action-trace-text": "var(--action-trace-text)",
+        "action-experiment-background": "var(--action-experiment-background)",
+        "action-experiment-text": "var(--action-experiment-text)",
+        "action-guardrail-background": "var(--action-guardrail-background)",
+        "action-guardrail-text": "var(--action-guardrail-text)",
+        "action-playground-background": "var(--action-playground-background)",
+        "action-playground-text": "var(--action-playground-text)",
+
+        /* Legacy colors (for backward compatibility) */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -35,9 +68,6 @@ module.exports = {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         "light-slate": "hsl(var(--lite-slate))",
-        soft: {
-          background: "#FCFCFD",
-        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -76,6 +106,10 @@ module.exports = {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        "soft-background": "var(--soft-background)", /* Legacy - use layout-soft-background */
+        gray: {
+          100: "var(--gray-100)",
         },
       },
       borderRadius: {

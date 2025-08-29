@@ -22,14 +22,14 @@ const TabsListVariants = cva(
 );
 
 const TabsTriggerVariants = cva(
-  "inline-flex items-center whitespace-nowrap transition-all disabled:pointer-events-none",
+  "inline-flex items-center whitespace-nowrap transition-all disabled:pointer-events-none text-text-secondary",
   {
     variants: {
       variant: {
         default:
-          "comet-body-s-accented justify-center rounded-md bg-transparent p-2 ring-offset-background hover:text-foreground-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:hover:bg-primary-hover data-[state=active]:hover:text-primary-foreground",
+          "comet-body-s-accented justify-center rounded-md bg-transparent p-2 ring-offset-background hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:hover:bg-primary-hover data-[state=active]:hover:text-primary-foreground",
         underline:
-          "comet-body-s-accented border-b-2 border-transparent py-2 hover:text-foreground-secondary disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-primary hover:data-[state=active]:text-primary-hover",
+          "comet-body-s-accented border-b-2 border-transparent py-2 hover:text-text-primary disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-primary hover:data-[state=active]:text-primary-hover",
       },
       size: {
         default: "",

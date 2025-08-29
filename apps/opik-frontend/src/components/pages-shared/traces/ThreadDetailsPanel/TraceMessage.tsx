@@ -70,7 +70,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   return (
     <div className="border-b pt-4 first:pt-0" data-trace-message-id={trace.id}>
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
-        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[#E7ECFF] px-4 py-2">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
         </div>
       </div>

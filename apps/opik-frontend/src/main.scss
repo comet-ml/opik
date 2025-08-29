@@ -7,9 +7,32 @@
 
 @layer base {
   :root {
+    --white: #ffffff;
+
+    /* Layout colors */
+    --layout-background: 0 0% 100%;
+    --layout-soft-background: #fcfcfd;
+    --layout-border: 214.3 31.8% 91.4%;
+
+    /* Text colors */
+    --text-primary: 224 71% 4%;
+    --text-secondary: 224 17% 26%;
+
+    /* Navigation colors */
+    --navigation-background: 0 0% 100%;
+    --navigation-border: 214.3 31.8% 91.4%;
+    --navigation-text-secondary: 215 20% 65%;
+    --navigation-hover: 210 40% 98%;
+    --navigation-active: 235 85% 97%;
+    --navigation-active-text: 239 89% 64%;
+
+    /* Legacy variables (for backward compatibility) */
+    //--soft-background: #FCFCFD;
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
     --foreground-secondary: 224 71% 4%;
+    --border: 214.3 31.8% 91.4%;
+    --lite-slate: 215 20% 65%;
 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -42,60 +65,215 @@
     --destructive: 348 86% 61%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 239 89% 64%;
 
     --warning: 348 86% 61%;
     --success: 129 100% 42%;
-    --lite-slate: 215 20% 65%;
+
+    /* Gray scale for utility classes */
+    --gray-100: #f3f4f6;
+
+    /* Special button colors */
+    --special-button: #19a979;
+    --special-button-hover: #1e8a66;
+    --special-button-active: #1a7557;
+
+    /* Toggle colors */
+    --toggle-outline-active: #f3f4fe;
+
+    /* CodeMirror theme colors */
+    --codemirror-background: #f8fafc;
+    --codemirror-gutter: #94a3b8;
+    --codemirror-line-highlight: #e6e6fe;
+    --codemirror-syntax-blue: #005cc5;
+
+    /* Chart colors */
+    --chart-tick-stroke: #373d4d;
+
+    /* DataTable colors */
+
+    /* Trace thread colors */
+    --thread-active: #ebf2f5;
+    --thread-inactive: #e2effd;
+    --thread-icon-background: #dedefd;
+    --thread-icon-text: #1b1c7e;
+    --message-input-background: #e7ecff;
+
+    /* Action cards */
+    --action-card-background: 0 0% 100%;
+    --action-card-border: 214.3 31.8% 91.4%;
+    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+    /* Action types */
+    --action-trace-background: #dafbf0;
+    --action-trace-text: #295747;
+    --action-experiment-background: #fde2f6;
+    --action-experiment-text: #72275f;
+    --action-guardrail-background: #fee3d7;
+    --action-guardrail-text: #73422b;
+    --action-playground-background: #efe2fd;
+    --action-playground-text: #491b7e;
+
+    /* Feature/brand colors */
+    --feature-experiment-management: #6c6ff7;
+    --feature-llm: #52aea4;
+
+    /* Error indicator colors */
+    --error-indicator-background: #ffd2d2;
+    --error-indicator-text: #822c45;
+
+    /* Search highlight colors */
+    --search-highlight: #ffdf20;
+    --search-current-highlight: #ff8904;
+
+    /* Modern color variants for tags and charts */
+    --color-gray: #64748b;
+    --color-purple: #8b5cf6;
+    --color-burgundy: #bf399e;
+    --color-pink: #f43f5e;
+    --color-red: #ef4444;
+    --color-orange: #f97316;
+    --color-yellow: #eab308;
+    --color-green: #10b981;
+    --color-turquoise: #06b6d4;
+    --color-blue: #3b82f6;
+    --color-primary: #6366f1;
+    --color-indigo: #6366f1;
+    --color-violet: #8b5cf6;
+    --color-emerald: #10b981;
+    --color-cyan: #06b6d4;
+    --color-rose: #f43f5e;
+
+    /* Tag variant background and text colors */
+    --tag-gray-bg: #f3f4f6;
+    --tag-purple-bg: #efe2fd;
+    --tag-purple-text: #491b7e;
+    --tag-burgundy-bg: #fde2f6;
+    --tag-burgundy-text: #72275f;
+    --tag-pink-bg: #fde2ea;
+    --tag-pink-text: #822c45;
+    --tag-red-bg: #fdc9c9;
+    --tag-red-text: #4e1d1d;
+    --tag-orange-bg: #fee3d7;
+    --tag-orange-text: #73422b;
+    --tag-yellow-bg: #fef0c8;
+    --tag-yellow-text: #675523;
+    --tag-green-bg: #dafbf0;
+    --tag-green-text: #295747;
+    --tag-turquoise-bg: #cdf5f9;
+    --tag-turquoise-text: #15545b;
+    --tag-blue-bg: #e2effd;
+    --tag-blue-text: #19426b;
 
     --radius: 0.5rem;
 
     --header-height: 60px;
     --sidebar-width: 61px;
-
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 224 17% 26%;
+    /* Layout colors - Dark Mode */
+    --layout-background: 222 84% 4.9%;
+    --layout-soft-background: hsl(222, 84%, 6%);
+    --layout-border: 217.2 32.6% 17.5%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    /* Navigation colors - Dark Mode */
+    --navigation-background: 222 84% 4.9%;
+    --navigation-border: 217.2 32.6% 17.5%;
+    --navigation-text-secondary: 215.4 16.3% 46.9%;
+    --navigation-hover: 217.2 32.6% 17.5%;
+    --navigation-active: 217.2 32.6% 25.5%;
+    --navigation-active-text: 217.2 91.2% 79.8%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* Text colors - Dark Mode */
+    --text-primary: 210 40% 87%;
+    --text-secondary: 210 40% 75%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
+    /* Legacy variables - Dark Mode (for backward compatibility) */
+    --soft-background: #1a1a1a;
+    --background: 222 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --foreground-secondary: 210 40% 87%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --lite-slate: 215.4 16.3% 46.9%;
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Primary colors - Dark Mode */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 217.2 32.6% 25.5%;
+    --primary-hover: 217.2 91.2% 69.8%;
+    --primary-active: 217.2 91.2% 49.8%;
+    --primary-100: 217.2 32.6% 17.5%;
+
+    /* Card colors - Dark Mode */
+    --card: 217.2 32.6% 17.5%;
+    --card-foreground: 210 40% 98%;
+
+    /* Popover colors - Dark Mode */
+    --popover: 222 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Action cards - Dark Mode */
+    --action-card-background: 222 84% 4.9%;
+    --action-card-border: 217.2 32.6% 17.5%;
+    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1),
+      0 2px 4px -2px rgb(255 255 255 / 0.05);
+
+    /* Action types - Dark Mode (darker backgrounds, lighter text) */
+    --action-trace-background: #1a332a;
+    --action-trace-text: #52c794;
+    --action-experiment-background: #3d1a36;
+    --action-experiment-text: #e48cc7;
+    --action-guardrail-background: #3d2a1a;
+    --action-guardrail-text: #e8a567;
+    --action-playground-background: #2a1a3d;
+    --action-playground-text: #b88ce8;
+
+    /* Feature colors - Dark Mode */
+    --feature-experiment-management: #8a8eff;
+    --feature-llm: #6bd4c9;
+
+    /* Muted colors - Dark Mode */
+    --muted: 217.2 32.6% 17.5%;
+    --muted-gray: 217.2 32.6% 35%;
+    --muted-disabled: 217.2 32.6% 25%;
+
+    /* Thread colors - Dark Mode */
+    --thread-active: #2a3f2f;
+    --thread-inactive: #2a3447;
+    --message-input-background: #2a2f47;
+
+    /* Toggle colors - Dark Mode */
+    --toggle-outline-active: #2a2f47;
+
+    /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
+    --codemirror-background: #0d1117;
+    --codemirror-gutter: #7d8590;
+    --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
+    --codemirror-syntax-blue: #79c0ff;
+
+    /* Tag variant background and text colors - Dark Mode */
+    --tag-gray-bg: #374151;
+    --tag-purple-bg: #4c1d95;
+    --tag-purple-text: #c4b5fd;
+    --tag-burgundy-bg: #7e1065;
+    --tag-burgundy-text: #f3e8ff;
+    --tag-pink-bg: #9d174d;
+    --tag-pink-text: #fecdd3;
+    --tag-red-bg: #7f1d1d;
+    --tag-red-text: #fef2f2;
+    --tag-orange-bg: #9a3412;
+    --tag-orange-text: #fed7aa;
+    --tag-yellow-bg: #a16207;
+    --tag-yellow-text: #fef3c7;
+    --tag-green-bg: #14532d;
+    --tag-green-text: #bbf7d0;
+    --tag-turquoise-bg: #155e75;
+    --tag-turquoise-text: #a7f3d0;
+    --tag-blue-bg: #1e3a8a;
+    --tag-blue-text: #dbeafe;
   }
 
   .comet-expanded {
@@ -109,34 +287,34 @@
   }
 
   body {
-    @apply bg-background text-foreground comet-body;
+    @apply bg-background text-text-primary comet-body;
   }
 }
 
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-3xl tracking-normal text-text-primary;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-2xl tracking-normal text-text-primary;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-normal text-foreground-secondary;
+    @apply font-medium text-xl tracking-normal text-text-primary;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-normal text-foreground-secondary;
+    @apply font-medium text-lg tracking-normal text-text-primary;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-normal text-foreground-secondary;
+    @apply font-medium text-sm tracking-normal text-text-primary;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-normal text-foreground-secondary;
+    @apply font-normal text-base tracking-normal text-text-primary;
   }
 
   .comet-body-accented {
@@ -217,18 +395,18 @@
     }
 
     ::-webkit-scrollbar {
-      background-color: #fff;
+      background-color: var(--white);
       width: 16px;
     }
 
     ::-webkit-scrollbar-track {
-      background-color: #fff;
+      background-color: var(--white);
     }
 
     ::-webkit-scrollbar-thumb {
       background-color: #babac0;
       border-radius: 16px;
-      border: 4px solid #fff;
+      border: 4px solid var(--white);
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -247,6 +425,10 @@
   .comet-no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .action-card-shadow {
+    box-shadow: var(--action-card-shadow);
   }
 }
 
@@ -318,7 +500,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: hsl(var(--secondary));
+    background: var(--codemirror-line-highlight);
   }
 }
 
@@ -383,5 +565,25 @@ div.cm-theme div.cm-search.cm-panel {
 
   button[name="close"] {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
+  }
+}
+
+/* Dark mode image transformation utility - user optimized */
+.dark-mode-image-transform {
+  /* Light mode - no transformation */
+  filter: none;
+  transition: filter 0.2s ease;
+  border-radius: inherit;
+  
+  /* Dark mode - optimized values with theme color overlay */
+  .dark & {
+    filter: 
+      invert(0.9) 
+      hue-rotate(220deg) 
+      contrast(1.1) 
+      brightness(80%);
+    
+    border: none;
+    border-radius: inherit;
   }
 }

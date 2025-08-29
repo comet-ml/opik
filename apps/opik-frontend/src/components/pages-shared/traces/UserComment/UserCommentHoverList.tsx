@@ -77,7 +77,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
             <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-popover-gray py-1">
               <Button
                 variant="ghost"
-                className="comet-body-xs h-6 w-full justify-end gap-1 text-foreground"
+                className="comet-body-xs h-6 w-full justify-end gap-1 text-text-primary"
                 size="sm"
                 onClick={handleOnReply}
               >

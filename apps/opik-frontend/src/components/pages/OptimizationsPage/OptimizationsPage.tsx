@@ -470,7 +470,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={handleNewOptimizationClick}
           >

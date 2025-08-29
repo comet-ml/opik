@@ -178,7 +178,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
+      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words pb-3 pt-2">
         Observability
       </h2>
       <DataTable
