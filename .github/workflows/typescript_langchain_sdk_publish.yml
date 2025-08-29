@@ -1,5 +1,7 @@
 name: TypeScript LangChain SDK Publish
 run-name: "TypeScript LangChain SDK Publish from ${{github.ref_name}} by @${{ github.actor }}"
+permissions:
+  contents: write
 
 on:
   workflow_dispatch:
