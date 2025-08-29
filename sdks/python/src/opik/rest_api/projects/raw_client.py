@@ -10,6 +10,7 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
@@ -20,6 +21,8 @@ from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.trace_filter_public import TraceFilterPublic
+from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
 from .types.project_update_visibility import ProjectUpdateVisibility
@@ -397,6 +400,8 @@ class RawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectMetricResponsePublic]:
         """
@@ -414,6 +419,10 @@ class RawProjectsClient:
 
         interval_end : typing.Optional[dt.datetime]
 
+        trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -430,6 +439,12 @@ class RawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "trace_filters": convert_and_respect_annotation_metadata(
+                    object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
+                ),
+                "thread_filters": convert_and_respect_annotation_metadata(
+                    object_=thread_filters, annotation=typing.Sequence[TraceThreadFilterPublic], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -977,6 +992,8 @@ class AsyncRawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectMetricResponsePublic]:
         """
@@ -994,6 +1011,10 @@ class AsyncRawProjectsClient:
 
         interval_end : typing.Optional[dt.datetime]
 
+        trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1010,6 +1031,12 @@ class AsyncRawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "trace_filters": convert_and_respect_annotation_metadata(
+                    object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
+                ),
+                "thread_filters": convert_and_respect_annotation_metadata(
+                    object_=thread_filters, annotation=typing.Sequence[TraceThreadFilterPublic], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

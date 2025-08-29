@@ -337,6 +337,8 @@ from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
 from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
+from .trace_thread_filter_public import TraceThreadFilterPublic
+from .trace_thread_filter_public_operator import TraceThreadFilterPublicOperator
 from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
@@ -680,6 +682,8 @@ __all__ = [
     "TraceThread",
     "TraceThreadFilter",
     "TraceThreadFilterOperator",
+    "TraceThreadFilterPublic",
+    "TraceThreadFilterPublicOperator",
     "TraceThreadIdentifier",
     "TraceThreadLlmAsJudgeCode",
     "TraceThreadLlmAsJudgeCodePublic",

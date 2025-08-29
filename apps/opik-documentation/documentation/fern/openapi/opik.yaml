@@ -8330,6 +8330,62 @@ components:
         interval_end:
           type: string
           format: date-time
+        trace_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
+        thread_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceThreadFilter_Public"
+    TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     ProjectStatsSummary:
       type: object
       properties:
@@ -9863,30 +9919,6 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
-    TraceFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceSearchStreamRequest_Public:
       type: object
       properties:
