@@ -14,37 +14,81 @@ LiveKit's primary advantage is its production-ready infrastructure that makes it
 
 ## Getting started
 
-To use the LiveKit integration with Opik, you will need to have LiveKit and the required OpenTelemetry packages installed.
-
-### Installation
-
-Install the required packages:
+To use the LiveKit integration with Opik, you will need to have LiveKit and the required OpenTelemetry packages installed:
 
 ```bash
-npm install livekit-client livekit-server-sdk @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
+npm install livekit-client @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
 ```
 
-### Environment configuration
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
         ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
+
+    </Tip>
     </Tab>
+
 </Tabs>
 
 ## Using Opik with LiveKit
@@ -52,51 +96,26 @@ npm install livekit-client livekit-server-sdk @opentelemetry/api @opentelemetry/
 Set up OpenTelemetry instrumentation for LiveKit:
 
 ```typescript
-import { trace } from "@opentelemetry/api";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { LiveKitInstrumentation } from "@opentelemetry/instrumentation-livekit";
+
+// Configure the OTLP exporter
+const otlpExporter = new OTLPTraceExporter();
 
 // Set up the tracer provider
 const provider = new NodeTracerProvider();
-trace.setGlobalTracerProvider(provider);
-
-// Configure the OTLP exporter
-const otlpExporter = new OTLPTraceExporter({
-  url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-  headers: Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS?.split(",").map((h) => h.split("=")) || []),
-});
-
-// Add the span processor
 provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+provider.register();
 
-// Instrument LiveKit
-const livekitInstrumentation = new LiveKitInstrumentation();
-livekitInstrumentation.enable();
-
-// Now use LiveKit normally - all calls will be automatically traced
+// Your LiveKit code will now automatically send traces to Opik
 import { Room, RoomEvent } from "livekit-client";
 
 const room = new Room();
-room.on(RoomEvent.MediaDevicesChanged, () => {
-  console.log("Media devices changed");
-});
-
-await room.connect("wss://your-livekit-server.com", "your-token");
+// ... room configuration
 ```
-
-## Results viewing
-
-After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the LiveKit integration. You'll see:
-
-- Room connections and disconnections
-- Media device changes and permissions
-- WebRTC connection establishment
-- Audio/video stream handling
-- Performance metrics and timing
-- Error details if any occur
 
 ## Further improvements
 
-If you have any feature requests or encounter issues with the LiveKit integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the LiveKit integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

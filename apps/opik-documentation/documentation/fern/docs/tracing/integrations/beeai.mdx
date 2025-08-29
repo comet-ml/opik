@@ -14,37 +14,81 @@ BeeAI's primary advantage is its lightweight design that makes it easy to create
 
 ## Getting started
 
-To use the BeeAI integration with Opik, you will need to have BeeAI and the required OpenTelemetry packages installed.
-
-### Installation
-
-Install the required packages:
+To use the BeeAI integration with Opik, you will need to have BeeAI and the required OpenTelemetry packages installed:
 
 ```bash
-pip install beeai openinference-instrumentation-beeai opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+pip install beeai-framework openinference-instrumentation-beeai "beeai-framework[wikipedia]" opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
-### Environment configuration
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
         ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
+
+    </Tip>
     </Tab>
+
 </Tabs>
 
 ## Using Opik with BeeAI
@@ -56,38 +100,66 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from openinference.instrumentation.beeai import BeeAIInstrumentor
-import os
+from openinference.instrumentation.beeai import (
+    BeeAIInstrumentor,
+)  # or SemanticKernelInstrumentor
+
+# Configure the OTLP exporter for Opik
+otlp_exporter = OTLPSpanExporter()
+
 
 # Set up the tracer provider
 trace.set_tracer_provider(TracerProvider())
 
-# Configure the OTLP exporter
-otlp_exporter = OTLPSpanExporter()
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(otlp_exporter)  # OTLP for sending to Opik
+)
 
-# Add the span processor
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(otlp_exporter))
+# Instrument your framework
+BeeAIInstrumentor().instrument()  # or SemanticKernelInstrumentor().instrument()
 
-# Instrument BeeAI
-BeeAIInstrumentor().instrument()
+import asyncio
+from beeai_framework.agents.react import ReActAgent
+from beeai_framework.agents.types import AgentExecutionConfig
+from beeai_framework.backend.chat import ChatModel
+from beeai_framework.backend.types import ChatModelParameters
+from beeai_framework.memory import TokenMemory
+from beeai_framework.tools.search.wikipedia import WikipediaTool
+from beeai_framework.tools.weather.openmeteo import OpenMeteoTool
 
-# Now use BeeAI normally - all calls will be automatically traced
-from beeai import Agent
+# Initialize the language model
+llm = ChatModel.from_name(
+    "openai:gpt-4o-mini",  # or "ollama:granite3.3:8b" for local Ollama
+    ChatModelParameters(temperature=0.7),
+)
 
-agent = Agent()
-response = agent.run("Hello, how are you?")
+# Create tools for the agent
+tools = [
+    WikipediaTool(),
+    OpenMeteoTool(),
+]
+
+# Create a ReAct agent with memory
+agent = ReActAgent(llm=llm, tools=tools, memory=TokenMemory(llm))
+
+
+# Run the agent
+async def main():
+    response = await agent.run(
+        prompt="I'm planning a trip to Barcelona, Spain. Can you research key attractions and landmarks I should visit, and also tell me what the current weather conditions are like there?",
+        execution=AgentExecutionConfig(
+            max_retries_per_step=3, total_max_retries=10, max_iterations=5
+        ),
+    )
+    print("Agent Response:", response.result.text)
+    return response
+
+
+# Run the example
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
-
-## Results viewing
-
-After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the BeeAI integration. You'll see:
-
-- Agent creation and configuration
-- Tool usage and execution
-- Conversation flows and responses
-- Performance metrics and timing
-- Error details if any occur
 
 ## Further improvements
 
-If you have any feature requests or encounter issues with the BeeAI integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the BeeAI integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

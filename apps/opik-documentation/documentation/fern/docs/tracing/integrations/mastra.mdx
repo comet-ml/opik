@@ -14,109 +14,108 @@ Mastra's primary advantage is its workflow-first design that makes it easy to bu
 
 ## Getting started
 
-To use the Mastra integration with Opik, you will need to have Mastra and the required OpenTelemetry packages installed.
-
-### Installation
+To use the Mastra integration with Opik, you will need to have Mastra and the required OpenTelemetry packages installed:
 
 ```bash
-npm install mastra @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/core @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
 ```
 
 ## Environment configuration
 
-Set up your environment variables based on your Opik deployment:
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
         ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
+
+    </Tip>
     </Tab>
+
 </Tabs>
 
 ## Using Opik with Mastra
 
-Mastra supports the OpenTelemetry Protocol (OTLP) for tracing and monitoring your application. When telemetry is enabled, Mastra automatically traces all core primitives including agent operations, LLM interactions, tool executions, integration calls, workflow runs, and database operations.
-
-### Basic Configuration
-
-Here's a simple example of enabling telemetry with Mastra:
+Set up OpenTelemetry instrumentation for Mastra:
 
 ```typescript
-import { Mastra } from "mastra";
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
-export const mastra = new Mastra({
-  // ... other config
-  telemetry: {
-    serviceName: "my-mastra-app",
-    enabled: true,
-    sampling: {
-      type: "always_on",
-    },
-    export: {
-      type: "otlp",
-      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-      headers: process.env.OTEL_EXPORTER_OTLP_HEADERS
-        ? Object.fromEntries(process.env.OTEL_EXPORTER_OTLP_HEADERS.split(",").map((h) => h.split("=")))
-        : undefined,
-    },
-  },
-});
+// Configure the OTLP exporter
+const otlpExporter = new OTLPTraceExporter();
+
+// Set up the tracer provider
+const provider = new NodeTracerProvider();
+provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+provider.register();
+
+// Your Mastra code will now automatically send traces to Opik
+import { Workflow } from "@mastra/core";
+
+const workflow = new Workflow();
+// ... workflow configuration
 ```
-
-### Configuration Options
-
-The telemetry config accepts these properties:
-
-```typescript
-type OtelConfig = {
-  // Name to identify your service in traces (optional)
-  serviceName?: string;
-
-  // Enable/disable telemetry (defaults to true)
-  enabled?: boolean;
-
-  // Control how many traces are sampled
-  sampling?: {
-    type: "ratio" | "always_on" | "always_off" | "parent_based";
-    probability?: number; // For ratio sampling
-    root?: {
-      probability: number; // For parent_based sampling
-    };
-  };
-
-  // Where to send telemetry data
-  export?: {
-    type: "otlp" | "console";
-    endpoint?: string;
-    headers?: Record<string, string>;
-  };
-};
-```
-
-## Results viewing
-
-Once configured, all your Mastra operations will automatically create traces in Opik. You can view these traces in the Opik dashboard to monitor:
-
-- Agent operations and their performance
-- LLM interactions with timing and token usage
-- Tool executions and their results
-- Workflow runs and their step-by-step execution
-- Database operations and their performance
 
 ## Further improvements
 
-If you have any suggestions for improving this integration, please [open an issue on GitHub](https://github.com/comet-ml/opik/issues/new/choose).
+If you have any questions or suggestions for improving the Mastra integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

@@ -191,6 +191,9 @@ navigation:
               - page: Fireworks AI
                 path: docs/tracing/integrations/fireworks-ai.mdx
                 slug: fireworks-ai
+              - page: Flowise
+                path: docs/tracing/integrations/flowise.mdx
+                slug: flowise
               - page: Gemini
                 path: docs/tracing/integrations/gemini.mdx
                 slug: gemini

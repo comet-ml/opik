@@ -14,37 +14,81 @@ Semantic Kernel's primary advantage is its seamless integration with Microsoft's
 
 ## Getting started
 
-To use the Semantic Kernel integration with Opik, you will need to have Semantic Kernel and the required OpenTelemetry packages installed.
-
-### Installation
-
-Install the required packages:
+To use the Semantic Kernel integration with Opik, you will need to have Semantic Kernel and the required OpenTelemetry packages installed:
 
 ```bash
-pip install semantic-kernel openinference-instrumentation-semantic-kernel opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+pip install semantic-kernel openinference-instrumentation-semantic-kernel opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
-### Environment configuration
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
         ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
+
+    </Tip>
     </Tab>
+
 </Tabs>
 
 ## Using Opik with Semantic Kernel
@@ -57,44 +101,26 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from openinference.instrumentation.semantic_kernel import SemanticKernelInstrumentor
-import os
+
+# Configure the OTLP exporter
+otlp_exporter = OTLPSpanExporter()
 
 # Set up the tracer provider
 trace.set_tracer_provider(TracerProvider())
-
-# Configure the OTLP exporter
-otlp_exporter = OTLPSpanExporter(
-    endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-    headers=dict(item.split("=") for item in os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "").split(",") if "=" in item)
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(otlp_exporter)
 )
-
-# Add the span processor
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(otlp_exporter))
 
 # Instrument Semantic Kernel
 SemanticKernelInstrumentor().instrument()
 
-# Now use Semantic Kernel normally - all calls will be automatically traced
+# Your Semantic Kernel code will now automatically send traces to Opik
 import semantic_kernel as sk
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
 
 kernel = sk.Kernel()
-kernel.add_chat_service("chat", AzureChatCompletion("gpt-4", "your-endpoint", "your-api-key"))
-
-# Your Semantic Kernel operations will now be traced
+# ... kernel configuration
 ```
-
-## Results viewing
-
-After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the Semantic Kernel integration. You'll see:
-
-- Kernel creation and configuration
-- Function and skill execution
-- Memory operations and retrieval
-- Plugin interactions and calls
-- Performance metrics and timing
-- Error details if any occur
 
 ## Further improvements
 
-If you have any feature requests or encounter issues with the Semantic Kernel integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the Semantic Kernel integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

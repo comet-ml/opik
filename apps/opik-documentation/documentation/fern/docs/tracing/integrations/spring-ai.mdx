@@ -14,11 +14,7 @@ Spring AI's primary advantage is its seamless integration with the Spring framew
 
 ## Getting started
 
-To use the Spring AI integration with Opik, you will need to have Spring AI and the required OpenTelemetry packages installed.
-
-### Installation
-
-Add the required dependencies to your `pom.xml`:
+To use the Spring AI integration with Opik, you will need to have Spring AI and the required OpenTelemetry packages installed:
 
 ```xml
 <dependencies>
@@ -53,100 +49,106 @@ Add the required dependencies to your `pom.xml`:
 </dependencies>
 ```
 
-### Environment configuration
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
         ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
+
+    </Tip>
     </Tab>
+
 </Tabs>
 
 ## Using Opik with Spring AI
 
-Set up OpenTelemetry instrumentation for Spring AI in your Spring Boot application:
+Set up OpenTelemetry instrumentation for Spring AI in your `application.properties`:
 
-```java
-import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.trace.SdkTracerProvider;
-import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
-import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class OpenTelemetryConfig {
-
-    @Bean
-    public OpenTelemetry openTelemetry() {
-        SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
-            .addSpanProcessor(BatchSpanProcessor.builder(
-                OtlpGrpcSpanExporter.builder()
-                    .setEndpoint(System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
-                    .addHeader("Authorization", System.getenv("OTEL_EXPORTER_OTLP_HEADERS"))
-                    .build()
-            ).build())
-            .build();
-
-        return OpenTelemetrySdk.builder()
-            .setTracerProvider(sdkTracerProvider)
-            .buildAndRegisterGlobal();
-    }
-
-    @Bean
-    public Tracer tracer(OpenTelemetry openTelemetry) {
-        return openTelemetry.getTracer("spring-ai-app");
-    }
-}
+```properties
+# OpenTelemetry configuration
+otel.traces.exporter=otlp
+otel.exporter.otlp.endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT}
+otel.exporter.otlp.headers=${OTEL_EXPORTER_OTLP_HEADERS}
 ```
 
-Now use Spring AI normally in your application:
+Your Spring AI code will now automatically send traces to Opik:
 
 ```java
-import org.springframework.ai.chat.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 @Service
 public class AiService {
 
-    @Autowired
-    private ChatClient chatClient;
+    private final AiClient aiClient;
 
-    public String generateResponse(String userMessage) {
-        Prompt prompt = new Prompt(userMessage);
-        return chatClient.call(prompt).getResult().getOutput().getContent();
+    public AiService(AiClient aiClient) {
+        this.aiClient = aiClient;
+    }
+
+    public String generateResponse(String prompt) {
+        return aiClient.generate(prompt);
     }
 }
 ```
 
-## Results viewing
-
-After running your code, you can view the traces in the Opik UI. Navigate to your project and look for traces with the Spring AI integration. You'll see:
-
-- Spring AI service calls and responses
-- Model interactions and configurations
-- Vector store operations
-- Performance metrics and timing
-- Error details if any occur
-
 ## Further improvements
 
-If you have any feature requests or encounter issues with the Spring AI integration, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the Spring AI integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
