@@ -20,7 +20,8 @@ PROVIDER_MAPPING = {
     "anthropic": "anthropic",
     "vertex_ai-anthropic_models": "anthropic_vertexai",
     "bedrock": "bedrock",
-    "bedrock_converse": "bedrock"
+    "bedrock_converse": "bedrock",
+    "groq": "groq",
 }
 
 # Provider display names and descriptions
@@ -54,6 +55,11 @@ PROVIDER_INFO = {
         "name": "AWS Bedrock",
         "description": "Models hosted by AWS Bedrock", 
         "url": "https://aws.amazon.com/bedrock"
+    },
+    "groq": {
+        "name": "Groq",
+        "description": "Models hosted by Groq",
+        "url": "https://groq.com"
     }
 }
 
@@ -91,7 +97,7 @@ def process_model_data(json_file_path: str) -> Dict[str, Any]:
             clean_model_name = model_name
             prefixes_to_remove = [
                 "openai/", "vertex_ai/", "gemini/", "anthropic/", 
-                "bedrock/", "ai21.", "amazon.", "anthropic.", "cohere.",
+                "bedrock/", "groq/", "ai21.", "amazon.", "anthropic.", "cohere.",
                 "meta.", "mistral.", "stability.", "apac.", "eu.", "us."
             ]
             for prefix in prefixes_to_remove:
