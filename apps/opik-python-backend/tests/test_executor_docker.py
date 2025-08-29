@@ -1,4 +1,3 @@
-import pytest
 from typing import Any
 from opik_backend.executor_docker import DockerExecutor
 
