@@ -15,7 +15,7 @@ import useAppStore from "@/store/AppStore";
 import useSegment from "./analytics/useSegment";
 import Logo from "./Logo";
 import useUser from "./useUser";
-import { buildUrl } from "./utils";
+import { buildUrl, setRedirectURL } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 
 type WorkspacePreloaderProps = {
@@ -45,6 +45,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   }
 
   if (!user || !user.loggedIn) {
+    setRedirectURL(window.location.href);
     window.location.href =
       workspaceNameFromURL === DEFAULT_WORKSPACE_NAME || !workspaceNameFromURL
         ? buildUrl("login")

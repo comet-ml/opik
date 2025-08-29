@@ -1,4 +1,5 @@
 const BASE_URL = import.meta.env.VITE_BASE_COMET_URL || "/";
+export const REDIRECT_URL_AFTER_LOGIN_KEY = "redirectURLAfterLogin"; // this param is sync with comet-react application
 const FROM_PARAM = "?from=llm";
 
 export const buildUrl = (
@@ -11,6 +12,10 @@ export const buildUrl = (
     : "";
 
   return `${BASE_URL}${path}${FROM_PARAM}${workspaceNameParameter}${search}`;
+};
+
+export const setRedirectURL = (url: string) => {
+  localStorage.setItem(REDIRECT_URL_AFTER_LOGIN_KEY, url);
 };
 
 export const loadScript = (url: string) => {
