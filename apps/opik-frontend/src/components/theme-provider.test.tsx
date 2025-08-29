@@ -12,7 +12,11 @@ const localStorageMock = {
 };
 
 // Mock window.matchMedia
-const matchMediaMock = vi.fn();
+const matchMediaMock = vi.fn(() => ({
+  matches: false,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}));
 
 // Test component to access theme context
 const TestComponent = () => {
@@ -58,7 +62,11 @@ describe("ThemeProvider", () => {
 
   it("should use default theme when no localStorage value", () => {
     localStorageMock.getItem.mockReturnValue(null);
-    matchMediaMock.mockReturnValue({ matches: false });
+    matchMediaMock.mockReturnValue({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
 
     render(
       <ThemeProvider defaultTheme="light">
@@ -85,7 +93,11 @@ describe("ThemeProvider", () => {
 
   it("should handle system theme preference (dark)", () => {
     localStorageMock.getItem.mockReturnValue("system");
-    matchMediaMock.mockReturnValue({ matches: true }); // dark mode preference
+    matchMediaMock.mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }); // dark mode preference
 
     render(
       <ThemeProvider>
@@ -99,7 +111,11 @@ describe("ThemeProvider", () => {
 
   it("should handle system theme preference (light)", () => {
     localStorageMock.getItem.mockReturnValue("system");
-    matchMediaMock.mockReturnValue({ matches: false }); // light mode preference
+    matchMediaMock.mockReturnValue({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }); // light mode preference
 
     render(
       <ThemeProvider>
