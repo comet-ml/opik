@@ -7,7 +7,7 @@ This script reads the model_prices_and_context_window.json file and generates
 a static markdown documentation page listing all supported models by provider.
 
 *TO ADD A NEW PROVIDER, YOU ONLY NEED TO:*
-1. Add the provider name to the PROVIDER_MAPPING dictionary
+1. Add the provider name mapping (litellm provider name => Opik provider name) to the PROVIDER_MAPPING dictionary
 2. Add the provider information to the PROVIDER_INFO dictionary
 3. Run the script to generate the MDX file
 
