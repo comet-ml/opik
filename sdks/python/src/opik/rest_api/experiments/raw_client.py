@@ -229,10 +229,7 @@ class RawExperimentsClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/experiments/update/{id}",
             method="POST",
-            json={
-                "name" : newName,
-                "metadata" : newMetadata
-            },
+            json=payload,
             headers={
                 "content-type": "application/json",
             },
