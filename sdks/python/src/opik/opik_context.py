@@ -1,7 +1,7 @@
 import contextlib
 from typing import Any, Dict, List, Optional, Union, Iterator
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace, opik_client
 from opik.api_objects.attachment import Attachment
 from opik.types import (
@@ -10,6 +10,8 @@ from opik.types import (
     LLMProvider,
     ErrorInfoDict,
 )
+
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 from . import context_storage, exceptions
 from .decorator import error_info_collector
@@ -65,6 +67,7 @@ def update_current_span(
     provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[Attachment]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -86,7 +89,11 @@ def update_current_span(
             If your provider is not in the list, you can still specify it, but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
+        error_info: The error information of the span.
     """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
     new_params = {
         "name": name,
         "input": input,
@@ -99,6 +106,7 @@ def update_current_span(
         "provider": provider,
         "total_cost": total_cost,
         "attachments": attachments,
+        "error_info": error_info,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -131,6 +139,9 @@ def update_current_trace(
             The identifier is user-defined and has to be unique per project.
         attachments: The list of attachments to be uploaded to the trace.
     """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
     new_params = {
         "name": name,
         "input": input,

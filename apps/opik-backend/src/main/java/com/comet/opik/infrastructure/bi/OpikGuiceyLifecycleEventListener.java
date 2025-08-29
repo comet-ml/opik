@@ -3,10 +3,8 @@ package com.comet.opik.infrastructure.bi;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
-import com.comet.opik.utils.JobManagerUtils;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
-import io.dropwizard.jobs.JobConfiguration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobBuilder;
@@ -14,6 +12,7 @@ import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
+import org.quartz.impl.matchers.GroupMatcher;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
@@ -29,6 +28,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     // This event cannot depend on authentication
     private final AtomicReference<Injector> injector = new AtomicReference<>();
 
+    private final AtomicReference<GuiceJobManager> guiceJobManager = new AtomicReference<>();
+
     @Override
     public void onEvent(GuiceyLifecycleEvent event) {
 
@@ -40,7 +41,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setTraceThreadsClosingJob();
             }
 
-            case GuiceyLifecycle.ApplicationStopped -> JobManagerUtils.clearJobManager();
+            case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
         }
     }
 
@@ -55,10 +56,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             injector.set(injectorEvent.getInjector());
 
             log.info("Installing jobs...");
-            JobConfiguration configuration = injectorEvent.getConfiguration();
-            var jobManager = new GuiceJobManager(configuration, injector.get());
-            injectorEvent.getEnvironment().lifecycle().manage(jobManager);
-            JobManagerUtils.setJobManager(jobManager);
+            guiceJobManager.set(injector.get().getInstance(GuiceJobManager.class));
             log.info("Jobs installed.");
         }
     }
@@ -78,6 +76,12 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setTraceThreadsClosingJob() {
         TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getTraceThreadConfig();
+
+        if (!traceThreadConfig.isEnabled()) {
+            log.info("Trace thread closing job is disabled, skipping job setup");
+            return;
+        }
+
         Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
 
         var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
@@ -94,9 +98,10 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 .build();
 
         try {
-            Scheduler scheduler = getJobManager();
+            var scheduler = getScheduler();
             scheduler.addJob(jobDetail, false);
             scheduler.scheduleJob(trigger);
+            log.info("Trace thread closing job scheduled successfully");
         } catch (SchedulerException e) {
             log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
         }
@@ -106,7 +111,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         JobKey key = JobKey.jobKey(DailyUsageReportJob.class.getName());
 
         try {
-            Scheduler scheduler = getJobManager();
+            var scheduler = getScheduler();
             var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
             scheduler.scheduleJob(trigger);
             log.info("Daily usage report enabled, running job during startup.");
@@ -118,7 +123,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void disableJob() {
         log.info("Daily usage report disabled, unregistering job.");
 
-        Scheduler scheduler = getJobManager();
+        var scheduler = getScheduler();
 
         var jobKey = new JobKey(DailyUsageReportJob.class.getName());
 
@@ -134,8 +139,32 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
     }
 
-    private Scheduler getJobManager() {
-        return JobManagerUtils.getJobManager().getScheduler();
+    private Scheduler getScheduler() {
+        return guiceJobManager.get().getScheduler();
     }
 
+    private void shutdownJobManagerScheduler() {
+        var jobManager = guiceJobManager.get();
+        if (jobManager == null) {
+            log.info("GuiceJobManager instance already cleared, nothing to shutdown");
+            return;
+        }
+        var scheduler = jobManager.getScheduler();
+        try {
+            log.info("Attempting to delete all jobs from the scheduler...");
+            scheduler.deleteJobs(scheduler.getJobKeys(GroupMatcher.anyGroup()).stream().toList());
+            log.info("Jobs deleted");
+        } catch (SchedulerException exception) {
+            log.warn("Error deleting jobs during scheduler shutdown", exception);
+        }
+        try {
+            log.info("Attempting scheduler shutdown...");
+            scheduler.shutdown(false); // Don't wait for jobs to complete
+            log.info("Scheduler shutdown completed");
+        } catch (SchedulerException exception) {
+            log.warn("Error shutting down scheduler", exception);
+        }
+        guiceJobManager.set(null);
+        log.info("Cleared GuiceJobManager instance");
+    }
 }

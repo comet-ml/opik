@@ -98,7 +98,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
             	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at
-            ) SELECT
+            )
+            SELECT
                 workspace_id,
                 project_id,
                 thread_id,
@@ -268,6 +269,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private Mono<Long> mapAndInsert(List<TraceThreadModel> items, Connection connection, String sqlTemplate) {
 
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
+
         var template = new ST(sqlTemplate).add("items", queryItems);
 
         String sql = template.render();

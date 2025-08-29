@@ -22,6 +22,7 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_4O_MINI_2024_07_18("gpt-4o-mini-2024-07-18", true),
     GPT_4_1("gpt-4.1", true),
     GPT_4_1_MINI("gpt-4.1-mini", true),
+    GPT_4_1_NANO("gpt-4.1-nano", true),
     GPT_3_5_TURBO("gpt-3.5-turbo", false),
     GPT_3_5_TURBO_1106("gpt-3.5-turbo-1106", false),
     GPT_3_5_TURBO_0125("gpt-3.5-turbo-0125", false),
@@ -39,7 +40,13 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_O1_MINI_2024_09_12("o1-mini-2024-09-12", false),
     GPT_O1_PREVIEW("o1-preview", false),
     GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12", false),
+    GPT_O3("o3", true),
     GPT_O3_MINI("o3-mini", false),
+    GPT_O4_MINI("o4-mini", true),
+    GPT_5("gpt-5", true),
+    GPT_5_MINI("gpt-5-mini", true),
+    GPT_5_NANO("gpt-5-nano", true),
+    GPT_5_CHAT_LATEST("gpt-5-chat-latest", false),
     ;
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";

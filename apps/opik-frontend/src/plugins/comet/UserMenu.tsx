@@ -11,6 +11,7 @@ import {
   Settings,
   Shield,
   UserPlus,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -45,6 +46,7 @@ import { buildUrl } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
+import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -77,6 +79,8 @@ const UserMenu = () => {
     },
     { enabled: !!user?.loggedIn && !!workspace },
   );
+
+  const inviteMembersURL = useInviteMembersURL();
 
   useEffect(() => {
     if (user && user.loggedIn) {
@@ -117,14 +121,8 @@ const UserMenu = () => {
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
-  const workspacePermissions = userPermissions.find(
-    (userPermission) => userPermission.workspaceName === workspaceName,
-  );
-  const invitePermission = workspacePermissions?.permissions.find(
-    (permission) => permission.permissionName === "invite_users_to_workspace",
-  );
-  const canInviteMembers =
-    isOrganizationAdmin || invitePermission?.permissionValue === "true";
+
+  const isAcademic = organization?.academic;
 
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
@@ -150,6 +148,29 @@ const UserMenu = () => {
         <AvatarFallback>{user.userName.charAt(0).toUpperCase()}</AvatarFallback>
       </Avatar>
     );
+  };
+
+  const renderUpgradeButton = () => {
+    if (isOrganizationAdmin && !isAcademic) {
+      return (
+        <a
+          href={buildUrl(
+            `organizations/${organization.id}/billing`,
+            workspaceName,
+            "&initialOpenUpgradeCard=true",
+          )}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Button size="sm" variant="special">
+            <Zap className="mr-1.5 size-3.5 shrink-0" />
+            Upgrade
+          </Button>
+        </a>
+      );
+    }
+
+    return null;
   };
 
   const renderAppSelector = () => {
@@ -295,14 +316,8 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {canInviteMembers ? (
-              <a
-                href={buildUrl(
-                  "account-settings/workspaces",
-                  workspaceName,
-                  `&initialInviteId=${workspace?.workspaceId}`,
-                )}
-              >
+            {inviteMembersURL ? (
+              <a href={inviteMembersURL}>
                 <DropdownMenuItem className="cursor-pointer">
                   <UserPlus className="mr-2 size-4" />
                   <span>Invite members</span>
@@ -394,7 +409,8 @@ const UserMenu = () => {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-4">
+    <div className="flex shrink-0 items-center gap-3">
+      {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
 

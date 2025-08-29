@@ -123,6 +123,8 @@ services:
     environment:
       # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
+      # Persistent anonymous installation ID passed from launcher script
+      OPIK_ANONYMOUS_ID: ${OPIK_ANONYMOUS_ID:-}
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
       STATE_DB_DATABASE_NAME: opik
@@ -151,14 +153,13 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
       PYTHON_EVALUATOR_URL: http://python-backend:8000
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
-      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health-check" ]
       interval: 1s
-      timeout: 30s
-      retries: 30
+      timeout: 600s
+      retries: 600
       start_period: 1s
     depends_on:
       mysql:

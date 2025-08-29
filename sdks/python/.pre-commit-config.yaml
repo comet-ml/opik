@@ -4,21 +4,21 @@ repos:
     hooks:
       - id: trailing-whitespace
         files: ^sdks/python
-        exclude: '(sdks/python/src/opik/rest_api/)'
+        exclude: "(sdks/python/src/opik/rest_api/)"
       - id: end-of-file-fixer
         files: ^sdks/python
-        exclude: '(sdks/python/src/opik/rest_api/)'
+        exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.9
     hooks:
       - id: ruff
-        args: [ --fix, --show-fixes]
+        args: [--fix, --show-fixes]
         files: ^sdks/python
-        exclude: '(sdks/python/src/opik/rest_api/)'
+        exclude: "(sdks/python/src/opik/rest_api/)"
       - id: ruff-format
         files: ^sdks/python
-        exclude: '(sdks/python/src/opik/rest_api/)'
+        exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
@@ -27,5 +27,11 @@ repos:
         files: ^sdks/python
         # `exclude` option will work only from here.
         # The rest of mypy configuration can be moved to pyproject.toml
-        exclude: '(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)'
-        args: [--config-file, sdks/python/pyproject.toml]
+        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
+        args:
+          [
+            --config-file,
+            sdks/python/pyproject.toml,
+            --disable-error-code,
+            misc,
+          ]

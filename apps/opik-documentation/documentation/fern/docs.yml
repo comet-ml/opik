@@ -21,6 +21,10 @@ js:
     strategy: lazyOnload
 css: ./styles.css
 
+analytics:
+  segment:
+    write-key: ${SEGMENT_WRITE_KEY}
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -107,6 +111,12 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
+          - page: ✨ Trace Inspector
+            path: docs/tracing/opik_assist.mdx
+            slug: opik_assist
+          - page: Debug Mode & Environment Variables
+            path: docs/tracing/debug_mode.mdx
+            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
@@ -460,6 +470,9 @@ navigation:
           - page: Quickstart notebook
             path: docs/cookbook/quickstart_notebook.mdx
             slug: quickstart_notebook
+          - page: Dynamic Tracing Control
+            path: docs/cookbook/dynamic_tracing_cookbook.mdx
+            slug: dynamic_tracing_cookbook
       - section: Integrations
         slug: /
         contents:
@@ -493,6 +506,12 @@ navigation:
           - page: Gemini
             path: docs/cookbook/gemini.mdx
             slug: gemini
+          - page: Google ADK
+            path: docs/cookbook/google_adk_integration.mdx
+            slug: google_adk_integration
+          - page: Gretel
+            path: docs/cookbook/gretel_opik_integration_cookbook.mdx
+            slug: gretel
           - page: Groq
             path: docs/cookbook/groq.mdx
             slug: groq
@@ -514,9 +533,6 @@ navigation:
           - page: Ollama
             path: docs/cookbook/ollama.mdx
             slug: ollama
-          - page: OpenAI Agents
-            path: docs/cookbook/openai-agents.mdx
-            slug: openai-agents
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
@@ -529,6 +545,9 @@ navigation:
           - page: Smolagents
             path: docs/cookbook/smolagents.mdx
             slug: smolagents
+          - page: Vertex AI
+            path: docs/cookbook/vertexai.mdx
+            slug: vertexai
           - page: WatsonX
             path: docs/cookbook/watsonx.mdx
             slug: watsonx

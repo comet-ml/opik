@@ -1,10 +1,12 @@
+import logging
 from typing import Any, Dict, Optional
 
 import haystack
-from haystack import logging, tracing
+from haystack import tracing
 
+import opik.api_objects.opik_client as opik_client
+import opik.decorator.tracing_runtime_config as tracing_runtime_config
 from . import opik_tracer
-import opik
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,10 +92,23 @@ class OpikConnector:
                 set to the default project name.
         """
         self.name = name
-        self.tracer = opik_tracer.OpikTracer(
-            opik_client=opik.Opik(project_name=project_name), name=name
-        )
+
+        if not tracing_runtime_config.is_tracing_active():
+            self.tracer = None
+            return
+
+        self.tracer = self._create_opik_tracer(name, project_name)
         tracing.enable_tracing(self.tracer)
+
+    def _create_opik_tracer(
+        self, name: str, project_name: Optional[str]
+    ) -> opik_tracer.OpikTracer:
+        """Create and configure the OpikTracer instance."""
+        opik_client_ = opik_client.get_client_cached()
+
+        return opik_tracer.OpikTracer(
+            opik_client=opik_client_, name=name, project_name=project_name
+        )
 
     @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)
     def run(
@@ -115,8 +130,15 @@ class OpikConnector:
                 - `project_url`: The URL to the Opik project with tracing data.
         """
         LOGGER.debug(
-            f"Opik tracer invoked with the following context: {invocation_context}"
+            "Opik tracer invoked with the following context: %s", invocation_context
         )
+
+        return self._build_response()
+
+    def _build_response(self) -> Dict[str, Any]:
+        """Build the response dictionary for the OpikConnector run method."""
+        if self.tracer is None:
+            return {"name": self.name, "trace_id": None, "project_url": None}
 
         return {
             "name": self.name,

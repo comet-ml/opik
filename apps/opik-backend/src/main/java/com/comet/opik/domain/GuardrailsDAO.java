@@ -31,7 +31,6 @@ public interface GuardrailsDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class GuardrailsDAOImpl implements GuardrailsDAO {
-    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     private static final String BULK_INSERT_GUARDRAILS = """
             INSERT INTO guardrails(
@@ -70,6 +69,8 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                 }>
             ;
             """;
+
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
     public Mono<Long> addGuardrails(EntityType entityType, List<Guardrail> guardrails) {

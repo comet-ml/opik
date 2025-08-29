@@ -129,6 +129,43 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 AND experiment_id IN (SELECT id FROM experiments_final)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM feedback_scores FINAL
+                WHERE entity_type = :entity_type
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = :entity_type
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
+                FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -147,10 +184,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             name,
                             entity_id AS trace_id,
                             value
-                        FROM feedback_scores final
-                        WHERE workspace_id = :workspace_id
-                        AND entity_type = :entity_type
-                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                        FROM feedback_scores_final
                     ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
                     HAVING length(fs.name) > 0
@@ -210,7 +244,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
-            ) SELECT
+            )
+            SELECT
                 id,
                 dataset_id,
                 <if(name)> :name <else> name <endif> as name,
@@ -232,7 +267,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
-            ) SELECT
+            )
+            SELECT
                 id,
                 dataset_id,
                 name as name,
@@ -559,6 +595,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
         ST template = buildUpdateTemplate(update);
+
         var statement = createUpdateStatement(id, update, connection, template.render());
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));

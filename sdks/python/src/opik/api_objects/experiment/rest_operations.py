@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from opik import exceptions
+import opik.exceptions as exceptions
 from .. import rest_stream_parser
 from opik.rest_api import OpikApi
 from opik.rest_api.types import experiment_public

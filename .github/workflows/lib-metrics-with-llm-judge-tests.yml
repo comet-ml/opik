@@ -18,6 +18,7 @@ jobs:
   tests:
     name: Evaluation Metrics Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/python
@@ -25,7 +26,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.9", "3.12"]
+        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code

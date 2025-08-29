@@ -80,4 +80,10 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
+
+    @Valid @NotNull @JsonProperty
+    private FeedbackScoresConfig feedbackScores = new FeedbackScoresConfig();
 }

@@ -36,7 +36,7 @@ public class FilterQueryBuilder {
 
     private static final String ANALYTICS_DB_AND_OPERATOR = "AND";
 
-    static final String JSONPATH_ROOT = "$";
+    public static final String JSONPATH_ROOT = "$";
 
     private static final String ID_DB = "id";
     private static final String NAME_DB = "name";
@@ -59,6 +59,8 @@ public class FilterQueryBuilder {
     private static final String VALUE_ANALYTICS_DB = "value";
     private static final String DURATION_ANALYTICS_DB = "duration";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
+    private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
+    private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_DB = "created_at";
@@ -115,6 +117,7 @@ public class FilterQueryBuilder {
                             "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)",
                             FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
@@ -129,6 +132,7 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d",
                             FieldType.NUMBER, "%1$s < :filter%2$d",
@@ -162,6 +166,8 @@ public class FilterQueryBuilder {
                     .put(TraceField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceField.INPUT, INPUT_ANALYTICS_DB)
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(TraceField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(TraceField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
                     .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
@@ -186,6 +192,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceThreadField.START_TIME, START_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
@@ -199,6 +207,8 @@ public class FilterQueryBuilder {
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(SpanField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(SpanField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
                     .put(SpanField.MODEL, MODEL_ANALYTICS_DB)
                     .put(SpanField.PROVIDER, PROVIDER_ANALYTICS_DB)
@@ -216,6 +226,8 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentField, String>builder()
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
@@ -259,6 +271,8 @@ public class FilterQueryBuilder {
                     .add(TraceField.END_TIME)
                     .add(TraceField.INPUT)
                     .add(TraceField.OUTPUT)
+                    .add(TraceField.INPUT_JSON)
+                    .add(TraceField.OUTPUT_JSON)
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
                     .add(TraceField.DURATION)
@@ -281,6 +295,8 @@ public class FilterQueryBuilder {
                     .add(SpanField.END_TIME)
                     .add(SpanField.INPUT)
                     .add(SpanField.OUTPUT)
+                    .add(SpanField.INPUT_JSON)
+                    .add(SpanField.OUTPUT_JSON)
                     .add(SpanField.METADATA)
                     .add(SpanField.MODEL)
                     .add(SpanField.PROVIDER)
@@ -304,6 +320,8 @@ public class FilterQueryBuilder {
                     .build()),
             FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
                     .add(ExperimentField.METADATA)
+                    .add(ExperimentField.DATASET_ID)
+                    .add(ExperimentField.PROMPT_IDS)
                     .build(),
             FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.ID)
@@ -336,6 +354,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.START_TIME)
+                    .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
                     .build())));
@@ -362,6 +382,13 @@ public class FilterQueryBuilder {
 
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
+    }
+
+    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return filters.stream()
+                .filter(filter -> filter.field() == TraceField.GUARDRAILS)
+                .findFirst()
+                .map(filter -> true);
     }
 
     public Optional<String> toAnalyticsDbFilters(

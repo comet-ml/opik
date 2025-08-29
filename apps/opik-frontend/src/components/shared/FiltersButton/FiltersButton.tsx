@@ -11,7 +11,7 @@ import { Button, ButtonProps } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Filter, FilterRowConfig, Filters } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
-import { createEmptyFilter, isFilterValid } from "@/lib/filters";
+import { createFilter, isFilterValid } from "@/lib/filters";
 import FilterRow from "@/components/shared/FiltersButton/FilterRow";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ const FiltersButton = <TColumnData,>({
   columns,
   onChange,
   layout = "standard",
-  variant = "secondary",
+  variant = "outline",
   align = "start",
   disabled,
 }: FiltersButtonProps<TColumnData>) => {
@@ -52,7 +52,7 @@ const FiltersButton = <TColumnData,>({
   useEffect(() => {
     if (!open) {
       if (initialFilters.length === 0) {
-        setFilters([createEmptyFilter()]);
+        setFilters([createFilter()]);
       } else {
         setFilters(initialFilters);
       }
@@ -68,7 +68,7 @@ const FiltersButton = <TColumnData,>({
   }, []);
 
   const addHandler = useCallback(() => {
-    setFilters((state) => [...state, createEmptyFilter()]);
+    setFilters((state) => [...state, createFilter()]);
   }, []);
 
   const onRemoveRow = useCallback((id: string) => {
@@ -137,7 +137,7 @@ const FiltersButton = <TColumnData,>({
               <span className="ml-1.5">{validFilters.length}</span>
             ) : null
           ) : (
-            <span className="ml-2">{`Filters (${validFilters.length})`}</span>
+            <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
           )}
         </Button>
       </PopoverTrigger>

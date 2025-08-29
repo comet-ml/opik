@@ -18,7 +18,8 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: true
+demoDataJob: 
+  enabled: true
 nodeSelector: {}
 tolerations: []
 affinity: {}
@@ -344,8 +345,17 @@ clickhouse:
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
   storage: 50Gi
   logsLevel: information
+  # deprecated: use templates instead
   service:
     serviceTemplate: clickhouse-cluster-svc-template
+  templates:
+    podTemplate: clickhouse-cluster-pod-template
+    replicaServiceTemplate: clickhouse-replica-svc-template
+    serviceTemplate: clickhouse-cluster-svc-template
+    volumeClaimTemplate: storage-vc-template
+  extraServiceTemplates: []
+  extraPodTemplates: []
+  extraVolumeClaimTemplates: []
   adminUser:
     useSecret:
       enabled: false
@@ -365,6 +375,7 @@ clickhouse:
       create: false
       name: ""
     schedule: "0 0 * * *" # daily at midnight
+    extraEnv: {}
     command:
       - /bin/bash
       - '-cx'
@@ -417,6 +428,7 @@ clickhouse:
     #     memory: 1Gi
     additionalLabels: {}
     annotations: {}
+    port: 9363
     service:
       type: ClusterIP
       ports:

@@ -41,14 +41,14 @@ async def _async_build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runne
 
 
 async def _async_extract_final_response_text(
-    events: AsyncIterator[adk_events.Event],
+    events_generator: AsyncIterator[adk_events.Event],
 ) -> Optional[str]:
     """
     Exhausts the async iterator of ADK events and returns the response text
     from the last event (presumably the final root agent response).
     """
     collected_events = []
-    async for event in events:
+    async for event in events_generator:
         collected_events.append(event)
 
     if len(collected_events) == 0:
@@ -93,7 +93,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
 
     runner = await _async_build_runner(root_agent)
 
-    events = runner.run_async(
+    events_generator = runner.run_async(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
@@ -101,7 +101,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = await _async_extract_final_response_text(events)
+    final_response = await _async_extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -236,14 +236,14 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
         "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
     )
 
-    events = runner.run_async(
+    events_generator = runner.run_async(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = await _async_extract_final_response_text(events)
+    final_response = await _async_extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0

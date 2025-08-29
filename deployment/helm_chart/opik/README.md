@@ -100,6 +100,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.command[1] | string | `"-cx"` |  |
 | clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.extraEnv | object | `{}` |  |
 | clickhouse.backup.schedule | string | `"0 0 * * *"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.backup.serviceAccount.create | bool | `false` |  |
@@ -131,12 +132,16 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
 | clickhouse.enabled | bool | `true` |  |
+| clickhouse.extraPodTemplates | list | `[]` |  |
+| clickhouse.extraServiceTemplates | list | `[]` |  |
+| clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.port | int | `9363` |  |
 | clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
 | clickhouse.monitoring.service.ports[0].port | int | `80` |  |
 | clickhouse.monitoring.service.ports[0].targetPort | int | `9363` |  |
@@ -161,6 +166,10 @@ Call opik api on http://localhost:5173/api
 | clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
+| clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
+| clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
@@ -304,7 +313,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
-| demoDataJob | bool | `true` |  |
+| demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |

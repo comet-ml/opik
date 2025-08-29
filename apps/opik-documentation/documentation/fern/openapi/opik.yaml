@@ -1196,6 +1196,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Experiment dataset mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "422":
           description: Unprocessable Content
           content:
@@ -1223,6 +1229,80 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/experiments/groups:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups
+      description: Find experiments grouped by specified fields
+      operationId: findExperimentGroups
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/groups/aggregations:
+    get:
+      tags:
+      - Experiments
+      summary: Find experiment groups with aggregations
+      description: Find experiments grouped by specified fields with aggregation metrics
+      operationId: findExperimentGroupsAggregations
+      parameters:
+      - name: groups
+        in: query
+        schema:
+          type: string
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment groups with aggregations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupAggregationsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -5036,6 +5116,8 @@ components:
           - function
         content:
           type: string
+        reasoning_content:
+          type: string
         name:
           type: string
         tool_calls:
@@ -5043,7 +5125,7 @@ components:
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
-          type: boolean
+          type: string
         function_call:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
@@ -5090,6 +5172,8 @@ components:
         role:
           type: string
         content:
+          type: string
+        reasoning_content:
           type: string
         tool_calls:
           type: array
@@ -5554,6 +5638,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        value_by_author:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ValueEntry"
+          readOnly: true
     JsonListString:
       type: object
       anyOf:
@@ -5562,6 +5651,25 @@ components:
         items:
           type: object
       - type: string
+    ValueEntry:
+      type: object
+      properties:
+        value:
+          type: number
+        reason:
+          type: string
+        category_name:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+        last_updated_at:
+          type: string
+          format: date-time
+      readOnly: true
     DatasetItemBatch_Write:
       required:
       - items
@@ -5851,6 +5959,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        value_by_author:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ValueEntry_Compare"
+          readOnly: true
       readOnly: true
     JsonListString_Compare:
       type: object
@@ -5861,6 +5974,25 @@ components:
         items:
           type: object
       - type: string
+    ValueEntry_Compare:
+      type: object
+      properties:
+        value:
+          type: number
+        reason:
+          type: string
+        category_name:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+        last_updated_at:
+          type: string
+          format: date-time
+      readOnly: true
     DatasetPage_Public:
       type: object
       properties:
@@ -6418,6 +6550,13 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        experiment_id:
+          type: string
+          description: "Optional experiment ID. If provided, items will be added to\
+            \ the existing experiment and experimentName will be ignored. If not provided\
+            \ or experiment with that ID doesn't exist, a new experiment will be created\
+            \ with the given experimentName"
+          format: uuid
         items:
           maxItems: 250
           minItems: 1
@@ -6677,6 +6816,13 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        experiment_id:
+          type: string
+          description: "Optional experiment ID. If provided, items will be added to\
+            \ the existing experiment and experimentName will be ignored. If not provided\
+            \ or experiment with that ID doesn't exist, a new experiment will be created\
+            \ with the given experimentName"
+          format: uuid
         items:
           maxItems: 250
           minItems: 1
@@ -6722,6 +6868,11 @@ components:
           readOnly: true
         last_updated_by:
           type: string
+          readOnly: true
+        value_by_author:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ValueEntry_ExperimentItemBulkWriteView"
           readOnly: true
     JsonListString_ExperimentItemBulkWriteView:
       type: object
@@ -6830,6 +6981,25 @@ components:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
+    ValueEntry_ExperimentItemBulkWriteView:
+      type: object
+      properties:
+        value:
+          type: number
+        reason:
+          type: string
+        category_name:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+        last_updated_at:
+          type: string
+          format: date-time
+      readOnly: true
     Comment_Public:
       required:
       - text
@@ -7002,6 +7172,49 @@ components:
           type: string
         details:
           type: string
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContent"
+    GroupContent:
+      type: object
+      properties:
+        label:
+          type: string
+    AggregationData:
+      type: object
+      properties:
+        experiment_count:
+          type: integer
+          format: int64
+        trace_count:
+          type: integer
+          format: int64
+        total_estimated_cost:
+          type: number
+        total_estimated_cost_avg:
+          type: number
+        duration:
+          $ref: "#/components/schemas/PercentageValues"
+        feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+    ExperimentGroupAggregationsResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupContentWithAggregations"
+    GroupContentWithAggregations:
+      type: object
+      properties:
+        aggregations:
+          $ref: "#/components/schemas/AggregationData"
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -8659,6 +8872,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
       type: object
@@ -8668,6 +8882,8 @@ components:
         traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
+          type: boolean
+        opikAIEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -8839,6 +9055,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        value_by_author:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ValueEntry_Public"
+          readOnly: true
       readOnly: true
     JsonListString_Public:
       type: object
@@ -8942,6 +9163,25 @@ components:
             precision
           format: double
           readOnly: true
+    ValueEntry_Public:
+      type: object
+      properties:
+        value:
+          type: number
+        reason:
+          type: string
+        category_name:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+        last_updated_at:
+          type: string
+          format: date-time
+      readOnly: true
     SpanPage_Public:
       type: object
       properties:
@@ -9057,6 +9297,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     SpanFilter_Public:
       type: object
       properties:
@@ -9558,6 +9800,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     FeedbackScoreBatchThread:
       required:
       - scores

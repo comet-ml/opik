@@ -12,7 +12,7 @@ import java.util.Map;
 
 public interface UserLogTableFactory {
 
-    static UserLogTableFactory getInstance(ConnectionFactory factory) {
+    static UserLogTableFactory getInstance(@NonNull ConnectionFactory factory) {
         return new UserLogTableFactoryImpl(factory);
     }
 

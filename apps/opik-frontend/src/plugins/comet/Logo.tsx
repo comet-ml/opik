@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import imageLogoUrl from "/images/comet-logo.png";
+import imageLogoUrl from "/images/opik-logo.png";
 
 type LogoProps = {
   expanded: boolean;
@@ -9,11 +9,11 @@ type LogoProps = {
 const Logo: React.FunctionComponent<LogoProps> = ({ expanded }) => {
   return (
     <img
-      className={cn("h-8 object-cover object-left", {
-        "w-[26px]": !expanded,
+      className={cn("h-8 object-cover object-left -ml-[3px] mr-[3px]", {
+        "w-[32px]": !expanded,
       })}
       src={imageLogoUrl}
-      alt="comet logo"
+      alt="opik logo"
     />
   );
 };
