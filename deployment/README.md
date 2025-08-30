@@ -2,7 +2,7 @@
 
 > **🎯 Complete guide to deploy Opik on Azure Kubernetes Service (AKS) with external access**
 
-Deploy Opik to Azure with production-ready networking using Azure Application Gateway Ingress Controller (AGIC) for external access without port forwarding.
+Here you can deploy Opik to Azure with production-ready networking using Azure Application Gateway Ingress Controller (AGIC) for external access without port forwarding.
 
 ## 📋 Prerequisites
 
@@ -49,36 +49,17 @@ cd /Users/luisarteiro/Documents/opik/deployment
 > [!TIP]
 > **Only edit `.env.azure`** - never modify the template files directly.
 
+To configure the Azure resources that you're going to deploy, edit the `.env.azure` file.
+
 ```bash
 # Edit configuration file
 vim .env.azure
 ```
 
-**Key settings to verify:**
-
-```bash
-# Azure Infrastructure
-RESOURCE_GROUP="opik-rg"                    # Resource group name
-LOCATION="northeurope"                      # Azure region
-AKS_CLUSTER_NAME="opik-aks"                # Kubernetes cluster name
-ACR_NAME="opikacr"                         # Container registry name
-
-# Application Version
-OPIK_VERSION="latest"                       # 🔄 Change this for updates
-
-# Networking (Auto-configured)
-VNET_NAME="opik-vnet"                      # Virtual network name
-APP_GATEWAY_NAME="opik-appgw"              # Application gateway name
-PUBLIC_IP_NAME="opik-appgw-ip"             # Public IP name
-
-# Optional: Custom Domain
-DOMAIN_NAME=""                              # Leave empty for IP access
-```
-
 ### 3. Deploy
 
 ```bash
-./deploy-opik-helm-azure.sh
+./first-time-deploy-azure.sh
 ```
 
 > [!NOTE]
@@ -111,15 +92,15 @@ The script automatically handles everything:
 
 ## 🌐 Accessing the Application
 
-After successful deployment, the output will show:
+After successful deployment, the output will show something like this:
 
 ```
-✅ Deployment completed successfully!
-
-🌐 Access Opik at: http://20.166.21.214
-📊 Frontend: http://20.166.21.214/
-🔌 API: http://20.166.21.214/v1/private/*
-⚙️ Evaluators: http://20.166.21.214/v1/private/evaluators/*
+✓ 🌐 Application available at: https://52.155.251.75 (HTTPS - Recommended)
+ℹ Also available at: http://52.155.251.75 (HTTP)
+⚠ HTTPS uses self-signed certificate - accept browser security warning
+ℹ It may take a few minutes for Application Gateway to configure backend pools
+ℹ If you get 502 errors, wait a few minutes and try again
+✓ 🎉 Deployment completed successfully!
 ```
 
 ### Primary Access (Recommended)
@@ -150,7 +131,7 @@ vim .env.azure
 # Change: OPIK_VERSION="v2.0.0"
 
 # 2. Redeploy
-./deploy-opik-helm-azure.sh
+./first-time-deploy-azure.sh
 ```
 
 The script automatically:
@@ -197,91 +178,68 @@ curl http://PUBLIC_IP_ADDRESS/health-check        # Backend health
 curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/ # API endpoint
 ```
 
-## 🛠️ Troubleshooting
+## 🌐 Public Access Through Ingress
 
-### Common Issues
+> [!IMPORTANT]
+> **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
 
-#### **🔴 Images Not Pulling**
-```bash
-# Check ACR integration
-az aks check-acr --name opik-aks --resource-group opik-rg --acr opikacr.azurecr.io
+### 🔓 Publicly Available Endpoints (with Authentication)
 
-# Verify ACR login
-az acr login --name opikacr
-```
+Once deployed, the following endpoints are accessible from the internet after Azure Entra ID authentication:
 
-#### **🔴 Pods Stuck in Pending**
-```bash
-# Check node resources
-kubectl describe nodes
-kubectl top nodes
-
-# Check events
-kubectl get events -n opik --sort-by='.lastTimestamp'
-```
-
-#### **🔴 502 Bad Gateway**
-```bash
-# Wait 2-3 minutes for Application Gateway to configure
-# Check backend health
-az network application-gateway show-backend-health -g opik-rg -n opik-appgw
-
-# Check ingress status
-kubectl describe ingress -n opik
-```
-
-#### **🔴 Cannot Access Externally**
-```bash
-# Verify public IP
-az network public-ip show --name opik-appgw-ip --resource-group opik-rg
-
-# Check Application Gateway status
-az network application-gateway show -g opik-rg -n opik-appgw --query "operationalState"
-
-# Verify AGIC pods
-kubectl get pods -n kube-system -l app=ingress-appgw
-```
-
-### Useful Commands
-
-```bash
-# Scale services
-kubectl scale deployment opik-backend -n opik --replicas=3
-
-# Restart deployment
-kubectl rollout restart deployment/opik-backend -n opik
-
-# Check resource usage
-kubectl top pods -n opik
-
-# Get cluster info
-kubectl cluster-info
-helm list -n opik
-```
+| Endpoint Path | Service | Description |
+|---------------|---------|-------------|
+| `/` | **Frontend** | Complete Opik web interface |
+| `/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) |
+| `/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints |
+| `/health-check` | **Java Backend** | Health monitoring endpoint |
 
 ## 🏗️ Architecture Overview
 
 ```mermaid
 graph TB
-    Internet[🌐 Internet] --> AppGW[🛡️ Azure Application Gateway<br/>Public IP: 20.166.21.214]
+    Internet[🌐 Internet] --> AppGW[🛡️ Azure Application Gateway<br/>Public IP]
     
     AppGW --> |"/ (Root Path)"| Frontend[🌐 Frontend Service<br/>React App<br/>Port: 5173]
     AppGW --> |"/v1/private/evaluators/*"| PythonBackend[🐍 Python Backend<br/>Evaluator Service<br/>Port: 8000]
     AppGW --> |"/v1/* (Fallback)"| Backend[⚙️ Java Backend<br/>Main API<br/>Port: 8080]
     
-    subgraph AKS[☸️ Azure Kubernetes Service]
-        Frontend
-        Backend
-        PythonBackend
-        
-        Backend --> MySQL[(🗄️ MySQL<br/>Database)]
-        Backend --> ClickHouse[(📊 ClickHouse<br/>Analytics DB)]
-        Backend --> Redis[(⚡ Redis<br/>Cache)]
-        Backend --> MinIO[📦 MinIO<br/>Object Storage]
-        
-        ClickHouse --> ZooKeeper[🔧 ZooKeeper]
-        PythonBackend --> SandboxExecutor[🔒 Sandbox Executor]
+    subgraph DeploymentFlow[🚀 Deployment Process]
+        Script[📋 first-time-deploy-azure.sh]
+        Script --> |1. Build & Push| ACR[📦 Azure Container Registry<br/>Docker Images]
+        Script --> |2. Create Infrastructure| AzureInfra[☁️ Azure Resources<br/>AKS, VNet, App Gateway]
+        Script --> |3. Deploy with Helm| HelmChart[⚙️ Helm Chart<br/>helm-values-azure-template.yaml]
+        HelmChart --> |Deploy to| AKS
     end
+    
+    subgraph AKS[☸️ Azure Kubernetes Service]
+        subgraph OpikNamespace[📁 opik namespace]
+            Frontend
+            Backend
+            PythonBackend
+            SandboxExecutor[🔒 Sandbox Executor]
+            
+            subgraph DataServices[🗄️ Data Layer]
+                MySQL[(🗄️ MySQL<br/>User Data & Config)]
+                ClickHouse[(📊 ClickHouse<br/>Analytics & Metrics)]
+                Redis[(⚡ Redis<br/>Cache & Sessions)]
+                MinIO[📦 MinIO<br/>Object Storage]
+                ZooKeeper[🔧 ZooKeeper<br/>ClickHouse Coordination]
+            end
+        end
+        
+        subgraph AGIC[🔌 App Gateway Ingress Controller]
+            IngressController[AGIC Pod<br/>Routes traffic from App Gateway]
+        end
+    end
+    
+    Backend --> MySQL
+    Backend --> ClickHouse
+    Backend --> Redis
+    Backend --> MinIO
+    ClickHouse --> ZooKeeper
+    PythonBackend --> SandboxExecutor
+    AppGW -.-> |Managed by| AGIC
     
     subgraph Network[🔗 Virtual Network - 10.0.0.0/16]
         subgraph AKSSubnet[AKS Subnet - 10.0.1.0/24]
@@ -292,15 +250,25 @@ graph TB
         end
     end
     
+    subgraph ConfigManagement[⚙️ Configuration]
+        EnvConfig[📄 .env.azure<br/>User Configuration]
+        HelmTemplate[📋 helm-values-azure-template.yaml<br/>Kubernetes Configuration]
+        EnvConfig --> |Processed by envsubst| HelmTemplate
+    end
+    
     classDef frontend fill:#e1f5fe,stroke:#0277bd
     classDef backend fill:#f3e5f5,stroke:#7b1fa2
     classDef database fill:#e8f5e8,stroke:#2e7d32
     classDef network fill:#fff3e0,stroke:#f57c00
+    classDef deployment fill:#f1f8e9,stroke:#558b2f
+    classDef config fill:#fce4ec,stroke:#c2185b
     
     class Frontend frontend
-    class Backend,PythonBackend backend
-    class MySQL,ClickHouse,Redis,MinIO database
+    class Backend,PythonBackend,SandboxExecutor backend
+    class MySQL,ClickHouse,Redis,MinIO,ZooKeeper database
     class Network,AKSSubnet,AppGWSubnet network
+    class DeploymentFlow,Script,ACR,AzureInfra,HelmChart,AGIC,IngressController deployment
+    class ConfigManagement,EnvConfig,HelmTemplate config
 ```
 
 ## 🛣️ Application Gateway Routing Configuration
@@ -319,7 +287,7 @@ The routing configuration is **tightly coupled with the application source code*
 | `/v1/*` | **Java Backend** | `apps/opik-backend/src/main/java/com/comet/opik/api/resources/v1/` | All other API endpoints |
 | `/health-check` | **Java Backend** | Built-in Dropwizard health check | Health monitoring |
 
-### � How Routes Are Determined
+### How Routes Are Determined
 
 The routing configuration was discovered by analyzing the source code:
 
@@ -368,62 +336,3 @@ This routing setup ensures that:
 | **AKS Nodes** | aks-subnet | 10.0.1.0/24 | Kubernetes cluster |
 | **App Gateway** | appgw-subnet | 10.0.2.0/24 | Load balancer |
 | **Virtual Network** | opik-vnet | 10.0.0.0/16 | Network isolation |
-
-## 🌐 Public Access Through Ingress
-
-> [!IMPORTANT]
-> **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
-
-### 🔓 Publicly Available Endpoints (with Authentication)
-
-Once deployed, the following endpoints are accessible from the internet after Azure Entra ID authentication:
-
-| Endpoint | Service | Description | Example |
-|----------|---------|-------------|---------|
-| `http://PUBLIC_IP/` | **Frontend** | Complete Opik web interface | `http://4.245.192.15/` |
-| `http://PUBLIC_IP/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) | `http://4.245.192.15/v1/private/projects/` |
-| `http://PUBLIC_IP/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints | `http://4.245.192.15/v1/private/evaluators/code/run` |
-| `http://PUBLIC_IP/health-check` | **Java Backend** | Health monitoring endpoint | `http://4.245.192.15/health-check` |
-
-### 🔍 Accessing the API
-
-**Web Interface:**
-```bash
-# Open in browser
-open http://PUBLIC_IP_ADDRESS
-```
-
-**API Examples:**
-```bash
-# Get API health
-curl http://PUBLIC_IP_ADDRESS/health-check
-
-# List projects (if any exist)
-curl http://PUBLIC_IP_ADDRESS/v1/private/projects/
-
-# Get feature toggles
-curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/
-
-# Code evaluation endpoint
-curl -X POST http://PUBLIC_IP_ADDRESS/v1/private/evaluators/code/run \
-  -H "Content-Type: application/json" \
-  -d '{"code": "print(\"Hello World\")", "language": "python"}'
-```
-
-
-## 🧹 Cleanup
-
-### Remove Application Only
-```bash
-helm uninstall opik -n opik
-kubectl delete namespace opik
-```
-
-### Remove All Resources
-```bash
-# ⚠️ This deletes everything including data
-az group delete --name opik-rg --yes --no-wait
-```
-
----
-

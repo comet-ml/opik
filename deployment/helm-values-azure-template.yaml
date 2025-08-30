@@ -3,53 +3,81 @@
 # Variables are substituted by the deployment script
 #
 # DO NOT EDIT VERSION NUMBERS HERE - Change OPIK_VERSION in .env.azure instead
-# This is a TEMPLATE file processed by deploy-opik-helm-azure.sh
-
+# This is a TEMPLATE file processed by first-time-deploy-azure.sh.
 registry: &registry $ACR_LOGIN_SERVER
 
 # OAuth2 Proxy Configuration for Azure Entra ID Authentication
 oauth2-proxy:
   enabled: true
-  
+
   config:
     clientID: "$APP_ID"
     clientSecret: "$CLIENT_SECRET"
     cookieSecret: "$OAUTH2_COOKIE_SECRET"
-    
+
   extraArgs:
+    # =================================================================
+    # Azure Entra ID Provider Configuration
+    # =================================================================
     provider: "azure"
     azure-tenant: "$TENANT_ID"
     oidc-issuer-url: "https://login.microsoftonline.com/$TENANT_ID/v2.0"
-    email-domain: "*"
-    http-address: "0.0.0.0:4180"
-    redirect-url: "https://$PUBLIC_IP_ADDRESS/oauth2/callback"
-    skip-provider-button: "true"
-    # Minimize header size to fix 431 errors for users with many groups
-    pass-access-token: "false"
-    pass-user-headers: "false"
-    pass-authorization-header: "false"
-    set-xauthrequest: "true"
-    cookie-expire: "24h"
-    cookie-refresh: "1h"
-    cookie-secure: "true"
-    cookie-samesite: "lax"
-    # Route to our nginx proxy which handles the routing to backend services
-    upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80"
-    # Minimal scope - only what's needed for group checking
-    scope: "openid email profile groups"
-    # Set user ID claim to use userPrincipalName from Azure AD
-    user-id-claim: "preferred_username"
-    
-    # Group-based access control - restrict access to members of the Opik Users group
-    # For Azure AD, use allowed-group with the group object ID
-    allowed-group: "$OPIK_ACCESS_GROUP_ID"
-    # Alternative: use allowed-groups (comma-separated) if multiple groups needed
-    # allowed-groups: "$OPIK_ACCESS_GROUP_ID"
-  
+
+    # =================================================================
+    # Basic Authentication Settings
+    # =================================================================
+    email-domain: "*" # Allow any email domain (restrict via groups instead)
+    http-address: "0.0.0.0:4180" # Listen on all interfaces, port 4180
+    redirect-url: "https://$PUBLIC_IP_ADDRESS/oauth2/callback" # OAuth2 callback URL after authentication
+    skip-provider-button: "true" # Skip provider selection page (single provider)
+
+    # =================================================================
+    # MINIMAL HEADER FORWARDING (Fixes 431 Errors)
+    # =================================================================
+    # Problem: Azure AD tokens can be very large (50KB+) for users with many group memberships,
+    # causing "431 Request Header Fields Too Large" errors when forwarded to backend services.
+    #
+    # Solution: Implement minimal header forwarding while maintaining security:
+    # - Disable forwarding of large tokens and user headers to backend
+    # - Use group-based access control at OAuth2 proxy level
+    # - Backend services don't receive user identity headers (stateless authentication)
+    # - Authentication happens at the gateway level only
+
+    pass-access-token: "false" # Don't forward Azure AD access token (can be 50KB+)
+    pass-user-headers: "false" # Don't forward X-Forwarded-User and related headers
+    pass-authorization-header: "false" # Don't forward Authorization header with bearer token
+    set-xauthrequest: "true" # Set X-Auth-Request-* headers (minimal user info)
+
+    # =================================================================
+    # Session Management
+    # =================================================================
+    cookie-expire: "24h" # Session expires after 24 hours
+    cookie-refresh: "1h" # Refresh token every hour to maintain session
+    cookie-secure: "true" # Only send cookies over HTTPS
+    cookie-samesite: "lax" # Allow cross-site requests for OAuth flow
+
+    # =================================================================
+    # Upstream Routing
+    # =================================================================
+    upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80" # Route authenticated requests to nginx proxy
+
+    # =================================================================
+    # OAuth2 Scopes & Claims
+    # =================================================================
+    scope: "openid email profile groups" # Request minimal scopes needed for authentication
+    user-id-claim: "preferred_username" # Use preferred_username as user identifier
+
+    # =================================================================
+    # Group-Based Access Control (Security Layer)
+    # =================================================================
+    # Restrict access to specific Azure AD group members only
+    # This provides security without forwarding large group membership tokens
+    allowed-group: "$OPIK_ACCESS_GROUP_ID" # Only allow members of specified group
+
   service:
     type: ClusterIP
     portNumber: 4180
-    
+
   ingress:
     enabled: false
 
@@ -64,7 +92,7 @@ component:
       OPIK_USAGE_REPORT_ENABLED: "true"
     ingress:
       enabled: false
-      
+
   python-backend:
     image:
       repository: opik-python-backend
@@ -79,7 +107,7 @@ component:
       OPIK_REVERSE_PROXY_URL: ""
     ingress:
       enabled: false
-      
+
   frontend:
     image:
       repository: opik-frontend
@@ -97,7 +125,7 @@ clickhouse:
   persistence:
     enabled: true
     size: 20Gi
-    
+
 mysql:
   enabled: true
   primary:
