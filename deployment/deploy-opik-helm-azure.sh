@@ -1,87 +1,82 @@
 #!/bin/bash
 
+# =============================================================================
 # Opik Helm Deployment Script for Azure
-# This script creates Azure resources, builds images, and deploys Opik using Helm
+# =============================================================================
+# This script deploys Opik on Azure using AKS, Application Gateway, and OAuth2
+# Features: HTTPS with AGIC, Azure Entra ID authentication, Docker image builds.
 #
-# HTTPS & OAuth2 Configuration:
-# - Creates TLS secrets for AGIC to enable HTTPS listeners
-# - Configures OAuth2 proxy with proper Azure Entra ID authentication
-# - Uses AGIC annotations for SSL certificate management
-# - Includes connectivity testing to verify HTTPS and OAuth2 functionality
-#
-# Key fixes implemented:
-# 1. AGIC HTTPS compatibility: Uses Ingress TLS configuration instead of manual Application Gateway setup
-# 2. OAuth2 reliability: Improved secret management and environment variable handling
-# 3. Connectivity verification: Tests HTTPS and authentication redirection
-# 4. Improved error handling: Better retry logic and conflict resolution
-# 5. AGIC permission handling: Automatic detection and fixing of AGIC permission issues
+# Warning: 
+# This script is meant to be executed one time, to setup everything.
+# The cluster will be created and then we should just need to update it from then on.
+# When executing the script, you may need to run it a few times
+# because Azure takes time to propagate some commands and they time out.
+# =============================================================================
 
-set -e  # Exit on error
+set -e
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
 # Quick fix function for AGIC permission issues
-# Usage: fix_agic_permissions
 fix_agic_permissions() {
-    echo "🔧 Quick Fix: AGIC Permission Issues"
-    echo "This function fixes AGIC permission issues by granting permissions to the actual AGIC identity found in logs"
-    echo ""
+    print_step "Fixing AGIC Permission Issues"
+    print_info "This function fixes AGIC permission issues by granting permissions to the actual AGIC identity found in logs"
     
     # Load environment variables if .env.azure exists
     if [ -f ".env.azure" ]; then
         source .env.azure
     else
-        echo "❌ .env.azure not found. Please run from deployment directory."
+        print_error ".env.azure not found. Please run from deployment directory."
         return 1
     fi
     
     # Get AGIC logs and extract the actual identity being used
-    echo "📋 Checking AGIC logs for permission errors..."
+    print_info "Checking AGIC logs for permission errors..."
     AGIC_LOGS=$(kubectl logs -l app=ingress-appgw -n kube-system --tail=50 2>/dev/null || echo "")
     
     if echo "$AGIC_LOGS" | grep -q "AuthorizationFailed\|Forbidden\|403"; then
-        echo "🔍 Found permission issues in AGIC logs"
+        print_info "Found permission issues in AGIC logs"
         
         # Extract the actual identity being used by AGIC
         ACTUAL_AGIC_IDENTITY=$(echo "$AGIC_LOGS" | grep -o "client '[^']*'" | head -1 | sed "s/client '//;s/'//")
         
         if [ -n "$ACTUAL_AGIC_IDENTITY" ]; then
-            echo "✅ Found actual AGIC identity: $ACTUAL_AGIC_IDENTITY"
+            print_success "Found actual AGIC identity: $ACTUAL_AGIC_IDENTITY"
             
             SUBSCRIPTION_ID=$(az account show --query id -o tsv)
             
-            echo "🔑 Granting Reader permission on resource group..."
+            print_info "Granting Reader permission on resource group..."
             az role assignment create \
                 --role Reader \
                 --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
                 --assignee "$ACTUAL_AGIC_IDENTITY" \
-                --only-show-errors || echo "   (Permission may already exist)"
+                --only-show-errors || print_info "Permission may already exist"
             
-            echo "🔑 Granting Contributor permission on Application Gateway..."
+            print_info "Granting Contributor permission on Application Gateway..."
             az role assignment create \
                 --role Contributor \
                 --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME" \
                 --assignee "$ACTUAL_AGIC_IDENTITY" \
-                --only-show-errors || echo "   (Permission may already exist)"
+                --only-show-errors || print_info "Permission may already exist"
             
-            echo "🔄 Restarting AGIC deployment..."
+            print_info "Restarting AGIC deployment..."
             kubectl rollout restart deployment -l app=ingress-appgw -n kube-system
             
-            echo "✅ AGIC permission fix completed!"
-            echo "🕐 Wait 1-2 minutes for AGIC to restart and retry with new permissions"
+            print_success "AGIC permission fix completed!"
+            print_info "Wait 1-2 minutes for AGIC to restart and retry with new permissions"
         else
-            echo "❌ Could not extract AGIC identity from logs"
-            echo "📋 Recent AGIC logs:"
+            print_error "Could not extract AGIC identity from logs"
+            print_info "Recent AGIC logs:"
             echo "$AGIC_LOGS" | tail -10
         fi
     else
-        echo "✅ No permission issues found in AGIC logs"
-        echo "📋 Recent AGIC logs:"
+        print_success "No permission issues found in AGIC logs"
+        print_info "Recent AGIC logs:"
         echo "$AGIC_LOGS" | tail -5
     fi
 }
-
-# Uncomment the line below and run: source deploy-opik-helm-azure.sh
-# to load the fix_agic_permissions function into your shell
-# Then run: fix_agic_permissions
 
 # Function to cleanup resources from failed runs
 cleanup_failed_deployment() {
@@ -109,16 +104,20 @@ cleanup_failed_deployment() {
         kubectl delete pvc "$pvc_name" -n "$namespace" --force --grace-period=0 &>/dev/null || true
     done
     
-    print_warning "⚠️  PVC cleanup will delete all stored data! Only use for clean redeployments."
+    print_warning "PVC cleanup will delete all stored data! Only use for clean redeployments."
     print_success "Cleanup completed"
 }
+
+# =============================================================================
+# OUTPUT FORMATTING FUNCTIONS  
+# =============================================================================
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Function to print colored output
 print_step() {
@@ -157,6 +156,10 @@ print_key_value() {
     printf "   %-20s: %s\n" "$key" "$value"
 }
 
+# =============================================================================
+# SCRIPT INITIALIZATION
+# =============================================================================
+
 # Check for cleanup flag
 if [ "${1:-}" = "--cleanup" ]; then
     if [ -f ".env.azure" ]; then
@@ -174,12 +177,16 @@ if [ "${1:-}" = "--cleanup" ]; then
     fi
 fi
 
+# =============================================================================
+# ENVIRONMENT CONFIGURATION
+# =============================================================================
+
 # Load environment variables from .env.azure
 if [ -f ".env.azure" ]; then
     print_step "Loading environment variables from .env.azure"
     
     # Source the file directly after filtering out comments and empty lines
-    set -a  # Automatically export all variables
+    set -a
     while IFS= read -r line; do
         # Skip empty lines and comments
         if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
@@ -189,7 +196,7 @@ if [ -f ".env.azure" ]; then
             fi
         fi
     done < .env.azure
-    set +a  # Turn off automatic export
+    set +a
     
     # Validate required variables
     REQUIRED_VARS=(
@@ -235,18 +242,22 @@ else
     exit 1
 fi
 
-print_step "Starting Opik Helm deployment to Azure"
+# =============================================================================
+# DEPLOYMENT OVERVIEW
+# =============================================================================
+
+print_step "🚀 Starting Opik Helm deployment to Azure"
 
 # Force unset any OAuth2 cookie secret from previous runs to ensure fresh generation
 unset OAUTH2_COOKIE_SECRET
 
-echo "Azure Resource Group (ARG) Name: $RESOURCE_GROUP"
-echo "Azure Container Registry (ACR) Name: $ACR_NAME"
-echo "Azure Kubernetes Service (AKS) Cluster Name: $AKS_CLUSTER_NAME"
-echo "Azure Location: $LOCATION"
-echo "Built Images Version: $OPIK_VERSION"
-echo "Kubernetes Namespace: $NAMESPACE"
-echo ""
+print_section "Deployment Configuration"
+print_key_value "Resource Group" "$RESOURCE_GROUP"
+print_key_value "Container Registry" "$ACR_NAME"
+print_key_value "AKS Cluster" "$AKS_CLUSTER_NAME"
+print_key_value "Azure Location" "$LOCATION"
+print_key_value "Images Version" "$OPIK_VERSION"
+print_key_value "Kubernetes Namespace" "$NAMESPACE"
 
 # Check for potential conflicts from previous runs
 if kubectl get namespace "$NAMESPACE" &>/dev/null; then
@@ -257,13 +268,15 @@ if kubectl get namespace "$NAMESPACE" &>/dev/null; then
     if [ "$EXISTING_SECRETS" -gt 0 ]; then
         print_warning "Found existing secrets that might conflict with Helm deployment:"
         kubectl get secret -n "$NAMESPACE" | grep -E "(opik-oauth2-proxy|opik-tls-secret)" || true
-        echo ""
         print_info "These secrets will be cleaned up automatically before Helm deployment"
     fi
 fi
 
-# Check prerequisites
-print_step "Checking prerequisites"
+# =============================================================================
+# PREREQUISITES CHECK
+# =============================================================================
+
+print_step "🔍 Checking prerequisites"
 
 # Check if helm-values-azure-template.yaml exists
 if [ ! -f "helm-values-azure-template.yaml" ]; then
@@ -314,17 +327,21 @@ fi
 
 print_success "All prerequisites check passed"
 
+# =============================================================================
+# AZURE INFRASTRUCTURE SETUP
+# =============================================================================
+
 # Create Resource Group (if it doesn't exist)
-print_step "Creating Resource Group"
+print_step "🏗️ Creating Resource Group"
 if az group show --name $RESOURCE_GROUP &> /dev/null; then
     print_warning "Resource group $RESOURCE_GROUP already exists"
 else
     az group create --name $RESOURCE_GROUP --location $LOCATION
-    print_success "Created resource group $RESOURCE_GROUP"
+    print_success "🏗️ Created resource group $RESOURCE_GROUP"
 fi
 
 # Create Azure Container Registry (if it doesn't exist)
-print_step "Creating Azure Container Registry"
+print_step "📦 Creating Azure Container Registry"
 if az acr show --name $ACR_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
     print_warning "ACR $ACR_NAME already exists"
 else
@@ -341,8 +358,11 @@ print_step "Logging into Azure Container Registry"
 az acr login --name $ACR_NAME
 print_success "Logged into ACR"
 
-# Create networking infrastructure for Application Gateway
-print_step "Setting up networking infrastructure"
+# =============================================================================
+# NETWORKING INFRASTRUCTURE
+# =============================================================================
+
+print_step "🌐 Setting up networking infrastructure"
 
 # Create virtual network (if it doesn't exist)
 if az network vnet show --name $VNET_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
@@ -383,8 +403,11 @@ fi
 # Get subnet ID for AKS
 AKS_SUBNET_ID=$(az network vnet subnet show --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --name $AKS_SUBNET_NAME --query id -o tsv)
 
-# Create AKS cluster (if it doesn't exist)
-print_step "Creating AKS Cluster"
+# =============================================================================
+# AKS CLUSTER SETUP
+# =============================================================================
+
+print_step "☸️ Creating AKS Cluster"
 if az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
     print_warning "AKS cluster $AKS_CLUSTER_NAME already exists"
     
@@ -396,7 +419,7 @@ if az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP &> /dev
         print_warning "AKS cluster was created without VNet integration. Consider recreating for optimal AGIC functionality."
     fi
 else
-    print_step "Creating AKS cluster with VNet integration (this may take 10-15 minutes)..."
+    print_info "Creating AKS cluster with VNet integration (this may take 10-15 minutes)..."
     az aks create \
         --resource-group $RESOURCE_GROUP \
         --name $AKS_CLUSTER_NAME \
@@ -410,8 +433,12 @@ else
         --network-plugin azure \
         --service-cidr 10.1.0.0/16 \
         --dns-service-ip 10.1.0.10
-    print_success "Created AKS cluster $AKS_CLUSTER_NAME with VNet integration"
+    print_success "☸️ Created AKS cluster $AKS_CLUSTER_NAME with VNet integration"
 fi
+
+# =============================================================================
+# PUBLIC IP AND APPLICATION GATEWAY SETUP
+# =============================================================================
 
 # Create public IP for Application Gateway (if it doesn't exist)
 if az network public-ip show --name $PUBLIC_IP_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
@@ -431,8 +458,11 @@ fi
 PUBLIC_IP_ADDRESS=$(az network public-ip show --name $PUBLIC_IP_NAME --resource-group $RESOURCE_GROUP --query "ipAddress" --output tsv)
 print_success "Public IP address: $PUBLIC_IP_ADDRESS"
 
-# Setup Azure Entra ID authentication
-print_step "Setting up Azure Entra ID authentication"
+# =============================================================================
+# AZURE ENTRA ID AUTHENTICATION SETUP
+# =============================================================================
+
+print_step "🔐 Setting up Azure Entra ID authentication"
 
 # Function to retry admin consent with exponential backoff
 grant_admin_consent_with_retry() {
@@ -465,7 +495,7 @@ grant_admin_consent_with_retry() {
                 print_warning "Attempt $attempt failed - Azure AD may still be propagating the app registration"
                 print_info "Waiting $wait_time seconds before retry..."
                 sleep $wait_time
-                wait_time=$((wait_time * 2))  # Exponential backoff
+                wait_time=$((wait_time * 2))
                 attempt=$((attempt + 1))
             fi
         fi
@@ -490,7 +520,7 @@ if [ -n "${OPIK_ACCESS_GROUP_NAME:-}" ]; then
             --mail-nickname "$(echo "$OPIK_ACCESS_GROUP_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')" \
             --query "id" -o tsv)
         print_success "Created Microsoft Entra ID group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
-        print_warning "⚠️  Remember to add your team members to this group in the Azure Portal!"
+        print_warning "Remember to add your team members to this group in the Azure Portal!"
     else
         print_success "Found existing Microsoft Entra ID group: $OPIK_ACCESS_GROUP_NAME (ID: $OPIK_ACCESS_GROUP_ID)"
     fi
@@ -508,7 +538,7 @@ print_step "Creating App Registration for Opik authentication"
 print_info "App Registration Name: $OPIK_APP_NAME"
 
 # Check if app registration already exists
-print_step "Searching for existing App Registration with name: $OPIK_APP_NAME"
+print_info "Searching for existing App Registration with name: $OPIK_APP_NAME"
 APP_ID=$(az ad app list --display-name "$OPIK_APP_NAME" --query "[0].appId" -o tsv)
 
 # If not found with full name, try searching for the base name from .env.azure
@@ -518,7 +548,7 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
         APP_ID=$(az ad app list --display-name "$ORIGINAL_OPIK_APP_NAME" --query "[0].appId" -o tsv)
         if [ -n "$APP_ID" ] && [ "$APP_ID" != "null" ]; then
             print_info "Found existing app registration with base name: $ORIGINAL_OPIK_APP_NAME"
-            OPIK_APP_NAME="$ORIGINAL_OPIK_APP_NAME"  # Use the found name
+            OPIK_APP_NAME="$ORIGINAL_OPIK_APP_NAME"
         fi
     fi
 fi
@@ -526,7 +556,7 @@ fi
 print_info "Search result for APP_ID: '$APP_ID'"
 
 if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
-    print_step "No existing app registration found - creating new one"
+    print_info "No existing app registration found - creating new one"
     # Determine redirect URL based on domain or public IP
     if [ -n "${DOMAIN_NAME:-}" ]; then
         REDIRECT_URL="https://$DOMAIN_NAME/oauth2/callback"
@@ -583,13 +613,13 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
     print_success "Added Microsoft Graph permissions: User.Read, email, profile, openid"
     
     # Grant admin consent for the permissions with retry logic for propagation delays
-    print_step "Granting admin consent for permissions (waiting for Azure AD propagation)"
+    print_info "Granting admin consent for permissions (waiting for Azure AD propagation)"
     
     # Call the retry function
     grant_admin_consent_with_retry "$APP_ID"
         
     # Create service principal (check if it already exists first)
-    print_step "Creating service principal"
+    print_info "Creating service principal"
     
     # Add a more intelligent wait for Azure AD propagation
     print_info "Waiting for Azure AD propagation (this may take 30-60 seconds)..."
@@ -627,7 +657,7 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
     done
     
     # Generate client secret
-    print_step "Generating client secret"
+    print_info "Generating client secret"
     CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
 
     print_success "Generated client secret for app registration"
@@ -638,12 +668,11 @@ if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
     print_key_value "Client Secret" "$CLIENT_SECRET"
     print_key_value "Tenant ID" "$TENANT_ID"
     print_key_value "Redirect URL" "$REDIRECT_URL"
-    print_warning "⚠️  IMPORTANT: Save these credentials securely - they will not be stored in files!"
+    print_warning "IMPORTANT: Save these credentials securely - they will not be stored in files!"
     
 else
     print_warning "App Registration $OPIK_APP_NAME already exists (App ID: $APP_ID)"
     print_info "Found existing App Registration with ID: $APP_ID"
-    print_info "DEBUG: Entering existing app registration branch"
     
     # Validate that we have a valid APP_ID
     if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
@@ -652,13 +681,10 @@ else
         exit 1
     fi
     
-    print_info "DEBUG: APP_ID validation passed, proceeding with permission checks"
-    
     # Check and add Microsoft Graph permissions if missing
-    print_step "Checking Microsoft Graph permissions"
+    print_info "Checking Microsoft Graph permissions"
     
     # Define required permissions with their GUIDs using a shell-compatible approach
-    # Using arrays with formatted strings instead of associative arrays
     REQUIRED_PERMISSIONS=(
         "e1fe6dd8-ba31-4d61-89e7-88639da4683d:User.Read"
         "64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0:email"
@@ -684,7 +710,7 @@ else
     
     # Add missing permissions
     if [ ${#MISSING_PERMISSIONS[@]} -gt 0 ]; then
-        print_step "Adding missing Microsoft Graph permissions"
+        print_info "Adding missing Microsoft Graph permissions"
         for permission_entry in "${MISSING_PERMISSIONS[@]}"; do
             permission_id="${permission_entry%%:*}"
             permission_name="${permission_entry##*:}"
@@ -696,7 +722,7 @@ else
         done
         
         # Grant admin consent with retry (reuse the function defined above)
-        print_step "Granting admin consent for added permissions"
+        print_info "Granting admin consent for added permissions"
         grant_admin_consent_with_retry "$APP_ID"
         print_success "Added and consented missing Microsoft Graph permissions"
     else
@@ -704,11 +730,6 @@ else
     fi
     
     # Check if CLIENT_SECRET is already set
-    print_info "DEBUG: Checking CLIENT_SECRET status before conditional:"
-    print_info "  CLIENT_SECRET value: '${CLIENT_SECRET:-UNDEFINED}'"
-    print_info "  CLIENT_SECRET length: ${#CLIENT_SECRET}"
-    print_info "  Conditional test [-z]: $([ -z "${CLIENT_SECRET:-}" ] && echo "TRUE (empty)" || echo "FALSE (has value)")"
-    
     if [ -z "${CLIENT_SECRET:-}" ]; then
         print_warning "CLIENT_SECRET not found in environment variables - regenerating client secret"
         
@@ -719,12 +740,8 @@ else
             exit 1
         fi
         
-        print_info "DEBUG: About to generate CLIENT_SECRET for APP_ID: $APP_ID"
-        
         # Generate new client secret
         CLIENT_SECRET=$(az ad app credential reset --id $APP_ID --query "password" -o tsv)
-        
-        print_info "DEBUG: CLIENT_SECRET generation completed, length: ${#CLIENT_SECRET}"
         
         if [ -n "$CLIENT_SECRET" ]; then
             print_success "Regenerated client secret for existing app registration"
@@ -734,7 +751,7 @@ else
             print_key_value "App ID" "$APP_ID"
             print_key_value "Client Secret" "$CLIENT_SECRET"
             print_key_value "Tenant ID" "$TENANT_ID"
-            print_warning "⚠️  IMPORTANT: Client secret has been regenerated - update your records!"
+            print_warning "IMPORTANT: Client secret has been regenerated - update your records!"
         else
             print_error "Failed to regenerate client secret - deployment cannot continue"
             exit 1
@@ -753,7 +770,7 @@ fi
 # Generate OAuth2 cookie secret if not provided or if existing one is invalid
 if [ -z "${OAUTH2_COOKIE_SECRET:-}" ]; then
     # Generate exactly 32 bytes for AES cipher compatibility
-    OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)  # 16 bytes = 32 hex characters
+    OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)
     print_success "Generated OAuth2 cookie secret (32 bytes)"
     print_section "OAuth2 Configuration"
     print_key_value "Cookie Secret" "$OAUTH2_COOKIE_SECRET"
@@ -762,8 +779,8 @@ else
     COOKIE_SECRET_LENGTH=${#OAUTH2_COOKIE_SECRET}
     if [ "$COOKIE_SECRET_LENGTH" -ne 32 ]; then
         print_warning "Existing OAuth2 cookie secret is $COOKIE_SECRET_LENGTH bytes, but 32 bytes required"
-        print_step "Regenerating OAuth2 cookie secret with correct length"
-        OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)  # 16 bytes = 32 hex characters
+        print_info "Regenerating OAuth2 cookie secret with correct length"
+        OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)
         print_success "Generated new OAuth2 cookie secret (32 bytes)"
         print_section "OAuth2 Configuration"
         print_key_value "Cookie Secret" "$OAUTH2_COOKIE_SECRET"
@@ -773,17 +790,11 @@ else
 fi
 
 # Export authentication variables for Helm values substitution
-print_step "Exporting authentication variables for Helm"
-print_info "APP_ID being exported: $APP_ID"
-print_info "CLIENT_SECRET length: ${#CLIENT_SECRET} characters"
-print_info "TENANT_ID being exported: $TENANT_ID"
-print_info "PUBLIC_IP_ADDRESS being exported: $PUBLIC_IP_ADDRESS"
+print_info "Exporting authentication variables for Helm"
 
-# Debug: Show CLIENT_SECRET status before export
 if [ -z "${CLIENT_SECRET:-}" ]; then
-    print_warning "DEBUG: CLIENT_SECRET is empty at export time - this should not happen!"
-else
-    print_success "DEBUG: CLIENT_SECRET is set with ${#CLIENT_SECRET} characters at export time"
+    print_error "CLIENT_SECRET is empty - authentication setup failed"
+    exit 1
 fi
 
 export APP_ID
@@ -792,13 +803,17 @@ export TENANT_ID
 export OAUTH2_COOKIE_SECRET
 export OPIK_ACCESS_GROUP_ID
 
-print_success "Azure Entra ID authentication setup completed"
+print_success "🔐 Azure Entra ID authentication setup completed"
+
+# =============================================================================
+# APPLICATION GATEWAY SETUP
+# =============================================================================
 
 # Create Application Gateway (if it doesn't exist)
 if az network application-gateway show --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP &> /dev/null; then
     print_warning "Application Gateway $APP_GATEWAY_NAME already exists"
 else
-    print_step "Creating Application Gateway (this may take 5-10 minutes)..."
+    print_info "Creating Application Gateway (this may take 5-10 minutes)..."
     az network application-gateway create \
         --name $APP_GATEWAY_NAME \
         --location $LOCATION \
@@ -816,12 +831,15 @@ else
     print_success "Created Application Gateway $APP_GATEWAY_NAME"
 fi
 
-# HTTPS will be configured automatically by AGIC based on Ingress TLS configuration
-print_step "HTTPS will be configured by AGIC during deployment"
+print_info "HTTPS will be configured by AGIC during deployment"
 print_info "AGIC will automatically create HTTPS infrastructure based on Ingress TLS configuration"
 
+# =============================================================================
+# KUBERNETES CLUSTER CONNECTION
+# =============================================================================
+
 # Get AKS credentials
-print_step "Getting AKS credentials"
+print_step "🔗 Getting AKS credentials"
 az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER_NAME --overwrite-existing
 print_success "Retrieved AKS credentials"
 
@@ -829,7 +847,10 @@ print_success "Retrieved AKS credentials"
 kubectl cluster-info
 print_success "Connected to AKS cluster"
 
-# Install and configure Azure Application Gateway Ingress Controller (AGIC)
+# =============================================================================
+# AGIC (APPLICATION GATEWAY INGRESS CONTROLLER) SETUP
+# =============================================================================
+
 print_step "Installing Azure Application Gateway Ingress Controller (AGIC)"
 
 # Enable AGIC add-on for AKS
@@ -841,12 +862,12 @@ AGIC_ENABLED=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_G
 if [ "$AGIC_ENABLED" = "true" ]; then
     print_warning "AGIC add-on is already enabled on AKS cluster"
 else
-    print_step "Enabling AGIC add-on on AKS cluster..."
+    print_info "Enabling AGIC add-on on AKS cluster..."
     
     # Check for any in-progress operations and wait for them to complete
     print_info "Checking for any in-progress AKS operations..."
     AKS_OPERATION_STATUS=""
-    MAX_WAIT_TIME=600  # 10 minutes
+    MAX_WAIT_TIME=600
     WAIT_TIME=0
     
     while [ $WAIT_TIME -lt $MAX_WAIT_TIME ]; do
@@ -915,23 +936,19 @@ if [ -n "$AGIC_IDENTITY_CLIENT_ID" ] && [ "$AGIC_IDENTITY_CLIENT_ID" != "null" ]
     
     print_success "AGIC permissions configured for identity: $AGIC_IDENTITY_CLIENT_ID"
     
-    # Additional check: Get all managed identities in the resource group to identify potential mismatches
     print_step "Verifying AGIC identity configuration"
     print_info "Checking for additional managed identities that might be used by AGIC..."
     
-    # Look for managed identities in the MC_ resource group (where AKS resources are actually created)
     MC_RESOURCE_GROUP=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "nodeResourceGroup" -o tsv)
     if [ -n "$MC_RESOURCE_GROUP" ]; then
         print_info "Checking managed identities in MC resource group: $MC_RESOURCE_GROUP"
         
-        # List all managed identities in the MC resource group
         MANAGED_IDENTITIES=$(az identity list --resource-group "$MC_RESOURCE_GROUP" --query "[?contains(name, 'agentpool') || contains(name, 'appgw') || contains(name, 'ingressappgw')].{name:name, clientId:clientId, principalId:principalId}" -o json 2>/dev/null || echo "[]")
         
         if [ "$MANAGED_IDENTITIES" != "[]" ] && [ -n "$MANAGED_IDENTITIES" ]; then
             print_info "Found additional managed identities in MC resource group:"
             echo "$MANAGED_IDENTITIES" | jq -r '.[] | "  - \(.name): \(.clientId)"' 2>/dev/null || echo "$MANAGED_IDENTITIES"
             
-            # Grant permissions to all relevant identities to ensure AGIC works
             echo "$MANAGED_IDENTITIES" | jq -r '.[].clientId' 2>/dev/null | while read -r identity_id; do
                 if [ -n "$identity_id" ] && [ "$identity_id" != "null" ]; then
                     print_info "Granting permissions to additional identity: $identity_id"
@@ -1048,8 +1065,11 @@ else
     print_info "AGIC functionality can be verified after deployment completion"
 fi
 
-# Build and push all images
-print_step "Building and pushing Docker images"
+# =============================================================================
+# DOCKER IMAGE BUILD AND PUSH
+# =============================================================================
+
+print_step "🐳 Building and pushing Docker images"
 
 # Get ACR login server
 ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $RESOURCE_GROUP --query "loginServer" --output tsv)
@@ -1059,16 +1079,16 @@ print_success "ACR login server: $ACR_LOGIN_SERVER"
 cd ..
 
 # Build backend image with proper build args
-print_step "Building opik-backend image for linux/amd64"
+print_info "Building opik-backend image for linux/amd64"
 docker build --platform linux/amd64 \
     --build-arg OPIK_VERSION=$OPIK_VERSION \
     -t $ACR_LOGIN_SERVER/opik-backend:$OPIK_VERSION \
     ./apps/opik-backend
 docker push $ACR_LOGIN_SERVER/opik-backend:$OPIK_VERSION
-print_success "Built and pushed opik-backend:$OPIK_VERSION"
+print_success "🐳 Built and pushed opik-backend:$OPIK_VERSION"
 
 # Build python-backend image with proper build args
-print_step "Building opik-python-backend image for linux/amd64"
+print_info "Building opik-python-backend image for linux/amd64"
 docker build --platform linux/amd64 \
     --build-arg OPIK_VERSION=$OPIK_VERSION \
     -t $ACR_LOGIN_SERVER/opik-python-backend:$OPIK_VERSION \
@@ -1077,15 +1097,15 @@ docker push $ACR_LOGIN_SERVER/opik-python-backend:$OPIK_VERSION
 print_success "Built and pushed opik-python-backend:$OPIK_VERSION"
 
 # Build frontend image
-print_step "Building opik-frontend image for linux/amd64"
+print_info "Building opik-frontend image for linux/amd64"
 docker build --platform linux/amd64 \
     -t $ACR_LOGIN_SERVER/opik-frontend:$OPIK_VERSION \
     ./apps/opik-frontend
 docker push $ACR_LOGIN_SERVER/opik-frontend:$OPIK_VERSION
-print_success "Built and pushed opik-frontend:$OPIK_VERSION"
+print_success "🐳 Built and pushed opik-frontend:$OPIK_VERSION"
 
 # Build sandbox executor image
-print_step "Building opik-sandbox-executor-python image for linux/amd64"
+print_info "Building opik-sandbox-executor-python image for linux/amd64"
 docker build --platform linux/amd64 \
     -t $ACR_LOGIN_SERVER/opik-sandbox-executor-python:$OPIK_VERSION \
     ./apps/opik-sandbox-executor-python
@@ -1094,7 +1114,7 @@ print_success "Built and pushed opik-sandbox-executor-python:$OPIK_VERSION"
 
 # Build guardrails image (optional)
 if [ "${TOGGLE_GUARDRAILS_ENABLED:-false}" = "true" ]; then
-    print_step "Building opik-guardrails-backend image for linux/amd64"
+    print_info "Building opik-guardrails-backend image for linux/amd64"
     docker build --platform linux/amd64 \
         --build-arg OPIK_VERSION=$OPIK_VERSION \
         -t $ACR_LOGIN_SERVER/opik-guardrails-backend:$OPIK_VERSION \
@@ -1106,8 +1126,11 @@ fi
 # Return to deployment directory
 cd deployment
 
-# Add Helm repositories and update dependencies
-print_step "Setting up Helm dependencies"
+# =============================================================================
+# HELM CHART PREPARATION AND DEPLOYMENT
+# =============================================================================
+
+print_step "⚓ Setting up Helm dependencies"
 cd helm_chart/opik
 
 # Add required Helm repositories
@@ -1125,13 +1148,13 @@ helm dependency build
 cd ../../
 
 # Install/upgrade Opik using local Helm chart
-print_step "Installing Opik using Helm"
+print_step "🚀 Installing Opik using Helm"
 
 # Create namespace if it doesn't exist
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
 # Clean up any existing resources that might conflict with Helm
-print_step "Cleaning up any existing resources to prevent Helm conflicts"
+print_info "Cleaning up any existing resources to prevent Helm conflicts"
 
 # First, scale down deployments that might be using PVCs
 print_info "Scaling down deployments to release PVC locks..."
@@ -1281,17 +1304,17 @@ else
 fi
 
 # Substitute environment variables in helm-values-azure-template.yaml
-print_step "Preparing Helm values with environment variables"
+print_info "Preparing Helm values with environment variables"
 
 # Final validation of OAuth2 cookie secret before Helm deployment
-print_step "Validating OAuth2 cookie secret before Helm deployment"
+print_info "Validating OAuth2 cookie secret before Helm deployment"
 if [ -z "${OAUTH2_COOKIE_SECRET:-}" ]; then
     print_error "OAUTH2_COOKIE_SECRET is not set! This should not happen."
     exit 1
 elif [ ${#OAUTH2_COOKIE_SECRET} -ne 32 ]; then
     print_error "OAUTH2_COOKIE_SECRET is ${#OAUTH2_COOKIE_SECRET} bytes, but OAuth2 proxy requires exactly 32 bytes"
     print_error "Current value: '$OAUTH2_COOKIE_SECRET'"
-    print_step "Regenerating correct OAuth2 cookie secret"
+    print_info "Regenerating correct OAuth2 cookie secret"
     OAUTH2_COOKIE_SECRET=$(openssl rand -hex 16)
     print_success "Generated new 32-byte OAuth2 cookie secret: $OAUTH2_COOKIE_SECRET"
     export OAUTH2_COOKIE_SECRET
@@ -1307,13 +1330,7 @@ export PUBLIC_IP_ADDRESS
 export NAMESPACE
 
 # Re-export authentication variables to ensure they're available for envsubst
-print_step "Re-exporting authentication variables for envsubst"
-
-# Debug: Check the status of each variable before validation
-print_info "DEBUG: Variable status before validation:"
-print_info "  APP_ID: '${APP_ID:-EMPTY}'"
-print_info "  CLIENT_SECRET: '${CLIENT_SECRET:+SET(${#CLIENT_SECRET} chars)}${CLIENT_SECRET:-EMPTY}'"
-print_info "  TENANT_ID: '${TENANT_ID:-EMPTY}'"
+print_info "Re-exporting authentication variables for envsubst"
 
 export APP_ID
 export CLIENT_SECRET
@@ -1337,7 +1354,7 @@ if [ -z "$TENANT_ID" ]; then
     exit 1
 fi
 
-print_info "Authentication variables validated: APP_ID=${APP_ID}, CLIENT_SECRET length=${#CLIENT_SECRET}, TENANT_ID=${TENANT_ID}"
+print_success "Authentication variables validated successfully"
 
 # Create a temporary values file with substituted variables
 envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
@@ -1345,7 +1362,7 @@ envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
 print_success "Environment variables substituted in Helm values"
 
 # Final pre-deployment check to ensure no resource conflicts
-print_step "Final pre-deployment verification"
+print_info "Final pre-deployment verification"
 
 # Check for any remaining secrets (TLS only - OAuth2 now managed by chart)
 if kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null; then
@@ -1410,10 +1427,10 @@ helm upgrade --install opik ./helm_chart/opik \
     --debug \
     --timeout 5m
 
-print_success "Helm installation initiated"
+print_success "🚀 Helm installation initiated"
 
 # Validate OAuth2 secret was created correctly
-print_step "Validating OAuth2 secret deployment"
+print_info "Validating OAuth2 secret deployment"
 RETRY_COUNT=0
 MAX_RETRIES=10
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
@@ -1457,11 +1474,11 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 # Wait for OAuth2 proxy to be ready
-print_step "Waiting for OAuth2 proxy to be ready"
+print_info "Waiting for OAuth2 proxy to be ready"
 kubectl wait --for=condition=available deployment/opik-oauth2-proxy -n $NAMESPACE --timeout=300s
 
 # Verify OAuth2 proxy is actually running
-print_step "Verifying OAuth2 proxy status"
+print_info "Verifying OAuth2 proxy status"
 OAUTH2_READY=$(kubectl get pods -n $NAMESPACE -l app=oauth2-proxy --no-headers | grep Running | wc -l)
 if [ "$OAUTH2_READY" -gt 0 ]; then
     print_success "OAuth2 proxy is running successfully"
@@ -1475,18 +1492,21 @@ fi
 # Clean up temporary file
 rm -f helm-values-azure-resolved.yaml
 
+# =============================================================================
+# DEPLOYMENT MONITORING AND VERIFICATION
+# =============================================================================
+
 # Monitor deployment progress
-print_step "Monitoring deployment progress"
-echo "This may take 2-5 minutes for all services to start..."
-echo ""
-echo "Checking pod status in 1 minute..."
+print_step "📊 Monitoring deployment progress"
+print_info "This may take 2-5 minutes for all services to start..."
+print_info "Checking pod status in 1 minute..."
 
 # Wait for 1 minute before checking pod status
 sleep 60
 kubectl get pods -n $NAMESPACE
 
 # Get service information
-print_step "Getting service information"
+print_info "Getting service information"
 kubectl get services -n $NAMESPACE
 
 # Configure HTTPS with TLS secret for AGIC
@@ -1520,12 +1540,12 @@ rm -rf "$TEMP_CERT_DIR"
 print_success "Created TLS secret for AGIC HTTPS configuration"
 
 # Wait for AGIC to process the ingress with TLS configuration
-print_step "Waiting for AGIC to configure HTTPS..."
-echo "AGIC will process the Ingress TLS configuration and create HTTPS listeners..."
+print_info "Waiting for AGIC to configure HTTPS..."
+print_info "AGIC will process the Ingress TLS configuration and create HTTPS listeners..."
 sleep 45
 
 # Check ingress status
-print_step "Checking ingress configuration"
+print_info "Checking ingress configuration"
 kubectl get ingress -n $NAMESPACE -o wide
 
 # Verify AGIC has created HTTPS configuration
@@ -1566,7 +1586,7 @@ else
 fi
 
 # Verify secrets are properly set
-print_step "Verifying OAuth2 secrets"
+print_info "Verifying OAuth2 secrets"
 OAUTH2_SECRET_EXISTS=$(kubectl get secret -n $NAMESPACE | grep oauth2-proxy | wc -l || echo "0")
 if [ "$OAUTH2_SECRET_EXISTS" -gt 0 ]; then
     print_success "OAuth2 proxy secrets exist"
@@ -1574,23 +1594,20 @@ if [ "$OAUTH2_SECRET_EXISTS" -gt 0 ]; then
 else
     print_warning "OAuth2 proxy secrets missing - this may cause 500 errors"
     print_info "OAuth2 secrets should be managed by Helm chart - check helm values configuration"
-    
-    # Check if Helm values have OAuth2 configuration
-    print_info "Verifying OAuth2 configuration in Helm values..."
-    if [ -f "helm-values-azure-resolved.yaml" ]; then
-        grep -A 5 "oauth2-proxy:" helm-values-azure-resolved.yaml || print_warning "No OAuth2 configuration found in Helm values"
-    fi
 fi
 
-# Final connectivity test
-print_step "Testing HTTPS connectivity"
+# =============================================================================
+# FINAL CONNECTIVITY TEST
+# =============================================================================
+
+print_step "🔍 Testing HTTPS connectivity"
 HTTPS_URL="https://$PUBLIC_IP_ADDRESS"
 if [ -n "$DOMAIN_NAME" ]; then
     HTTPS_URL="https://$DOMAIN_NAME"
 fi
 
 print_info "Testing HTTPS access to: $HTTPS_URL"
-sleep 5  # Give a moment for any final AGIC updates
+sleep 5
 
 HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 15 -k "$HTTPS_URL" 2>/dev/null || echo "000")
 
@@ -1601,9 +1618,9 @@ case "$HTTP_STATUS" in
         # Test if it's redirecting to Microsoft login
         REDIRECT_LOCATION=$(curl -s -I --connect-timeout 15 -k "$HTTPS_URL" 2>/dev/null | grep -i "location:" | head -1 || echo "")
         if echo "$REDIRECT_LOCATION" | grep -q "login.microsoftonline.com"; then
-            print_success "✅ OAuth2 authentication is working! Redirecting to Microsoft login"
+            print_success "🔐 OAuth2 authentication is working! Redirecting to Microsoft login"
         else
-            print_warning "⚠️  HTTPS works but may not be redirecting to Microsoft authentication"
+            print_warning "HTTPS works but may not be redirecting to Microsoft authentication"
             print_info "Redirect location: $REDIRECT_LOCATION"
         fi
         ;;
@@ -1611,19 +1628,23 @@ case "$HTTP_STATUS" in
         print_success "✅ HTTPS is working! (HTTP $HTTP_STATUS)"
         ;;
     "000")
-        print_warning "⚠️  HTTPS connectivity failed - connection timeout or refused"
+        print_warning "⚠️ HTTPS connectivity failed - connection timeout or refused"
         print_info "HTTPS may still be configuring - wait 2-3 minutes and try accessing manually"
         ;;
     *)
-        print_warning "⚠️  HTTPS connectivity issue (HTTP $HTTP_STATUS)"
+        print_warning "⚠️ HTTPS connectivity issue (HTTP $HTTP_STATUS)"
         print_info "HTTPS may still be configuring - wait a few minutes and try accessing manually"
         ;;
 esac
 
-# Print comprehensive deployment information
-print_header "🎉 OPIK DEPLOYMENT COMPLETED SUCCESSFULLY"
+# =============================================================================
+# DEPLOYMENT SUMMARY
+# =============================================================================
 
-print_section "Infrastructure Summary"
+print_step "Deployment Summary"
+print_success "🎉 Opik deployment completed successfully!"
+
+print_section "🏗️ Infrastructure Summary"
 print_key_value "Resource Group" "$RESOURCE_GROUP"
 print_key_value "AKS Cluster" "$AKS_CLUSTER_NAME"
 print_key_value "Application Gateway" "$APP_GATEWAY_NAME"
@@ -1631,7 +1652,7 @@ print_key_value "Public IP" "$PUBLIC_IP_ADDRESS"
 print_key_value "Container Registry" "$ACR_NAME"
 print_key_value "Namespace" "$NAMESPACE"
 
-print_section "Authentication Configuration"
+print_section "🔐 Authentication Configuration"
 print_key_value "App Registration" "$OPIK_APP_NAME"
 print_key_value "App ID" "$APP_ID"
 print_key_value "Tenant ID" "$TENANT_ID"
@@ -1640,13 +1661,13 @@ print_key_value "OAuth2 Cookie Secret" "$OAUTH2_COOKIE_SECRET"
 if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
     print_key_value "Access Group" "$OPIK_ACCESS_GROUP_NAME"
     print_key_value "Group ID" "$OPIK_ACCESS_GROUP_ID"
-    print_warning "⚠️  Only members of '$OPIK_ACCESS_GROUP_NAME' group can access Opik!"
-    print_warning "⚠️  Add team members to the access group in Azure Portal!"
+    print_warning "⚠️ Only members of '$OPIK_ACCESS_GROUP_NAME' group can access Opik!"
+    print_warning "👥 Add team members to the access group in Azure Portal!"
 else
     print_info "Access allowed for all users in tenant"
 fi
 
-print_section "Access Information"
+print_section "🌐 Access Information"
 if [ -n "$DOMAIN_NAME" ]; then
     print_key_value "HTTPS URL (Recommended)" "https://$DOMAIN_NAME"
     print_key_value "HTTP URL" "http://$DOMAIN_NAME"
@@ -1655,108 +1676,107 @@ else
     print_key_value "HTTPS URL (Recommended)" "https://$PUBLIC_IP_ADDRESS"
     print_key_value "HTTP URL" "http://$PUBLIC_IP_ADDRESS"
 fi
-print_warning "⚠️  HTTPS uses self-signed certificate - browsers will show security warnings"
+print_warning "🔒 HTTPS uses self-signed certificate - browsers will show security warnings"
 
-print_section "Available Endpoints"
+print_section "🔗 Available Endpoints"
 print_key_value "Frontend" "/"
 print_key_value "Backend API" "/v1/private/*"
 print_key_value "Python Backend" "/v1/private/evaluators/*"
 print_key_value "Health Check" "/health-check"
 
-print_section "Useful Commands"
-echo "Check deployment status:"
-print_info "kubectl get pods -n $NAMESPACE"
-print_info "kubectl get ingress -n $NAMESPACE"
-echo ""
-echo "View application logs:"
-print_info "kubectl logs -n $NAMESPACE deployment/opik-backend"
-print_info "kubectl logs -n $NAMESPACE deployment/opik-frontend"
-print_info "kubectl logs -n $NAMESPACE deployment/opik-python-backend"
-print_info "kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
-echo ""
-echo "Port forward (bypass authentication):"
-print_info "kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
-echo ""
-echo "Manage team access:"
+print_section "⚡ Useful Commands"
+print_info "Check deployment status:"
+print_info "  kubectl get pods -n $NAMESPACE"
+print_info "  kubectl get ingress -n $NAMESPACE"
+print_info ""
+print_info "View application logs:"
+print_info "  kubectl logs -n $NAMESPACE deployment/opik-backend"
+print_info "  kubectl logs -n $NAMESPACE deployment/opik-frontend"
+print_info "  kubectl logs -n $NAMESPACE deployment/opik-python-backend"
+print_info "  kubectl logs -n $NAMESPACE deployment/oauth2-proxy"
+print_info ""
+print_info "Port forward (bypass authentication):"
+print_info "  kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173"
+print_info ""
+print_info "Manage team access:"
 if [ -n "${OPIK_ACCESS_GROUP_ID:-}" ]; then
-    print_info "# Add users to the Opik Users group:"
-    print_info "az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email-or-object-id>"
-    print_info "# List current group members:"
-    print_info "az ad group member list --group '$OPIK_ACCESS_GROUP_NAME'"
-    print_info "# View group in Azure Portal:"
-    print_info "https://portal.azure.com/#view/Microsoft_AAD_Groups/GroupDetailsMenuBlade/~/Overview/groupId/$OPIK_ACCESS_GROUP_ID"
+    print_info "  # Add users to the Opik Users group:"
+    print_info "  az ad group member add --group '$OPIK_ACCESS_GROUP_NAME' --member-id <user-email-or-object-id>"
+    print_info "  # List current group members:"
+    print_info "  az ad group member list --group '$OPIK_ACCESS_GROUP_NAME'"
+    print_info "  # View group in Azure Portal:"
+    print_info "  https://portal.azure.com/#view/Microsoft_AAD_Groups/GroupDetailsMenuBlade/~/Overview/groupId/$OPIK_ACCESS_GROUP_ID"
 else
-    print_info "Group-based access control is not configured - all tenant users can access Opik"
+    print_info "  Group-based access control is not configured - all tenant users can access Opik"
 fi
-echo ""
-echo "Uninstall deployment:"
-print_info "helm uninstall opik -n $NAMESPACE"
+print_info ""
+print_info "Uninstall deployment:"
+print_info "  helm uninstall opik -n $NAMESPACE"
 
-print_section "Troubleshooting Commands"
-echo "If authentication fails with AADSTS650056 error:"
-print_info "az ad app permission list --id $APP_ID"
-print_info "az ad app permission admin-consent --id $APP_ID"
-echo ""
-echo "If you get 'Misconfigured application' errors:"
-print_info "Check App Registration in Azure Portal: https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
-print_info "Ensure User.Read permission is granted and admin consented"
-echo ""
-echo "If Application Gateway shows 502 errors:"
-print_info "kubectl get pods -l app=ingress-appgw -n kube-system"
-print_info "kubectl logs -l app=ingress-appgw -n kube-system --tail=50"
-print_info "kubectl get ingress -n $NAMESPACE"
-echo ""
-echo "If AGIC has permission issues (403 Forbidden errors):"
-print_info "# Check AGIC logs for permission errors:"
-print_info "kubectl logs -l app=ingress-appgw -n kube-system | grep -E 'Forbidden|AuthorizationFailed|403'"
-echo ""
-print_info "# Get the actual AGIC identity from logs:"
-print_info "kubectl logs -l app=ingress-appgw -n kube-system | grep \"client '\" | head -1"
-echo ""
-print_info "# Grant permissions to AGIC identity (replace CLIENT_ID with actual ID from logs):"
-print_info "az role assignment create --role Reader --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP --assignee CLIENT_ID"
-print_info "az role assignment create --role Contributor --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME --assignee CLIENT_ID"
-echo ""
-print_info "# Restart AGIC after fixing permissions:"
-print_info "kubectl rollout restart deployment -l app=ingress-appgw -n kube-system"
-echo ""
-echo "Check Application Gateway backend health:"
-print_info "az network application-gateway show-backend-health --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
-echo ""
-echo "Restart AGIC if needed:"
-print_info "kubectl rollout restart deployment/ingress-appgw-deployment -n kube-system"
-echo ""
-echo "Check AGIC configuration:"
-print_info "kubectl describe configmap -n kube-system | grep appgw"
+print_section "🔧 Troubleshooting Commands"
+print_info "If authentication fails with AADSTS650056 error:"
+print_info "  az ad app permission list --id $APP_ID"
+print_info "  az ad app permission admin-consent --id $APP_ID"
+print_info ""
+print_info "If you get 'Misconfigured application' errors:"
+print_info "  Check App Registration in Azure Portal: https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+print_info "  Ensure User.Read permission is granted and admin consented"
+print_info ""
+print_info "If Application Gateway shows 502 errors:"
+print_info "  kubectl get pods -l app=ingress-appgw -n kube-system"
+print_info "  kubectl logs -l app=ingress-appgw -n kube-system --tail=50"
+print_info "  kubectl get ingress -n $NAMESPACE"
+print_info ""
+print_info "If AGIC has permission issues (403 Forbidden errors):"
+print_info "  # Check AGIC logs for permission errors:"
+print_info "  kubectl logs -l app=ingress-appgw -n kube-system | grep -E 'Forbidden|AuthorizationFailed|403'"
+print_info ""
+print_info "  # Get the actual AGIC identity from logs:"
+print_info "  kubectl logs -l app=ingress-appgw -n kube-system | grep \"client '\" | head -1"
+print_info ""
+print_info "  # Grant permissions to AGIC identity (replace CLIENT_ID with actual ID from logs):"
+print_info "  az role assignment create --role Reader --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP --assignee CLIENT_ID"
+print_info "  az role assignment create --role Contributor --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/applicationGateways/$APP_GATEWAY_NAME --assignee CLIENT_ID"
+print_info ""
+print_info "  # Restart AGIC after fixing permissions:"
+print_info "  kubectl rollout restart deployment -l app=ingress-appgw -n kube-system"
+print_info ""
+print_info "Check Application Gateway backend health:"
+print_info "  az network application-gateway show-backend-health --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
+print_info ""
+print_info "Restart AGIC if needed:"
+print_info "  kubectl rollout restart deployment/ingress-appgw-deployment -n kube-system"
+print_info ""
+print_info "Check AGIC configuration:"
+print_info "  kubectl describe configmap -n kube-system | grep appgw"
 
-print_warning "🔒 Authentication is required - all users will be redirected to Microsoft login"
+print_warning "🔐 Authentication is required - all users will be redirected to Microsoft login"
 
-print_section "Next Steps"
-echo "Choose how you want to access Opik:"
-echo "1. Use Application Gateway (recommended) - Access via public IP with authentication"
-echo "2. Use port forwarding - Access via localhost (bypasses authentication)"
-echo ""
+print_section "🎯 Next Steps"
+print_info "Choose how you want to access Opik:"
+print_info "1. Use Application Gateway (recommended) - Access via public IP with authentication"
+print_info "2. Use port forwarding - Access via localhost (bypasses authentication)"
 read -p "Enter your choice (1 or 2): " -n 1 -r
 echo
 
 if [[ $REPLY == "2" ]]; then
     print_step "Starting Port Forwarding"
-    print_info "Opik will be available at: http://localhost:5173"
+    print_info "🌐 Opik will be available at: http://localhost:5173"
     print_warning "Press Ctrl+C to stop port forwarding"
     kubectl port-forward -n $NAMESPACE svc/opik-frontend 5173:5173
 else
     print_step "Application Gateway Ready"
     if [ -n "$DOMAIN_NAME" ]; then
-        print_success "Application available at: https://$DOMAIN_NAME (HTTPS - Recommended)"
+        print_success "🌐 Application available at: https://$DOMAIN_NAME (HTTPS - Recommended)"
         print_info "Also available at: http://$DOMAIN_NAME (HTTP)"
         print_warning "Configure DNS: $DOMAIN_NAME → $PUBLIC_IP_ADDRESS"
     else
-        print_success "Application available at: https://$PUBLIC_IP_ADDRESS (HTTPS - Recommended)"
+        print_success "🌐 Application available at: https://$PUBLIC_IP_ADDRESS (HTTPS - Recommended)"
         print_info "Also available at: http://$PUBLIC_IP_ADDRESS (HTTP)"
     fi
-    print_warning "⚠️  HTTPS uses self-signed certificate - accept browser security warning"
+    print_warning "HTTPS uses self-signed certificate - accept browser security warning"
     print_info "It may take a few minutes for Application Gateway to configure backend pools"
     print_info "If you get 502 errors, wait a few minutes and try again"
 fi
 
-print_header "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY"
+print_success "🎉 Deployment completed successfully!"
