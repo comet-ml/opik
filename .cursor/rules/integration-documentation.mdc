@@ -184,7 +184,7 @@ Replace these placeholders in templates:
 - `[framework_otel_packages]` → Required OTEL packages (e.g., "logfire")
 - `[framework_specific_instrumentation_code]` → Framework-specific setup code
 - `[advanced_configuration_examples]` → Framework-specific advanced features (NOT generic OTel configurations)
-- `/img/tracing/[framework_name]_integration.png` → Screenshot path for tracing results
+- `apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png` → Screenshot path for tracing results (full Git root relative path)
 
 ### Code Examples Requirements
 
@@ -200,6 +200,42 @@ Replace these placeholders in templates:
 2. **Use consistent screenshot style** (same browser, same project structure)
 3. **Show relevant trace data** (spans, metadata, timing)
 4. **Update screenshots** when UI changes
+
+### Screenshot File Placement
+
+**⚠️ CRITICAL: Screenshot File Locations**
+
+Screenshots must be placed in the correct directory structure to avoid confusion:
+
+**File System Location (Git root relative):**
+- `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
+
+**Documentation Reference Path:**
+- `/img/tracing/[integration_name]_integration.png`
+
+**Examples:**
+- Fireworks AI: `apps/opik-documentation/documentation/fern/img/tracing/fireworks_ai_integration.png`
+- OpenAI: `apps/opik-documentation/documentation/fern/img/tracing/openai_integration.png`
+- LangChain: `apps/opik-documentation/documentation/fern/img/tracing/langchain_integration.png`
+
+**⚠️ Common Mistakes to Avoid:**
+- ❌ Placing screenshots in `static/img/tracing/` (incorrect location)
+- ❌ Using absolute paths in documentation
+- ❌ Inconsistent naming conventions
+
+**📸 Screenshot Paths by Documentation Type:**
+
+**Integration Documentation (Short format):**
+- File location: `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
+- Documentation reference: `/img/tracing/[integration_name]_integration.png`
+
+**Cookbook Documentation (Long format):**
+- File location: `apps/opik-documentation/documentation/fern/img/cookbook/[integration_name]_trace_cookbook.png`
+- Documentation reference: `/img/cookbook/[integration_name]_trace_cookbook.png`
+
+**OpenTelemetry Documentation:**
+- File location: `apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png`
+- Documentation reference: `/img/tracing/[framework_name]_integration.png`
 
 ## 🔍 Quality Checklist
 
@@ -420,6 +456,8 @@ When modifying integrations, verify:
 - ❌ Missing navigation entries in docs.yml for cookbook integrations
 - ❌ Duplicate entries in docs.yml navigation structure
 - ❌ Screenshot positioned at the bottom instead of near the top (after framework overview)
+- ❌ Screenshot placed in incorrect directory (`static/img/tracing/` instead of `fern/img/tracing/`)
+- ❌ Screenshot file naming doesn't follow `[integration_name]_integration.png` pattern
 - ❌ Using `--quiet` flag in pip install commands (removes user feedback)
 - ❌ Auto-generating "Advanced usage" sections instead of only including when genuine framework features exist
 - ❌ Including generic OpenTelemetry configurations in Advanced usage instead of framework-specific features

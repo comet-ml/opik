@@ -81,6 +81,11 @@ response = litellm.completion(
   <img src="/img/cookbook/[provider_screenshot_name]_trace_cookbook.png" />
 </Frame>
 
+<!--
+Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/cookbook/[provider_screenshot_name]_trace_cookbook.png
+Documentation reference path: /img/cookbook/[provider_screenshot_name]_trace_cookbook.png
+-->
+
 ## Logging LLM calls within a tracked function
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
@@ -131,4 +136,9 @@ generate_opik_story()
 <!-- Include screenshot only if you have one -->
 <Frame>
   <img src="/img/cookbook/[provider_screenshot_name]_trace_decorator_cookbook.png" />
-</Frame> 
+</Frame>
+
+<!--
+Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/cookbook/[provider_screenshot_name]_trace_decorator_cookbook.png
+Documentation reference path: /img/cookbook/[provider_screenshot_name]_trace_decorator_cookbook.png
+-->

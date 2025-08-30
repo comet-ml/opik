@@ -164,6 +164,16 @@ Once your [INTEGRATION_NAME] calls are logged with Opik, you can view them in th
 - Token usage and cost information
 - Timing and performance metrics
 
+<!-- Include screenshot only if you have one -->
+<Frame>
+  <img src="/img/tracing/[integration_name]_integration.png" />
+</Frame>
+
+<!--
+Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png
+Documentation reference path: /img/tracing/[integration_name]_integration.png
+-->
+
 ## Troubleshooting
 
 ### Common Issues

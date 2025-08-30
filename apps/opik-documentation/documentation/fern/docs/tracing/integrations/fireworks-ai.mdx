@@ -1,20 +1,26 @@
 [Fireworks AI](https://fireworks.ai/) provides fast inference for popular open-source models, offering high-performance API access to models like Llama, Mistral, and Qwen with optimized inference infrastructure.
 
-This guide explains how to integrate Opik with Fireworks AI via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your Fireworks AI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+This guide explains how to integrate Opik with Fireworks AI using their OpenAI-compatible API endpoints. By using the Opik OpenAI integration, you can easily track and evaluate your Fireworks AI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
+![Fireworks AI Integration Results](/img/tracing/fireworks_ai_integration.png)
 
 ## Getting Started
 
-### Configuring Opik
+### Account Setup
 
-To get started, you need to configure Opik to send traces to your Comet project. You can do this by setting the `OPIK_PROJECT_NAME` environment variable:
+First, you'll need a Comet.com account to use Opik. If you don't have one, you can [sign up for free](https://www.comet.com/signup?utm_source=opik&utm_medium=docs&utm_campaign=fireworks-ai-integration).
+
+### Installation
+
+Install the required packages:
 
 ```bash
-export OPIK_PROJECT_NAME="your-project-name"
-export OPIK_WORKSPACE="your-workspace-name"
+pip install opik openai
 ```
 
-You can also call the `opik.configure` method:
+### Configuration
+
+Configure Opik to send traces to your Comet project:
 
 ```python
 import opik
@@ -25,32 +31,7 @@ opik.configure(
 )
 ```
 
-### Configuring LiteLLM
-
-Install the required packages:
-
-```bash
-pip install opik litellm
-```
-
-Create a LiteLLM configuration file (e.g., `litellm_config.yaml`):
-
-```yaml
-model_list:
-  - model_name: llama-v3-70b-instruct
-    litellm_params:
-      model: fireworks_ai/accounts/fireworks/models/llama-v3-70b-instruct
-      api_key: os.environ/FIREWORKS_API_KEY
-  - model_name: mixtral-8x7b-instruct
-    litellm_params:
-      model: fireworks_ai/accounts/fireworks/models/mixtral-8x7b-instruct-hf
-      api_key: os.environ/FIREWORKS_API_KEY
-
-litellm_settings:
-  callbacks: ["opik"]
-```
-
-### Authentication
+### Environment Setup
 
 Set your Fireworks AI API key as an environment variable:
 
@@ -60,29 +41,32 @@ export FIREWORKS_API_KEY="your-fireworks-api-key"
 
 You can obtain a Fireworks AI API key from the [Fireworks AI dashboard](https://fireworks.ai/api-keys).
 
-## Usage
+## Basic Usage
 
-### Using LiteLLM Proxy Server
-
-Start the LiteLLM proxy server:
-
-```bash
-litellm --config litellm_config.yaml
-```
-
-Use the proxy server to make requests:
+### Import and Setup
 
 ```python
-import openai
+from opik.integrations.openai import track_openai
+from openai import OpenAI
 
-client = openai.OpenAI(
-    api_key="anything",  # can be anything
-    base_url="http://0.0.0.0:4000"
+# Create your OpenAI client
+client = OpenAI(
+    api_key="your-fireworks-api-key",
+    base_url="https://api.fireworks.ai/inference/v1"
 )
 
-response = client.chat.completions.create(
-    model="llama-v3-70b-instruct",
+# Wrap the client with Opik tracking
+tracked_client = track_openai(client, project_name="your-project-name")
+```
+
+### Making API Calls
+
+```python
+# Make a chat completion call
+response = tracked_client.chat.completions.create(
+    model="accounts/fireworks/models/llama-v3p1-8b-instruct",
     messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "What are the benefits of using fast inference platforms?"}
     ]
 )
@@ -90,74 +74,91 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-### Direct Integration
+## Advanced Usage
 
-You can also use LiteLLM directly in your Python code:
+### Using with @track Decorator
+
+You can combine the tracked client with Opik's `@track` decorator for more comprehensive tracing:
 
 ```python
-import os
-from litellm import completion
+from opik import track
 
-# Configure Opik
-import opik
-opik.configure()
+@track
+def analyze_text_with_fireworks(text: str):
+    response = tracked_client.chat.completions.create(
+        model="accounts/fireworks/models/llama-v3p1-8b-instruct",
+        messages=[
+            {"role": "user", "content": f"Analyze this text: {text}"}
+        ],
+    )
+    return response.choices[0].message.content
 
-# Configure LiteLLM for Opik
-from litellm.integrations.opik.opik import OpikLogger
-import litellm
+# Use the function
+result = analyze_text_with_fireworks("Open source AI models are becoming increasingly powerful.")
+```
 
-litellm.callbacks = ["opik"]
+![Fireworks AI Function Tracing with @track Decorator](/img/tracing/fireworks_ai_integration_2.png)
 
-os.environ["FIREWORKS_API_KEY"] = "your-fireworks-api-key"
+### Streaming Responses
 
-response = completion(
-    model="fireworks_ai/accounts/fireworks/models/llama-v3-70b-instruct",
+Fireworks AI supports streaming responses, which are also tracked by Opik:
+
+```python
+response = tracked_client.chat.completions.create(
+    model="accounts/fireworks/models/llama-v3p1-8b-instruct",
     messages=[
-        {"role": "user", "content": "What are the advantages of fast LLM inference?"}
-    ]
+        {"role": "user", "content": "Explain quantum computing in simple terms."}
+    ],
+    stream=True
 )
 
-print(response.choices[0].message.content)
+for chunk in response:
+    if chunk.choices[0].delta.content is not None:
+        print(chunk.choices[0].delta.content, end="")
 ```
 
 ## Supported Models
 
 Fireworks AI provides fast inference for a wide range of popular open-source models. Some of the popular models available include:
 
-- **Llama Models**: `llama-v3-70b-instruct`, `llama-v3-8b-instruct`
-- **Mistral Models**: `mixtral-8x7b-instruct-hf`, `mistral-7b-instruct-v0.1`
-- **Qwen Models**: `qwen-72b-chat`, `qwen-14b-chat`
-- **Code Models**: `starcoder-16b`, `codellama-34b-instruct-hf`
+- **Llama Models**: `accounts/fireworks/models/llama-v3p1-8b-instruct`, `accounts/fireworks/models/llama-v3-70b-instruct`
+- **Mistral Models**: `accounts/fireworks/models/mixtral-8x7b-instruct-hf`, `accounts/fireworks/models/mistral-7b-instruct-v0.1`
+- **Qwen Models**: `accounts/fireworks/models/qwen-72b-chat`, `accounts/fireworks/models/qwen-14b-chat`
+- **Code Models**: `accounts/fireworks/models/starcoder-16b`, `accounts/fireworks/models/codellama-34b-instruct-hf`
 
 For the complete list of available models, visit the [Fireworks AI model catalog](https://fireworks.ai/models).
 
-## Feedback Scores and Evaluation
+## Results Viewing
 
-Once your Fireworks AI calls are logged with Opik, you can evaluate your LLM application using Opik's evaluation framework:
+Once your Fireworks AI calls are logged with Opik, you can view detailed traces in your Opik dashboard. Each API call will create a trace that includes:
 
-```python
-from opik.evaluation import evaluate
-from opik.evaluation.metrics import Hallucination
+- Input prompts and messages
+- Model parameters and configuration
+- Response content and metadata
+- Token usage statistics
+- Timing information
+- Any custom metadata you've added
 
-# Define your evaluation task
-def evaluation_task(x):
-    return {
-        "message": x["message"],
-        "output": x["output"],
-        "reference": x["reference"]
-    }
+## Troubleshooting
 
-# Create the Hallucination metric
-hallucination_metric = Hallucination()
+### Common Issues
 
-# Run the evaluation
-evaluation_results = evaluate(
-    experiment_name="fireworks-ai-evaluation",
-    dataset=your_dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-)
-```
+**API Key Issues**: Ensure your `FIREWORKS_API_KEY` environment variable is set correctly and has sufficient credits.
+
+**Model Name Format**: Fireworks AI models use the format `accounts/fireworks/models/{model-name}`. Make sure you're using the correct model identifier.
+
+**Rate Limiting**: Fireworks AI has rate limits based on your plan. If you encounter rate limiting, consider implementing exponential backoff in your application.
+
+**Base URL**: The base URL for Fireworks AI is `https://api.fireworks.ai/inference/v1`. Ensure you're using the correct endpoint.
+
+### Getting Help
+
+If you encounter issues with the integration:
+
+1. Check your API key and model names
+2. Verify your Opik configuration
+3. Check the [Fireworks AI documentation](https://docs.fireworks.ai/)
+4. Review the [Opik OpenAI integration documentation](/tracing/integrations/openai)
 
 ## Environment Variables
 
@@ -170,4 +171,4 @@ export FIREWORKS_API_KEY="your-fireworks-api-key"
 # Opik Configuration
 export OPIK_PROJECT_NAME="your-project-name"
 export OPIK_WORKSPACE="your-workspace-name"
-``` 
+```

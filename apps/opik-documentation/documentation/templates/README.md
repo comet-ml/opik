@@ -61,6 +61,32 @@ Use this matrix to determine which template to use:
 6. **Include screenshots** of traces in Opik UI
 7. **Update integration tables** in main README files
 
+## 📸 Screenshot File Placement
+
+**⚠️ CRITICAL: Screenshot File Locations**
+
+Screenshots must be placed in the correct directory structure:
+
+**File System Location (Git root relative):**
+
+- `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
+
+**Documentation Reference Path:**
+
+- `/img/tracing/[integration_name]_integration.png`
+
+**Examples:**
+
+- Fireworks AI: `fern/img/tracing/fireworks_ai_integration.png`
+- OpenAI: `fern/img/tracing/openai_integration.png`
+- LangChain: `fern/img/tracing/langchain_integration.png`
+
+**⚠️ Common Mistakes:**
+
+- ❌ Placing screenshots in `static/img/tracing/` (incorrect location)
+- ❌ Using absolute paths in documentation
+- ❌ Inconsistent naming conventions
+
 ## 📋 Quick Reference
 
 ### Code Integration Placeholders
