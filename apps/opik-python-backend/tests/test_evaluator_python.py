@@ -354,33 +354,39 @@ def test_missing_data_returns_bad_request(client):
 
 
 # Test how the evaluator handles invalid code, including syntax errors and Flask injection attempts
-@pytest.mark.parametrize("code, stacktrace", [
+@pytest.mark.parametrize("code, stacktraces", [
     (
             INVALID_METRIC,
-            """from typing import
+            [
+                """from typing import
+                      ^
+SyntaxError: Expected one or more names after 'import'""",
+                """from typing import
                       ^
 SyntaxError: invalid syntax"""
+            ]
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
-            """ModuleNotFoundError: No module named 'flask'""",
+            ["""ModuleNotFoundError: No module named 'flask'"""],
             marks=pytest.mark.skipif(
                 lambda: isinstance(app.executor, ProcessExecutor),
                 reason="Flask injection test only makes sense for DockerExecutor"
             )
     )
 ])
-def test_invalid_code_returns_bad_request(client, code, stacktrace):
+def test_invalid_code_returns_bad_request(client, code, stacktraces):
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
         "code": code
     })
     assert response.status_code == 400
     assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
-    
+
     # Normalize error message to handle differences between remote and local images
     error_message = normalize_error_message(str(response.json["error"]))
-    assert stacktrace in error_message
+    # Check if any of the expected stacktraces match
+    assert any(stacktrace in error_message for stacktrace in stacktraces), f"None of the expected stacktraces found in error message: {error_message}"
 
 
 def test_missing_metric_returns_bad_request(client):
