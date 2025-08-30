@@ -49,7 +49,6 @@ from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
 from .prompt.client import PromptClient
 from .trace import migration as trace_migration
-
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -857,6 +856,21 @@ class Opik:
         )
 
         return experiment_
+
+    def update_experiment(
+        self,
+        id: str,
+        newName: Optional[str] = None,
+        newMetadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update an experiment's name and/or metadata.
+
+        Raises:
+            ApiError: if the backend responds with a non-2xx status
+        """
+        res = self._rest_client.experiments.update_experiment(id, newName, newMetadata)
+        LOGGER.debug("Update experiment %s response: %s", id, res)
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
