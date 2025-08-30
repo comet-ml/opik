@@ -170,9 +170,6 @@ navigation:
               - page: BytePlus
                 path: docs/tracing/integrations/byteplus.mdx
                 slug: byteplus
-              - page: Cleanlab
-                path: docs/tracing/integrations/cleanlab.mdx
-                slug: cleanlab
               - page: Cohere
                 path: docs/tracing/integrations/cohere.mdx
                 slug: cohere
