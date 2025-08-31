@@ -162,7 +162,16 @@ class ExperimentDAO {
                     experiment_id,
                     mapFromArrays(
                         ['p50', 'p90', 'p99'],
-                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
                     ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
@@ -387,7 +396,16 @@ class ExperimentDAO {
                     experiment_id,
                     mapFromArrays(
                         ['p50', 'p90', 'p99'],
-                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
                     ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
