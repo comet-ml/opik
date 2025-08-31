@@ -7,7 +7,7 @@
 
 @layer base {
   :root {
-
+    /* Design system colors */
     --primary: 239 89% 64%;
     --primary-hover: 238 62% 51%;
     --primary-active: 238 65% 43%;
@@ -21,7 +21,7 @@
     
     --muted-slate: 215 16%, 47%;
     --lite-slate: 215 20% 65%;
-    --slate-300: 213, 27%, 84%;
+    --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
@@ -31,30 +31,12 @@
     
     --soft-background: 240 20% 99%;
     
-    /* Navigation colors */
-    --navigation-hover: 210 40% 98%;
-    --navigation-active: 235 85% 97%;
-    --navigation-active-text: 239 89% 64%;
-
-    /* Legacy variables (for backward compatibility) */
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* other colors */
 
     --tooltip: 224 17% 26%;
     --tooltip-foreground: 0 0% 100%;
 
-    --popover: 0 0% 100%;
     --popover-gray: 240 14% 99%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 239 89% 64%;
-    --primary-hover: 238 62% 51%;
-    --primary-active: 238 65% 43%;
-    --primary-100: 235 85% 97%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 240 93% 95%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
     --muted-disabled: 220 14% 96%;
@@ -102,8 +84,6 @@
     --message-input-background: #E7ECFF;
 
     /* Action cards */
-    --action-card-background: 0 0% 100%;
-    --action-card-border: 214.3 31.8% 91.4%;
     --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 
     /* Action types */
@@ -175,41 +155,37 @@
   }
 
   .dark {
-    --background: 222 84% 4.9%;
-    --soft-background: 222, 84%, 6%;
-    
-    --border: 217.2 32.6% 17.5%;
-    --lite-slate: 215.4 16.3% 46.9%;
+    /* Design system colors */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-hover: 217.2 91.2% 69.8%;
+    --primary-active: 217.2 91.2% 49.8%;
+    --secondary: 240 93% 95%; /* To replace */
+    --primary-100: 217.2 32.6% 17.5%;
+    --white: #FFFFFF;
 
-    --foreground: 210 40% 87%;
     --foreground-secondary: 210 40% 98%;
+    --muted-gray: 217.2 32.6% 35%;
+    --muted-disabled: 217.2 32.6% 25%;
+    
+    --muted-slate: 215 16%, 47%; /* To replace */
+    --lite-slate: 215.4 16.3% 46.9%;
+    --slate-300: 213 27% 84%; /* To replace */
+    --border: 217.2 32.6% 17.5%;
+    --secondary-foreground: 222.2 47.4% 11.2%; /* To replace */
+    --primary-foreground: 217.2 32.6% 25.5%;
 
-    /* Navigation colors - Dark Mode */
-    --navigation-hover: 217.2 32.6% 17.5%;
-    --navigation-active: 217.2 32.6% 25.5%;
-    --navigation-active-text: 217.2 91.2% 79.8%;
-
+    --background: 222 84% 4.9%;
+    --foreground: 210 40% 87%;
+    
+    --soft-background: 222, 84%, 6%;
+  
     /* Legacy variables - Dark Mode (for backward compatibility) */
     --input: 217.2 32.6% 17.5%;
     
-    /* Primary colors - Dark Mode */
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 217.2 32.6% 25.5%;
-    --primary-hover: 217.2 91.2% 69.8%;
-    --primary-active: 217.2 91.2% 49.8%;
-    --primary-100: 217.2 32.6% 17.5%;
-
-    /* Card colors - Dark Mode */
-    --card: 217.2 32.6% 17.5%;
-    --card-foreground: 210 40% 98%;
-
     /* Popover colors - Dark Mode */
-    --popover: 222 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover-gray: 240 14% 99%; /* To replace */
 
     /* Action cards - Dark Mode */
-    --action-card-background: 222 84% 4.9%;
-    --action-card-border: 217.2 32.6% 17.5%;
     --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1), 0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
@@ -228,8 +204,8 @@
 
     /* Muted colors - Dark Mode */
     --muted: 217.2 32.6% 17.5%;
-    --muted-gray: 217.2 32.6% 35%;
-    --muted-disabled: 217.2 32.6% 25%;
+    
+    
 
     /* Thread colors - Dark Mode */
     --thread-active: #2a3f2f;

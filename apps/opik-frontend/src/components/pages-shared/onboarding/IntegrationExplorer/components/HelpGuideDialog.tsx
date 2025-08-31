@@ -47,7 +47,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-lg border bg-card p-4">
+            <div className="rounded-lg border bg-background p-4">
               <div className="mb-4 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-2">
                   <PlayIcon className="size-4 text-muted-slate" />
@@ -77,7 +77,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
               </a>
             </div>
 
-            <div className="rounded-lg border bg-card p-4">
+            <div className="rounded-lg border bg-background p-4">
               <div className="mb-2 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-2">
                   <Book className="size-4 text-muted-slate" />
