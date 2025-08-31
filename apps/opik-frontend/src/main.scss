@@ -11,7 +11,7 @@
 
     /* Layout colors */
     --layout-background: 0 0% 100%;
-    --layout-soft-background: #FCFCFD;
+    --soft-background: #FCFCFD;
     --layout-border: 214.3 31.8% 91.4%;
 
     /* Text colors */
@@ -27,7 +27,7 @@
     --navigation-active-text: 239 89% 64%;
 
     /* Legacy variables (for backward compatibility) */
-    //--soft-background: #FCFCFD;
+    
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
     --foreground-secondary: 224 71% 4%;
@@ -176,7 +176,7 @@
   .dark {
     /* Layout colors - Dark Mode */
     --layout-background: 222 84% 4.9%;
-    --layout-soft-background: hsl(222, 84%, 6%);
+    --soft-background: hsl(222, 84%, 6%);
     --layout-border: 217.2 32.6% 17.5%;
 
     /* Navigation colors - Dark Mode */
@@ -192,7 +192,6 @@
     --text-secondary: 210 40% 75%;
 
     /* Legacy variables - Dark Mode (for backward compatibility) */
-    --soft-background: #1a1a1a;
     --background: 222 84% 4.9%;
     --foreground: 210 40% 98%;
     --foreground-secondary: 210 40% 87%;

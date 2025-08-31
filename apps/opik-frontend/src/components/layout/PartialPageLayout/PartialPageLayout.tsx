@@ -36,7 +36,7 @@ export const PartialPageLayout = ({
           </div>
         </nav>
 
-        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-layout-soft-background px-6">
+        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           {children}
         </section>
       </main>

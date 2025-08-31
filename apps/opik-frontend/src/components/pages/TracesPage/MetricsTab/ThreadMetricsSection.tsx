@@ -144,7 +144,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
 
   return (
     <div className="pt-6">
-      <div className="sticky top-0 z-10 flex items-center justify-between bg-layout-soft-background pb-3 pt-2">
+      <div className="sticky top-0 z-10 flex items-center justify-between bg-soft-background pb-3 pt-2">
         <h2 className="comet-title-s truncate break-words">Thread metrics</h2>
         <FiltersButton
           columns={THREAD_FILTER_COLUMNS}

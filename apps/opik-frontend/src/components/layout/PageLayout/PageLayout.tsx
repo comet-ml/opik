@@ -34,7 +34,7 @@ const PageLayout = () => {
       <SideBar expanded={expanded} setExpanded={setExpanded} />
       <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
         <TopBar />
-        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-layout-soft-background px-6">
+        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           <Outlet />
         </section>
       </main>

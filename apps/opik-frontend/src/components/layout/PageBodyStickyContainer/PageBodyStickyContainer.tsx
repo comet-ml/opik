@@ -29,7 +29,7 @@ const PageBodyStickyContainer: React.FC<PageBodyStickyContainerProps> = ({
         [STICKY_ATTRIBUTE_VERTICAL]: direction,
       })}
       className={cn(
-        "sticky z-10 bg-layout-soft-background px-6",
+        "sticky z-10 bg-soft-background px-6",
         direction === STICKY_DIRECTION.horizontal && "left-0",
         direction === STICKY_DIRECTION.vertical && "top-0",
         direction === STICKY_DIRECTION.bidirectional && "left-0 top-0",
