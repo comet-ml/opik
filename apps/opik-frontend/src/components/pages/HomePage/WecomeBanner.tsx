@@ -15,7 +15,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
     <div
       className="relative mb-4 flex min-h-[200px] items-center rounded-md bg-cover bg-center bg-no-repeat p-8"
       style={{
-        backgroundImage: `url(${welcomeBannerUrl}), linear-gradient(180deg, #060A28 0%, #604FFF 100%)`,
+        backgroundImage: `url(${welcomeBannerUrl}), linear-gradient(180deg, var(--banner-gradient-start) 0%, var(--banner-gradient-end) 100%)`,
       }}
     >
       <Button

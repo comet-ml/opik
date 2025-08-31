@@ -90,6 +90,17 @@ module.exports = {
         gray: {
           100: "var(--gray-100)",
         },
+        
+        /* Custom colors for simplified class names */
+        "toggle-outline-active": "var(--toggle-outline-active)",
+        "diff-removed-bg": "var(--diff-removed-bg)",
+        "diff-removed-text": "var(--diff-removed-text)",
+        "diff-added-bg": "var(--diff-added-bg)",
+        "diff-added-text": "var(--diff-added-text)",
+        "upload-icon-bg": "hsl(var(--upload-icon-bg))",
+        "code-block": "var(--code-block)",
+        "breadcrumb-last": "hsl(var(--breadcrumb-last))",
+        "special-button": "var(--special-button)",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",

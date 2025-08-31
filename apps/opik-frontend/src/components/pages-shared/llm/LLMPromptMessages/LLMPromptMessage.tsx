@@ -55,7 +55,7 @@ const theme = EditorView.theme({
     fontFamily: "inherit",
   },
   ".cm-placeholder": {
-    color: "#94A3B8",
+    color: "var(--codemirror-gutter)",
     fontWeight: 300,
   },
 });

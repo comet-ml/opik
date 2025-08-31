@@ -23,6 +23,7 @@
     --lite-slate: 215 20% 65%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
+    --breadcrumb-last: 216 20% 40%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
@@ -107,6 +108,26 @@
     --search-highlight: #FFDF20;
     --search-current-highlight: #FF8904;
 
+    /* Diff colors */
+    --diff-removed-bg: #FDE2E7;
+    --diff-removed-text: #931A32;
+    --diff-added-bg: #E2FDE6;
+    --diff-added-text: #1D6728;
+
+    /* Upload field colors */
+    --upload-icon-bg: 203 213 225;
+
+    /* Code block colors */
+    --code-block: #FBFCFD;
+
+    /* Welcome banner gradient colors */
+    --banner-gradient-start: #060A28;
+    --banner-gradient-end: #604FFF;
+
+    /* Scrollbar colors */
+    --scrollbar-thumb: #babac0;
+    --scrollbar-thumb-hover: #7d7d7d;
+
     /* Modern color variants for tags and charts */
     --color-gray: #64748B;
     --color-purple: #8B5CF6;
@@ -170,6 +191,7 @@
     --lite-slate: 215.4 16.3% 46.9%;
     --slate-300: 213 27% 84%; /* To replace */
     --border: 217.2 32.6% 17.5%;
+    --breadcrumb-last: 217.2 32.6% 55%;
     --secondary-foreground: 222.2 47.4% 11.2%; /* To replace */
     --primary-foreground: 217.2 32.6% 25.5%;
 
@@ -212,10 +234,30 @@
     --message-input-background: #2a2f47;
 
     /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
-    --codemirror-background: #0d1117;
+    --codemirror-background: #2c3c56;
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+
+    /* Diff colors - Dark Mode */
+    --diff-removed-bg: #7F1D1D;
+    --diff-removed-text: #FEF2F2;
+    --diff-added-bg: #14532D;
+    --diff-added-text: #BBF7D0;
+
+    /* Upload field colors - Dark Mode */
+    --upload-icon-bg: 71 85 105;
+
+    /* Code block colors - Dark Mode */
+    --code-block: #1e293b;
+
+    /* Welcome banner gradient colors - Dark Mode */
+    --banner-gradient-start: #0f172a;
+    --banner-gradient-end: hsl(var(--primary));
+
+    /* Scrollbar colors - Dark Mode */
+    --scrollbar-thumb: #64748b;
+    --scrollbar-thumb-hover: #94a3b8;
 
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #374151;
@@ -353,7 +395,7 @@
 
   .comet-custom-scrollbar {
     &.firefox {
-      scrollbar-color: #babac0 transparent;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
       scrollbar-width: thin;
     }
 
@@ -367,13 +409,13 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background-color: #babac0;
+      background-color: var(--scrollbar-thumb);
       border-radius: 16px;
       border: 4px solid var(--white);
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #7d7d7d;
+      background: var(--scrollbar-thumb-hover);
     }
 
     ::-webkit-scrollbar-button {
