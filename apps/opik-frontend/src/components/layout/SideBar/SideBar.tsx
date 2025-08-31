@@ -307,7 +307,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         <li key={group.id} className={cn(expanded && "mb-1")}>
           <div>
             {group.label && expanded && (
-              <div className="comet-body-s truncate pb-1 pl-2.5 pr-3 pt-3 text-navigation-text-secondary">
+              <div className="comet-body-s truncate pb-1 pl-2.5 pr-3 pt-3 text-lite-slate">
                 {group.label}
               </div>
             )}
@@ -336,8 +336,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   return (
     <>
-      <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r border-navigation-border bg-navigation-background transition-all">
-        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b border-navigation-border">
+      <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r border-border bg-background transition-all">
+        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b border-border">
           <Link
             to={HOME_PATH}
             className="absolute left-[18px] z-10 block"

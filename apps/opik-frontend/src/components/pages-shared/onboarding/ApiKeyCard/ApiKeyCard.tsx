@@ -9,7 +9,7 @@ const ApiKeyCard = () => {
   }
 
   return (
-    <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border border-layout-border bg-layout-background p-6">
+    <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border border-border bg-background p-6">
       <div className="comet-title-xs text-foreground-secondary">API key</div>
       <ApiKeyInput apiKey={apiKey} />
     </div>

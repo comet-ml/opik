@@ -345,7 +345,7 @@ const UserMenu = () => {
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-layout-border text-xs">
+                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-border text-xs">
                   {organization?.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="comet-body-s truncate">
@@ -390,7 +390,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-navigation-text-secondary"
+                className="cursor-pointer justify-center text-lite-slate"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });

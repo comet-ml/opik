@@ -7,7 +7,7 @@ const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
 
   return (
-    <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b border-navigation-border bg-navigation-background pl-4 pr-6">
+    <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b border-border bg-background pl-4 pr-6">
       <div className="min-w-1 flex-1">
         <Breadcrumbs />
       </div>

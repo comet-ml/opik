@@ -29,8 +29,6 @@ module.exports = {
         white: "var(--white)",
         
         /* Layout colors */
-        "layout-background": "hsl(var(--layout-background))",
-        "layout-soft-background": "var(--layout-soft-background)",
         "layout-border": "hsl(var(--layout-border))",
 
         /* Text colors */
@@ -107,7 +105,12 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        "soft-background": "var(--soft-background)", /* Legacy - use layout-soft-background */
+        soft: {
+          background: "hsl(var(--soft-background))"
+        },
+        slate: {
+          300: "hsl(var(--slate-300))"
+        },
         gray: {
           100: "var(--gray-100)",
         },

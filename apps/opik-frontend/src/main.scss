@@ -7,36 +7,36 @@
 
 @layer base {
   :root {
+
+    --primary: 239 89% 64%;
+    --primary-hover: 238 62% 51%;
+    --primary-active: 238 65% 43%;
+    --secondary: 240 93% 95%;
+    --primary-100: 235 85% 97%;
     --white: #FFFFFF;
+
+    --foreground-secondary: 224 71% 4%;
+    --muted-gray: 218 11% 65%;
+    --muted-disabled: 220 14% 96%;
+    
+    --muted-slate: 215 16%, 47%;
+    --lite-slate: 215 20% 65%;
+    --slate-300: 213, 27%, 84%;
+    --border: 214 32% 92%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
 
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
-    --foreground-secondary: 224 71% 4%;
-
-
-
-
-    /* Layout colors */
-    --layout-background: 0 0% 100%;
-    --soft-background: #FCFCFD;
-    --layout-border: 214.3 31.8% 91.4%;
-
+    
+    --soft-background: 240 20% 99%;
+    
     /* Navigation colors */
-    --navigation-background: 0 0% 100%;
-    --navigation-border: 214.3 31.8% 91.4%;
-    --navigation-text-secondary: 215 20% 65%;
     --navigation-hover: 210 40% 98%;
     --navigation-active: 235 85% 97%;
     --navigation-active-text: 239 89% 64%;
 
     /* Legacy variables (for backward compatibility) */
-    
-    --background: 0 0% 100%;
-    --foreground: 224 17% 26%;
-    --foreground-secondary: 224 71% 4%;
-    --border: 214.3 31.8% 91.4%;
-    --lite-slate: 215 20% 65%;
-
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
 
@@ -57,8 +57,6 @@
     --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
-    --muted-slate: 215 16%, 47%;
-    --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
@@ -178,29 +176,22 @@
 
   .dark {
     --background: 222 84% 4.9%;
+    --soft-background: 222, 84%, 6%;
+    
+    --border: 217.2 32.6% 17.5%;
+    --lite-slate: 215.4 16.3% 46.9%;
+
     --foreground: 210 40% 87%;
     --foreground-secondary: 210 40% 98%;
 
-
-    /* Layout colors - Dark Mode */
-    --layout-background: 222 84% 4.9%;
-    --soft-background: hsl(222, 84%, 6%);
-    --layout-border: 217.2 32.6% 17.5%;
-
     /* Navigation colors - Dark Mode */
-    --navigation-background: 222 84% 4.9%;
-    --navigation-border: 217.2 32.6% 17.5%;
-    --navigation-text-secondary: 215.4 16.3% 46.9%;
     --navigation-hover: 217.2 32.6% 17.5%;
     --navigation-active: 217.2 32.6% 25.5%;
     --navigation-active-text: 217.2 91.2% 79.8%;
 
     /* Legacy variables - Dark Mode (for backward compatibility) */
-    --background: 222 84% 4.9%;
-    --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --lite-slate: 215.4 16.3% 46.9%;
-
+    
     /* Primary colors - Dark Mode */
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 217.2 32.6% 25.5%;
