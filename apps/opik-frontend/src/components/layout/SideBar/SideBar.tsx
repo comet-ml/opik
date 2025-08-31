@@ -307,7 +307,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         <li key={group.id} className={cn(expanded && "mb-1")}>
           <div>
             {group.label && expanded && (
-              <div className="comet-body-s text-light-slate truncate pb-1 pl-2.5 pr-3 pt-3">
+              <div className="comet-body-s truncate pb-1 pl-2.5 pr-3 pt-3 text-light-slate">
                 {group.label}
               </div>
             )}

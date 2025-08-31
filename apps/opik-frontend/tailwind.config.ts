@@ -101,6 +101,7 @@ module.exports = {
         "code-block": "var(--code-block)",
         "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
+        "thread-active": "var(--thread-active)",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",
@@ -122,6 +123,9 @@ module.exports = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      boxShadow: {
+        "action-card": "var(--action-card-shadow)",
       },
     },
   },

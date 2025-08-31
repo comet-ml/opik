@@ -37,7 +37,7 @@ export const usernameStyleVariants = cva("truncate leading-none", {
 });
 
 export const createdAtStyleVariants = cva(
-  "text-light-slate shrink-0 leading-none",
+  "shrink-0 leading-none text-light-slate",
   {
     variants: {
       size: {
