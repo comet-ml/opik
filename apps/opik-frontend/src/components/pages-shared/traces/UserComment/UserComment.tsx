@@ -230,7 +230,7 @@ const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
     >
       <div className={cn(rootStyleVariants({ size }), className)}>
         {avatar}
-        <div className="flex min-w-0 flex-1 flex-col text-text-primary">
+        <div className="flex min-w-0 flex-1 flex-col text-foreground">
           <div className="flex justify-between">
             <div
               className={cn(

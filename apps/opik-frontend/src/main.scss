@@ -9,14 +9,17 @@
   :root {
     --white: #FFFFFF;
 
+    --background: 0 0% 100%;
+    --foreground: 224 17% 26%;
+    --foreground-secondary: 224 71% 4%;
+
+
+
+
     /* Layout colors */
     --layout-background: 0 0% 100%;
     --soft-background: #FCFCFD;
     --layout-border: 214.3 31.8% 91.4%;
-
-    /* Text colors */
-    --text-primary: 224 71% 4%;
-    --text-secondary: 224 17% 26%;
 
     /* Navigation colors */
     --navigation-background: 0 0% 100%;
@@ -174,6 +177,11 @@
   }
 
   .dark {
+    --background: 222 84% 4.9%;
+    --foreground: 210 40% 87%;
+    --foreground-secondary: 210 40% 98%;
+
+
     /* Layout colors - Dark Mode */
     --layout-background: 222 84% 4.9%;
     --soft-background: hsl(222, 84%, 6%);
@@ -187,14 +195,8 @@
     --navigation-active: 217.2 32.6% 25.5%;
     --navigation-active-text: 217.2 91.2% 79.8%;
 
-    /* Text colors - Dark Mode */
-    --text-primary: 210 40% 87%;
-    --text-secondary: 210 40% 75%;
-
     /* Legacy variables - Dark Mode (for backward compatibility) */
     --background: 222 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --foreground-secondary: 210 40% 87%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --lite-slate: 215.4 16.3% 46.9%;
@@ -285,34 +287,34 @@
   }
 
   body {
-    @apply bg-background text-text-primary comet-body;
+    @apply bg-background text-foreground comet-body;
   }
 }
 
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-normal text-text-primary;
+    @apply font-medium text-3xl tracking-normal text-foreground;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-normal text-text-primary;
+    @apply font-medium text-2xl tracking-normal text-foreground;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-normal text-text-primary;
+    @apply font-medium text-xl tracking-normal text-foreground;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-normal text-text-primary;
+    @apply font-medium text-lg tracking-normal text-foreground;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-normal text-text-primary;
+    @apply font-medium text-sm tracking-normal text-foreground;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-normal text-text-primary;
+    @apply font-normal text-base tracking-normal text-foreground;
   }
 
   .comet-body-accented {

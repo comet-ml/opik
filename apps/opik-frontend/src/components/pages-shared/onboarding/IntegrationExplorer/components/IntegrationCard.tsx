@@ -40,7 +40,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
 
       <div>
         <div className="flex gap-2">
-          <h3 className="comet-body-s-accented text-text-primary transition-colors">
+          <h3 className="comet-body-s-accented text-foreground transition-colors">
             {title}
           </h3>
           {tag && (

@@ -216,7 +216,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-text-primary">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {user.userName}
               </span>
             </TooltipWrapper>
