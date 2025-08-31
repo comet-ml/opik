@@ -28,25 +28,7 @@ module.exports = {
       colors: {
         white: "var(--white)",
         
-        /* Layout colors */
-        "layout-border": "hsl(var(--layout-border))",
-
-        /* Text colors */
-        "text-primary": "hsl(var(--text-primary))",
-        "text-secondary": "hsl(var(--text-secondary))",
-
-        /* Navigation colors */
-        "navigation-background": "hsl(var(--navigation-background))",
-        "navigation-border": "hsl(var(--navigation-border))",
-        "navigation-text": "hsl(var(--navigation-text))",
-        "navigation-text-secondary": "hsl(var(--navigation-text-secondary))",
-        "navigation-hover": "hsl(var(--navigation-hover))",
-        "navigation-active": "hsl(var(--navigation-active))",
-        "navigation-active-text": "hsl(var(--navigation-active-text))",
-
         /* Action cards */
-        "action-card-background": "hsl(var(--action-card-background))",
-        "action-card-border": "hsl(var(--action-card-border))",
         "action-trace-background": "var(--action-trace-background)",
         "action-trace-text": "var(--action-trace-text)",
         "action-experiment-background": "var(--action-experiment-background)",
@@ -93,17 +75,11 @@ module.exports = {
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
           gray: "hsl(var(--popover-gray))",
-          foreground: "hsl(var(--popover-foreground))",
         },
         tooltip: {
           DEFAULT: "hsl(var(--tooltip))",
           foreground: "hsl(var(--tooltip-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
         },
         soft: {
           background: "hsl(var(--soft-background))"
