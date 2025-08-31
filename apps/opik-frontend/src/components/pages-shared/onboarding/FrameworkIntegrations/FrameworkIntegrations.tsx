@@ -41,7 +41,11 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
               >
                 <img
                   alt={item.label}
-                  src={themeMode === "dark" && item.logoWhite ? item.logoWhite : item.logo}
+                  src={
+                    themeMode === "dark" && item.logoWhite
+                      ? item.logoWhite
+                      : item.logo
+                  }
                   className="size-[32px] shrink-0"
                 />
                 <div className="ml-1 truncate">{item.label}</div>

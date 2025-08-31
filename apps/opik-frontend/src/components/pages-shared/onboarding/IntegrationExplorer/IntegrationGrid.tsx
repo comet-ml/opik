@@ -88,7 +88,11 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
             icon={
               <img
                 alt={integration.title}
-                src={themeMode === "dark" && integration.whiteIcon ? integration.whiteIcon : integration.icon}
+                src={
+                  themeMode === "dark" && integration.whiteIcon
+                    ? integration.whiteIcon
+                    : integration.icon
+                }
                 className="size-[40px] shrink-0"
               />
             }

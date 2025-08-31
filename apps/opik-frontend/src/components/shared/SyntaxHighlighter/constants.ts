@@ -23,4 +23,5 @@ export const UNUSED_SYNTAX_HIGHLIGHTER_KEY =
   "__unused_syntax_highlighter_key__";
 
 export const SEARCH_HIGHLIGHT_COLOR = "bg-[var(--search-highlight)]";
-export const SEARCH_CURRENT_HIGHLIGHT_COLOR = "bg-[var(--search-current-highlight)]";
+export const SEARCH_CURRENT_HIGHLIGHT_COLOR =
+  "bg-[var(--search-current-highlight)]";

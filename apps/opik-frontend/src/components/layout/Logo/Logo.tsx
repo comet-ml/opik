@@ -10,7 +10,7 @@ type LogoProps = {
 
 const Logo: React.FunctionComponent<LogoProps> = ({ expanded }) => {
   const { themeMode } = useTheme();
-  
+
   return (
     <img
       className={cn("h-8 object-cover object-left -ml-[3px] mr-[3px]", {

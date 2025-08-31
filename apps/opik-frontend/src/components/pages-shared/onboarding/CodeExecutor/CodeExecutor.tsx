@@ -164,7 +164,9 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 <div key={log} className="flex gap-2 text-foreground-secondary">
                   {log.includes("%cmd%") && (
                     <div className="flex gap-1">
-                      <span className="text-[var(--codemirror-syntax-blue)]">~/sandbox</span>
+                      <span className="text-[var(--codemirror-syntax-blue)]">
+                        ~/sandbox
+                      </span>
                     </div>
                   )}
 
