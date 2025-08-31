@@ -198,13 +198,36 @@
     --background: 222 84% 4.9%;
     --foreground: 210 40% 87%;
     
-    --soft-background: 222, 84%, 6%;
-  
+    --soft-background: 222 84% 6%;
+
+    /* other colors - Dark Mode */
+    --tooltip: 210 40% 98%;
+    --tooltip-foreground: 222 84% 4.9%;
+
     /* Legacy variables - Dark Mode (for backward compatibility) */
     --input: 217.2 32.6% 17.5%;
+    --ring: 217.2 91.2% 59.8%;
     
     /* Popover colors - Dark Mode */
-    --popover-gray: 240 14% 99%; /* To replace */
+    --popover-gray: 217.2 32.6% 10%;
+
+    --muted-foreground: 217.2 32.6% 55%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 348 86% 61%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 348 86% 61%;
+    --success: 129 100% 42%;
+
+    /* Gray scale for utility classes - Dark Mode */
+    --gray-100: 217.2 32.6% 15%;
+
+    /* Special button colors - Dark Mode */
+    --special-button: #22C785;
+    --special-button-hover: #28B575;
+    --special-button-active: #1E9A65;
 
     /* Action cards - Dark Mode */
     --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1), 0 2px 4px -2px rgb(255 255 255 / 0.05);
@@ -226,6 +249,8 @@
     /* Muted colors - Dark Mode */
     --muted: 217.2 32.6% 17.5%;
     
+    /* Toggle colors - Dark Mode */
+    --toggle-outline-active: #2c3c56;
     
 
     /* Thread colors - Dark Mode */
@@ -279,6 +304,19 @@
     --tag-turquoise-text: #A7F3D0;
     --tag-blue-bg: #1E3A8A;
     --tag-blue-text: #DBEAFE;
+  }
+
+  /* CodeMirror cursor and selection fix for dark mode */
+  .dark .cm-cursor {
+    border-left-color: hsl(var(--text-primary)) !important;
+  }
+  
+  .dark .cm-selectionBackground {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  
+  .dark .cm-focused .cm-selectionBackground {
+    background-color: rgba(255, 255, 255, 0.15) !important;
   }
 
   .comet-expanded {

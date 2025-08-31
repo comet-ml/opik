@@ -8,8 +8,10 @@ import {
   Grip,
   KeyRound,
   LogOut,
+  Moon,
   Settings,
   Shield,
+  Sun,
   UserPlus,
   Zap,
 } from "lucide-react";
@@ -33,6 +35,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTheme } from "@/components/theme-provider";
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
@@ -51,6 +54,7 @@ import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 const UserMenu = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setTheme } = useTheme();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const setAppUser = useSetAppUser();
@@ -216,7 +220,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-secondary-foreground">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {user.userName}
               </span>
             </TooltipWrapper>
@@ -367,6 +371,38 @@ const UserMenu = () => {
                       </DropdownMenuCheckboxItem>
                     ))}
                   </div>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="cursor-pointer">
+                <Sun className="mr-2 size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute mr-2 size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span>Theme</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("light")}
+                  >
+                    Light
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("dark")}
+                  >
+                    Dark
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("system")}
+                  >
+                    System
+                  </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>

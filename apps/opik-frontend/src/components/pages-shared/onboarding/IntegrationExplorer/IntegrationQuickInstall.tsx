@@ -1,14 +1,18 @@
 import React from "react";
+import { useTheme } from "@/components/theme-provider";
 import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import QuickInstallDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/QuickInstallDialog";
 import { useIntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import cursorLogo from "/images/integrations/cursor.png";
 import copilotLogo from "/images/integrations/copilot.png";
+import copilotWhiteLogo from "/images/integrations/copilot-white.png";
 import windsurfLogo from "/images/integrations/windsurf.png";
+import windsurfWhiteLogo from "/images/integrations/windsurf-white.png";
 
 const IntegrationQuickInstall: React.FC = () => {
   const { selectedIntegrationId, setSelectedIntegrationId } =
     useIntegrationExplorer();
+  const { themeMode } = useTheme();
 
   const handleQuickInstallClick = () => {
     setSelectedIntegrationId("quick-opik-install");
@@ -20,7 +24,7 @@ const IntegrationQuickInstall: React.FC = () => {
         title="Quick install with AI assistants"
         description="Set up Opik fast with Cursor, Copilot, Windsurf, or your favorite AI assistant."
         icon={
-          <div className="flex gap-1 pr-2">
+          <div className="flex items-center gap-1 pr-2">
             <img
               alt="Cursor"
               src={cursorLogo}
@@ -28,12 +32,12 @@ const IntegrationQuickInstall: React.FC = () => {
             />
             <img
               alt="Copilot"
-              src={copilotLogo}
-              className="size-[32px] shrink-0"
+              src={themeMode === "dark" ? copilotWhiteLogo : copilotLogo}
+              className="size-[20px] shrink-0"
             />
             <img
               alt="Windsurf"
-              src={windsurfLogo}
+              src={themeMode === "dark" ? windsurfWhiteLogo : windsurfLogo}
               className="size-[32px] shrink-0"
             />
           </div>
