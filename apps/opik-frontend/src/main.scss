@@ -257,27 +257,27 @@
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-normal text-foreground;
+    @apply font-medium text-3xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-normal text-foreground;
+    @apply font-medium text-2xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-normal text-foreground;
+    @apply font-medium text-xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-normal text-foreground;
+    @apply font-medium text-lg tracking-normal text-foreground-secondary;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-normal text-foreground;
+    @apply font-medium text-sm tracking-normal text-foreground-secondary;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-normal text-foreground;
+    @apply font-normal text-base tracking-normal text-foreground-secondary;
   }
 
   .comet-body-accented {
@@ -463,7 +463,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: var(--codemirror-line-highlight);
+    background: var(--secondary);
   }
 }
 

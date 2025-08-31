@@ -132,7 +132,7 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
                   <UserComment.CreatedAt />
                 </>
               }
-              className="px-6 hover:bg-muted"
+              className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
               <UserComment.Form onSubmit={onEditSubmit} />

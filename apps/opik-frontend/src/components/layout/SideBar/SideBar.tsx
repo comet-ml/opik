@@ -336,8 +336,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   return (
     <>
-      <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r border-border bg-background transition-all">
-        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b border-border">
+      <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
+      <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
           <Link
             to={HOME_PATH}
             className="absolute left-[18px] z-10 block"

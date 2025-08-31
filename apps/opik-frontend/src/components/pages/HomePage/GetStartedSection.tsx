@@ -32,13 +32,13 @@ const GetStartedSection = () => {
 
   return (
     <div>
-      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words pb-3 pt-2">
+      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
         Get started
       </h2>
       <div className="flex gap-x-4">
         <div
           onClick={openLogTraceDialog}
-          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-border bg-background p-4 transition-shadow hover:action-card-shadow"
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:action-card-shadow"
         >
           <div className="flex size-[24px] items-center justify-center rounded bg-action-trace-background">
             <InspectionPanel className="size-3.5 text-action-trace-text" />
@@ -47,7 +47,7 @@ const GetStartedSection = () => {
         </div>
         <div
           onClick={openNewExperimentDialog}
-          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-border bg-background p-4 transition-shadow hover:action-card-shadow"
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:action-card-shadow"
         >
           <div className="flex size-[24px] items-center justify-center rounded bg-action-experiment-background">
             <MousePointer className="size-3.5 text-action-experiment-text" />
@@ -57,7 +57,7 @@ const GetStartedSection = () => {
         {isGuardrailsEnabled && (
           <div
             onClick={openGuardrailsDialog}
-            className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-border bg-background p-4 transition-shadow hover:action-card-shadow"
+            className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:action-card-shadow"
           >
             <div className="flex size-[24px] items-center justify-center rounded bg-action-guardrail-background">
               <Construction className="size-3.5 text-action-guardrail-text" />
@@ -66,7 +66,7 @@ const GetStartedSection = () => {
           </div>
         )}
         <Link
-          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-border bg-background p-4 transition-shadow hover:action-card-shadow"
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:action-card-shadow"
           to={"/$workspaceName/playground"}
           params={{ workspaceName }}
         >

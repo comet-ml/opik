@@ -23,7 +23,7 @@ export const PartialPageLayout = ({
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
       <main>
-        <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b border-border bg-background pl-4 pr-6">
+        <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
           <div className="flex-1">
             <Link to="/$workspaceName/home" params={{ workspaceName }}>
               {logo}
