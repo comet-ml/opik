@@ -426,7 +426,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-lite-slate cursor-pointer justify-center"
+                className="text-light-slate cursor-pointer justify-center"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });
