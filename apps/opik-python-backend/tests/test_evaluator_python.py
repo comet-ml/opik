@@ -5,46 +5,7 @@ from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
-def normalize_error_message(error_message: str) -> str:
-    """
-    Normalize error messages to handle differences between remote and local images.
-    Remote images may have double-escaped newlines, this method standardizes them.
-    """
-    return error_message.replace('\\n', '\n')
 
-
-def _assert_evaluation_error_with_type_error_pattern(response, metric_class_name: str, type_error_message: str):
-    """
-    Assert that the response contains an evaluation error with a specific TypeError pattern.
-
-    Handles non-deterministic behavior where error messages may be complete or truncated.
-    Both Docker images behave identically but sometimes truncate error messages.
-
-    Args:
-        response: Flask test response object
-        metric_class_name: Name of the metric class (e.g., "TestConversationThreadMetric")
-        type_error_message: Expected TypeError message (e.g., "argument after ** must be a mapping, not list")
-    """
-    import re
-
-    # Basic checks
-    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
-
-    error_str = str(response.json["error"])
-
-    # Pattern for full TypeError with UUID in class name
-    # Example: TypeError: {UUID}.TestConversationThreadMetric.score() argument after ** must be a mapping, not list
-    full_error_pattern = rf"TypeError: [a-f0-9\-]{{36}}\.{re.escape(metric_class_name)}\.score\(\) {re.escape(type_error_message)}"
-
-    # Exact truncated error message (when error gets cut off)
-    truncated_error_exact = "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated: "
-
-    # Assert either the full TypeError pattern or the exact truncated message
-    assert (re.search(full_error_pattern, error_str) or
-            error_str == truncated_error_exact), (
-        f"Expected either full TypeError pattern matching '{metric_class_name}' and '{type_error_message}' "
-        f"or truncated message, got: {error_str}"
-    )
 
 @pytest.fixture(params=[DockerExecutor, ProcessExecutor])
 def executor(request):
@@ -358,12 +319,8 @@ def test_missing_data_returns_bad_request(client):
     (
             INVALID_METRIC,
             [
-                """from typing import
-                      ^
-SyntaxError: Expected one or more names after 'import'""",
-                """from typing import
-                      ^
-SyntaxError: invalid syntax"""
+                """SyntaxError: invalid syntax""",  # DockerExecutor format
+                """SyntaxError: Expected one or more names after 'import'"""  # ProcessExecutor format
             ]
     ),
     pytest.param(
@@ -383,8 +340,8 @@ def test_invalid_code_returns_bad_request(client, code, stacktraces):
     assert response.status_code == 400
     assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
 
-    # Normalize error message to handle differences between remote and local images
-    error_message = normalize_error_message(str(response.json["error"]))
+    # Check that the expected error message is in the response
+    error_message = str(response.json["error"])
     # Check if any of the expected stacktraces match
     assert any(stacktrace in error_message for stacktrace in stacktraces), f"None of the expected stacktraces found in error message: {error_message}"
 
@@ -416,9 +373,9 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
     })
     assert response.status_code == 400
     assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
-    
-    # Normalize error message to handle differences between remote and local images
-    error_message = normalize_error_message(str(response.json["error"]))
+
+    # Check that the expected error message is in the response
+    error_message = str(response.json["error"])
     assert stacktrace in error_message
 
 
@@ -491,7 +448,7 @@ def test_conversation_thread_metric_wrong_data_structure_fails(client, app):
 
     # Should fail with 400 error about evaluation failure
     assert response.status_code == 400
-    _assert_evaluation_error_with_type_error_pattern(response, "TestConversationThreadMetric", "argument after ** must be a mapping, not list")
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
 
 
 def test_conversation_thread_metric_with_trace_thread_type(client, app):

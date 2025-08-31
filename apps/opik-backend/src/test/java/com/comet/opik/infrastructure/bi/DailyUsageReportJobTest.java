@@ -48,6 +48,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -70,6 +71,10 @@ class DailyUsageReportJobTest {
 
     private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
             PodamUtils.getIntegerInRange(1, 99), PodamUtils.getIntegerInRange(1, 99));
+
+    private static final Map<String, List<String>> EXPECTED_DEMO_DATA = Map.of(
+            DemoData.DATASETS.get(0), DemoData.EXPERIMENTS.subList(0, 1),
+            DemoData.DATASETS.get(1), DemoData.EXPERIMENTS.subList(1, DemoData.EXPERIMENTS.size()));
 
     private void mockBiEventResponse(String eventType, WireMockServer server) {
         server.stubFor(
@@ -484,9 +489,18 @@ class DailyUsageReportJobTest {
             });
 
             for (int i = 0; i < DemoData.EXPERIMENTS.size(); i++) {
+                int index = i;
+
+                String datasetName = EXPECTED_DEMO_DATA.entrySet()
+                        .stream()
+                        .filter(entry -> entry.getValue().contains(DemoData.EXPERIMENTS.get(index)))
+                        .findFirst()
+                        .map(Map.Entry::getKey)
+                        .orElseThrow();
+
                 Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                         .name(DemoData.EXPERIMENTS.get(i))
-                        .datasetName(DemoData.DATASETS.get(i))
+                        .datasetName(datasetName)
                         .promptVersion(null)
                         .promptVersions(null)
                         .build();
