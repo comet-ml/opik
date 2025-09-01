@@ -33,6 +33,7 @@ class OpikTracer:
     """
     Opik tracer for google-adk.
     """
+
     def __init__(
         self,
         name: Optional[str] = None,
