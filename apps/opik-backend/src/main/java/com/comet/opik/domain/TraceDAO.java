@@ -1069,6 +1069,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -1269,7 +1270,16 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
                 countDistinct(t.id) AS trace_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(t.duration)) AS duration,
+                arrayMap(
+                  v -> toDecimal64(
+                         greatest(
+                           least(if(isFinite(v), v, 0),  999999999.999999999),
+                           -999999999.999999999
+                         ),
+                         9
+                       ),
+                  quantiles(0.5, 0.9, 0.99)(t.duration)
+                ) AS duration,
                 sum(input_count) AS input,
                 sum(output_count) AS output,
                 sum(metadata_count) AS metadata,
@@ -1277,6 +1287,7 @@ class TraceDAOImpl implements TraceDAO {
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
+                avg(s.span_count) AS span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
@@ -1357,7 +1368,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
+                   AND project_id = :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT
@@ -1377,7 +1388,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
+                   AND project_id = :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
             ), feedback_scores_combined_grouped AS (
                 SELECT
