@@ -477,8 +477,7 @@
     box-shadow: var(--action-card-shadow);
   }
 
-  .hover\:bg-\[var\(--thread-active\)\]\/80:hover {
-    background-color: rgb(from var(--thread-active) r g b / 0.8);
+    background-color: rgba(var(--thread-active), 0.8);
   }
 }
 
