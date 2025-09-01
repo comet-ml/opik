@@ -125,6 +125,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
                 trace_to_close_in_finally_block.update(error_info=error_info)
             if span_to_close_in_finally_block is not None:
                 span_to_close_in_finally_block.update(error_info=error_info)
+            raise
         finally:
             if trace_to_close_in_finally_block is not None:
                 self._ensure_trace_is_finalized(trace_to_close_in_finally_block.id)
