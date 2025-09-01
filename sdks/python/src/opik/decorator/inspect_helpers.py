@@ -1,4 +1,5 @@
 import inspect
+import functools
 
 from typing import Callable, Tuple, Any, Dict
 
@@ -44,3 +45,13 @@ def is_async(func: Callable) -> bool:
         return True
 
     return False
+
+
+def get_function_name(func: Callable) -> str:
+    """Safely get the name of a function, handling functools.partial objects."""
+    if isinstance(func, functools.partial):
+        # For partial objects, get the name from the underlying function
+        return getattr(func.func, "__name__", "<unknown>")
+
+    # For regular functions and other callables
+    return getattr(func, "__name__", "<unknown>")

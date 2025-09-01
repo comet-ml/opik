@@ -30,6 +30,10 @@ SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
 
 class OpikTracer:
+    """
+    Opik tracer for google-adk.
+    """
+
     def __init__(
         self,
         name: Optional[str] = None,
@@ -38,6 +42,16 @@ class OpikTracer:
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
     ):
+        """
+        Initialize OpikTracer.
+
+        Arguments:
+            name: The default name for root span or trace created by the tracer.
+            tags: The default tags for all the traces and spans created by the tracer.
+            metadata: The default metadata for all the traces and spans created by the tracer.
+            project_name: The name of the project for tracing.
+            distributed_headers: The distributed trace headers.
+        """
         self.name = name
         self.tags = tags
         self.metadata = metadata or {}
