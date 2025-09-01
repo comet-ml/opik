@@ -32,7 +32,7 @@
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.51.0</redisson.version>
         <opentelmetry.version>2.19.0</opentelmetry.version>
-        <aws.java.sdk.version>2.32.4</aws.java.sdk.version>
+        <aws.java.sdk.version>2.33.0</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
