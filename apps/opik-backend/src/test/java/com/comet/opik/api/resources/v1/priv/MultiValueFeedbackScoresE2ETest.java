@@ -439,7 +439,8 @@ public class MultiValueFeedbackScoresE2ETest {
                 List.of(createScoreBatchItemThread(threadId, projectName, user2Score)), API_KEY2, TEST_WORKSPACE);
 
         // verify both scores are present
-        TraceThread.TraceThreadPage actualThreads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY1,
+        TraceThread.TraceThreadPage actualThreads = traceResourceClient.getTraceThreads(projectId, projectName,
+                API_KEY1,
                 TEST_WORKSPACE, null, null, Map.of());
 
         assertThat(actualThreads.content()).hasSize(1);
@@ -448,7 +449,8 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
         // Delete user 2 feedback score
-        traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(user1Score.name()), USER2, API_KEY1,
+        traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(user1Score.name()), USER2,
+                API_KEY1,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
