@@ -6,14 +6,12 @@ const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
 
   return (
-    <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b border-border bg-background pl-4 pr-6">
+    <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
       <div className="min-w-1 flex-1">
         <Breadcrumbs />
       </div>
 
-      <div className="flex items-center gap-2">
-        {UserMenu ? <UserMenu /> : null}
-      </div>
+      {UserMenu ? <UserMenu /> : null}
     </nav>
   );
 };

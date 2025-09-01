@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-
-type ThemeMode = "light" | "dark";
+import { THEME_MODE, type ThemeMode } from "@/constants/theme";
 
 type Theme = ThemeMode | "system";
 
@@ -18,15 +17,15 @@ type ThemeProviderState = {
 
 const initialState: ThemeProviderState = {
   theme: "system",
-  themeMode: "light",
+  themeMode: THEME_MODE.LIGHT,
   setTheme: () => null,
 };
 
 const calculateThemeMode = (theme: Theme) => {
   if (theme === "system") {
     return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+      ? THEME_MODE.DARK
+      : THEME_MODE.LIGHT;
   }
   return theme;
 };
@@ -45,7 +44,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
+    root.classList.remove(THEME_MODE.LIGHT, THEME_MODE.DARK);
     root.classList.add(calculateThemeMode(theme));
   }, [theme]);
 

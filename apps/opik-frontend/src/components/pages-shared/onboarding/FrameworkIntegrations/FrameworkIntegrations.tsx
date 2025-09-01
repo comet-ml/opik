@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "../GoogleColabCard/GoogleColabCard";
 import IntegrationTemplate from "./IntegrationTemplate";
@@ -42,7 +43,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
                 <img
                   alt={item.label}
                   src={
-                    themeMode === "dark" && item.logoWhite
+                    themeMode === THEME_MODE.DARK && item.logoWhite
                       ? item.logoWhite
                       : item.logo
                   }

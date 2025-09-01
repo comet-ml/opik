@@ -1,5 +1,6 @@
 import React from "react";
 import { useTheme } from "@/components/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import QuickInstallDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/QuickInstallDialog";
 import { useIntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
@@ -8,6 +9,21 @@ import copilotLogo from "/images/integrations/copilot.png";
 import copilotWhiteLogo from "/images/integrations/copilot-white.png";
 import windsurfLogo from "/images/integrations/windsurf.png";
 import windsurfWhiteLogo from "/images/integrations/windsurf-white.png";
+
+const INTEGRATION_ICON_THEME_MAP = {
+  cursor: {
+    [THEME_MODE.LIGHT]: cursorLogo,
+    [THEME_MODE.DARK]: cursorLogo,
+  },
+  copilot: {
+    [THEME_MODE.LIGHT]: copilotLogo,
+    [THEME_MODE.DARK]: copilotWhiteLogo,
+  },
+  windsurf: {
+    [THEME_MODE.LIGHT]: windsurfLogo,
+    [THEME_MODE.DARK]: windsurfWhiteLogo,
+  },
+} as const;
 
 const IntegrationQuickInstall: React.FC = () => {
   const { selectedIntegrationId, setSelectedIntegrationId } =
@@ -27,17 +43,17 @@ const IntegrationQuickInstall: React.FC = () => {
           <div className="flex items-center gap-1 pr-2">
             <img
               alt="Cursor"
-              src={cursorLogo}
+              src={INTEGRATION_ICON_THEME_MAP.cursor[themeMode]}
               className="size-[32px] shrink-0"
             />
             <img
               alt="Copilot"
-              src={themeMode === "dark" ? copilotWhiteLogo : copilotLogo}
+              src={INTEGRATION_ICON_THEME_MAP.copilot[themeMode]}
               className="size-[20px] shrink-0"
             />
             <img
               alt="Windsurf"
-              src={themeMode === "dark" ? windsurfWhiteLogo : windsurfLogo}
+              src={INTEGRATION_ICON_THEME_MAP.windsurf[themeMode]}
               className="size-[32px] shrink-0"
             />
           </div>
