@@ -58,9 +58,10 @@
   ],
   "peerDependencies": {
     "@langchain/core": "^0.3.42",
-    "opik": "^1.7.33"
+    "opik": "^1.8.37"
   },
   "devDependencies": {
+    "tsup": "^8.5.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }
