@@ -243,7 +243,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <Button
             variant="outline"
             size="2xs"
-            className="border-thread-active bg-thread-active hover:bg-thread-active/80"
+            className="hover:bg-thread-active/80 border-thread-active bg-thread-active"
           >
             <MessageCircleMore className="mr-1 size-3" /> Active
             <ChevronDown className="ml-1 size-3.5" />

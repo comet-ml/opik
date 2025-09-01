@@ -13,12 +13,12 @@
     --primary-active: 238 65% 43%;
     --secondary: 240 93% 95%;
     --primary-100: 235 85% 97%;
-    --white: #FFFFFF;
+    --white: #ffffff;
 
     --foreground-secondary: 224 71% 4%;
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
-    
+
     --muted-slate: 215 16%, 47%;
     --light-slate: 215 20% 65%;
     --slate-300: 213 27% 84%;
@@ -29,9 +29,9 @@
 
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
-    
+
     --soft-background: 240 20% 99%;
-    
+
     /* other colors */
     --tooltip: 224 17% 26%;
     --tooltip-foreground: 0 0% 100%;
@@ -39,7 +39,6 @@
     --popover-gray: 240 14% 99%;
 
     --muted: 210 40% 96.1%;
-    --muted-disabled: 220 14% 96%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
     --accent: 210 40% 96.1%;
@@ -53,125 +52,125 @@
 
     --warning: 348 86% 61%;
     --success: 129 100% 42%;
-    
+
     /* Gray scale for utility classes */
-    --gray-100: #F3F4F6;
+    --gray-100: #f3f4f6;
 
     /* Special button colors */
-    --special-button: #19A979;
-    --special-button-hover: #1E8A66;
-    --special-button-active: #1A7557;
+    --special-button: #19a979;
+    --special-button-hover: #1e8a66;
+    --special-button-active: #1a7557;
 
     /* Toggle colors */
-    --toggle-outline-active: #F3F4FE;
+    --toggle-outline-active: #f3f4fe;
 
     /* CodeMirror theme colors */
-    --codemirror-background: #F8FAFC;
-    --codemirror-gutter: #94A3B8;
+    --codemirror-background: #f8fafc;
+    --codemirror-gutter: #94a3b8;
     --codemirror-line-highlight: #e6e6fe;
-    --codemirror-syntax-blue: #005CC5;
+    --codemirror-syntax-blue: #005cc5;
 
     /* Chart colors */
-    --chart-tick-stroke: #373D4D;
+    --chart-tick-stroke: #373d4d;
 
     /* DataTable colors */
 
     /* Trace thread colors */
-    --thread-active: #EBF2F5;
-    --thread-inactive: #E2EFFD;
-    --thread-icon-background: #DEDEFD;
-    --thread-icon-text: #1B1C7E;
-    --message-input-background: #E7ECFF;
+    --thread-active: #ebf2f5;
+    --thread-inactive: #e2effd;
+    --thread-icon-background: #dedefd;
+    --thread-icon-text: #1b1c7e;
+    --message-input-background: #e7ecff;
 
     /* Action cards */
-    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
 
     /* Action types */
-    --action-trace-background: #DAFBF0;
+    --action-trace-background: #dafbf0;
     --action-trace-text: #295747;
-    --action-experiment-background: #FDE2F6;
-    --action-experiment-text: #72275F;
-    --action-guardrail-background: #FEE3D7;
-    --action-guardrail-text: #73422B;
-    --action-playground-background: #EFE2FD;
-    --action-playground-text: #491B7E;
+    --action-experiment-background: #fde2f6;
+    --action-experiment-text: #72275f;
+    --action-guardrail-background: #fee3d7;
+    --action-guardrail-text: #73422b;
+    --action-playground-background: #efe2fd;
+    --action-playground-text: #491b7e;
 
     /* Feature/brand colors */
-    --feature-experiment-management: #6C6FF7;
-    --feature-llm: #52AEA4;
+    --feature-experiment-management: #6c6ff7;
+    --feature-llm: #52aea4;
 
     /* Error indicator colors */
-    --error-indicator-background: #FFD2D2;
-    --error-indicator-text: #822C45;
+    --error-indicator-background: #ffd2d2;
+    --error-indicator-text: #822c45;
 
     /* Search highlight colors */
-    --search-highlight: #FFDF20;
-    --search-current-highlight: #FF8904;
+    --search-highlight: #ffdf20;
+    --search-current-highlight: #ff8904;
 
     /* Diff colors */
-    --diff-removed-bg: #FDE2E7;
-    --diff-removed-text: #931A32;
-    --diff-added-bg: #E2FDE6;
-    --diff-added-text: #1D6728;
+    --diff-removed-bg: #fde2e7;
+    --diff-removed-text: #931a32;
+    --diff-added-bg: #e2fde6;
+    --diff-added-text: #1d6728;
 
     /* Upload field colors */
     --upload-icon-bg: 203 213 225;
 
     /* Code block colors */
-    --code-block: #FBFCFD;
+    --code-block: #fbfcfd;
 
     /* Welcome banner gradient colors */
-    --banner-gradient-start: #060A28;
-    --banner-gradient-end: #604FFF;
+    --banner-gradient-start: #060a28;
+    --banner-gradient-end: #604fff;
 
     /* Scrollbar colors */
     --scrollbar-thumb: #babac0;
     --scrollbar-thumb-hover: #7d7d7d;
 
     /* Modern color variants for tags and charts */
-    --color-gray: #64748B;
-    --color-purple: #8B5CF6;
-    --color-burgundy: #BF399E;
-    --color-pink: #F43F5E;
-    --color-red: #EF4444;
-    --color-orange: #F97316;
-    --color-yellow: #EAB308;
-    --color-green: #10B981;
-    --color-turquoise: #06B6D4;
-    --color-blue: #3B82F6;
-    --color-primary: #6366F1;
-    --color-indigo: #6366F1;
-    --color-violet: #8B5CF6;
-    --color-emerald: #10B981;
-    --color-cyan: #06B6D4;
-    --color-rose: #F43F5E;
+    --color-gray: #64748b;
+    --color-purple: #8b5cf6;
+    --color-burgundy: #bf399e;
+    --color-pink: #f43f5e;
+    --color-red: #ef4444;
+    --color-orange: #f97316;
+    --color-yellow: #eab308;
+    --color-green: #10b981;
+    --color-turquoise: #06b6d4;
+    --color-blue: #3b82f6;
+    --color-primary: #6366f1;
+    --color-indigo: #6366f1;
+    --color-violet: #8b5cf6;
+    --color-emerald: #10b981;
+    --color-cyan: #06b6d4;
+    --color-rose: #f43f5e;
 
     /* Tag variant background and text colors */
-    --tag-gray-bg: #F3F4F6;
-    --tag-purple-bg: #EFE2FD;
-    --tag-purple-text: #491B7E;
-    --tag-burgundy-bg: #FDE2F6;
-    --tag-burgundy-text: #72275F;
-    --tag-pink-bg: #FDE2EA;
-    --tag-pink-text: #822C45;
-    --tag-red-bg: #FDC9C9;
-    --tag-red-text: #4E1D1D;
-    --tag-orange-bg: #FEE3D7;
-    --tag-orange-text: #73422B;
-    --tag-yellow-bg: #FEF0C8;
+    --tag-gray-bg: #f3f4f6;
+    --tag-purple-bg: #efe2fd;
+    --tag-purple-text: #491b7e;
+    --tag-burgundy-bg: #fde2f6;
+    --tag-burgundy-text: #72275f;
+    --tag-pink-bg: #fde2ea;
+    --tag-pink-text: #822c45;
+    --tag-red-bg: #fdc9c9;
+    --tag-red-text: #4e1d1d;
+    --tag-orange-bg: #fee3d7;
+    --tag-orange-text: #73422b;
+    --tag-yellow-bg: #fef0c8;
     --tag-yellow-text: #675523;
-    --tag-green-bg: #DAFBF0;
+    --tag-green-bg: #dafbf0;
     --tag-green-text: #295747;
-    --tag-turquoise-bg: #CDF5F9;
-    --tag-turquoise-text: #15545B;
-    --tag-blue-bg: #E2EFFD;
-    --tag-blue-text: #19426B;
+    --tag-turquoise-bg: #cdf5f9;
+    --tag-turquoise-text: #15545b;
+    --tag-blue-bg: #e2effd;
+    --tag-blue-text: #19426b;
 
     --radius: 0.5rem;
 
     --header-height: 60px;
     --sidebar-width: 61px;
-
   }
 
   .dark {
@@ -181,12 +180,12 @@
     --primary-active: 217.2 91.2% 49.8%;
     --secondary: 240 93% 95%; /* To replace */
     --primary-100: 217.2 32.6% 17.5%;
-    --white: #FFFFFF;
+    --white: #ffffff;
 
     --foreground-secondary: 210 40% 98%;
     --muted-gray: 217.2 32.6% 35%;
     --muted-disabled: 217.2 32.6% 25%;
-    
+
     --muted-slate: 215 16%, 47%; /* To replace */
     --light-slate: 215.4 16.3% 46.9%;
     --slate-300: 213 27% 84%; /* To replace */
@@ -197,7 +196,7 @@
 
     --background: 222 84% 4.9%;
     --foreground: 210 40% 87%;
-    
+
     --soft-background: 222 84% 6%;
 
     /* other colors - Dark Mode */
@@ -207,7 +206,7 @@
     /* Legacy variables - Dark Mode (for backward compatibility) */
     --input: 217.2 32.6% 17.5%;
     --ring: 217.2 91.2% 59.8%;
-    
+
     /* Popover colors - Dark Mode */
     --popover-gray: 217.2 32.6% 10%;
 
@@ -225,12 +224,13 @@
     --gray-100: 217.2 32.6% 15%;
 
     /* Special button colors - Dark Mode */
-    --special-button: #22C785;
-    --special-button-hover: #28B575;
-    --special-button-active: #1E9A65;
+    --special-button: #22c785;
+    --special-button-hover: #28b575;
+    --special-button-active: #1e9a65;
 
     /* Action cards - Dark Mode */
-    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1), 0 2px 4px -2px rgb(255 255 255 / 0.05);
+    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1),
+      0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
     --action-trace-background: #1a332a;
@@ -243,15 +243,14 @@
     --action-playground-text: #b88ce8;
 
     /* Feature colors - Dark Mode */
-    --feature-experiment-management: #8A8EFF;
-    --feature-llm: #6BD4C9;
+    --feature-experiment-management: #8a8eff;
+    --feature-llm: #6bd4c9;
 
     /* Muted colors - Dark Mode */
     --muted: 217.2 32.6% 17.5%;
-    
+
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
-    
 
     /* Thread colors - Dark Mode */
     --thread-active: #2a3f2f;
@@ -265,10 +264,10 @@
     --codemirror-syntax-blue: #79c0ff;
 
     /* Diff colors - Dark Mode */
-    --diff-removed-bg: #7F1D1D;
-    --diff-removed-text: #FEF2F2;
-    --diff-added-bg: #14532D;
-    --diff-added-text: #BBF7D0;
+    --diff-removed-bg: #7f1d1d;
+    --diff-removed-text: #fef2f2;
+    --diff-added-bg: #14532d;
+    --diff-added-text: #bbf7d0;
 
     /* Upload field colors - Dark Mode */
     --upload-icon-bg: 71 85 105;
@@ -286,35 +285,35 @@
 
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #374151;
-    --tag-purple-bg: #4C1D95;
-    --tag-purple-text: #C4B5FD;
-    --tag-burgundy-bg: #7E1065;
-    --tag-burgundy-text: #F3E8FF;
-    --tag-pink-bg: #9D174D;
-    --tag-pink-text: #FECDD3;
-    --tag-red-bg: #7F1D1D;
-    --tag-red-text: #FEF2F2;
-    --tag-orange-bg: #9A3412;
-    --tag-orange-text: #FED7AA;
-    --tag-yellow-bg: #A16207;
-    --tag-yellow-text: #FEF3C7;
-    --tag-green-bg: #14532D;
-    --tag-green-text: #BBF7D0;
-    --tag-turquoise-bg: #155E75;
-    --tag-turquoise-text: #A7F3D0;
-    --tag-blue-bg: #1E3A8A;
-    --tag-blue-text: #DBEAFE;
+    --tag-purple-bg: #4c1d95;
+    --tag-purple-text: #c4b5fd;
+    --tag-burgundy-bg: #7e1065;
+    --tag-burgundy-text: #f3e8ff;
+    --tag-pink-bg: #9d174d;
+    --tag-pink-text: #fecdd3;
+    --tag-red-bg: #7f1d1d;
+    --tag-red-text: #fef2f2;
+    --tag-orange-bg: #9a3412;
+    --tag-orange-text: #fed7aa;
+    --tag-yellow-bg: #a16207;
+    --tag-yellow-text: #fef3c7;
+    --tag-green-bg: #14532d;
+    --tag-green-text: #bbf7d0;
+    --tag-turquoise-bg: #155e75;
+    --tag-turquoise-text: #a7f3d0;
+    --tag-blue-bg: #1e3a8a;
+    --tag-blue-text: #dbeafe;
   }
 
   /* CodeMirror cursor and selection fix for dark mode */
   .dark .cm-cursor {
     border-left-color: hsl(var(--text-primary)) !important;
   }
-  
+
   .dark .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.1) !important;
   }
-  
+
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
   }
