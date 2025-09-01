@@ -426,9 +426,12 @@ else
     az aks create \
         --resource-group $RESOURCE_GROUP \
         --name $AKS_CLUSTER_NAME \
-        --node-count 2 \
+        --node-count 1 \
+        --min-count 1 \
+        --max-count 2 \
+        --enable-cluster-autoscaler \
         --tier free \
-        --node-vm-size Standard_D2s_v3 \
+        --node-vm-size Standard_B4ms \
         --enable-addons monitoring \
         --generate-ssh-keys \
         --attach-acr $ACR_NAME \
