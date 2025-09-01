@@ -52,6 +52,8 @@ const FeedbackScoresEditor = ({
     [feedbackDefinitionsData?.content],
   );
 
+  console.log("feedbackScoresUI", feedbackDefinitions, feedbackScoresUI);
+
   const rows: FeebackScoreRow[] = useMemo(() => {
     return sortBy(
       [

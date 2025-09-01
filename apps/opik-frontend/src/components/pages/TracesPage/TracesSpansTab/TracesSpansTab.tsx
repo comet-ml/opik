@@ -475,6 +475,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [feedbackScoresData?.scores]);
 
+  console.log("feedbackScoresData?.scores", feedbackScoresData?.scores);
+
   const dynamicColumnsIds = useMemo(
     () => dynamicScoresColumns.map((c) => c.id),
     [dynamicScoresColumns],

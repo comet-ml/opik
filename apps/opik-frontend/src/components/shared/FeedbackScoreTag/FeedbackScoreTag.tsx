@@ -40,9 +40,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
 
   const Reason = reason ? (
     <FeedbackScoreReasonTooltip
-      reason={reason}
-      lastUpdatedAt={lastUpdatedAt}
-      lastUpdatedBy={lastUpdatedBy}
+      reasons={[{ reason, author: lastUpdatedBy, lastUpdatedAt }]}
     >
       <MessageSquareMore className="size-3.5 text-light-slate" />
     </FeedbackScoreReasonTooltip>

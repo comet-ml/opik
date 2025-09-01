@@ -19,15 +19,41 @@ export enum TRACE_VISIBILITY_MODE {
   hidden = "hidden",
 }
 
-export interface TraceFeedbackScore {
+export interface BaseFeedbackScore {
   category_name?: string;
   reason?: string;
   name: string;
   source: FEEDBACK_SCORE_TYPE;
-  value: number;
   last_updated_by?: string;
   last_updated_at?: string;
+  value: number;
 }
+
+export type FeedbackScoreValueByAuthorMap = Record<
+  string,
+  {
+    value: number;
+    reason?: string;
+    category_name?: string;
+    source: FEEDBACK_SCORE_TYPE;
+    last_updated_at: string;
+  }
+>;
+
+export interface DeprecatedFeedbackScore extends BaseFeedbackScore {
+  // single value
+  value: number;
+}
+
+export interface MultiValueFeedbackScore extends BaseFeedbackScore {
+  // average value
+  value: number;
+  value_by_author: FeedbackScoreValueByAuthorMap;
+}
+
+export type TraceFeedbackScore =
+  | DeprecatedFeedbackScore
+  | MultiValueFeedbackScore;
 
 export interface BaseTraceDataErrorInfo {
   exception_type: string;

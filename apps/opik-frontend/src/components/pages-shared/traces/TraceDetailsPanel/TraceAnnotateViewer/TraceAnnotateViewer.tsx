@@ -10,6 +10,8 @@ import {
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "./types";
+import MultiValueFeedbackScoreTag from "@/components/shared/FeedbackScoreTag/MultiValueFeedbackScoreTag";
+import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
@@ -49,16 +51,26 @@ const TraceAnnotateViewer: React.FunctionComponent<
     >
       {hasFeedbackScores && (
         <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {data.feedback_scores?.map((score) => (
-            <FeedbackScoreTag
-              key={score.name}
-              label={score.name}
-              value={score.value}
-              reason={score.reason}
-              lastUpdatedAt={score.last_updated_at}
-              lastUpdatedBy={score.last_updated_by}
-            />
-          ))}
+          {data.feedback_scores?.map((score) =>
+            isMultiValueFeedbackScore(score) ? (
+              <MultiValueFeedbackScoreTag
+                key={score.name}
+                label={score.name}
+                value={score.value}
+                valueByAuthor={score.value_by_author}
+                category={score.category_name}
+              />
+            ) : (
+              <FeedbackScoreTag
+                key={score.name}
+                label={score.name}
+                value={score.value}
+                reason={score.reason}
+                lastUpdatedAt={score.last_updated_at}
+                lastUpdatedBy={score.last_updated_by}
+              />
+            ),
+          )}
         </div>
       )}
       <FeedbackScoresEditor

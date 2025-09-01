@@ -7,6 +7,8 @@ import ExpandableSection from "../ExpandableSection/ExpandableSection";
 import { PenLine } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { sortBy } from "lodash";
+import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
+import MultiValueFeedbackScoreTag from "../FeedbackScoreTag/MultiValueFeedbackScoreTag";
 
 type ExperimentFeedbackScoresViewerProps = {
   feedbackScores: TraceFeedbackScore[];
@@ -45,18 +47,30 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
         {feedbackScores.length !== 0 && (
           <Separator orientation="vertical" className="h-4" />
         )}
-        {sortBy(feedbackScores, "name").map((feedbackScore) => (
-          <FeedbackScoreTag
-            key={feedbackScore.name + feedbackScore.value}
-            label={feedbackScore.name}
-            value={feedbackScore.value}
-            reason={feedbackScore.reason}
-            lastUpdatedAt={feedbackScore.last_updated_at}
-            lastUpdatedBy={feedbackScore.last_updated_by}
-            onDelete={handleDeleteFeedbackScore}
-            className="max-w-full"
-          />
-        ))}
+        {sortBy(feedbackScores, "name").map((feedbackScore) =>
+          isMultiValueFeedbackScore(feedbackScore) ? (
+            <MultiValueFeedbackScoreTag
+              key={feedbackScore.name + feedbackScore.value}
+              label={feedbackScore.name}
+              value={feedbackScore.value}
+              valueByAuthor={feedbackScore.value_by_author}
+              category={feedbackScore.category_name}
+              onDelete={handleDeleteFeedbackScore}
+              className="max-w-full"
+            />
+          ) : (
+            <FeedbackScoreTag
+              key={feedbackScore.name + feedbackScore.value}
+              label={feedbackScore.name}
+              value={feedbackScore.value}
+              reason={feedbackScore.reason}
+              lastUpdatedAt={feedbackScore.last_updated_at}
+              lastUpdatedBy={feedbackScore.last_updated_by}
+              onDelete={handleDeleteFeedbackScore}
+              className="max-w-full"
+            />
+          ),
+        )}
       </div>
     </ExpandableSection>
   );

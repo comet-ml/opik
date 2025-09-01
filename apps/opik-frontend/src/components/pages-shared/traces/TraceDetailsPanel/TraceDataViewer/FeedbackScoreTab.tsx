@@ -12,6 +12,7 @@ import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
 import FeedbackScoreTableNoData from "./FeedbackScoreTableNoData";
+import FeedbackScoreAuthorCell from "@/components/shared/DataTableCells/FeedbackScoreAuthorCell";
 
 const SELECTED_COLUMNS_KEY = "feedback-scores-tab-selected-columns";
 const COLUMNS_ORDER_KEY = "feedback-scores-tab-columns-order";
@@ -47,8 +48,9 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   },
   {
     id: "created_by",
-    label: "Created by",
+    label: "Scored by",
     type: COLUMN_TYPE.string,
+    cell: FeedbackScoreAuthorCell as never,
     size: 100,
   },
 ];

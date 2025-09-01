@@ -1,5 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
-import { FEEDBACK_SCORE_TYPE, Trace, TraceFeedbackScore } from "@/types/traces";
+import {
+  FEEDBACK_SCORE_TYPE,
+  MultiValueFeedbackScore,
+  Trace,
+  TraceFeedbackScore,
+} from "@/types/traces";
 import { AggregatedFeedbackScore } from "@/types/shared";
 import {
   COMPARE_EXPERIMENTS_KEY,
@@ -16,6 +21,26 @@ export const FEEDBACK_SCORE_SOURCE_MAP = {
   [FEEDBACK_SCORE_TYPE.sdk]: "SDK",
   [FEEDBACK_SCORE_TYPE.ui]: "Human Review",
 };
+
+export function isMultiValueFeedbackScore(
+  score: unknown,
+): score is MultiValueFeedbackScore {
+  return Boolean(
+    score &&
+      typeof score === "object" &&
+      "value_by_author" in score &&
+      score.value_by_author &&
+      typeof score.value_by_author === "object" &&
+      !Array.isArray(score.value_by_author) &&
+      Object.keys(score.value_by_author).length > 1,
+  );
+}
+
+export function hasValuesByAuthor(
+  score: TraceFeedbackScore,
+): score is MultiValueFeedbackScore {
+  return Boolean("value_by_author" in score);
+}
 
 export const setExperimentsCompareCache = async (
   queryClient: QueryClient,

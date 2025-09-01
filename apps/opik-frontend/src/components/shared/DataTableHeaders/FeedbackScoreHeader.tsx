@@ -16,6 +16,8 @@ const FeedbackScoreHeader = <TData,>(
     column,
   });
 
+  console.log("header", context);
+
   return (
     <HeaderWrapper
       metadata={context.column.columnDef.meta}
