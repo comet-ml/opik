@@ -503,7 +503,7 @@ def create_demo_optimizer_project(base_url: str, workspace_name, comet_api_key):
         project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Optimizer"), None)
        
         if project_id is None:
-            logger.error("Could not find project ID for 'Opik Assistant'")
+            logger.error("Could not find project ID for 'Opik Optimizer'")
             return
         
         if project_exists(base_url, workspace_name, comet_api_key, project_name):
