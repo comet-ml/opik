@@ -52,13 +52,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update to patch version
-        if: ${{ !env.IS_RELEASE }}
-        run: |
-          # Use npm version to update to patch version
-          npm version patch --no-git-tag-version
-
       - name: Update version
+        if: ${{ env.IS_RELEASE }}
         run: npm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Build package
@@ -84,4 +79,4 @@ jobs:
         with:
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
           branch: ${{ github.ref }}
-            : true
+          force_with_lease: true
