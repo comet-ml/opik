@@ -3,7 +3,7 @@
 # Variables are substituted by the deployment script
 #
 # DO NOT EDIT VERSION NUMBERS HERE - Change OPIK_VERSION in .env.azure instead
-# This is a TEMPLATE file processed by first-time-deploy-azure.sh.
+# This is a TEMPLATE file processed by deploy-azure.sh.
 registry: &registry $ACR_LOGIN_SERVER
 
 # OAuth2 Proxy Configuration for Azure Entra ID Authentication

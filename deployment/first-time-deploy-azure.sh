@@ -6,10 +6,13 @@
 # This script deploys Opik on Azure using AKS, Application Gateway, and OAuth2
 # Features: HTTPS with AGIC, Azure Entra ID authentication, Docker image builds.
 #
-# Warning: 
+# Warning:
 # This script is meant to be executed one time, to setup everything.
+# It can, however, be used to upgrade deployment with changes to the Helm template
+# (we are using `helm upgrade` on the script).
+#
 # The cluster will be created and then we should just need to update it from then on.
-# When executing the script, you may need to run it a few times
+# When executing the script and creating a cluster from 0, you may need to run it a few times
 # because Azure takes time to propagate some commands and they time out.
 # =============================================================================
 
@@ -423,7 +426,8 @@ else
     az aks create \
         --resource-group $RESOURCE_GROUP \
         --name $AKS_CLUSTER_NAME \
-        --node-count 3 \
+        --node-count 2 \
+        --tier free \
         --node-vm-size Standard_D2s_v3 \
         --enable-addons monitoring \
         --generate-ssh-keys \
@@ -818,7 +822,7 @@ else
         --name $APP_GATEWAY_NAME \
         --location $LOCATION \
         --resource-group $RESOURCE_GROUP \
-        --capacity 2 \
+        --capacity 1 \
         --sku Standard_v2 \
         --http-settings-cookie-based-affinity Disabled \
         --frontend-port 80 \
@@ -827,7 +831,9 @@ else
         --public-ip-address $PUBLIC_IP_NAME \
         --vnet-name $VNET_NAME \
         --subnet $APP_GATEWAY_SUBNET_NAME \
-        --priority 1000
+        --priority 1000 \
+        --min-capacity 1 \
+        --max-capacity 2
     print_success "Created Application Gateway $APP_GATEWAY_NAME"
 fi
 

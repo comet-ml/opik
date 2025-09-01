@@ -59,7 +59,7 @@ vim .env.azure
 ### 3. Deploy
 
 ```bash
-./first-time-deploy-azure.sh
+./deploy-azure.sh
 ```
 
 > [!NOTE]
@@ -131,7 +131,7 @@ vim .env.azure
 # Change: OPIK_VERSION="v2.0.0"
 
 # 2. Redeploy
-./first-time-deploy-azure.sh
+./deploy-azure.sh
 ```
 
 The script automatically:
@@ -205,7 +205,7 @@ graph TB
     AppGW --> |"/v1/* (Fallback)"| Backend[⚙️ Java Backend<br/>Main API<br/>Port: 8080]
     
     subgraph DeploymentFlow[🚀 Deployment Process]
-        Script[📋 first-time-deploy-azure.sh]
+        Script[📋 deploy-azure.sh]
         Script --> |1. Build & Push| ACR[📦 Azure Container Registry<br/>Docker Images]
         Script --> |2. Create Infrastructure| AzureInfra[☁️ Azure Resources<br/>AKS, VNet, App Gateway]
         Script --> |3. Deploy with Helm| HelmChart[⚙️ Helm Chart<br/>helm-values-azure-template.yaml]
