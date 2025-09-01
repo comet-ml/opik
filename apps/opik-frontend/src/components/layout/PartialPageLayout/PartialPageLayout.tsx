@@ -30,10 +30,7 @@ export const PartialPageLayout = ({
             </Link>
           </div>
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            {UserMenu ? <UserMenu /> : null}
-          </div>
+          {UserMenu ? <UserMenu /> : <ThemeToggle />}
         </nav>
 
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">

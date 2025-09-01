@@ -60,16 +60,16 @@ const VerticallySplitCellWrapper = <TData,>({
 
   const highlightSubRow = (virtualRowId: string, highlight: boolean) => {
     if (experimentsIds.length > 1) {
-      const mutedColor = highlight
-        ? `hsl(${getComputedStyle(document.documentElement)
-            .getPropertyValue("--muted")
-            .trim()})`
-        : "transparent";
       document
         .querySelectorAll<HTMLElement>(
           `div[data-virtual-row-id="${virtualRowId}"]`,
         )
-        .forEach((node) => (node.style.backgroundColor = mutedColor));
+        .forEach(
+          (node) =>
+            (node.style.backgroundColor = highlight
+              ? "hsl(var(--muted))"
+              : "transparent"),
+        );
     }
   };
 
