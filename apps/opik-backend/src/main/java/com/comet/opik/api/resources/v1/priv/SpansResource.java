@@ -275,11 +275,13 @@ public class SpansResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-        feedbackScoreService.deleteSpanScore(id, score.name())
+        log.info("Delete span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
+        feedbackScoreService.deleteSpanScore(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Deleted span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
         return Response.noContent().build();
     }
 

@@ -69,7 +69,6 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.InRangeStrategy;
@@ -6896,7 +6895,7 @@ class TracesResourceTest {
                     scoreItems.get(3).name(), scoreItems.getLast().name());
 
             // And When
-            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, apiKey,
+            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, null, apiKey,
                     workspaceName);
 
             // Then - Verify remaining scores using getTraceThreads API
@@ -8722,19 +8721,8 @@ class TracesResourceTest {
 
             var id = generator.generate();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            traceResourceClient.deleteTraceFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id,
+                    API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -8750,24 +8738,12 @@ class TracesResourceTest {
                     .build();
             create(id, score, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            traceResourceClient.deleteTraceFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id,
+                    API_KEY, TEST_WORKSPACE);
 
             var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
-
     }
 
     @Nested

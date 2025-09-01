@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
@@ -238,6 +239,45 @@ public class MultiValueFeedbackScoresE2ETest {
     }
 
     @Test
+    @DisplayName("delete trace score by author")
+    void deleteTraceFeedbackScoreByAuthor() {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        // score trace
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.feedbackScore(traceId, user1Score, TEST_WORKSPACE, API_KEY1);
+
+        // simulate another user scoring the same trace by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        traceResourceClient.feedbackScore(traceId, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        // verify both scores are present
+        var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+
+        assertThat(actualTrace.feedbackScores()).hasSize(1);
+        assertThat(actualTrace.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
+
+        // Delete user 2 feedback score
+        traceResourceClient.deleteTraceFeedbackScore(
+                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), traceId, API_KEY1,
+                TEST_WORKSPACE);
+
+        // verify only user 1 score is present
+        actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.feedbackScores()).hasSize(1);
+        assertThat(actualTrace.feedbackScores().getFirst().valueByAuthor()).hasSize(1);
+        assertThat(actualTrace.feedbackScores().getFirst().valueByAuthor().keySet()).containsExactly(USER1);
+    }
+
+    @Test
     @DisplayName("test score span by multiple authors")
     void testScoreSpanByMultipleAuthors() {
         // create spans
@@ -313,6 +353,114 @@ public class MultiValueFeedbackScoresE2ETest {
         assertThat(actualFilteredNotEmpty.content()).hasSize(2);
         assertThat(actualFilteredNotEmpty.content().stream().map(Span::id))
                 .containsExactlyInAnyOrder(span1Id, span2Id);
+    }
+
+    @Test
+    @DisplayName("delete span score by author")
+    void deleteSpanFeedbackScoreByAuthor() {
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .totalEstimatedCost(null)
+                .build();
+        var spanId = spanResourceClient.createSpan(span, API_KEY1, TEST_WORKSPACE);
+
+        // score span
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        spanResourceClient.feedbackScore(spanId, user1Score, TEST_WORKSPACE, API_KEY1);
+
+        // simulate another user scoring the same span by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        spanResourceClient.feedbackScore(spanId, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        // verify both scores are present
+        var actualSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY1);
+
+        assertThat(actualSpan.feedbackScores()).hasSize(1);
+        assertThat(actualSpan.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
+
+        // Delete user 2 feedback score
+        spanResourceClient.deleteSpanFeedbackScore(
+                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), spanId, API_KEY1,
+                TEST_WORKSPACE);
+
+        // verify only user 1 score is present
+        actualSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualSpan.feedbackScores()).hasSize(1);
+        assertThat(actualSpan.feedbackScores().getFirst().valueByAuthor()).hasSize(1);
+        assertThat(actualSpan.feedbackScores().getFirst().valueByAuthor().keySet()).containsExactly(USER1);
+    }
+
+    @Test
+    @DisplayName("delete thread score by author")
+    void deleteThreadFeedbackScoreByAuthor() {
+        // create thread identifiers
+        var threadId = randomUUID().toString();
+
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
+
+        // open thread first
+        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // create trace within thread
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY1, TEST_WORKSPACE);
+
+        // close thread to ensure it is written to the trace_threads table
+        traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // wait for thread to be created and get its ID
+        Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            TraceThread thread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY1, TEST_WORKSPACE);
+            assertThat(thread.threadModelId()).isNotNull();
+        });
+
+        // score the thread by user 1
+        var user1Score = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId, projectName, user1Score)), API_KEY1, TEST_WORKSPACE);
+
+        // simulate another user scoring the same thread by using the same name
+        var user2Score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(user1Score.name()).build();
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId, projectName, user2Score)), API_KEY2, TEST_WORKSPACE);
+
+        // verify both scores are present
+        TraceThread.TraceThreadPage actualThreads = traceResourceClient.getTraceThreads(projectId, projectName,
+                API_KEY1,
+                TEST_WORKSPACE, null, null, Map.of());
+
+        assertThat(actualThreads.content()).hasSize(1);
+        var actualThread = actualThreads.content().getFirst();
+        assertThat(actualThread.feedbackScores()).hasSize(1);
+        assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
+
+        // Delete user 2 feedback score
+        traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(user1Score.name()), USER2,
+                API_KEY1,
+                TEST_WORKSPACE);
+
+        // verify only user 1 score is present
+        actualThreads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY1,
+                TEST_WORKSPACE, null, null, Map.of());
+        assertThat(actualThreads.content()).hasSize(1);
+        actualThread = actualThreads.content().getFirst();
+        assertThat(actualThread.feedbackScores()).hasSize(1);
+        assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(1);
+        assertThat(actualThread.feedbackScores().getFirst().valueByAuthor().keySet()).containsExactly(USER1);
     }
 
     @Test

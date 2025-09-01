@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
@@ -51,8 +52,8 @@ public interface FeedbackScoreService {
     Mono<Void> scoreBatchOfSpans(List<FeedbackScoreBatchItem> scores);
     Mono<Void> scoreBatchOfTraces(List<FeedbackScoreBatchItem> scores);
 
-    Mono<Void> deleteSpanScore(UUID id, String tag);
-    Mono<Void> deleteTraceScore(UUID id, String tag);
+    Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score);
+    Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score);
 
     Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -64,7 +65,7 @@ public interface FeedbackScoreService {
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
-    Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names);
+    Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names, String author);
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
@@ -177,13 +178,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteSpanScore(UUID id, String name) {
-        return dao.deleteScoreFrom(EntityType.SPAN, id, name);
+    public Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score) {
+        return dao.deleteScoreFrom(EntityType.SPAN, id, score);
     }
 
     @Override
-    public Mono<Void> deleteTraceScore(UUID id, String name) {
-        return dao.deleteScoreFrom(EntityType.TRACE, id, name);
+    public Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score) {
+        return dao.deleteScoreFrom(EntityType.TRACE, id, score);
     }
 
     @Override
@@ -225,7 +226,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteThreadScores(@NonNull String projectName, @NonNull String threadId,
-            @NonNull Set<String> names) {
+            @NonNull Set<String> names, String author) {
         Preconditions.checkArgument(!StringUtils.isBlank(projectName), "Project name cannot be blank");
         Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
 
@@ -237,7 +238,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
         return getProject(projectName)
                 .flatMap(projectId -> traceThreadService.getThreadModelId(projectId, threadId)
-                        .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names))
+                        .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names,
+                                author))
                         .switchIfEmpty(Mono.defer(() -> {
                             log.info("ThreadId '{}' not found in project '{}'. No scores deleted.", threadId,
                                     projectId);
