@@ -401,6 +401,12 @@ pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+  # Default: 4
+  # Description: Maximum number of retry attempts for failed requests to the Python evaluator service
+  maxRetryAttempts: ${PYTHON_EVALUATOR_MAX_RETRY_ATTEMPTS:-4}
+  # Default: 500
+  # Description: Delay in milliseconds between retry attempts for failed requests to the Python evaluator service
+  retryDelay: ${PYTHON_EVALUATOR_RETRY_DELAY:-500}
 
 serviceToggles:
   # Default: true
