@@ -398,11 +398,13 @@ public class TracesResource {
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Delete trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-        feedbackScoreService.deleteTraceScore(id, score.name())
+        log.info("Delete trace feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
+        feedbackScoreService.deleteTraceScore(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Deleted trace feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -805,15 +807,17 @@ public class TracesResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         String projectName = scores.projectName();
 
-        log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
-                projectName, workspaceId);
+        log.info("Deleting feedback scores for threadId '{}', projectName '{}', author '{}' on workspaceId '{}'",
+                scores.threadId(),
+                projectName, scores.author(), workspaceId);
 
-        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names())
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
-                projectName, workspaceId);
+        log.info("Deleted feedback scores for threadId '{}', projectName '{}', author '{}' on workspaceId '{}'",
+                scores.threadId(),
+                projectName, scores.author(), workspaceId);
 
         return Response.noContent().build();
     }
