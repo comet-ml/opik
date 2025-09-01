@@ -91,7 +91,7 @@ Each agent execution will now be automatically logged to the Opik platform with 
   <img src="/img/tracing/adk/adk_weather_time_trace_screenshot.png" />
 </Frame>
 
-## Multi-agent instrumentation with track_adk_agent_recursive
+## Multi-agent instrumentation with `track_adk_agent_recursive`
 
 For complex multi-agent systems, manually adding OpikTracer callbacks to every agent can be time-consuming. The [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html) function automatically adds OpikTracer callbacks to all agents in your hierarchy:
 
@@ -165,7 +165,7 @@ For more complex agent architectures displaying a graph may be even more benefic
   <img src="/img/tracing/adk/adk_code_assistant_graph_screenshot.png" />
 </Frame>
 
-## Compatibility with @opik.track Decorator
+## Compatibility with @track Decorator
 
 The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches that combine ADK agent tracking with custom function tracing.
 You can both invoke your agent from inside another tracked function and call tracked functions inside your tool functions, all the spans and traces parent-child relationships will be preserved!
@@ -211,7 +211,6 @@ The `OpikTracer` provides comprehensive error tracking and monitoring:
 - **Detailed stack traces** with full context information
 - **Tool execution errors** with input/output data
 - **Model call failures** with provider-specific error details
-- **Graceful error handling** that doesn't interrupt agent execution
 
 Error information is automatically logged to spans and traces, making it easy to debug issues in production:
 

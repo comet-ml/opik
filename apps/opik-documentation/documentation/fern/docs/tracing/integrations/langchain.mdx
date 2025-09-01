@@ -67,30 +67,6 @@ print(result.content)
 
 The `OpikTracer` will automatically log the run and its details to Opik, including the input prompt, the output, and metadata for each step in the chain.
 
-## OpikTracer Configuration
-
-The `OpikTracer` constructor accepts several parameters to customize its behavior:
-
-```python
-from opik.integrations.langchain import OpikTracer
-from opik.types import DistributedTraceHeadersDict
-
-# Example distributed headers (optional)
-distributed_headers = DistributedTraceHeadersDict(
-    opik_trace_id="trace-id-from-upstream",
-    opik_parent_span_id="parent-span-id-from-upstream"
-)
-
-opik_tracer = OpikTracer(
-    tags=["langchain", "production"],           # List of tags for all traces
-    metadata={"version": "1.0", "env": "prod"}, # Additional metadata
-    project_name="my-langchain-project",        # Project name for traces
-    thread_id="conversation-123",               # Thread ID for grouping traces
-    distributed_headers=distributed_headers,    # For distributed tracing
-    graph=graph                               # LangGraph object for visualization
-)
-```
-
 For detailed parameter information, see the [OpikTracer SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html).
 
 ## Cost Tracking
@@ -198,9 +174,9 @@ for trace in traces:
     trace.log_feedback_score(name="user-feedback", value=0.5)
 ```
 
-## Compatibility with @opik.track Decorator
+## Compatibility with @track Decorator
 
-The `OpikTracer` is fully compatible with the `@opik.track` decorator, allowing you to create hybrid tracing approaches:
+The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches:
 
 ```python
 import opik
