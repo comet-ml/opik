@@ -1636,7 +1636,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
     )
 
     def get_weather(city: str) -> str:
-        1/0
+        1 / 0
         return ""
 
     root_agent = adk_agents.Agent(
