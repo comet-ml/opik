@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { THEME_MODE, type ThemeMode } from "@/constants/theme";
 
 type Theme = ThemeMode | "system";
@@ -48,14 +48,17 @@ export function ThemeProvider({
     root.classList.add(calculateThemeMode(theme));
   }, [theme]);
 
-  const value = {
-    themeMode: calculateThemeMode(theme),
-    theme,
-    setTheme: (newTheme: Theme) => {
-      localStorage.setItem(storageKey, newTheme);
-      setTheme(newTheme);
-    },
-  };
+  const value = useMemo(
+    () => ({
+      themeMode: calculateThemeMode(theme),
+      theme,
+      setTheme: (newTheme: Theme) => {
+        localStorage.setItem(storageKey, newTheme);
+        setTheme(newTheme);
+      },
+    }),
+    [theme, storageKey],
+  );
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
