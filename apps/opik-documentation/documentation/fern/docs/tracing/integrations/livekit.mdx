@@ -1,23 +1,23 @@
 ---
-description: How to send LiveKit telemetry data to Opik using OpenTelemetry
+description: How to send LiveKit Agents telemetry data to Opik using OpenTelemetry
 ---
 
-# LiveKit Integration via OpenTelemetry
+# LiveKit Agents Integration via OpenTelemetry
 
-LiveKit is a real-time communication framework designed to power live video, audio, and data experiences in web and mobile applications. It provides scalable infrastructure for building real-time communication features with built-in support for WebRTC, room management, and media processing.
+LiveKit Agents is an open-source Python framework for building production-grade multimodal and voice AI agents. It provides a complete set of tools and abstractions for feeding realtime media through AI pipelines, supporting both high-performance STT-LLM-TTS voice pipelines and speech-to-speech models.
 
-LiveKit's primary advantage is its production-ready infrastructure that makes it easy to add real-time communication capabilities to applications without managing complex WebRTC implementations.
+LiveKit Agents' primary advantage is its built-in OpenTelemetry support for comprehensive observability, making it easy to monitor agent sessions, LLM calls, function tools, and TTS operations in real-time applications.
 
 <Frame>
-  <img src="/img/tracing/livekit_integration.png" alt="LiveKit tracing" />
+  <img src="/img/tracing/livekit_integration.png" alt="LiveKit Agents tracing" />
 </Frame>
 
 ## Getting started
 
-To use the LiveKit integration with Opik, you will need to have LiveKit and the required OpenTelemetry packages installed:
+To use the LiveKit Agents integration with Opik, you will need to have LiveKit Agents and the required OpenTelemetry packages installed:
 
 ```bash
-npm install livekit-client @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
+pip install "livekit-agents[openai,turn-detector,silero,deepgram]" opentelemetry-exporter-otlp-proto-http
 ```
 
 ## Environment configuration
@@ -91,31 +91,141 @@ Configure your environment variables based on your Opik deployment:
 
 </Tabs>
 
-## Using Opik with LiveKit
+## Using Opik with LiveKit Agents
 
-Set up OpenTelemetry instrumentation for LiveKit:
+LiveKit Agents includes built-in OpenTelemetry support. To enable telemetry, configure a tracer provider using `set_tracer_provider` in your entrypoint function:
 
-```typescript
-import { trace, SpanStatusCode } from "@opentelemetry/api";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+```python
+import logging
 
-// Configure the OTLP exporter
-const otlpExporter = new OTLPTraceExporter();
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    JobContext,
+    RunContext,
+    WorkerOptions,
+    cli,
+    metrics,
+)
+from livekit.agents.llm import function_tool
+from livekit.agents.telemetry import set_tracer_provider
+from livekit.agents.voice import MetricsCollectedEvent
+from livekit.plugins import deepgram, openai, silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from opentelemetry.util.types import AttributeValue
 
-// Set up the tracer provider
-const provider = new NodeTracerProvider();
-provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
-provider.register();
+logger = logging.getLogger("basic-agent")
 
-// Your LiveKit code will now automatically send traces to Opik
-import { Room, RoomEvent } from "livekit-client";
 
-const room = new Room();
-// ... room configuration
+def setup_opik_tracing(metadata: dict[str, AttributeValue] | None = None):
+    """Set up Opik tracing for LiveKit Agents"""
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    # Set up the tracer provider
+    trace_provider = TracerProvider()
+    trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    set_tracer_provider(trace_provider, metadata=metadata)
+
+    return trace_provider
+
+
+@function_tool
+async def lookup_weather(context: RunContext, location: str) -> str:
+    """Called when the user asks for weather related information.
+
+    Args:
+        location: The location they are asking for
+    """
+
+    logger.info(f"Looking up weather for {location}")
+
+    return "sunny with a temperature of 70 degrees."
+
+
+class Kelly(Agent):
+    def __init__(self) -> None:
+        super().__init__(
+            instructions="Your name is Kelly.",
+            llm=openai.LLM(model="gpt-4o-mini"),
+            stt=deepgram.STT(model="nova-3", language="multi"),
+            tts=openai.TTS(voice="ash"),
+            turn_detection=MultilingualModel(),
+            tools=[lookup_weather],
+        )
+
+    async def on_enter(self):
+        logger.info("Kelly is entering the session")
+        self.session.generate_reply()
+
+    @function_tool
+    async def transfer_to_alloy(self) -> Agent:
+        """Transfer the call to Alloy."""
+        logger.info("Transferring the call to Alloy")
+        return Alloy()
+
+
+class Alloy(Agent):
+    def __init__(self) -> None:
+        super().__init__(
+            instructions="Your name is Alloy.",
+            llm=openai.realtime.RealtimeModel(voice="alloy"),
+            tools=[lookup_weather],
+        )
+
+    async def on_enter(self):
+        logger.info("Alloy is entering the session")
+        self.session.generate_reply()
+
+    @function_tool
+    async def transfer_to_kelly(self) -> Agent:
+        """Transfer the call to Kelly."""
+
+        logger.info("Transferring the call to Kelly")
+        return Kelly()
+
+
+async def entrypoint(ctx: JobContext):
+    # set up the langfuse tracer
+    trace_provider = setup_opik_tracing(
+        # metadata will be set as attributes on all spans created by the tracer
+        metadata={
+            "livekit.session.id": ctx.room.name,
+        }
+    )
+
+    # (optional) add a shutdown callback to flush the trace before process exit
+    async def flush_trace():
+        trace_provider.force_flush()
+
+    ctx.add_shutdown_callback(flush_trace)
+
+    session = AgentSession(vad=silero.VAD.load())
+
+    @session.on("metrics_collected")
+    def _on_metrics_collected(ev: MetricsCollectedEvent):
+        metrics.log_metrics(ev.metrics)
+
+    await session.start(agent=Kelly(), room=ctx.room)
+
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
+
+## What gets traced
+
+With this setup, your LiveKit agent will automatically trace:
+
+- **Session events**: Session start and end with metadata
+- **Agent turns**: Complete conversation turns with timing
+- **LLM operations**: Model calls, prompts, responses, and token usage
+- **Function tools**: Tool executions with inputs and outputs
+- **TTS operations**: Text-to-speech conversions with audio metadata
+- **STT operations**: Speech-to-text transcriptions
+- **End-of-turn detection**: Conversation flow events
 
 ## Further improvements
 
-If you have any questions or suggestions for improving the LiveKit integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
+If you have any questions or suggestions for improving the LiveKit Agents integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

@@ -218,7 +218,7 @@ navigation:
               - page: LiteLLM
                 path: docs/tracing/integrations/litellm.mdx
                 slug: litellm
-              - page: LiveKit
+              - page: LiveKit Agents
                 path: docs/tracing/integrations/livekit.mdx
                 slug: livekit
               - page: Llama Index
