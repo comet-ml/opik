@@ -1595,6 +1595,11 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         },
         thread_id=SESSION_ID,
         project_name="adk-test",
+        error_info={
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1610,7 +1615,130 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
                 usage=None,
                 provider="openai",
                 project_name="adk-test",
-                error_info=ANY_DICT,
+                error_info={
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
+                },
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    def get_weather(city: str) -> str:
+        1/0
+        return ""
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    with pytest.raises(Exception):
+        # `events_generator` generator will not produce a single event and finish immediately
+        # because first llm call fails.
+        # `_extract_final_response_text` will raise an exception because it is
+        # programmed to do so when there are no events (we still have to try to exhaust the generator though,
+        # because it is necessary for agent to actuallyexecute)
+        _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_BUT_NONE,
+        },
+        tags=["adk-test"],
+        output=None,
+        input={
+            "role": "user",
+            "parts": [{"text": "What is the weather in New York?"}],
+        },
+        thread_id=SESSION_ID,
+        project_name="adk-test",
+        error_info={
+            "exception_type": "ZeroDivisionError",
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=MODEL_NAME,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider=opik_adk_helpers.get_adk_provider(),
+                model=MODEL_NAME,
+                usage=ANY_DICT,
+                project_name="adk-test",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="get_weather",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="tool",
+                input={"city": "New York"},
+                output=None,
+                error_info={
+                    "exception_type": "ZeroDivisionError",
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
+                },
+                project_name="adk-test",
             ),
         ],
     )
