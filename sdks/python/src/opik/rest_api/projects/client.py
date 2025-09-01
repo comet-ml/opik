@@ -11,6 +11,8 @@ from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.trace_filter_public import TraceFilterPublic
+from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .raw_client import AsyncRawProjectsClient, RawProjectsClient
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
@@ -266,6 +268,8 @@ class ProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectMetricResponsePublic:
         """
@@ -282,6 +286,10 @@ class ProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -303,6 +311,8 @@ class ProjectsClient:
             interval=interval,
             interval_start=interval_start,
             interval_end=interval_end,
+            trace_filters=trace_filters,
+            thread_filters=thread_filters,
             request_options=request_options,
         )
         return _response.data
@@ -644,6 +654,8 @@ class AsyncProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectMetricResponsePublic:
         """
@@ -660,6 +672,10 @@ class AsyncProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -684,6 +700,8 @@ class AsyncProjectsClient:
             interval=interval,
             interval_start=interval_start,
             interval_end=interval_end,
+            trace_filters=trace_filters,
+            thread_filters=thread_filters,
             request_options=request_options,
         )
         return _response.data

@@ -336,7 +336,16 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_TRACE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
+                   arrayMap(
+                     v -> toDecimal64(
+                            greatest(
+                              least(if(isFinite(v), v, 0),  999999999.999999999),
+                              -999999999.999999999
+                            ),
+                            9
+                          ),
+                     quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -489,7 +498,16 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
+                   arrayMap(
+                     v -> toDecimal64(
+                            greatest(
+                              least(if(isFinite(v), v, 0),  999999999.999999999),
+                              -999999999.999999999
+                            ),
+                            9
+                          ),
+                     quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
             FROM threads_filtered
             GROUP BY bucket
             ORDER BY bucket

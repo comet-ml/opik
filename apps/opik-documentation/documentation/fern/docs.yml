@@ -75,6 +75,10 @@ tabs:
     display-name: Contributing
     icon: fa-regular fa-code-branch
     slug: /contributing
+  opik-university:
+    display-name: Opik University
+    icon: fa-regular fa-graduation-cap
+    slug: /opik-university
 navigation:
   - tab: documentation
     layout:
@@ -131,6 +135,9 @@ navigation:
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
+          - page: Supported models
+            path: docs/tracing/supported_models.mdx
+            slug: supported_models
           - page: SDK configuration
             path: docs/tracing/sdk_configuration.mdx
             slug: sdk_configuration
@@ -670,6 +677,66 @@ navigation:
             path: docs/contributing/bounties.mdx
             slug: bounties
             icon: fa-regular fa-gem
+  - tab: opik-university
+    layout:
+      - page: Overview
+        path: docs/opik-university/overview.mdx
+        slug: overview
+        icon: fa-regular fa-graduation-cap
+      - section: Intro
+        slug: /intro
+        contents:
+          - page: Opik Overview
+            path: docs/opik-university/1_intro/1.1-intro-opik-overview.mdx
+            slug: opik-overview
+          - page: Next steps / Set expectations
+            path: docs/opik-university/1_intro/1.2-intro-next-steps-set-expectations.mdx
+            slug: next-steps
+      - section: Observability
+        slug: /observability
+        contents:
+          - page: Log Traces
+            path: docs/opik-university/2_observability/2.1-observability-log-traces.mdx
+            slug: log-traces
+          - page: Annotate Traces
+            path: docs/opik-university/2_observability/2.2-observability-annotate-traces.mdx
+            slug: annotate-traces
+      - section: Evaluation
+        slug: /evaluation
+        contents:
+          - page: Evaluation Concepts and Overview
+            path: docs/opik-university/3_evaluation/3.1-evaluation-concepts-overview.mdx
+            slug: concepts-overview
+          - page: Create Evaluation Datasets
+            path: docs/opik-university/3_evaluation/3.2-evaluation-create-datasets.mdx
+            slug: create-datasets
+          - page: Define Evaluation Metrics
+            path: docs/opik-university/3_evaluation/3.3-evaluation-define-metrics.mdx
+            slug: define-metrics
+          - page: Evaluate your LLM Application
+            path: docs/opik-university/3_evaluation/3.4-evaluation-evaluate-llm-application.mdx
+            slug: evaluate-llm-app
+      - section: Prompt Engineering
+        slug: /prompt-engineering
+        contents:
+          - page: Prompt Management
+            path: docs/opik-university/4_prompt-engineering/4.1-prompt-engineering-management.mdx
+            slug: prompt-management
+          - page: Prompt Playground
+            path: docs/opik-university/4_prompt-engineering/4.2-prompt-engineering-playground.mdx
+            slug: prompt-playground
+      - section: Testing
+        slug: /testing
+        contents:
+          - page: PyTest Integration
+            path: docs/opik-university/5_testing/5.1-testing-pytest-integration.mdx
+            slug: pytest-integration
+      - section: Production Monitoring
+        slug: /production-monitoring
+        contents:
+          - page: Online Evaluation Rules
+            path: docs/opik-university/6_production-monitoring/6.1-production-monitoring-online-evaluation-rules.mdx
+            slug: online-evaluation-rules
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"

@@ -1110,7 +1110,16 @@ class SpanDAO {
             SELECT
                 project_id as project_id,
                 count(DISTINCT id) as span_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                arrayMap(
+                  v -> toDecimal64(
+                         greatest(
+                           least(if(isFinite(v), v, 0),  999999999.999999999),
+                           -999999999.999999999
+                         ),
+                         9
+                       ),
+                  quantiles(0.5, 0.9, 0.99)(duration)
+                ) AS duration,
                 sum(input_count) as input,
                 sum(output_count) as output,
                 sum(metadata_count) as metadata,

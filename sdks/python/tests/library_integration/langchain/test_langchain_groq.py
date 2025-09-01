@@ -16,28 +16,12 @@ from ...testlib import (
 
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, expected_usage, streaming",
-    [
-        (
-            langchain_groq.ChatGroq,
-            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
-            False,
-        ),
-        (
-            langchain_groq.ChatGroq,
-            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
-            True,
-        ),
-    ],
+    "streaming",
+    [False, True],
 )
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
     fake_backend,
     ensure_groq_configured,
-    llm_model,
-    expected_input_prompt,
-    expected_usage,
     streaming,
 ):
     llm_args = {
@@ -45,10 +29,11 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
         "name": "custom-groq-llm-name",
         "model": "openai/gpt-oss-20b",
     }
+
     if streaming is True:
         llm_args["streaming"] = streaming
 
-    llm = llm_model(**llm_args)
+    llm = langchain_groq.ChatGroq(**llm_args)
 
     template = "Given the title of play, write a synopsys for that. Title: {title}."
 
@@ -110,7 +95,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
                         output=ANY_BUT_NONE,
                         metadata=ANY_DICT,
                         type="llm",
-                        usage=expected_usage,
+                        usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name="Default Project",
                         model="gpt-oss-20b",

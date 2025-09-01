@@ -31,6 +31,8 @@ public class StatsMapper {
     public static final String TAGS = "tags";
     public static final String LLM_SPAN_COUNT = "llm_span_count";
     public static final String LLM_SPAN_COUNT_AVG = "llm_span_count_avg";
+    public static final String SPAN_COUNT = "span_count";
+    public static final String SPAN_COUNT_AVG = "span_count_avg";
     public static final String TRACE_COUNT = "trace_count";
     public static final String GUARDRAILS_FAILED_COUNT = "guardrails_failed_count";
     public static final String RECENT_ERROR_COUNT = "recent_error_count";
@@ -56,6 +58,7 @@ public class StatsMapper {
 
         if (entityCountLabel.equals("trace_count")) {
             stats.add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
+            stats.add(new AvgValueStat(SPAN_COUNT, row.get(SPAN_COUNT_AVG, Double.class)));
         }
 
         BigDecimal totalEstimatedCostAvg = row.get(TOTAL_ESTIMATED_COST_AVG, BigDecimal.class);
