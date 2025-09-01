@@ -406,7 +406,7 @@ pythonEvaluator:
   maxRetryAttempts: ${PYTHON_EVALUATOR_MAX_RETRY_ATTEMPTS:-4}
   # Default: 500
   # Description: Delay in milliseconds between retry attempts for failed requests to the Python evaluator service
-  retryDelay: ${PYTHON_EVALUATOR_RETRY_DELAY:-500}
+  retryDelay: ${PYTHON_EVALUATOR_RETRY_DELAY:-500ms}
 
 serviceToggles:
   # Default: true
