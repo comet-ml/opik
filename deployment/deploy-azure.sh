@@ -81,6 +81,61 @@ fix_agic_permissions() {
     fi
 }
 
+# Function to recover from failed upgrades - can be called manually
+recover_from_upgrade_failure() {
+    print_step "🔄 Recovering from Upgrade Failure"
+    print_info "This function helps recover from failed version upgrades"
+    
+    # Load environment variables if .env.azure exists
+    if [ -f ".env.azure" ]; then
+        source .env.azure
+    else
+        print_error ".env.azure not found. Please run from deployment directory."
+        return 1
+    fi
+    
+    print_info "Cleaning up failed upgrade state..."
+    
+    # Remove failed backend pods
+    print_info "Removing failed backend pods..."
+    kubectl delete pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
+    kubectl delete pods -l app.kubernetes.io/name=opik-python-backend -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
+    
+    # Clean up stuck replica sets
+    print_info "Cleaning up old replica sets..."
+    for deployment in opik-backend opik-frontend opik-python-backend; do
+        # Get old replica sets (with 0 replicas)
+        OLD_RS=$(kubectl get rs -n $NAMESPACE -l app.kubernetes.io/name=$deployment -o jsonpath='{.items[?(@.spec.replicas==0)].metadata.name}' 2>/dev/null || echo "")
+        if [ -n "$OLD_RS" ]; then
+            print_info "Removing old replica sets for $deployment: $OLD_RS"
+            echo "$OLD_RS" | xargs -r kubectl delete rs -n $NAMESPACE 2>/dev/null || true
+        fi
+    done
+    
+    # Reset ClickHouse database state
+    print_info "Resetting ClickHouse database state..."
+    if kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "SELECT 1" &>/dev/null; then
+        print_info "Cleaning ClickHouse migration state..."
+        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP DATABASE IF EXISTS opik" 2>/dev/null || true
+        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "CREATE DATABASE IF NOT EXISTS opik" 2>/dev/null || true
+        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOG" 2>/dev/null || true
+        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOGLOCK" 2>/dev/null || true
+        print_success "ClickHouse database state reset"
+    else
+        print_warning "ClickHouse not accessible for cleanup"
+    fi
+    
+    # Restart deployments to recover from stuck state
+    print_info "Restarting deployments to recover from stuck state..."
+    for deployment in opik-backend opik-python-backend; do
+        kubectl rollout restart deployment $deployment -n $NAMESPACE 2>/dev/null || true
+    done
+    
+    print_success "Recovery operations completed"
+    print_info "Monitor pod status with: kubectl get pods -n $NAMESPACE"
+    print_info "Check deployment status with: kubectl rollout status deployment/opik-backend -n $NAMESPACE"
+}
+
 # =============================================================================
 # OUTPUT FORMATTING FUNCTIONS  
 # =============================================================================
@@ -1138,13 +1193,136 @@ print_step "🚀 Installing Opik using Helm"
 # Create namespace if it doesn't exist
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-# Minimal cleanup - only remove resources that genuinely conflict with Helm
-print_info "Performing minimal cleanup to prevent Helm conflicts"
+# Check if this is an upgrade scenario (existing deployment exists)
+if helm list -n $NAMESPACE | grep -q "opik"; then
+    print_info "Existing Opik deployment detected - performing comprehensive upgrade cleanup"
+    
+    # Get current deployed version for comparison
+    CURRENT_VERSION=$(helm list -n $NAMESPACE -o json | jq -r '.[] | select(.name=="opik") | .app_version // .chart // "unknown"' 2>/dev/null || echo "unknown")
+    print_info "Current deployed version: $CURRENT_VERSION"
+    print_info "Target version: $OPIK_VERSION"
+    
+    # Check for stuck deployments (common in failed upgrades)
+    print_info "Checking for stuck deployment rollouts..."
+    STUCK_DEPLOYMENTS=""
+    for deployment in opik-backend opik-frontend opik-python-backend; do
+        if kubectl rollout status deployment/$deployment -n $NAMESPACE --timeout=5s &>/dev/null; then
+            print_success "$deployment rollout is healthy"
+        else
+            print_warning "$deployment rollout appears stuck - will force cleanup"
+            STUCK_DEPLOYMENTS="$STUCK_DEPLOYMENTS $deployment"
+        fi
+    done
+    
+    # Comprehensive cleanup for stuck deployments
+    if [ -n "$STUCK_DEPLOYMENTS" ]; then
+        print_info "Found stuck deployments:$STUCK_DEPLOYMENTS"
+        print_info "Performing force cleanup of stuck rollouts..."
+        
+        for deployment in $STUCK_DEPLOYMENTS; do
+            print_info "Cleaning up $deployment deployment..."
+            
+            # Kill all pods for this deployment to break deadlock
+            kubectl delete pods -l app.kubernetes.io/name=$deployment -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
+            
+            # Scale deployment to 0 to reset rollout state
+            kubectl scale deployment $deployment -n $NAMESPACE --replicas=0 2>/dev/null || true
+            
+            # Delete old replica sets to clean up history
+            kubectl get rs -n $NAMESPACE -l app.kubernetes.io/name=$deployment -o jsonpath='{.items[*].metadata.name}' | \
+                xargs -r kubectl delete rs -n $NAMESPACE 2>/dev/null || true
+        done
+        
+        print_info "Waiting for stuck deployments to fully terminate..."
+        sleep 45
+    fi
+    
+    # Clean up ClickHouse database state for version upgrades
+    print_info "Preparing ClickHouse database for version upgrade..."
+    
+    # Stop ClickHouse cluster managed by operator
+    kubectl patch chi opik-clickhouse -n $NAMESPACE --type='merge' -p='{"spec":{"stop":"yes"}}' 2>/dev/null || true
+    
+    # Wait for ClickHouse to stop
+    print_info "Waiting for ClickHouse to stop..."
+    sleep 30
+    
+    # Start ClickHouse temporarily for database cleanup
+    kubectl patch chi opik-clickhouse -n $NAMESPACE --type='merge' -p='{"spec":{"stop":"no"}}' 2>/dev/null || true
+    print_info "Starting ClickHouse temporarily for database cleanup..."
+    sleep 45
+    
+    # Check if ClickHouse is accessible and clean database state
+    CLICKHOUSE_CLEANUP_SUCCESS=false
+    for attempt in {1..3}; do
+        if kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "SELECT 1" &>/dev/null; then
+            print_info "ClickHouse accessible - cleaning database state for upgrade (attempt $attempt)"
+            
+            # Drop and recreate opik database to ensure clean migration state
+            kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP DATABASE IF EXISTS opik" 2>/dev/null || true
+            kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "CREATE DATABASE IF NOT EXISTS opik" 2>/dev/null || true
+            
+            # Clean up Liquibase tables in default database to reset migration state
+            kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOG" 2>/dev/null || true
+            kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOGLOCK" 2>/dev/null || true
+            
+            print_success "ClickHouse database cleaned for version upgrade"
+            CLICKHOUSE_CLEANUP_SUCCESS=true
+            break
+        else
+            print_warning "ClickHouse not accessible for cleanup (attempt $attempt/3)"
+            if [ $attempt -lt 3 ]; then
+                sleep 30
+            fi
+        fi
+    done
+    
+    if [ "$CLICKHOUSE_CLEANUP_SUCCESS" = "false" ]; then
+        print_warning "Could not clean ClickHouse database - migrations will handle cleanup"
+    fi
+    
+    # Stop ClickHouse again before continuing with upgrade
+    kubectl patch chi opik-clickhouse -n $NAMESPACE --type='merge' -p='{"spec":{"stop":"yes"}}' 2>/dev/null || true
+    sleep 15
 
-# Remove any existing TLS secret (Helm will recreate it)
-kubectl delete secret opik-tls-secret -n $NAMESPACE --ignore-not-found=true
+    # Scale down remaining stateful sets and deployments to release PVC locks
+    print_info "Scaling down all services to release PVC locks..."
+    kubectl scale statefulset opik-mysql -n $NAMESPACE --replicas=0 2>/dev/null || true
+    kubectl scale statefulset opik-redis-master -n $NAMESPACE --replicas=0 2>/dev/null || true
+    kubectl scale statefulset opik-zookeeper -n $NAMESPACE --replicas=0 2>/dev/null || true
+    kubectl scale deployment opik-minio -n $NAMESPACE --replicas=0 2>/dev/null || true
 
-print_success "Minimal cleanup completed - preserving all data storage"
+    # Remove any existing TLS secret (Helm will recreate it)
+    kubectl delete secret opik-tls-secret -n $NAMESPACE --ignore-not-found=true
+
+    # Wait for all pods to terminate
+    print_info "Waiting for all pods to terminate..."
+    sleep 30
+
+    # Remove existing PVCs that may have immutable spec conflicts
+    # Data is preserved because PVs have Retain policy
+    print_info "Removing existing PVCs to allow Helm to recreate them (data preserved on PVs)..."
+    kubectl delete pvc -n $NAMESPACE \
+        opik-minio \
+        data-opik-mysql-0 \
+        redis-data-opik-redis-master-0 \
+        storage-vc-template-chi-opik-clickhouse-cluster-0-0-0 \
+        data-opik-zookeeper-0 \
+        --ignore-not-found=true --timeout=60s
+
+    # CRITICAL: After deleting PVCs, the PVs become "Released" and cannot be rebound
+    # We need to clear the claimRef to make them "Available" again for rebinding
+    # This ensures Helm creates new PVCs that bind to our existing PVs with data
+    print_info "Making PVs available for rebinding by clearing claim references..."
+    kubectl patch pv opik-mysql-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
+    kubectl patch pv opik-minio-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
+    kubectl patch pv opik-redis-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
+    kubectl patch pv opik-clickhouse-pv --type json -p='[{"op": "remove", "path": "/spec/claimRef"}]' 2>/dev/null || true
+
+    print_success "Comprehensive upgrade cleanup completed - ready for version $OPIK_VERSION"
+else
+    print_info "Fresh installation detected - skipping upgrade cleanup"
+fi
 # Substitute environment variables in helm-values-azure-template.yaml
 print_info "Preparing Helm values with environment variables"
 
@@ -1352,12 +1530,95 @@ helm upgrade --install opik ./helm_chart/opik \
 
 print_success "🚀 Helm installation initiated"
 
+# =============================================================================
+# POST-DEPLOYMENT VALIDATION AND RECOVERY
+# =============================================================================
+
+print_step "📊 Post-deployment validation and recovery"
+print_info "Waiting for initial deployment to stabilize..."
+sleep 30
+
+# Validate ClickHouse first (critical for backend startup)
+print_info "Validating ClickHouse accessibility..."
+CLICKHOUSE_READY=false
+for attempt in {1..6}; do
+    if kubectl wait --for=condition=Ready pod -l app=clickhouse -n $NAMESPACE --timeout=30s &>/dev/null; then
+        if kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "SELECT 1" &>/dev/null; then
+            print_success "ClickHouse is ready and accessible"
+            CLICKHOUSE_READY=true
+            break
+        fi
+    fi
+    print_info "ClickHouse not ready yet (attempt $attempt/6), waiting 30 seconds..."
+    sleep 30
+done
+
+if [ "$CLICKHOUSE_READY" = "false" ]; then
+    print_warning "ClickHouse not accessible after 6 minutes - backend may fail to start"
+    print_info "Checking ClickHouse pod status:"
+    kubectl get pods -l app=clickhouse -n $NAMESPACE
+fi
+
+# Check deployment rollout status and fix stuck deployments
+print_info "Validating deployment rollouts..."
+FAILED_DEPLOYMENTS=""
+for deployment in opik-backend opik-frontend opik-python-backend; do
+    print_info "Checking $deployment rollout status..."
+    
+    if kubectl rollout status deployment/$deployment -n $NAMESPACE --timeout=120s &>/dev/null; then
+        print_success "$deployment deployment completed successfully"
+    else
+        print_warning "$deployment rollout failed or timed out"
+        FAILED_DEPLOYMENTS="$FAILED_DEPLOYMENTS $deployment"
+        
+        # Check if it's a stuck rollout due to image pull or init issues
+        print_info "Diagnosing $deployment issues..."
+        kubectl describe deployment $deployment -n $NAMESPACE | grep -A5 -B5 "Conditions\|Events" || true
+        
+        # Get pod status for this deployment
+        PODS=$(kubectl get pods -l app.kubernetes.io/name=$deployment -n $NAMESPACE --no-headers 2>/dev/null || echo "")
+        if [ -n "$PODS" ]; then
+            print_info "$deployment pod status:"
+            echo "$PODS"
+            
+            # Check for init container failures (common with ClickHouse connectivity)
+            if echo "$PODS" | grep -q "Init:"; then
+                print_warning "$deployment has init container issues - likely ClickHouse connectivity"
+                
+                # If ClickHouse is ready but backend still failing, restart the deployment
+                if [ "$CLICKHOUSE_READY" = "true" ] && [ "$deployment" = "opik-backend" ]; then
+                    print_info "ClickHouse is ready but backend init failing - restarting deployment"
+                    kubectl rollout restart deployment/$deployment -n $NAMESPACE
+                    
+                    # Wait for restart to take effect
+                    print_info "Waiting for $deployment restart to complete..."
+                    if kubectl rollout status deployment/$deployment -n $NAMESPACE --timeout=180s &>/dev/null; then
+                        print_success "$deployment restarted successfully"
+                        # Remove from failed list
+                        FAILED_DEPLOYMENTS=$(echo "$FAILED_DEPLOYMENTS" | sed "s/$deployment//g")
+                    else
+                        print_warning "$deployment restart still failing"
+                    fi
+                fi
+            fi
+        fi
+    fi
+done
+
+# Summary of deployment status
+if [ -z "$FAILED_DEPLOYMENTS" ]; then
+    print_success "✅ All deployments completed successfully"
+else
+    print_warning "⚠️ Some deployments need attention:$FAILED_DEPLOYMENTS"
+    print_info "This is often normal during upgrades - services may take additional time to stabilize"
+fi
+
 # Validate that all services are using the correct PVCs
 print_info "Validating PVC usage by services"
 kubectl get pvc -n $NAMESPACE
 
-# Basic validation that Helm deployment succeeded
-print_info "Validating deployment completion"
+# Final deployment status overview
+print_info "Final deployment status overview"
 kubectl get pods -n $NAMESPACE
 
 # Clean up temporary file
@@ -1538,6 +1799,19 @@ print_info "Uninstall deployment:"
 print_info "  helm uninstall opik -n $NAMESPACE"
 
 print_section "🔧 Troubleshooting Commands"
+print_info "If upgrade fails with backend/ClickHouse issues:"
+print_info "  # Use the built-in recovery function:"
+print_info "  source ./deploy-azure.sh && recover_from_upgrade_failure"
+print_info ""
+print_info "  # Or manually check rollout status:"
+print_info "  kubectl rollout status deployment/opik-backend -n $NAMESPACE"
+print_info "  kubectl get pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE"
+print_info ""
+print_info "  # Manually fix ClickHouse state:"
+print_info "  kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query \"DROP DATABASE IF EXISTS opik\""
+print_info "  kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query \"CREATE DATABASE IF NOT EXISTS opik\""
+print_info "  kubectl delete pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE"
+print_info ""
 print_info "If authentication fails with AADSTS650056 error:"
 print_info "  az ad app permission list --id $APP_ID"
 print_info "  az ad app permission admin-consent --id $APP_ID"
@@ -1552,7 +1826,10 @@ print_info "  kubectl logs -l app=ingress-appgw -n kube-system --tail=50"
 print_info "  kubectl get ingress -n $NAMESPACE"
 print_info ""
 print_info "If AGIC has permission issues (403 Forbidden errors):"
-print_info "  # Check AGIC logs for permission errors:"
+print_info "  # Use the built-in fix function:"
+print_info "  source ./deploy-azure.sh && fix_agic_permissions"
+print_info ""
+print_info "  # Or check AGIC logs for permission errors:"
 print_info "  kubectl logs -l app=ingress-appgw -n kube-system | grep -E 'Forbidden|AuthorizationFailed|403'"
 print_info ""
 print_info "  # Get the actual AGIC identity from logs:"
