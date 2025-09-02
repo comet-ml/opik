@@ -71,7 +71,7 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: docker.io/bitnami/zookeeper:3.9.3-debian-12-r16
+    image: docker.io/bitnamilegacy/zookeeper:3.9.3-debian-12-r16
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
