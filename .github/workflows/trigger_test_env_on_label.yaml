@@ -41,6 +41,7 @@ jobs:
       is_release: false
       # ref: ${{ github.event.pull_request.head.ref }}
       ref: ${{ inputs.ref }}
+      build_guardrails: false
 
 
   trigger_deployment:

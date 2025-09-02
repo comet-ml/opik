@@ -21,6 +21,11 @@ on:
         required: true
         description: Is release build
         default: false
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
   workflow_call:
     inputs:
       version:
@@ -136,6 +141,7 @@ jobs:
       is_release: ${{ inputs.is_release || false }}
 
   build-guardrails-backend:
+    if: ${{ inputs.build_guardrails || true }}
     needs:
       - set-version
     secrets: inherit
