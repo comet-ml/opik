@@ -1,31 +1,25 @@
 ---
-description: How to send [FRAMEWORK_NAME] telemetry data to Opik using OpenTelemetry
+description: How to send Semantic Kernel telemetry data to Opik using OpenTelemetry
 ---
 
-# [FRAMEWORK_NAME] Integration via OpenTelemetry
+# Semantic Kernel Integration via OpenTelemetry
 
-[Brief description of the framework and what it's used for. For example: "[FRAMEWORK_NAME] is a Python framework designed to build production-grade AI applications."]
+Semantic Kernel is Microsoft's AI orchestration framework designed to simplify the integration of AI services into applications. It provides a unified programming model for working with different AI models, memory systems, and plugins, making it easier to build intelligent applications.
 
-[Brief explanation of the framework's primary advantage or key feature that makes it valuable for AI development.]
+Semantic Kernel's primary advantage is its seamless integration with Microsoft's AI ecosystem and its plugin architecture that allows developers to easily extend functionality with custom skills and connectors.
 
-<Frame>
-  <img src="/img/tracing/[framework_name]_integration.png" alt="[FRAMEWORK_NAME] tracing" />
-
-<!--
-Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png
-Documentation reference path: /img/tracing/[framework_name]_integration.png
--->
-</Frame>
 
 ## Getting started
 
-To use the [FRAMEWORK_NAME] integration with Opik, you will need to have [FRAMEWORK_NAME] and the required OpenTelemetry packages installed:
+To use the Semantic Kernel integration with Opik, you will need to have Semantic Kernel and the required OpenTelemetry packages installed:
 
 ```bash
-pip install --upgrade [framework_package] [framework_otel_packages] opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+pip install semantic-kernel openinference-instrumentation-semantic-kernel opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
-In addition, you will need to set the following environment variables to configure OpenTelemetry to send data to Opik:
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
@@ -94,41 +88,36 @@ In addition, you will need to set the following environment variables to configu
 
 </Tabs>
 
-## Using Opik with [FRAMEWORK_NAME]
+## Using Opik with Semantic Kernel
 
-To track your [FRAMEWORK_NAME] applications, you will need to configure OpenTelemetry to instrument your framework:
-
-```python
-[framework_specific_instrumentation_code]
-```
-
-## Advanced usage
-
-<!--
-⚠️  DO NOT AUTO-GENERATE THIS SECTION ⚠️
-Only include this section if the framework has genuine advanced features to showcase.
-Examples of legitimate advanced features:
-- Framework-specific configuration options
-- Multi-agent workflows
-- Custom tool integrations
-- Production-ready enterprise configurations
-
-❌ DO NOT include:
-- Generic OpenTelemetry configurations
-- Batch vs Simple span processors
-- Generic resource configurations
-- Standard tracer provider setups
--->
-
-You can customize [FRAMEWORK_NAME] for more advanced use cases:
+Set up OpenTelemetry instrumentation for Semantic Kernel:
 
 ```python
-[framework_specific_advanced_features]
-```
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from openinference.instrumentation.semantic_kernel import SemanticKernelInstrumentor
 
-[Description of framework-specific advanced features, not generic OpenTelemetry configurations.]
+# Configure the OTLP exporter
+otlp_exporter = OTLPSpanExporter()
+
+# Set up the tracer provider
+trace.set_tracer_provider(TracerProvider())
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(otlp_exporter)
+)
+
+# Instrument Semantic Kernel
+SemanticKernelInstrumentor().instrument()
+
+# Your Semantic Kernel code will now automatically send traces to Opik
+import semantic_kernel as sk
+
+kernel = sk.Kernel()
+# ... kernel configuration
+```
 
 ## Further improvements
 
-If you would like to see us improve this integration, simply open a new feature
-request on [Github](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the Semantic Kernel integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
