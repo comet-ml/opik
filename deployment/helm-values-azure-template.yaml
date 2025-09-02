@@ -119,23 +119,51 @@ component:
 demoDataJob:
   enabled: false
 
-# Configure resources for Azure
+# =============================================================================
+# AZURE-SPECIFIC PERSISTENCE CONFIGURATION
+# =============================================================================
+persistence:
+  # Storage class with retain policy for data persistence across cluster deletions
+  storageClass:
+    create: true
+    name: "managed-standard-retain"
+    reclaimPolicy: "Retain"  # Keeps Azure disks when PVCs are deleted
+    skuName: "Standard_LRS"
+    allowVolumeExpansion: true
+    volumeBindingMode: "WaitForFirstConsumer"
+    annotations: {}
+    parameters:
+      # Azure-specific parameters
+      cachingmode: ReadOnly
+      kind: Managed
+      # CRITICAL: Store disks in main resource group, not auto-generated AKS resource group
+      # This ensures disks survive cluster deletion
+      resourceGroup: "$RESOURCE_GROUP"
+
+# Configure resources for Azure with persistent storage
 clickhouse:
   enabled: true
-  persistence:
-    enabled: true
-    size: 20Gi
+  storageClassName: "managed-standard-retain"
+  storage: 32Gi
 
 mysql:
   enabled: true
   primary:
     persistence:
       enabled: true
-      size: 10Gi
-
+      size: 32Gi
+      storageClass: "managed-standard-retain"
 redis:
   enabled: true
   master:
     persistence:
       enabled: true
       size: 5Gi
+      storageClass: "managed-standard-retain"
+
+minio:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 128Gi
+    storageClass: "managed-standard-retain"

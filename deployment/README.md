@@ -336,3 +336,63 @@ This routing setup ensures that:
 | **AKS Nodes** | aks-subnet | 10.0.1.0/24 | Kubernetes cluster |
 | **App Gateway** | appgw-subnet | 10.0.2.0/24 | Load balancer |
 | **Virtual Network** | opik-vnet | 10.0.0.0/16 | Network isolation |
+
+## 🛡️ Data Persistence & Automatic Recovery
+
+### Automatic Data Protection
+
+The deployment script automatically creates persistent disks in your **main resource group** (`opik-rg`), ensuring your data survives cluster deletion and recreation. 
+
+### How Data Persistence Works
+
+During deployment, the script:
+
+1. **🔍 Discovers existing data disks** with `opik-*` naming pattern
+2. **♻️ Reuses existing disks** automatically (preserves your data)
+3. **🆕 Creates new disks** only if none exist (fresh deployment)
+4. **📍 Stores disks in main resource group** (survives cluster deletion)
+
+### Safe Cluster Operations
+
+#### 🗑️ Safe Cluster Deletion
+
+You can safely delete the entire AKS cluster without losing data:
+
+```bash
+# ✅ Safe - deletes cluster but preserves data disks in main resource group
+az aks delete --resource-group opik-rg --name opik-aks
+
+# ✅ Also safe - the auto-generated resource group does NOT contain your data
+# MC_opik-rg_opik-aks_northeurope can be deleted without data loss
+```
+
+**Why it's safe:**
+- Data disks are stored in the **main resource group** (`opik-rg`)
+- AKS cluster deletion only removes cluster resources, not data disks
+- Auto-generated resource groups (`MC_*`) don't contain persistent data
+
+#### 🔄 Automatic Data Recovery
+
+After cluster deletion/recreation, simply redeploy:
+
+```bash
+cd deployment
+./deploy-azure.sh
+```
+
+**The script automatically:**
+- ✅ Detects your existing data disks
+- ✅ Reattaches them to the new cluster  
+- ✅ Preserves all your historical data
+- ✅ No manual intervention required
+
+**No separate recovery script needed** - everything is handled automatically!
+
+### Multiple Deployment Safety
+
+Running the deployment script multiple times is completely safe:
+
+- **🔄 Idempotent operations** - script can be run repeatedly
+- **📊 Data preservation** - existing data is never overwritten
+- **⚙️ Infrastructure updates** - safely updates infrastructure while preserving data
+- **🚀 Version upgrades** - update `OPIK_VERSION` and redeploy safely

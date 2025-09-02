@@ -81,6 +81,36 @@ fix_agic_permissions() {
     fi
 }
 
+# Function to cleanup resources from failed runs
+cleanup_failed_deployment() {
+    local namespace="$1"
+    print_step "Cleaning up resources from previous failed deployments"
+    
+    # Remove any stuck TLS secrets (OAuth2 secrets now managed by chart)
+    kubectl delete secret opik-tls-secret -n "$namespace" --ignore-not-found=true
+    
+    # Remove any stuck PVCs that could cause immutable field errors
+    print_info "Force deleting PVCs (this will remove all data)..."
+    for pvc_name in "opik-minio" "data-opik-clickhouse-cluster-0-0-0" "data-opik-mysql-0"; do
+        if kubectl get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+            print_info "Force deleting PVC: $pvc_name"
+            kubectl patch pvc "$pvc_name" -n "$namespace" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+            kubectl delete pvc "$pvc_name" -n "$namespace" --force --grace-period=0 &>/dev/null || true
+        fi
+    done
+    
+    # Also cleanup any ClickHouse PVCs
+    kubectl get pvc -n "$namespace" -o name 2>/dev/null | grep "storage-vc-template-chi" | while read pvc_path; do
+        pvc_name=$(echo "$pvc_path" | sed 's|persistentvolumeclaim/||')
+        print_info "Force deleting ClickHouse PVC: $pvc_name"
+        kubectl patch pvc "$pvc_name" -n "$namespace" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+        kubectl delete pvc "$pvc_name" -n "$namespace" --force --grace-period=0 &>/dev/null || true
+    done
+    
+    print_warning "PVC cleanup will delete all stored data! Only use for clean redeployments."
+    print_success "Cleanup completed"
+}
+
 # =============================================================================
 # OUTPUT FORMATTING FUNCTIONS  
 # =============================================================================
@@ -128,6 +158,27 @@ print_key_value() {
     local value="$2"
     printf "   %-20s: %s\n" "$key" "$value"
 }
+
+# =============================================================================
+# SCRIPT INITIALIZATION
+# =============================================================================
+
+# Check for cleanup flag
+if [ "${1:-}" = "--cleanup" ]; then
+    if [ -f ".env.azure" ]; then
+        source .env.azure
+        if [ -n "${NAMESPACE:-}" ]; then
+            cleanup_failed_deployment "$NAMESPACE"
+            exit 0
+        else
+            print_error "NAMESPACE not found in .env.azure"
+            exit 1
+        fi
+    else
+        print_error ".env.azure file not found"
+        exit 1
+    fi
+fi
 
 # =============================================================================
 # ENVIRONMENT CONFIGURATION
@@ -390,33 +441,6 @@ else
         --service-cidr 10.1.0.0/16 \
         --dns-service-ip 10.1.0.10
     print_success "☸️ Created AKS cluster $AKS_CLUSTER_NAME with VNet integration"
-fi
-
-# =============================================================================
-# AKS PERMISSIONS SETUP
-# =============================================================================
-
-print_step "🔐 Configuring AKS cluster permissions"
-
-# Get AKS cluster's managed identity
-AKS_IDENTITY_PRINCIPAL_ID=$(az aks show --name $AKS_CLUSTER_NAME --resource-group $RESOURCE_GROUP --query "identity.principalId" -o tsv)
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-if [ -n "$AKS_IDENTITY_PRINCIPAL_ID" ] && [ "$AKS_IDENTITY_PRINCIPAL_ID" != "null" ]; then
-    print_info "AKS Managed Identity Principal ID: $AKS_IDENTITY_PRINCIPAL_ID"
-    
-    # Grant Contributor permission on the resource group for disk creation
-    print_info "Granting Contributor permission to AKS on resource group for disk management..."
-    az role assignment create \
-        --role "Contributor" \
-        --assignee "$AKS_IDENTITY_PRINCIPAL_ID" \
-        --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
-        --only-show-errors || print_info "Permission may already exist"
-    
-    print_success "AKS permissions configured successfully"
-else
-    print_error "Could not retrieve AKS managed identity principal ID"
-    exit 1
 fi
 
 # =============================================================================
@@ -1138,13 +1162,156 @@ print_step "🚀 Installing Opik using Helm"
 # Create namespace if it doesn't exist
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-# Minimal cleanup - only remove resources that genuinely conflict with Helm
-print_info "Performing minimal cleanup to prevent Helm conflicts"
+# Clean up any existing resources that might conflict with Helm
+print_info "Cleaning up any existing resources to prevent Helm conflicts"
 
-# Remove any existing TLS secret (Helm will recreate it)
+# First, scale down deployments that might be using PVCs
+print_info "Scaling down deployments to release PVC locks..."
+kubectl scale deployment --all --replicas=0 -n $NAMESPACE &>/dev/null || true
+kubectl scale statefulset --all --replicas=0 -n $NAMESPACE &>/dev/null || true
+
+# Wait a moment for pods to terminate
+print_info "Waiting for pods to terminate..."
+sleep 10
+
+# Remove any existing secrets (TLS only - OAuth2 is now managed by chart)
 kubectl delete secret opik-tls-secret -n $NAMESPACE --ignore-not-found=true
 
-print_success "Minimal cleanup completed - preserving all data storage"
+# Remove any existing PVCs that might have immutable field conflicts
+print_info "Cleaning up existing PersistentVolumeClaims..."
+
+# Function to force delete PVC with finalizer removal
+force_delete_pvc() {
+    local pvc_name="$1"
+    local namespace="$2"
+    
+    if kubectl get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+        print_info "Deleting PVC $pvc_name..."
+        
+        # First, try normal deletion
+        kubectl delete pvc "$pvc_name" -n "$namespace" --timeout=10s &>/dev/null || true
+        
+        # Check if it's stuck in Terminating state
+        PVC_STATUS=$(kubectl get pvc "$pvc_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+        
+        if [ "$PVC_STATUS" = "Terminating" ] || kubectl get pvc "$pvc_name" -n "$namespace" &>/dev/null; then
+            print_warning "PVC $pvc_name is stuck - removing finalizers..."
+            
+            # Remove finalizers to allow deletion
+            kubectl patch pvc "$pvc_name" -n "$namespace" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+            
+            # Force delete with grace period 0
+            kubectl delete pvc "$pvc_name" -n "$namespace" --force --grace-period=0 &>/dev/null || true
+            
+            print_success "Force deleted PVC $pvc_name"
+        else
+            print_success "Deleted PVC $pvc_name"
+        fi
+    fi
+}
+
+# Delete common PVCs that cause conflicts
+force_delete_pvc "opik-minio" "$NAMESPACE"
+force_delete_pvc "data-opik-clickhouse-cluster-0-0-0" "$NAMESPACE"
+force_delete_pvc "data-opik-mysql-0" "$NAMESPACE"
+
+# Also delete any other ClickHouse related PVCs
+print_info "Checking for additional ClickHouse PVCs..."
+kubectl get pvc -n "$NAMESPACE" -o name | grep "storage-vc-template-chi" | while read pvc_path; do
+    pvc_name=$(echo "$pvc_path" | sed 's|persistentvolumeclaim/||')
+    force_delete_pvc "$pvc_name" "$NAMESPACE"
+done
+
+# Wait for all resources to be completely removed before proceeding
+print_info "Waiting for resource deletion to complete..."
+MAX_WAIT=60
+WAIT_COUNT=0
+
+# Wait for TLS secret to be deleted  
+while kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null && [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    print_info "Waiting for TLS secret to be deleted... ($WAIT_COUNT/$MAX_WAIT)"
+    sleep 2
+    WAIT_COUNT=$((WAIT_COUNT + 2))
+done
+
+# Reset counter for PVC cleanup
+WAIT_COUNT=0
+
+# Wait for PVCs to be deleted (this is critical for avoiding immutable field errors)
+while (kubectl get pvc opik-minio -n $NAMESPACE &>/dev/null || kubectl get pvc data-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE &>/dev/null || kubectl get pvc data-opik-mysql-0 -n $NAMESPACE &>/dev/null) && [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    print_info "Waiting for PVCs to be deleted... ($WAIT_COUNT/$MAX_WAIT)"
+    sleep 2
+    WAIT_COUNT=$((WAIT_COUNT + 2))
+done
+
+# Force cleanup any remaining problematic resources
+if kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null; then
+    print_error "TLS secret still exists after cleanup attempt. Forcing removal..."
+    kubectl patch secret opik-tls-secret -n $NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge &>/dev/null || true
+    kubectl delete secret opik-tls-secret -n $NAMESPACE --force --grace-period=0 &>/dev/null || true
+    sleep 3
+fi
+
+# Force cleanup any remaining PVCs that could cause immutable field errors
+PVC_CLEANUP_NEEDED=false
+for pvc_name in "opik-minio" "data-opik-clickhouse-cluster-0-0-0" "data-opik-mysql-0"; do
+    if kubectl get pvc $pvc_name -n $NAMESPACE &>/dev/null; then
+        print_warning "PVC $pvc_name still exists - forcing removal to prevent immutable field errors..."
+        
+        # Remove finalizers first to prevent hanging
+        kubectl patch pvc $pvc_name -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+        
+        # Then force delete
+        kubectl delete pvc $pvc_name -n $NAMESPACE --force --grace-period=0 &>/dev/null || true
+        PVC_CLEANUP_NEEDED=true
+    fi
+done
+
+# Also check for any stuck ClickHouse PVCs
+kubectl get pvc -n $NAMESPACE -o name 2>/dev/null | grep "storage-vc-template-chi" | while read pvc_path; do
+    pvc_name=$(echo "$pvc_path" | sed 's|persistentvolumeclaim/||')
+    if kubectl get pvc "$pvc_name" -n $NAMESPACE &>/dev/null; then
+        print_warning "ClickHouse PVC $pvc_name still exists - forcing removal..."
+        kubectl patch pvc "$pvc_name" -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+        kubectl delete pvc "$pvc_name" -n $NAMESPACE --force --grace-period=0 &>/dev/null || true
+        PVC_CLEANUP_NEEDED=true
+    fi
+done
+
+if [ "$PVC_CLEANUP_NEEDED" = true ]; then
+    print_info "Waiting additional time for PVC cleanup to complete..."
+    sleep 10
+fi
+
+# Final validation
+REMAINING_RESOURCES=""
+if kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null; then
+    REMAINING_RESOURCES="$REMAINING_RESOURCES opik-tls-secret(secret)"
+fi
+
+for pvc_name in "opik-minio" "data-opik-clickhouse-cluster-0-0-0" "data-opik-mysql-0"; do
+    if kubectl get pvc $pvc_name -n $NAMESPACE &>/dev/null; then
+        REMAINING_RESOURCES="$REMAINING_RESOURCES $pvc_name(pvc)"
+    fi
+done
+
+if [ -n "$REMAINING_RESOURCES" ]; then
+    print_error "Cannot remove existing resources: $REMAINING_RESOURCES"
+    print_error "Manual intervention required. Please delete these resources manually:"
+    echo "$REMAINING_RESOURCES" | tr ' ' '\n' | while read resource; do
+        if [[ $resource == *"(secret)"* ]]; then
+            resource_name=$(echo $resource | sed 's/(secret)//')
+            print_info "kubectl delete secret $resource_name -n $NAMESPACE --force"
+        elif [[ $resource == *"(pvc)"* ]]; then
+            resource_name=$(echo $resource | sed 's/(pvc)//')
+            print_info "kubectl delete pvc $resource_name -n $NAMESPACE --force"
+        fi
+    done
+    exit 1
+else
+    print_success "Successfully cleaned up all conflicting resources"
+fi
+
 # Substitute environment variables in helm-values-azure-template.yaml
 print_info "Preparing Helm values with environment variables"
 
@@ -1203,162 +1370,133 @@ envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
 
 print_success "Environment variables substituted in Helm values"
 
-# =============================================================================
-# PERSISTENT DISK MANAGEMENT
-# =============================================================================
+# Final pre-deployment check to ensure no resource conflicts
+print_info "Final pre-deployment verification"
 
-print_step "💾 Managing persistent disks for data persistence"
-
-# Get the location for disk creation
-DISK_LOCATION=$LOCATION
-
-print_info "Creating persistent disks in main resource group: $RESOURCE_GROUP"
-print_info "This ensures data survives cluster deletion"
-
-# Extract disk sizes from helm template to keep them centralized
-print_info "Extracting disk sizes from Helm template..."
-MYSQL_SIZE=$(grep -A5 "mysql:" helm-values-azure-template.yaml | grep "size:" | head -1 | sed 's/.*size: //; s/Gi//')
-CLICKHOUSE_SIZE=$(grep -A10 "clickhouse:" helm-values-azure-template.yaml | grep "storage:" | head -1 | sed 's/.*storage: //; s/Gi//')
-MINIO_SIZE=$(grep -A5 "minio:" helm-values-azure-template.yaml | grep "size:" | head -1 | sed 's/.*size: //; s/Gi//')
-REDIS_SIZE=$(grep -A10 "redis:" helm-values-azure-template.yaml | grep "size:" | head -1 | sed 's/.*size: //; s/Gi//')
-
-print_success "Disk sizes from template: MySQL=${MYSQL_SIZE}GB, ClickHouse=${CLICKHOUSE_SIZE}GB, MinIO=${MINIO_SIZE}GB, Redis=${REDIS_SIZE}GB"
-
-# Function to find or create disk with proper naming
-find_or_create_opik_disk() {
-    local service_name="$1"
-    local size_gb="$2"
-    local service_name_upper=$(echo "$service_name" | tr '[:lower:]' '[:upper:]')
-    local var_name_disk_name="${service_name_upper}_DISK_NAME"
-    local var_name_disk_id="${service_name_upper}_DISK_ID"
-    
-    # Look for existing opik disk for this service
-    print_info "Looking for existing $service_name data disk..."
-    local existing_disk=$(az disk list --resource-group $RESOURCE_GROUP --query "[?starts_with(name, 'opik-${service_name}-data')].{name:name, id:id}" -o json)
-    
-    if [ "$existing_disk" != "[]" ] && [ -n "$existing_disk" ]; then
-        # Found existing disk(s) - use the first one
-        local disk_name=$(echo "$existing_disk" | jq -r '.[0].name')
-        local disk_id=$(echo "$existing_disk" | jq -r '.[0].id')
-        
-        print_success "Found existing $service_name disk: $disk_name"
-        print_info "Reusing existing data - this preserves your previous data!"
-        
-        # Check if multiple disks exist and warn user
-        local disk_count=$(echo "$existing_disk" | jq '. | length')
-        if [ "$disk_count" -gt 1 ]; then
-            print_warning "Multiple $service_name disks found:"
-            echo "$existing_disk" | jq -r '.[] | "  - \(.name)"'
-            print_warning "Using the first one: $disk_name"
-        fi
-        
-        # Export the variables
-        eval "export $var_name_disk_name='$disk_name'"
-        eval "export $var_name_disk_id='$disk_id'"
-    else
-        # No existing disk found - create new one
-        print_info "No existing $service_name disk found - creating new one"
-        local new_disk_name="opik-${service_name}-data-$(date +%s)"
-        
-        print_info "Creating $service_name data disk: $new_disk_name (${size_gb}GB)"
-        az disk create \
-            --resource-group $RESOURCE_GROUP \
-            --name $new_disk_name \
-            --size-gb $size_gb \
-            --location $DISK_LOCATION \
-            --sku Standard_LRS
-        
-        local new_disk_id=$(az disk show --resource-group $RESOURCE_GROUP --name $new_disk_name --query id -o tsv)
-        print_success "Created new $service_name data disk: $new_disk_name"
-        
-        # Export the variables
-        eval "export $var_name_disk_name='$new_disk_name'"
-        eval "export $var_name_disk_id='$new_disk_id'"
+# Check for any remaining secrets (TLS only - OAuth2 now managed by chart)
+if kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null; then
+    print_error "CRITICAL: TLS secret still exists before Helm deployment. This will cause deployment failure."
+    print_info "Attempting emergency cleanup..."
+    kubectl delete secret opik-tls-secret -n $NAMESPACE --force --grace-period=0 &>/dev/null || true
+    sleep 3
+    if kubectl get secret opik-tls-secret -n $NAMESPACE &>/dev/null; then
+        print_error "Emergency cleanup failed. Cannot proceed with deployment."
+        print_info "Manual fix required: kubectl delete secret opik-tls-secret -n $NAMESPACE --force"
+        exit 1
     fi
-}
+    print_warning "Emergency cleanup successful - proceeding with deployment"
+fi
 
-# Create or find disks for each service using sizes from template
-find_or_create_opik_disk "mysql" "$MYSQL_SIZE"
-find_or_create_opik_disk "clickhouse" "$CLICKHOUSE_SIZE" 
-find_or_create_opik_disk "minio" "$MINIO_SIZE"
-find_or_create_opik_disk "redis" "$REDIS_SIZE"
+# Check for any remaining PVCs that could cause immutable field errors
+CONFLICTING_PVCS=""
+for pvc_name in "opik-minio" "data-opik-clickhouse-cluster-0-0-0" "data-opik-mysql-0"; do
+    if kubectl get pvc $pvc_name -n $NAMESPACE &>/dev/null; then
+        CONFLICTING_PVCS="$CONFLICTING_PVCS $pvc_name"
+    fi
+done
 
-print_success "💾 Persistent disks ready"
-print_info "Data will survive cluster deletion - disks are in main resource group"
-
-# Configure existingClaim variables based on whether we're in a fresh deployment
-print_info "Configuring persistence strategy"
-echo "📝 Using pre-created PVs with automatic PVC binding by Helm"
-echo "🔗 Helm will create PVCs that automatically bind to our pre-created PVs"
-
-print_success "Persistence configuration prepared"
-
-# Create PersistentVolumes for pre-created disks
-print_step "🔗 Creating PersistentVolumes for pre-created disks"
-
-# Note: Storage class will be created by Helm during deployment
-
-# Function to create PV only - let Helm create PVCs
-create_pv_for_disk() {
-    local service_name="$1"
-    local disk_id="$2"
-    local size="$3"
-    local pv_name="opik-${service_name}-pv"
+if [ -n "$CONFLICTING_PVCS" ]; then
+    print_error "CRITICAL: Existing PVCs will cause immutable field errors:$CONFLICTING_PVCS"
+    print_info "Attempting emergency PVC cleanup..."
+    for pvc_name in $CONFLICTING_PVCS; do
+        # Remove finalizers first to prevent hanging
+        kubectl patch pvc $pvc_name -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+        kubectl delete pvc $pvc_name -n $NAMESPACE --force --grace-period=0 &>/dev/null || true
+    done
+    sleep 5
     
-    print_info "Creating PV for $service_name (Helm will create PVC)..."
+    # Check if cleanup was successful
+    REMAINING_PVCS=""
+    for pvc_name in $CONFLICTING_PVCS; do
+        if kubectl get pvc $pvc_name -n $NAMESPACE &>/dev/null; then
+            REMAINING_PVCS="$REMAINING_PVCS $pvc_name"
+        fi
+    done
     
-    # Create PersistentVolume that Helm-created PVCs can bind to
-    cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: $pv_name
-  labels:
-    app.kubernetes.io/name: opik
-    service: $service_name
-spec:
-  capacity:
-    storage: ${size}Gi
-  accessModes:
-  - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: managed-standard-retain
-  csi:
-    driver: disk.csi.azure.com
-    volumeHandle: $disk_id
-    fsType: ext4
-EOF
+    if [ -n "$REMAINING_PVCS" ]; then
+        print_error "Emergency PVC cleanup failed. Cannot proceed with deployment."
+        print_info "Manual fix required:"
+        for pvc_name in $REMAINING_PVCS; do
+            print_info "kubectl delete pvc $pvc_name -n $NAMESPACE --force"
+        done
+        exit 1
+    fi
+    print_warning "Emergency PVC cleanup successful - proceeding with deployment"
+else
+    print_success "No conflicting PVCs detected - safe to proceed"
+fi
 
-    print_success "Created PV $pv_name for $service_name"
-}
+print_success "Pre-deployment verification completed - no resource conflicts detected"
 
-# Create PVs for all services using sizes from template
-create_pv_for_disk "mysql" "$MYSQL_DISK_ID" "$MYSQL_SIZE"
-create_pv_for_disk "clickhouse" "$CLICKHOUSE_DISK_ID" "$CLICKHOUSE_SIZE"
-create_pv_for_disk "minio" "$MINIO_DISK_ID" "$MINIO_SIZE" 
-create_pv_for_disk "redis" "$REDIS_DISK_ID" "$REDIS_SIZE"
-
-print_success "🔗 All PersistentVolumes created - Helm will create PVCs that bind to them"
-
-# Final pre-deployment setup
-print_info "Ready for Helm deployment"
-
-# Install or upgrade Opik with pre-created persistent disks
+# Install or upgrade Opik with forced replacement to handle any existing resources
 helm upgrade --install opik ./helm_chart/opik \
     --namespace $NAMESPACE \
     --values helm-values-azure-resolved.yaml \
     --force \
-    --timeout 15m
+    --debug \
+    --timeout 5m
 
 print_success "🚀 Helm installation initiated"
 
-# Validate that all services are using the correct PVCs
-print_info "Validating PVC usage by services"
-kubectl get pvc -n $NAMESPACE
+# Validate OAuth2 secret was created correctly
+print_info "Validating OAuth2 secret deployment"
+RETRY_COUNT=0
+MAX_RETRIES=10
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if kubectl get secret opik-oauth2-proxy -n $NAMESPACE &>/dev/null; then
+        # Check if the secret has the correct cookie-secret
+        DEPLOYED_COOKIE_SECRET=$(kubectl get secret opik-oauth2-proxy -n $NAMESPACE -o jsonpath='{.data.cookie-secret}' | base64 -d 2>/dev/null || echo "")
+        DEPLOYED_CLIENT_SECRET=$(kubectl get secret opik-oauth2-proxy -n $NAMESPACE -o jsonpath='{.data.client-secret}' | base64 -d 2>/dev/null || echo "")
+        
+        if [ ${#DEPLOYED_COOKIE_SECRET} -eq 32 ]; then
+            if [ -n "$DEPLOYED_CLIENT_SECRET" ] && [ ${#DEPLOYED_CLIENT_SECRET} -gt 10 ]; then
+                print_success "OAuth2 secret validated successfully (32-byte cookie secret, ${#DEPLOYED_CLIENT_SECRET}-char client secret)"
+                break
+            else
+                print_warning "OAuth2 secret exists but client-secret is missing or too short: ${#DEPLOYED_CLIENT_SECRET} chars"
+                print_warning "This will cause OAuth2 proxy to crash - fixing the secret..."
+                
+                # Fix the client-secret in the deployed secret
+                kubectl patch secret opik-oauth2-proxy -n $NAMESPACE --type='json' -p='[{"op": "replace", "path": "/data/client-secret", "value":"'$(echo -n "$CLIENT_SECRET" | base64)'"}]'
+                print_success "Fixed client-secret in deployed OAuth2 secret"
+                
+                # Restart OAuth2 proxy to pick up the fix
+                kubectl rollout restart deployment/opik-oauth2-proxy -n $NAMESPACE
+                print_success "Restarted OAuth2 proxy to apply the fix"
+                break
+            fi
+        else
+            print_warning "OAuth2 secret exists but cookie-secret is wrong length: ${#DEPLOYED_COOKIE_SECRET} bytes"
+        fi
+    else
+        print_info "Waiting for OAuth2 secret to be created... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
+    fi
+    
+    sleep 3
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+done
 
-# Basic validation that Helm deployment succeeded
-print_info "Validating deployment completion"
-kubectl get pods -n $NAMESPACE
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    print_error "OAuth2 secret validation failed after $MAX_RETRIES attempts"
+    print_error "This will cause OAuth2 proxy startup issues and 502 errors"
+    exit 1
+fi
+
+# Wait for OAuth2 proxy to be ready
+print_info "Waiting for OAuth2 proxy to be ready"
+kubectl wait --for=condition=available deployment/opik-oauth2-proxy -n $NAMESPACE --timeout=300s
+
+# Verify OAuth2 proxy is actually running
+print_info "Verifying OAuth2 proxy status"
+OAUTH2_READY=$(kubectl get pods -n $NAMESPACE -l app=oauth2-proxy --no-headers | grep Running | wc -l)
+if [ "$OAUTH2_READY" -gt 0 ]; then
+    print_success "OAuth2 proxy is running successfully"
+else
+    print_error "OAuth2 proxy is not running - this will cause 502 errors"
+    print_info "Checking OAuth2 proxy logs:"
+    kubectl logs -n $NAMESPACE -l app=oauth2-proxy --tail=10
+    exit 1
+fi
 
 # Clean up temporary file
 rm -f helm-values-azure-resolved.yaml
@@ -1410,56 +1548,103 @@ rm -rf "$TEMP_CERT_DIR"
 
 print_success "Created TLS secret for AGIC HTTPS configuration"
 
-# =============================================================================
-# DEPLOYMENT MONITORING AND VERIFICATION
-# =============================================================================
+# Wait for AGIC to process the ingress with TLS configuration
+print_info "Waiting for AGIC to configure HTTPS..."
+print_info "AGIC will process the Ingress TLS configuration and create HTTPS listeners..."
+sleep 45
 
-# Monitor deployment progress
-print_step "📊 Monitoring deployment progress"
-print_info "Waiting for services to start..."
-sleep 60
-
-# Check basic deployment status
-kubectl get pods -n $NAMESPACE
-kubectl get services -n $NAMESPACE
+# Check ingress status
+print_info "Checking ingress configuration"
 kubectl get ingress -n $NAMESPACE -o wide
 
-# Create TLS secret for AGIC
-print_info "Creating TLS secret for AGIC..."
-TEMP_CERT_DIR=$(mktemp -d)
-CERT_FILE="$TEMP_CERT_DIR/tls.crt"
-KEY_FILE="$TEMP_CERT_DIR/tls.key"
+# Verify AGIC has created HTTPS configuration
+print_step "Verifying AGIC HTTPS configuration"
+HTTPS_PORT_EXISTS=$(az network application-gateway frontend-port list --gateway-name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP --query "[?port==\`443\`].name" -o tsv 2>/dev/null || echo "")
 
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout "$KEY_FILE" \
-    -out "$CERT_FILE" \
-    -subj "/CN=$PUBLIC_IP_ADDRESS" 2>/dev/null
+if [ -n "$HTTPS_PORT_EXISTS" ]; then
+    print_success "AGIC has successfully configured HTTPS (port 443)"
+    
+    # Check HTTPS listeners
+    HTTPS_LISTENERS=$(az network application-gateway http-listener list --gateway-name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP --query "[?protocol==\`Https\`].name" -o tsv 2>/dev/null | wc -l || echo "0")
+    
+    if [ "$HTTPS_LISTENERS" -gt 0 ]; then
+        print_success "AGIC has created HTTPS listeners"
+    else
+        print_warning "HTTPS port exists but no HTTPS listeners found"
+    fi
+else
+    print_warning "AGIC has not yet configured HTTPS port - this may take additional time"
+    print_info "HTTPS configuration may complete in the background"
+fi
 
-kubectl create secret tls opik-tls-secret \
-    --cert="$CERT_FILE" \
-    --key="$KEY_FILE" \
-    --namespace=$NAMESPACE \
-    --dry-run=client -o yaml | kubectl apply -f -
+# Verify OAuth2 proxy deployment and secrets
+print_step "Verifying OAuth2 proxy configuration"
 
-rm -rf "$TEMP_CERT_DIR"
-print_success "TLS secret created"
+# Check if OAuth2 proxy pods are running
+OAUTH2_PODS=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=oauth2-proxy --no-headers 2>/dev/null | wc -l || echo "0")
+if [ "$OAUTH2_PODS" -gt 0 ]; then
+    print_success "OAuth2 proxy pods are running"
+    kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=oauth2-proxy
+    
+    # Check OAuth2 proxy logs for any configuration issues
+    print_info "Checking OAuth2 proxy logs for configuration issues..."
+    kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=oauth2-proxy --tail=20 || true
+else
+    print_warning "No OAuth2 proxy pods found - checking deployment..."
+    kubectl get deployment -n $NAMESPACE | grep oauth2 || true
+fi
 
-# Simple connectivity test
-print_step "🔍 Testing basic connectivity"
+# Verify secrets are properly set
+print_info "Verifying OAuth2 secrets"
+OAUTH2_SECRET_EXISTS=$(kubectl get secret -n $NAMESPACE | grep oauth2-proxy | wc -l || echo "0")
+if [ "$OAUTH2_SECRET_EXISTS" -gt 0 ]; then
+    print_success "OAuth2 proxy secrets exist"
+    kubectl get secrets -n $NAMESPACE | grep oauth2
+else
+    print_warning "OAuth2 proxy secrets missing - this may cause 500 errors"
+    print_info "OAuth2 secrets should be managed by Helm chart - check helm values configuration"
+fi
+
+# =============================================================================
+# FINAL CONNECTIVITY TEST
+# =============================================================================
+
+print_step "🔍 Testing HTTPS connectivity"
 HTTPS_URL="https://$PUBLIC_IP_ADDRESS"
 if [ -n "$DOMAIN_NAME" ]; then
     HTTPS_URL="https://$DOMAIN_NAME"
 fi
 
-print_info "Testing access to: $HTTPS_URL"
-HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 10 -k "$HTTPS_URL" 2>/dev/null || echo "000")
+print_info "Testing HTTPS access to: $HTTPS_URL"
+sleep 5
 
-if [ "$HTTP_STATUS" = "302" ] || [ "$HTTP_STATUS" = "200" ]; then
-    print_success "✅ HTTPS connectivity working (HTTP $HTTP_STATUS)"
-else
-    print_warning "⚠️ HTTPS may still be configuring (HTTP $HTTP_STATUS)"
-    print_info "Wait a few minutes and try accessing manually"
-fi
+HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 15 -k "$HTTPS_URL" 2>/dev/null || echo "000")
+
+case "$HTTP_STATUS" in
+    "302")
+        print_success "✅ HTTPS is working! Redirecting to authentication (HTTP $HTTP_STATUS)"
+        
+        # Test if it's redirecting to Microsoft login
+        REDIRECT_LOCATION=$(curl -s -I --connect-timeout 15 -k "$HTTPS_URL" 2>/dev/null | grep -i "location:" | head -1 || echo "")
+        if echo "$REDIRECT_LOCATION" | grep -q "login.microsoftonline.com"; then
+            print_success "🔐 OAuth2 authentication is working! Redirecting to Microsoft login"
+        else
+            print_warning "HTTPS works but may not be redirecting to Microsoft authentication"
+            print_info "Redirect location: $REDIRECT_LOCATION"
+        fi
+        ;;
+    "200")
+        print_success "✅ HTTPS is working! (HTTP $HTTP_STATUS)"
+        ;;
+    "000")
+        print_warning "⚠️ HTTPS connectivity failed - connection timeout or refused"
+        print_info "HTTPS may still be configuring - wait 2-3 minutes and try accessing manually"
+        ;;
+    *)
+        print_warning "⚠️ HTTPS connectivity issue (HTTP $HTTP_STATUS)"
+        print_info "HTTPS may still be configuring - wait a few minutes and try accessing manually"
+        ;;
+esac
 
 # =============================================================================
 # DEPLOYMENT SUMMARY
@@ -1602,34 +1787,5 @@ else
     print_info "It may take a few minutes for Application Gateway to configure backend pools"
     print_info "If you get 502 errors, wait a few minutes and try again"
 fi
-
-# =============================================================================
-# DATA PERSISTENCE INFORMATION
-# =============================================================================
-
-print_section "💾 Data Persistence Information"
-print_success "✅ Data is stored on persistent disks in the main resource group"
-print_info "Your data will survive cluster deletion and recreation!"
-
-print_info "Disk Resource Information:"
-print_key_value "Resource Group" "$RESOURCE_GROUP"
-print_info ""
-print_info "Created Opik Data Disks:"
-if [ -n "${MYSQL_DISK_NAME:-}" ]; then
-    print_key_value "MySQL" "$MYSQL_DISK_NAME"
-fi
-if [ -n "${CLICKHOUSE_DISK_NAME:-}" ]; then
-    print_key_value "ClickHouse" "$CLICKHOUSE_DISK_NAME"  
-fi
-if [ -n "${MINIO_DISK_NAME:-}" ]; then
-    print_key_value "MinIO" "$MINIO_DISK_NAME"
-fi
-if [ -n "${REDIS_DISK_NAME:-}" ]; then
-    print_key_value "Redis" "$REDIS_DISK_NAME"
-fi
-
-print_success "✅ Data will persist across cluster deletions!"
-print_info "Safe to delete cluster - data disks remain in main resource group"
-print_warning "To delete data permanently, manually delete the opik-*-data-* disks"
 
 print_success "🎉 Deployment completed successfully!"
