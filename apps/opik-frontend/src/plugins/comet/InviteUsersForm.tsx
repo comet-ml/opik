@@ -99,7 +99,7 @@ const InviteUsersForm = () => {
   };
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="rounded-lg border bg-background p-4">
       <div className="mb-4 flex flex-col items-start gap-1.5">
         <div className="flex items-center gap-2">
           <UserPlus className="size-4 text-muted-slate" />

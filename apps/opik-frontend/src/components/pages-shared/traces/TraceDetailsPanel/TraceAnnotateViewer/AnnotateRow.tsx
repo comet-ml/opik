@@ -271,7 +271,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             className={cn(
               "size-7 relative group/reason-btn",
               editReason &&
-                "bg-[#F3F4FE] active:bg-[#F3F4FE] hover:bg-[#F3F4FE]",
+                "bg-toggle-outline-active active:bg-toggle-outline-active hover:bg-toggle-outline-active",
             )}
             onClick={() => setEditReason((v) => !v)}
           >
@@ -280,7 +280,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                 className={cn(
                   "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
                   editReason &&
-                    "border-[#F3F4FE] group-hover/reason-btn:border-[#F3F4FE]",
+                    "border-toggle-outline-active group-hover/reason-btn:border-toggle-outline-active",
                 )}
               />
             )}

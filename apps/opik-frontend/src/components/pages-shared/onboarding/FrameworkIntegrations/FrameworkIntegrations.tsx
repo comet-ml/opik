@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "../GoogleColabCard/GoogleColabCard";
 import IntegrationTemplate from "./IntegrationTemplate";
@@ -24,6 +26,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
   const integration = integrationList[integrationIndex];
   const apiKey = useUserApiKey();
+  const { themeMode } = useTheme();
 
   return (
     <IntegrationListLayout
@@ -39,7 +42,11 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
               >
                 <img
                   alt={item.label}
-                  src={item.logo}
+                  src={
+                    themeMode === THEME_MODE.DARK && item.logoWhite
+                      ? item.logoWhite
+                      : item.logo
+                  }
                   className="size-[32px] shrink-0"
                 />
                 <div className="ml-1 truncate">{item.label}</div>

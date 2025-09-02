@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import RequestIntegrationDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/RequestIntegrationDialog";
 import IntegrationDetailsDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog";
@@ -23,6 +25,7 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
   } = useIntegrationExplorer();
   const [requestIntegrationDialogOpen, setRequestIntegrationDialogOpen] =
     useState(false);
+  const { themeMode } = useTheme();
 
   const handleRequestIntegration = () => {
     setRequestIntegrationDialogOpen(true);
@@ -86,7 +89,11 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
             icon={
               <img
                 alt={integration.title}
-                src={integration.icon}
+                src={
+                  themeMode === THEME_MODE.DARK && integration.whiteIcon
+                    ? integration.whiteIcon
+                    : integration.icon
+                }
                 className="size-[40px] shrink-0"
               />
             }

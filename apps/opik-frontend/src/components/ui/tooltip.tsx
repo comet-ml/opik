@@ -31,7 +31,7 @@ export const tooltipVariants = cva(
     variants: {
       variant: {
         default:
-          "comet-body-xs border border-slate-200 bg-soft-background p-2 text-foreground-secondary",
+          "comet-body-xs border border-border bg-soft-background p-2 text-foreground-secondary",
         hotkey: "flex py-1.5 pl-3 pr-2",
       },
     },

@@ -1,7 +1,9 @@
 import pythonLogoUrl from "/images/integrations/python.png";
 import openAILogoUrl from "/images/integrations/openai.png";
+import openAIWhiteLogoUrl from "/images/integrations/openai-white.png";
 import anthropicLogoUrl from "/images/integrations/anthropic.png";
 import bedrockLogoUrl from "/images/integrations/bedrock.png";
+import bedrockWhiteLogoUrl from "/images/integrations/bedrock-white.png";
 import geminiLogoUrl from "/images/integrations/gemini.png";
 import groqLogoUrl from "/images/integrations/groq.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
@@ -20,7 +22,9 @@ import deepseekLogoUrl from "/images/integrations/deepseek.png";
 import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
+import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
+import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
 // import pydanticaiLogoUrl from "/images/integrations/pydanticai.png";
 import smolagentsLogoUrl from "/images/integrations/smolagents.png";
@@ -66,6 +70,7 @@ export type Integration = {
   description?: string;
   category: string;
   icon: string;
+  whiteIcon?: string;
   code: string;
   tag?: string;
   installCommand: string;
@@ -95,6 +100,7 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: openAILogoUrl,
+    whiteIcon: openAIWhiteLogoUrl,
     code: openAiCode,
     installCommand: "pip install -U opik openai",
     docsLink: buildDocsUrl("/tracing/integrations/openai"),
@@ -127,6 +133,7 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: bedrockLogoUrl,
+    whiteIcon: bedrockWhiteLogoUrl,
     code: bedrockCode,
     installCommand: "pip install -U opik boto3",
     docsLink: buildDocsUrl("/tracing/integrations/bedrock"),
@@ -147,6 +154,7 @@ export const INTEGRATIONS: Integration[] = [
     description: "LLM provider",
     category: INTEGRATION_CATEGORIES.LLM_PROVIDERS,
     icon: ollamaLogoUrl,
+    whiteIcon: ollamaWhiteLogoUrl,
     code: ollamaCode,
     installCommand: "pip install -U opik ollama",
     docsLink: buildDocsUrl("/tracing/integrations/ollama"),
@@ -273,6 +281,7 @@ export const INTEGRATIONS: Integration[] = [
     description: "Frameworks & tools",
     category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
     icon: openrouterLogoUrl,
+    whiteIcon: openrouterWhiteLogoUrl,
     code: openrouterCode,
     installCommand: "pip install -U opik openai",
     docsLink: buildDocsUrl("/tracing/integrations/openrouter"),

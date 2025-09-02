@@ -20,8 +20,8 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
           <div
             key={c.value + index}
             className={cn("p-0.5 rounded-[2px]", {
-              "text-[#931A32] bg-[#FDE2E7]": c.removed,
-              "text-[#1D6728] bg-[#E2FDE6]": c.added,
+              "text-diff-removed-text bg-diff-removed-bg": c.removed,
+              "text-diff-added-text bg-diff-added-bg": c.added,
             })}
           >
             {c.value}
