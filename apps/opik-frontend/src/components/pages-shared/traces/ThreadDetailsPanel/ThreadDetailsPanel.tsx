@@ -243,7 +243,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <Button
             variant="outline"
             size="2xs"
-            className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
+            className="hover:bg-thread-active/80 border-thread-active bg-thread-active"
           >
             <MessageCircleMore className="mr-1 size-3" /> Active
             <ChevronDown className="ml-1 size-3.5" />
@@ -283,7 +283,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2 overflow-x-hidden">
-          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[#DEDEFD] text-[#1B1C7E]">
+          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
             <MessagesSquare className="size-3.5" />
           </div>
           <div className="comet-title-s truncate py-0.5">Thread</div>

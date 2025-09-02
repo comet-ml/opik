@@ -317,7 +317,7 @@ eval_results = evaluate(
             {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
             {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
           </div>
-          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
+          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
               1. Select dataset
             </div>

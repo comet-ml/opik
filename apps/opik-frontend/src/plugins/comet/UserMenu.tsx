@@ -8,9 +8,12 @@ import {
   Grip,
   KeyRound,
   LogOut,
+  Moon,
   Settings,
   Shield,
+  Sun,
   UserPlus,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -32,6 +35,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTheme } from "@/components/theme-provider";
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
@@ -45,10 +49,12 @@ import { buildUrl } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
+import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
 const UserMenu = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setTheme } = useTheme();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const setAppUser = useSetAppUser();
@@ -77,6 +83,8 @@ const UserMenu = () => {
     },
     { enabled: !!user?.loggedIn && !!workspace },
   );
+
+  const inviteMembersURL = useInviteMembersURL();
 
   useEffect(() => {
     if (user && user.loggedIn) {
@@ -117,14 +125,8 @@ const UserMenu = () => {
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
-  const workspacePermissions = userPermissions.find(
-    (userPermission) => userPermission.workspaceName === workspaceName,
-  );
-  const invitePermission = workspacePermissions?.permissions.find(
-    (permission) => permission.permissionName === "invite_users_to_workspace",
-  );
-  const canInviteMembers =
-    isOrganizationAdmin || invitePermission?.permissionValue === "true";
+
+  const isAcademic = organization?.academic;
 
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
@@ -152,6 +154,29 @@ const UserMenu = () => {
     );
   };
 
+  const renderUpgradeButton = () => {
+    if (isOrganizationAdmin && !isAcademic) {
+      return (
+        <a
+          href={buildUrl(
+            `organizations/${organization.id}/billing`,
+            workspaceName,
+            "&initialOpenUpgradeCard=true",
+          )}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Button size="sm" variant="special">
+            <Zap className="mr-1.5 size-3.5 shrink-0" />
+            Upgrade
+          </Button>
+        </a>
+      );
+    }
+
+    return null;
+  };
+
   const renderAppSelector = () => {
     return (
       <DropdownMenu>
@@ -168,14 +193,14 @@ const UserMenu = () => {
               className="flex cursor-pointer flex-row gap-3"
               onClick={handleSwitchToEM}
             >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#6C6FF7] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
                 EM
               </span>
               <span>Experiment management</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#52AEA4] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
                 LLM
               </span>
 
@@ -195,7 +220,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-secondary-foreground">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {user.userName}
               </span>
             </TooltipWrapper>
@@ -295,14 +320,8 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {canInviteMembers ? (
-              <a
-                href={buildUrl(
-                  "account-settings/workspaces",
-                  workspaceName,
-                  `&initialInviteId=${workspace?.workspaceId}`,
-                )}
-              >
+            {inviteMembersURL ? (
+              <a href={inviteMembersURL}>
                 <DropdownMenuItem className="cursor-pointer">
                   <UserPlus className="mr-2 size-4" />
                   <span>Invite members</span>
@@ -330,7 +349,7 @@ const UserMenu = () => {
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-black text-xs">
+                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-border text-xs">
                   {organization?.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="comet-body-s truncate">
@@ -356,6 +375,38 @@ const UserMenu = () => {
               </DropdownMenuPortal>
             </DropdownMenuSub>
           </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="cursor-pointer">
+                <Sun className="mr-2 size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute mr-2 size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span>Theme</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("light")}
+                  >
+                    Light
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("dark")}
+                  >
+                    Dark
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setTheme("system")}
+                  >
+                    System
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+          </DropdownMenuGroup>
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {
@@ -375,7 +426,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-muted-slate"
+                className="cursor-pointer justify-center text-light-slate"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });
@@ -394,7 +445,8 @@ const UserMenu = () => {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-4">
+    <div className="flex shrink-0 items-center gap-3">
+      {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
 

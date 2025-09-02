@@ -71,7 +71,7 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: docker.io/bitnami/zookeeper:3.9.3-debian-12-r16
+    image: docker.io/bitnamilegacy/zookeeper:3.9.3-debian-12-r16
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
@@ -123,6 +123,8 @@ services:
     environment:
       # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
+      # Persistent anonymous installation ID passed from launcher script
+      OPIK_ANONYMOUS_ID: ${OPIK_ANONYMOUS_ID:-}
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
       STATE_DB_DATABASE_NAME: opik
@@ -156,8 +158,8 @@ services:
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health-check" ]
       interval: 1s
-      timeout: 30s
-      retries: 30
+      timeout: 600s
+      retries: 600
       start_period: 1s
     depends_on:
       mysql:

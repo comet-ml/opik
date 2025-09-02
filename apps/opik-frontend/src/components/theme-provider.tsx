@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-
-type ThemeMode = "light" | "dark";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { THEME_MODE, type ThemeMode } from "@/constants/theme";
 
 type Theme = ThemeMode | "system";
 
@@ -18,15 +17,15 @@ type ThemeProviderState = {
 
 const initialState: ThemeProviderState = {
   theme: "system",
-  themeMode: "light",
+  themeMode: THEME_MODE.LIGHT,
   setTheme: () => null,
 };
 
 const calculateThemeMode = (theme: Theme) => {
   if (theme === "system") {
     return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+      ? THEME_MODE.DARK
+      : THEME_MODE.LIGHT;
   }
   return theme;
 };
@@ -39,27 +38,27 @@ export function ThemeProvider({
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  // TODO temporary commented functionality
-  // const [theme, setTheme] = useState<Theme>(
-  //   () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-  // );
-
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
+  );
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
+    root.classList.remove(THEME_MODE.LIGHT, THEME_MODE.DARK);
     root.classList.add(calculateThemeMode(theme));
   }, [theme]);
 
-  const value = {
-    themeMode: calculateThemeMode(theme),
-    theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme);
-      setTheme(theme);
-    },
-  };
+  const value = useMemo(
+    () => ({
+      themeMode: calculateThemeMode(theme),
+      theme,
+      setTheme: (newTheme: Theme) => {
+        localStorage.setItem(storageKey, newTheme);
+        setTheme(newTheme);
+      },
+    }),
+    [theme, storageKey],
+  );
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

@@ -87,13 +87,19 @@ public class FilterQueryBuilder {
                             "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
-                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.DICTIONARY,
+                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
+                            FieldType.DICTIONARY,
+                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
+                            FieldType.DICTIONARY,
+                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
                             FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)",
@@ -192,6 +198,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceThreadField.START_TIME, START_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
@@ -352,6 +360,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.START_TIME)
+                    .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
                     .build())));
@@ -378,6 +388,13 @@ public class FilterQueryBuilder {
 
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
+    }
+
+    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return filters.stream()
+                .filter(filter -> filter.field() == TraceField.GUARDRAILS)
+                .findFirst()
+                .map(filter -> true);
     }
 
     public Optional<String> toAnalyticsDbFilters(

@@ -235,7 +235,7 @@ const PromptModelSelect = ({
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="flex h-10 justify-center pr-5"
+                    className="flex h-10 justify-center pr-5 focus:bg-primary-foreground focus:text-foreground"
                   >
                     {option.label}
                   </SelectItem>

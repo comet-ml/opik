@@ -82,8 +82,8 @@ public class OpikConfiguration extends JobConfiguration {
     private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
 
     @Valid @NotNull @JsonProperty
-    private AsyncInsertConfig asyncInsert = new AsyncInsertConfig();
+    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
 
     @Valid @NotNull @JsonProperty
-    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
+    private FeedbackScoresConfig feedbackScores = new FeedbackScoresConfig();
 }

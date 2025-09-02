@@ -8330,6 +8330,62 @@ components:
         interval_end:
           type: string
           format: date-time
+        trace_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
+        thread_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceThreadFilter_Public"
+    TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     ProjectStatsSummary:
       type: object
       properties:
@@ -8872,6 +8928,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
       type: object
@@ -8881,6 +8938,8 @@ components:
         traceThreadPythonEvaluatorEnabled:
           type: boolean
         guardrailsEnabled:
+          type: boolean
+        opikAIEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -8997,6 +9056,8 @@ components:
       properties:
         name:
           minLength: 1
+          type: string
+        author:
           type: string
     ErrorInfo_Public:
       required:
@@ -9294,6 +9355,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     SpanFilter_Public:
       type: object
       properties:
@@ -9506,6 +9569,8 @@ components:
           items:
             minLength: 1
             type: string
+        author:
+          type: string
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -9795,6 +9860,8 @@ components:
           - ui
           - sdk
           - online_scoring
+        author:
+          type: string
     FeedbackScoreBatchThread:
       required:
       - scores
@@ -9856,30 +9923,6 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
-    TraceFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceSearchStreamRequest_Public:
       type: object
       properties:

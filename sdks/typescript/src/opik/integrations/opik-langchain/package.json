@@ -1,7 +1,7 @@
 {
   "name": "opik-langchain",
   "description": "Opik TypeScript and JavaScript SDK integration with LangChain",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "engines": {
     "node": ">=18"
   },
@@ -58,9 +58,10 @@
   ],
   "peerDependencies": {
     "@langchain/core": "^0.3.42",
-    "opik": "^1.7.33"
+    "opik": "^1.8.37"
   },
   "devDependencies": {
+    "tsup": "^8.5.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

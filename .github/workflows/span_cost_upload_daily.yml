@@ -14,40 +14,51 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
       - name: Set branch name and update the file
         run: |
           echo "BRANCH_NAME=github-actions/NA-automatically-update-model-prices-file-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
+
+      - name: Generate supported models documentation
+        run: |
+          python3 scripts/generate_supported_models_mdx.py
 
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
         with:
           branch: ${{ env.BRANCH_NAME }}
 
-      - name: Push updated file
-        uses: comet-ml/push-files@main
-        with:
-          branch: ${{ env.BRANCH_NAME }}
-          files: apps/opik-backend/src/main/resources/model_prices_and_context_window.json:apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          repository: 'comet-ml/opik'
-          commit_user_email: github-actions@comet.com
-          commit_user_name: 'Github Actions (${{ github.actor }})'
-          commit_message: "[NA] [BE] Update automatically model prices file"
+      - name: Commit files
+        run: |
+          set -ex
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "Github Actions (${{ github.actor }})"
+          git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          git add apps/opik-documentation/documentation/fern/docs/tracing/supported_models.mdx
+          git commit --allow-empty -m "[NA] [BE] [DOCS] Update model prices file and supported models documentation"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
-          title: "[NA] [BE] Update automatically model prices file"
+          title: "[NA] [BE] [DOCS] Update model prices file and supported models documentation"
           body: |
             ## Details
-            Automated update of `model_prices_and_context_window.json` file, including span prices from the LiteLLM repo.
+            Automated update of `model_prices_and_context_window.json` file and regeneration of supported models documentation.
+            
+            **Files updated:**
+            - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` - Latest model pricing data from LiteLLM
+            - `apps/opik-documentation/documentation/fern/docs/tracing/supported_models.mdx` - Auto-generated documentation page
           
             ## Change checklist
             - [X] User facing change
-            - [ ] Documentation update
+            - [X] Documentation update
           
             ## Issues
             N/A
