@@ -2,6 +2,8 @@
 
 This guide explains how to integrate Opik with Mistral AI via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your Mistral API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
+
+
 ## Getting Started
 
 ### Configuring Opik
@@ -44,12 +46,6 @@ response = litellm.completion(
     ]
 )
 ```
-
-{/\*
-
-<Frame>
-  <img src="/img/cookbook/mistral_trace_cookbook.png" />
-</Frame> */}
 
 ## Logging LLM calls within a tracked function
 
@@ -97,9 +93,3 @@ def generate_opik_story():
 
 generate_opik_story()
 ```
-
-{/\*
-
-<Frame>
-  <img src="/img/cookbook/mistral_trace_decorator_cookbook.png" />
-</Frame> */}

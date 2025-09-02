@@ -45,12 +45,6 @@ response = litellm.completion(
 )
 ```
 
-{/\*
-
-<Frame>
-  <img src="/img/cookbook/together_ai_trace_cookbook.png" />
-</Frame> */}
-
 ## Logging LLM calls within a tracked function
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
@@ -97,9 +91,3 @@ def generate_opik_story():
 
 generate_opik_story()
 ```
-
-{/\*
-
-<Frame>
-  <img src="/img/cookbook/together_ai_trace_decorator_cookbook.png" />
-</Frame> */}
