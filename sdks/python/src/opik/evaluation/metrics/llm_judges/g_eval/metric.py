@@ -36,7 +36,7 @@ class GEval(base_metric.BaseMetric):
             name: The name of the metric.
             track: Whether to track the metric. Defaults to True.
             project_name: Optional project name to track the metric in for the cases when
-                there are no parent span/trace to inherit project name from.
+                there is no parent span/trace to inherit project name from.
         """
         super().__init__(
             name=name,
@@ -62,7 +62,7 @@ class GEval(base_metric.BaseMetric):
         return self._chain_of_thought_response
 
     async def allm_chain_of_thought(self) -> str:
-        if not self._chain_of_thought_response:
+        if self._chain_of_thought_response is None:
             prompt = template.G_EVAL_COT_TEMPLATE.format(
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
