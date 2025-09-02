@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import usePluginsStore from "@/store/PluginsStore";
 import PlayButton from "@/icons/play-button.svg?react";
 import HelpLinks, { VIDEO_TUTORIAL_LINK } from "./HelpLinks";
+import { buildDocsUrl } from "@/lib/utils";
 
 type HelpGuideDialogProps = {
   open: boolean;
@@ -92,7 +93,16 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 
               <div className="space-y-2">
                 <a
-                  href="https://www.comet.com/docs/opik/quickstart"
+                  href={buildDocsUrl("/opik-university")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline"
+                >
+                  Opik University
+                  <ExternalLink className="size-4" />
+                </a>
+                <a
+                  href={buildDocsUrl("/quickstart")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline"
@@ -101,7 +111,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href="https://www.comet.com/docs/opik/cookbook/overview"
+                  href={buildDocsUrl("/cookbook/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline"
@@ -110,7 +120,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href="https://www.comet.com/docs/opik/tracing/integrations/overview"
+                  href={buildDocsUrl("/tracing/integrations/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline"
@@ -119,7 +129,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href="https://www.comet.com/docs/opik/tracing/log_agents"
+                  href={buildDocsUrl("/tracing/log_agents")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline"
@@ -128,7 +138,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href="https://www.comet.com/docs/opik/faq"
+                  href={buildDocsUrl("/faq")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline"
