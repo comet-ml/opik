@@ -22,7 +22,7 @@ jobs:
           echo "Skipping deployment of test environment for this PR"
 
   build-apps:
-    # if: github.event.label.name == 'test-environment'
+    if: github.event.label.name == 'test-environment'
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
     with:
@@ -31,7 +31,7 @@ jobs:
       ref: ${{ github.event.pull_request.head.ref }}
 
   trigger_deployment:
-    # if: github.event.label.name == 'test-environment'
+    if: github.event.label.name == 'test-environment'
     needs:
       - build-apps
     runs-on: ubuntu-latest
