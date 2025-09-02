@@ -43,6 +43,11 @@ on:
         required: false
         description: Git ref to build from (branch, tag, or commit SHA)
         default: ""
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
         
     outputs:
       version:
