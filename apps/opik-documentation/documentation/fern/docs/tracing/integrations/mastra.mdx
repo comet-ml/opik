@@ -4,9 +4,9 @@ description: How to send Mastra telemetry data to Opik using OpenTelemetry
 
 # Mastra Integration via OpenTelemetry
 
-Mastra is an AI workflow framework designed to simplify the creation and orchestration of complex AI pipelines. It provides a declarative approach to building AI workflows with built-in support for parallel execution, error handling, and workflow optimization.
+Mastra is the TypeScript agent framework designed to provide the essential primitives for building AI applications. It enables developers to create AI agents with memory and tool-calling capabilities, implement deterministic LLM workflows, and leverage RAG for knowledge integration.
 
-Mastra's primary advantage is its workflow-first design that makes it easy to build, test, and deploy production AI pipelines with minimal boilerplate code.
+Mastra's primary advantage is its built-in telemetry support that automatically captures agent interactions, LLM calls, and workflow executions, making it easy to monitor and debug AI applications.
 
 <Frame>
   <img src="/img/tracing/mastra_integration.png" alt="Mastra tracing" />
@@ -14,24 +14,36 @@ Mastra's primary advantage is its workflow-first design that makes it easy to bu
 
 ## Getting started
 
-To use the Mastra integration with Opik, you will need to have Mastra and the required OpenTelemetry packages installed:
+### Create a Mastra project
+
+If you don't have a Mastra project yet, you can create one using the Mastra CLI:
 
 ```bash
-npm install @mastra/core @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
+npx create-mastra
+cd your-mastra-project
 ```
 
-## Environment configuration
+### Install required packages
 
-Configure your environment variables based on your Opik deployment:
+Install the necessary dependencies for Mastra and AI SDK:
+
+```bash
+npm install langfuse-vercel
+```
+
+### Add environment variables
+
+Create or update your `.env` file with the following variables:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
-        If you are using Opik Cloud, you will need to set the following
-        environment variables:
-            
         ```bash wordWrap
-        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
+        
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
 
         <Tip>
@@ -48,12 +60,13 @@ Configure your environment variables based on your Opik deployment:
         </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
-        If you are using an Enterprise deployment of Opik, you will need to set the following
-        environment variables:
-
         ```bash wordWrap
-        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
-        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
+
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
 
         <Tip>
@@ -70,51 +83,78 @@ Configure your environment variables based on your Opik deployment:
         </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-
-    If you are self-hosting Opik, you will need to set the following environment
-    variables:
-
-    ```bash
-    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
-    ```
-
-    <Tip>
-        To log the traces to a specific project, you can add the `projectName`
-        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
-
         ```bash
-        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
-        ```
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
 
-    </Tip>
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
     </Tab>
 
 </Tabs>
 
-## Using Opik with Mastra
+## Set up an agent
 
-Set up OpenTelemetry instrumentation for Mastra:
+Create an agent in your project. For example, create a file `src/mastra/index.ts`:
 
 ```typescript
-import { trace, SpanStatusCode } from "@opentelemetry/api";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
-// Configure the OTLP exporter
-const otlpExporter = new OTLPTraceExporter();
+export const chefAgent = new Agent({
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef " +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+});
 
-// Set up the tracer provider
-const provider = new NodeTracerProvider();
-provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
-provider.register();
-
-// Your Mastra code will now automatically send traces to Opik
-import { Workflow } from "@mastra/core";
-
-const workflow = new Workflow();
-// ... workflow configuration
+export const mastra = new Mastra({
+  agents: { chefAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  telemetry: {
+    serviceName: "ai",
+    enabled: true,
+    sampling: {
+      type: "always_on",
+    },
+    export: {
+      type: "otlp",
+    },
+  },
+});
 ```
+
+## Run Mastra development server
+
+Start the Mastra development server:
+
+```bash
+npm run dev
+```
+
+Head over to the developer playground with the provided URL and start chatting with your agent.
+
+## What gets traced
+
+With this setup, your Mastra application will automatically trace:
+
+- **Agent interactions**: Complete conversation flows with agents
+- **LLM calls**: Model requests, responses, and token usage
+- **Tool executions**: Function calls and their results
+- **Workflow steps**: Individual steps in complex workflows
+- **Memory operations**: Context and memory updates
 
 ## Further improvements
 
