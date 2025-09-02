@@ -38,7 +38,7 @@ on:
         required: false
         description: Git ref to build from (branch, tag, or commit SHA)
         default: ""
-  
+        
     outputs:
       version:
         description: "The version that was built"
@@ -98,6 +98,7 @@ jobs:
   build-backend:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-backend"
@@ -110,6 +111,7 @@ jobs:
   build-sandbox-executor-python:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-sandbox-executor-python"
@@ -123,6 +125,7 @@ jobs:
     needs:
       - set-version
       - build-sandbox-executor-python
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-python-backend"
@@ -135,6 +138,7 @@ jobs:
   build-guardrails-backend:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-guardrails-backend"
