@@ -1,13 +1,26 @@
 name: Trigger Test Environment Deployment
 run-name: "Trigger Test Environment Deployment for PR #${{ github.event.number }} by @${{ github.actor }}"
 
+# on:
+#   pull_request:
+#     types: [labeled]
 on:
-  pull_request:
-    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build from (branch, tag, or commit SHA)"
+        required: false
+        type: string
+        default: "liya/OPIK-2062-add-workflow-for-adhoc-env"
+      pr_number:
+        description: "PR number"
+        required: false
+        type: string
+        default: "123"
 
-permissions:
-  contents: write
-  pull-requests: write
+# permissions:
+#   contents: write
+#   pull-requests: write
 
 jobs:
 
@@ -26,7 +39,9 @@ jobs:
     with:
       version: ""
       is_release: false
-      ref: ${{ github.event.pull_request.head.ref }}
+      # ref: ${{ github.event.pull_request.head.ref }}
+      ref: ${{ inputs.ref }}
+
 
   trigger_deployment:
     if: github.event.label.name == 'test-environment'
@@ -44,7 +59,8 @@ jobs:
               repo: 'comet-deployment',
               event_type: 'deploy-opik-test-env',
               client_payload: {
-                pr_number: '${{ github.event.number }}',
+                # pr_number: '${{ github.event.number }}',
+                pr_number: '${{ inputs.pr_number }}',
                 version_name: '${{ needs.build-apps.outputs.version }}'
               }
             });
@@ -53,14 +69,18 @@ jobs:
             
             // Comment on PR with deployment info
             await github.rest.issues.createComment({
-              issue_number: Number('${{ github.event.number }}'),
+              # issue_number: Number('${{ github.event.number }}'),
+              issue_number: Number('${{ inputs.pr_number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `🚀 **Test environment deployment triggered!**
 
               ### Access Information
-              - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
-              - **Namespace:** pr-${{ github.event.number }}
+              # - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
+              # - **Namespace:** pr-${{ github.event.number }}
+              # - **Version:** ${{ needs.build-apps.outputs.version }}
+              - **URL:** https://pr-${{ inputs.pr_number }}.dev.comet.com
+              - **Namespace:** pr-${{ inputs.pr_number }}
               - **Version:** ${{ needs.build-apps.outputs.version }}
                      
               You can monitor the deployment progress [here](https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml).`
@@ -73,7 +93,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             await github.rest.issues.createComment({
-              issue_number: Number('${{ github.event.number }}'),
+              # issue_number: Number('${{ github.event.number }}'),
+              issue_number: Number('${{ inputs.pr_number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `❌ **Failed to trigger test environment deployment**`
