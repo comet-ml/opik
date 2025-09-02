@@ -24,7 +24,7 @@ const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
         className={cn(
           "relative min-w-[20%] max-w-[90%] px-4 py-2",
           isUser
-            ? "rounded-t-xl rounded-bl-xl bg-[#E7ECFF]"
+            ? "rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)]"
             : "rounded-t-xl rounded-br-xl bg-primary-foreground",
           message.isError && "bg-destructive/10 border border-destructive",
           noContent && "w-4/5",

@@ -34,7 +34,7 @@ const BreadcrumbItem = React.forwardRef<
   <li
     ref={ref}
     className={cn(
-      "inline-flex items-center gap-1.5 last:text-[#475569] last:font-medium p-1.5 truncate",
+      "inline-flex items-center gap-1.5 last:text-[hsl(var(--breadcrumb-last))] last:font-medium p-1.5 truncate",
       className,
     )}
     {...props}

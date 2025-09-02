@@ -9,7 +9,7 @@ const UsingPlaygroundTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   return (
-    <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
+    <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
       <div className="comet-body-s">
         <div className="pt-1">
           You can run prompt evaluations from the Opik platform using the
