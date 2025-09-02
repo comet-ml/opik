@@ -6,7 +6,7 @@ on:
     types: [labeled]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -26,6 +26,7 @@ jobs:
     with:
       version: ""
       is_release: false
+      ref: ${{ github.head_ref }}
 
   trigger_deployment:
     if: github.event.label.name == 'test-environment'
