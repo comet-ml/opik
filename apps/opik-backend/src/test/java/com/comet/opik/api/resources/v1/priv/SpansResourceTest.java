@@ -550,7 +550,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name(), null)))) {
+                    .post(Entity.json(DeleteFeedbackScore.builder().name(feedbackScore.name()).build()))) {
 
                 assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
@@ -932,7 +932,7 @@ class SpansResourceTest {
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name(), null)))) {
+                    .post(Entity.json(DeleteFeedbackScore.builder().name(feedbackScore.name()).build()))) {
 
                 assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
                         UNAUTHORIZED_RESPONSE);
