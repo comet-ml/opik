@@ -13,6 +13,7 @@ export const DeleteThreadFeedbackScores: core.serialization.Schema<
     projectName: core.serialization.property("project_name", core.serialization.string()),
     threadId: core.serialization.property("thread_id", core.serialization.string()),
     names: core.serialization.list(core.serialization.string()),
+    author: core.serialization.string().optional(),
 });
 
 export declare namespace DeleteThreadFeedbackScores {
@@ -20,5 +21,6 @@ export declare namespace DeleteThreadFeedbackScores {
         project_name: string;
         thread_id: string;
         names: string[];
+        author?: string | null;
     }
 }
