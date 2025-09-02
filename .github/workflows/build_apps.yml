@@ -33,12 +33,12 @@ on:
         required: true
         description: Is release build
         default: false
-
       ref:
         type: string
         required: false
         description: Git ref to build from (branch, tag, or commit SHA)
         default: ""
+  
     outputs:
       version:
         description: "The version that was built"
