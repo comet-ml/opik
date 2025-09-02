@@ -146,7 +146,7 @@ jobs:
       is_release: ${{ inputs.is_release || false }}
 
   build-guardrails-backend:
-    if: ${{ inputs.build_guardrails || true }}
+    if: inputs.build_guardrails != false 
     needs:
       - set-version
     secrets: inherit
