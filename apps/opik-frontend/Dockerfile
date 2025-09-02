@@ -66,12 +66,13 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 # Copy entrypoint script (fluent-bit.conf is mounted via volume)
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && \
-    chown nginx:nginx /entrypoint.sh
+COPY entrypoint.sh /opt/frontend/entrypoint.sh
+RUN chmod u+x /opt/frontend/entrypoint.sh && \
+    chown nginx:nginx /opt/frontend/entrypoint.sh
 
 EXPOSE 5173
 
 USER nginx:nginx
+
 # Use entrypoint script to start nginx and conditionally start Fluent Bit
-CMD ["/entrypoint.sh"]
+CMD ["/opt/frontend/entrypoint.sh"]
