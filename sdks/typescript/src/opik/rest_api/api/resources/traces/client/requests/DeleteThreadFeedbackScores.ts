@@ -14,4 +14,5 @@ export interface DeleteThreadFeedbackScores {
     projectName: string;
     threadId: string;
     names: string[];
+    author?: string;
 }

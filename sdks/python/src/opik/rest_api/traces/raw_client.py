@@ -709,6 +709,7 @@ class RawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -721,6 +722,8 @@ class RawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -736,6 +739,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -789,7 +793,12 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete trace feedback score
@@ -799,6 +808,8 @@ class RawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -812,6 +823,7 @@ class RawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -2495,6 +2507,7 @@ class AsyncRawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2507,6 +2520,8 @@ class AsyncRawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2522,6 +2537,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -2575,7 +2591,12 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete trace feedback score
@@ -2585,6 +2606,8 @@ class AsyncRawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2598,6 +2621,7 @@ class AsyncRawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",

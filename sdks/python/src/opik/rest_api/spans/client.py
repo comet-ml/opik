@@ -552,7 +552,12 @@ class SpansClient:
         return _response.data
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -562,6 +567,8 @@ class SpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -576,7 +583,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.delete_span_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_span_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names_1(
@@ -1383,7 +1392,12 @@ class AsyncSpansClient:
         return _response.data
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -1393,6 +1407,8 @@ class AsyncSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1410,7 +1426,9 @@ class AsyncSpansClient:
             await client.spans.delete_span_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_span_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names_1(

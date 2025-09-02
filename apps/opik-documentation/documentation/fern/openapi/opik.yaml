@@ -9057,6 +9057,8 @@ components:
         name:
           minLength: 1
           type: string
+        author:
+          type: string
     ErrorInfo_Public:
       required:
       - exception_type
@@ -9567,6 +9569,8 @@ components:
           items:
             minLength: 1
             type: string
+        author:
+          type: string
     DeleteTraceThreads:
       required:
       - thread_ids
