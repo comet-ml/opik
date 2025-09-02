@@ -34,6 +34,19 @@
    ./deploy-azure.sh
    ```
 
+### Upgrading Versions
+
+```bash
+# 1. Merge upstream changes
+git fetch upstream && git merge upstream/main
+
+# 2. Update version in deployment/.env.azure
+OPIK_VERSION=new_version
+
+# 3. Redeploy (preserves all data)
+cd deployment && ./deploy-azure.sh
+```
+
 ### Cluster Management
 
 #### Delete Cluster

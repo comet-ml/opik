@@ -6,8 +6,7 @@ Here you can deploy Opik to Azure with production-ready networking using Azure A
 
 ## 📋 Prerequisites
 
-> [!IMPORTANT]
-> **Required**: Use the **DevScope** Azure account. Run `az login` and select the DevScope account before deployment.
+> [!IMPORTANT] > **Required**: Use the **DevScope** Azure account. Run `az login` and select the DevScope account before deployment.
 
 ### Install Required Tools
 
@@ -46,8 +45,7 @@ cd /Users/luisarteiro/Documents/opik/deployment
 
 ### 2. Configure the Deployment
 
-> [!TIP]
-> **Only edit `.env.azure`** - never modify the template files directly.
+> [!TIP] > **Only edit `.env.azure`** - never modify the template files directly.
 
 To configure the Azure resources that you're going to deploy, edit the `.env.azure` file.
 
@@ -62,14 +60,60 @@ vim .env.azure
 ./deploy-azure.sh
 ```
 
-> [!NOTE]
-> **First deployment takes 15-20 minutes** - the script builds images, creates infrastructure, and deploys services.
+> [!NOTE] > **First deployment takes 15-20 minutes** - the script builds images, creates infrastructure, and deploys services.
+
+## 🔄 Upgrading Opik Versions
+
+### Upgrade Process
+
+```bash
+# 1. Merge upstream changes
+git remote add upstream https://github.com/comet-ml/opik.git
+git fetch upstream && git merge upstream/main
+
+# 2. Update version
+vim .env.azure  # Change OPIK_VERSION="1.9.0"
+
+# 3. Deploy upgrade (preserves all data)
+./deploy-azure.sh
+```
+
+### Rollback if Needed
+
+```bash
+# Option 1: Helm rollback
+helm rollback opik -n opik
+
+# Option 2: Version rollback
+vim .env.azure  # Set previous version
+./deploy-azure.sh
+```
+
+### What Happens During Upgrade
+
+- ✅ **Zero downtime** - Rolling update of pods
+- ✅ **Data preserved** - All persistent storage intact
+- ✅ **Automatic migrations** - Database schemas updated if needed
+- ✅ **Same URL/config** - No changes to access or authentication
+
+### Monitor Upgrade
+
+```bash
+# Watch pods update
+kubectl get pods -n opik -w
+
+# Check if successful
+kubectl rollout status deployment/opik-backend -n opik
+```
+
+> **Safety**: All data persists through upgrades. Rollback available if issues occur.
 
 ## 🏗️ What the Deployment Does
 
 The script automatically handles everything:
 
 ### 🔧 Infrastructure Creation
+
 - **Resource Group**: Container for all Azure resources
 - **Virtual Network**: Isolated network with subnets for AKS and Application Gateway
 - **Application Gateway**: Load balancer with public IP for external access
@@ -77,6 +121,7 @@ The script automatically handles everything:
 - **Container Registry**: Private registry for your Docker images
 
 ### 📦 Image Building & Publishing
+
 - Builds all Opik services from source:
   - `opik-backend` (Java/Dropwizard API)
   - `opik-python-backend` (Python evaluator service)
@@ -85,6 +130,7 @@ The script automatically handles everything:
 - Pushes images to Azure Container Registry
 
 ### ⚙️ Application Deployment
+
 - Deploys using Helm with proper ingress configuration
 - Sets up databases: MySQL, ClickHouse, Redis
 - Configures external access through Application Gateway
@@ -106,6 +152,7 @@ After successful deployment, the output will show something like this:
 ### Primary Access (Recommended)
 
 **Direct Browser Access:**
+
 ```
 http://PUBLIC_IP_ADDRESS
 ```
@@ -113,15 +160,16 @@ http://PUBLIC_IP_ADDRESS
 ### Fallback Access (Troubleshooting)
 
 **Port Forwarding:**
+
 ```bash
 kubectl port-forward -n opik svc/opik-frontend 5173:5173
 ```
+
 Then visit: `http://localhost:5173`
 
 ## 🔄 Updating the Deployment
 
-> [!IMPORTANT]
-> **To update**: Only change `OPIK_VERSION` in `.env.azure` and re-run the script.
+> [!IMPORTANT] > **To update**: Only change `OPIK_VERSION` in `.env.azure` and re-run the script.
 
 ### Update to New Version
 
@@ -135,6 +183,7 @@ vim .env.azure
 ```
 
 The script automatically:
+
 - Rebuilds images with new version tags
 - Updates the Kubernetes deployment
 - Preserves data and configuration
@@ -180,30 +229,29 @@ curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/ # API endpoint
 
 ## 🌐 Public Access Through Ingress
 
-> [!IMPORTANT]
-> **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
+> [!IMPORTANT] > **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
 
 ### 🔓 Publicly Available Endpoints (with Authentication)
 
 Once deployed, the following endpoints are accessible from the internet after Azure Entra ID authentication:
 
-| Endpoint Path | Service | Description |
-|---------------|---------|-------------|
-| `/` | **Frontend** | Complete Opik web interface |
-| `/v1/private/*` | **Java Backend** | Main API endpoints (projects, datasets, traces, etc.) |
-| `/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints |
-| `/health-check` | **Java Backend** | Health monitoring endpoint |
+| Endpoint Path              | Service            | Description                                           |
+| -------------------------- | ------------------ | ----------------------------------------------------- |
+| `/`                        | **Frontend**       | Complete Opik web interface                           |
+| `/v1/private/*`            | **Java Backend**   | Main API endpoints (projects, datasets, traces, etc.) |
+| `/v1/private/evaluators/*` | **Python Backend** | Code evaluation and execution endpoints               |
+| `/health-check`            | **Java Backend**   | Health monitoring endpoint                            |
 
 ## 🏗️ Architecture Overview
 
 ```mermaid
 graph TB
     Internet[🌐 Internet] --> AppGW[🛡️ Azure Application Gateway<br/>Public IP]
-    
+
     AppGW --> |"/ (Root Path)"| Frontend[🌐 Frontend Service<br/>React App<br/>Port: 5173]
     AppGW --> |"/v1/private/evaluators/*"| PythonBackend[🐍 Python Backend<br/>Evaluator Service<br/>Port: 8000]
     AppGW --> |"/v1/* (Fallback)"| Backend[⚙️ Java Backend<br/>Main API<br/>Port: 8080]
-    
+
     subgraph DeploymentFlow[🚀 Deployment Process]
         Script[📋 deploy-azure.sh]
         Script --> |1. Build & Push| ACR[📦 Azure Container Registry<br/>Docker Images]
@@ -211,14 +259,14 @@ graph TB
         Script --> |3. Deploy with Helm| HelmChart[⚙️ Helm Chart<br/>helm-values-azure-template.yaml]
         HelmChart --> |Deploy to| AKS
     end
-    
+
     subgraph AKS[☸️ Azure Kubernetes Service]
         subgraph OpikNamespace[📁 opik namespace]
             Frontend
             Backend
             PythonBackend
             SandboxExecutor[🔒 Sandbox Executor]
-            
+
             subgraph DataServices[🗄️ Data Layer]
                 MySQL[(🗄️ MySQL<br/>User Data & Config)]
                 ClickHouse[(📊 ClickHouse<br/>Analytics & Metrics)]
@@ -227,12 +275,12 @@ graph TB
                 ZooKeeper[🔧 ZooKeeper<br/>ClickHouse Coordination]
             end
         end
-        
+
         subgraph AGIC[🔌 App Gateway Ingress Controller]
             IngressController[AGIC Pod<br/>Routes traffic from App Gateway]
         end
     end
-    
+
     Backend --> MySQL
     Backend --> ClickHouse
     Backend --> Redis
@@ -240,7 +288,7 @@ graph TB
     ClickHouse --> ZooKeeper
     PythonBackend --> SandboxExecutor
     AppGW -.-> |Managed by| AGIC
-    
+
     subgraph Network[🔗 Virtual Network - 10.0.0.0/16]
         subgraph AKSSubnet[AKS Subnet - 10.0.1.0/24]
             AKS
@@ -249,20 +297,20 @@ graph TB
             AppGW
         end
     end
-    
+
     subgraph ConfigManagement[⚙️ Configuration]
         EnvConfig[📄 .env.azure<br/>User Configuration]
         HelmTemplate[📋 helm-values-azure-template.yaml<br/>Kubernetes Configuration]
         EnvConfig --> |Processed by envsubst| HelmTemplate
     end
-    
+
     classDef frontend fill:#e1f5fe,stroke:#0277bd
     classDef backend fill:#f3e5f5,stroke:#7b1fa2
     classDef database fill:#e8f5e8,stroke:#2e7d32
     classDef network fill:#fff3e0,stroke:#f57c00
     classDef deployment fill:#f1f8e9,stroke:#558b2f
     classDef config fill:#fce4ec,stroke:#c2185b
-    
+
     class Frontend frontend
     class Backend,PythonBackend,SandboxExecutor backend
     class MySQL,ClickHouse,Redis,MinIO,ZooKeeper database
@@ -275,23 +323,23 @@ graph TB
 
 The routing configuration is **tightly coupled with the application source code** and follows this priority order:
 
-> [!IMPORTANT]
-> **Route Priority**: More specific paths are matched first, then fallback to less specific paths.
+> [!IMPORTANT] > **Route Priority**: More specific paths are matched first, then fallback to less specific paths.
 
 ### 🎯 Route Mapping (Source Code Dependent)
 
-| Route Pattern | Target Service | Source Code Location | Purpose |
-|---------------|----------------|---------------------|---------|
-| `/` | **Frontend** | `apps/opik-frontend/` | React application serving the UI |
-| `/v1/private/evaluators/*` | **Python Backend** | `apps/opik-python-backend/src/opik_backend/evaluator.py` | Code evaluation endpoints |
-| `/v1/*` | **Java Backend** | `apps/opik-backend/src/main/java/com/comet/opik/api/resources/v1/` | All other API endpoints |
-| `/health-check` | **Java Backend** | Built-in Dropwizard health check | Health monitoring |
+| Route Pattern              | Target Service     | Source Code Location                                               | Purpose                          |
+| -------------------------- | ------------------ | ------------------------------------------------------------------ | -------------------------------- |
+| `/`                        | **Frontend**       | `apps/opik-frontend/`                                              | React application serving the UI |
+| `/v1/private/evaluators/*` | **Python Backend** | `apps/opik-python-backend/src/opik_backend/evaluator.py`           | Code evaluation endpoints        |
+| `/v1/*`                    | **Java Backend**   | `apps/opik-backend/src/main/java/com/comet/opik/api/resources/v1/` | All other API endpoints          |
+| `/health-check`            | **Java Backend**   | Built-in Dropwizard health check                                   | Health monitoring                |
 
 ### How Routes Are Determined
 
 The routing configuration was discovered by analyzing the source code:
 
 1. **Frontend Routes** (`apps/opik-frontend/src/api/api.ts`):
+
    ```typescript
    export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
    export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
@@ -300,9 +348,10 @@ The routing configuration was discovered by analyzing the source code:
    ```
 
 2. **Java Backend Routes** (`apps/opik-backend/src/main/java/com/comet/opik/api/resources/v1/`):
+
    ```java
    @Path("/v1/private/projects")   // ProjectsResource.java
-   @Path("/v1/private/datasets")   // DatasetsResource.java  
+   @Path("/v1/private/datasets")   // DatasetsResource.java
    @Path("/v1/private/traces")     // TracesResource.java
    // ... main API serves /v1/private/* endpoints
    ```
@@ -315,8 +364,7 @@ The routing configuration was discovered by analyzing the source code:
 
 ### ⚠️ Critical Routing Dependencies
 
-> [!WARNING]
-> **If you modify API endpoints in the source code, you MUST update the ingress routing in `helm-values-azure-template.yaml`**
+> [!WARNING] > **If you modify API endpoints in the source code, you MUST update the ingress routing in `helm-values-azure-template.yaml`**
 
 - **Frontend expects**: All API calls to start with `/v1/private/`
 - **Java Backend serves**: Most `/v1/private/*` endpoints (projects, datasets, traces, etc.)
@@ -324,6 +372,7 @@ The routing configuration was discovered by analyzing the source code:
 - **Routing conflict resolution**: More specific Python Backend route takes precedence over general Java Backend route
 
 This routing setup ensures that:
+
 1. Users access the React frontend at the root path `/`
 2. Frontend API calls reach the correct backend services
 3. Specialized evaluator functionality is properly isolated
@@ -331,17 +380,17 @@ This routing setup ensures that:
 
 ### Network Configuration
 
-| Component | Subnet | IP Range | Purpose |
-|-----------|--------|----------|---------|
-| **AKS Nodes** | aks-subnet | 10.0.1.0/24 | Kubernetes cluster |
-| **App Gateway** | appgw-subnet | 10.0.2.0/24 | Load balancer |
-| **Virtual Network** | opik-vnet | 10.0.0.0/16 | Network isolation |
+| Component           | Subnet       | IP Range    | Purpose            |
+| ------------------- | ------------ | ----------- | ------------------ |
+| **AKS Nodes**       | aks-subnet   | 10.0.1.0/24 | Kubernetes cluster |
+| **App Gateway**     | appgw-subnet | 10.0.2.0/24 | Load balancer      |
+| **Virtual Network** | opik-vnet    | 10.0.0.0/16 | Network isolation  |
 
 ## 🛡️ Data Persistence & Automatic Recovery
 
 ### Automatic Data Protection
 
-The deployment script automatically creates persistent disks in your **main resource group** (`opik-rg`), ensuring your data survives cluster deletion and recreation. 
+The deployment script automatically creates persistent disks in your **main resource group** (`opik-rg`), ensuring your data survives cluster deletion and recreation.
 
 ### How Data Persistence Works
 
@@ -367,6 +416,7 @@ az aks delete --resource-group opik-rg --name opik-aks
 ```
 
 **Why it's safe:**
+
 - Data disks are stored in the **main resource group** (`opik-rg`)
 - AKS cluster deletion only removes cluster resources, not data disks
 - Auto-generated resource groups (`MC_*`) don't contain persistent data
@@ -381,8 +431,9 @@ cd deployment
 ```
 
 **The script automatically:**
+
 - ✅ Detects your existing data disks
-- ✅ Reattaches them to the new cluster  
+- ✅ Reattaches them to the new cluster
 - ✅ Preserves all your historical data
 - ✅ No manual intervention required
 
