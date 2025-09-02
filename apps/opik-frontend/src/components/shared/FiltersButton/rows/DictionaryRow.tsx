@@ -36,11 +36,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
   const operatorSelector = (
     <OperatorSelector
       operator={filter.operator}
-      operators={
-        config?.operators ??
-        OPERATORS_MAP[filter.type as COLUMN_TYPE] ??
-        DEFAULT_OPERATORS
-      }
+      operators={OPERATORS_MAP[filter.type as COLUMN_TYPE] ?? DEFAULT_OPERATORS}
       onSelect={(o) => onChange({ ...filter, operator: o })}
     />
   );
