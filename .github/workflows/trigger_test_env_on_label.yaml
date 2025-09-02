@@ -4,6 +4,7 @@ run-name: "Trigger Test Environment Deployment for PR #${{ github.event.number }
 on:
   pull_request:
     types: [labeled]
+  workflow_dispatch:
 
 permissions:
   contents: write
