@@ -18,9 +18,9 @@
       }
     },
     "Atlassian": {
-      "command": "npx mcp-remote https://mcp.atlassian.com/v1/sse",
+      "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
       "env": {},
       "args": []
-    }    
+    }
   }
 }
