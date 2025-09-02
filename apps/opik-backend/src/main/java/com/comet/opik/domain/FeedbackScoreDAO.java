@@ -378,8 +378,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             Mono<Long> deleteNonAuthoredOperation;
 
-            if (score.author() == null) {
-                // Delete from feedback_scores table only if author is null
+            if (StringUtils.isBlank(score.author())) {
+                // Delete from feedback_scores table only if author is not available
                 String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
                         .add("table_name", "feedback_scores")
                         .render();
@@ -400,6 +400,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
                     .add("table_name", "authored_feedback_scores");
             Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", author));
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
@@ -408,6 +409,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_type", entityType.getType())
                     .bind("name", score.name());
             Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> statement2.bind("author", author));
 
             return deleteNonAuthoredOperation
@@ -452,8 +454,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             Mono<Long> deleteNonAuthoredOperation;
 
-            if (author == null) {
-                // Delete from feedback_scores table only if author is null
+            if (StringUtils.isBlank(author)) {
+                // Delete from feedback_scores table only if author is not available
                 ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
                 template1.add("names", names);
                 template1.add("table_name", "feedback_scores");
@@ -475,6 +477,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
             Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> template2.add("author", a));
 
             var statement2 = connection.createStatement(template2.render())
@@ -482,6 +485,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_type", entityType.getType())
                     .bind("names", names);
             Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> statement2.bind("author", a));
 
             return deleteNonAuthoredOperation
