@@ -26,7 +26,7 @@ jobs:
     with:
       version: ""
       is_release: false
-      ref: ${{ github.head_ref }}
+      ref: ${{ github.event.pull_request.head.ref }}
 
   trigger_deployment:
     if: github.event.label.name == 'test-environment'
