@@ -2,16 +2,20 @@ package com.comet.opik.domain.evaluators.python;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.PythonEvaluatorConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.podam.PodamFactoryUtils;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.client.AsyncInvoker;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.client.InvocationCallback;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -30,7 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,6 +63,9 @@ class PythonEvaluatorServiceTest {
     private Invocation.Builder builder;
 
     @Mock
+    private AsyncInvoker asyncInvoker;
+
+    @Mock
     private Response response;
 
     private PythonEvaluatorService pythonEvaluatorService;
@@ -66,15 +75,16 @@ class PythonEvaluatorServiceTest {
         lenient().when(config.getPythonEvaluator()).thenReturn(pythonEvaluatorConfig);
         lenient().when(pythonEvaluatorConfig.getUrl()).thenReturn("http://localhost:8000");
         lenient().when(pythonEvaluatorConfig.getMaxRetryAttempts()).thenReturn(4);
-        lenient().when(pythonEvaluatorConfig.getRetryDelay()).thenReturn(Duration.milliseconds(100));
+        lenient().when(pythonEvaluatorConfig.getMinRetryDelay()).thenReturn(Duration.milliseconds(100));
+        lenient().when(pythonEvaluatorConfig.getMaxRetryDelay()).thenReturn(Duration.milliseconds(100));
 
-        pythonEvaluatorService = new PythonEvaluatorService(client, config);
+        pythonEvaluatorService = new PythonEvaluatorService(new RetriableHttpClient(client), config);
     }
 
-    private void setupHttpCall() {
+    private void setupHttpCallChain() {
         when(client.target(anyString())).thenReturn(webTarget);
         when(webTarget.request()).thenReturn(builder);
-        lenient().when(builder.post(any(Entity.class))).thenReturn(response);
+        when(builder.async()).thenReturn(asyncInvoker);
     }
 
     @Nested
@@ -93,9 +103,16 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
-            when(response.getStatusInfo()).thenReturn(Response.Status.OK);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            // Setup HTTP call chain
+            setupHttpCallChain();
+
+            // Setup HTTP call with immutable response
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluate(code, data);
@@ -127,25 +144,34 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
-            // First 2 calls return 503, 3rd call succeeds
-            when(response.getStatusInfo())
-                    .thenReturn(Response.Status.SERVICE_UNAVAILABLE)
-                    .thenReturn(Response.Status.SERVICE_UNAVAILABLE)
-                    .thenReturn(Response.Status.OK);
-            when(response.getStatus())
-                    .thenReturn(503)
-                    .thenReturn(503)
-                    .thenReturn(200);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            // Create immutable responses for each retry attempt
+            Response errorResponse1 = createMockResponse(Status.SERVICE_UNAVAILABLE, null);
+            Response errorResponse2 = createMockResponse(Status.SERVICE_UNAVAILABLE, null);
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(errorResponse1);
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(errorResponse2);
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluate(code, data);
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
-            verify(builder, times(3)).post(any(Entity.class));
+            verify(asyncInvoker, times(3)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -158,23 +184,29 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
-            // First call returns 504, 2nd call succeeds
-            when(response.getStatusInfo())
-                    .thenReturn(Response.Status.GATEWAY_TIMEOUT)
-                    .thenReturn(Response.Status.OK);
-            when(response.getStatus())
-                    .thenReturn(504)
-                    .thenReturn(200);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            // Create immutable responses for each retry attempt
+            Response timeoutResponse = createMockResponse(Status.GATEWAY_TIMEOUT, null);
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(timeoutResponse);
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluate(code, data);
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
-            verify(builder, times(2)).post(any(Entity.class));
+            verify(asyncInvoker, times(2)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -187,22 +219,30 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
+
+            // Create immutable response for success case
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
 
             // First call throws timeout, 2nd call succeeds
-            when(builder.post(any(Entity.class)))
-                    .thenThrow(new ProcessingException("Request timeout",
-                            new SocketTimeoutException("Connection timed out")))
-                    .thenReturn(response);
-            when(response.getStatusInfo()).thenReturn(Response.Status.OK);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.failed(new ProcessingException("Request timeout",
+                        new SocketTimeoutException("Connection timed out")));
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluate(code, data);
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
-            verify(builder, times(2)).post(any(Entity.class));
+            verify(asyncInvoker, times(2)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -211,18 +251,24 @@ class PythonEvaluatorServiceTest {
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.of("input", "test input", "output", "test output");
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
-            // All calls return 503
-            when(response.getStatusInfo()).thenReturn(Response.Status.SERVICE_UNAVAILABLE);
-            when(response.getStatus()).thenReturn(503);
+            // Create immutable error response for all attempts
+            Response errorResponse = createMockResponse(Status.SERVICE_UNAVAILABLE, null);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(errorResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
-            verify(builder, times(5)).post(any(Entity.class));
+            verify(asyncInvoker, times(5)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -234,12 +280,17 @@ class PythonEvaluatorServiceTest {
                     .error("Invalid Python code")
                     .build();
 
-            setupHttpCall();
-            when(response.getStatusInfo()).thenReturn(Response.Status.BAD_REQUEST);
-            when(response.getStatus()).thenReturn(400);
-            when(response.hasEntity()).thenReturn(true);
-            when(response.bufferEntity()).thenReturn(true);
-            when(response.readEntity(PythonEvaluatorErrorResponse.class)).thenReturn(errorResponse);
+            // Setup HTTP call chain
+            setupHttpCallChain();
+
+            // Create immutable error response
+            Response badRequestResponse = createMockResponse(Status.BAD_REQUEST, errorResponse);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(badRequestResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
@@ -247,7 +298,7 @@ class PythonEvaluatorServiceTest {
                     .hasMessageContaining("Invalid Python code");
 
             // Should not retry for 400 errors
-            verify(builder, times(1)).post(any(Entity.class));
+            verify(asyncInvoker, times(1)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -256,9 +307,16 @@ class PythonEvaluatorServiceTest {
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.of("input", "test input", "output", "test output");
 
-            setupHttpCall();
-            when(builder.post(any(Entity.class)))
-                    .thenThrow(new ProcessingException("Connection refused"));
+            // Setup HTTP call chain
+            when(client.target(anyString())).thenReturn(webTarget);
+            when(webTarget.request()).thenReturn(builder);
+            when(builder.async()).thenReturn(asyncInvoker);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.failed(new ProcessingException("Connection refused"));
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
@@ -266,7 +324,7 @@ class PythonEvaluatorServiceTest {
                     .hasMessageContaining("Connection refused");
 
             // Should not retry for non-timeout processing exceptions
-            verify(builder, times(1)).post(any(Entity.class));
+            verify(asyncInvoker, times(1)).post(any(Entity.class), any(InvocationCallback.class));
         }
     }
 
@@ -287,9 +345,17 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
-            when(response.getStatusInfo()).thenReturn(Response.Status.OK);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            // Setup HTTP call chain
+            setupHttpCallChain();
+
+            // Create immutable success response
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluateThread(code, context);
@@ -321,23 +387,29 @@ class PythonEvaluatorServiceTest {
                     .scores(expectedScores)
                     .build();
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
-            // First call returns 503, 2nd call succeeds
-            when(response.getStatusInfo())
-                    .thenReturn(Response.Status.SERVICE_UNAVAILABLE)
-                    .thenReturn(Response.Status.OK);
-            when(response.getStatus())
-                    .thenReturn(503)
-                    .thenReturn(200);
-            when(response.readEntity(PythonEvaluatorResponse.class)).thenReturn(pythonResponse);
+            // Create immutable responses for each retry attempt
+            Response errorResponse = createMockResponse(Status.SERVICE_UNAVAILABLE, null);
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(errorResponse);
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
             var actualScores = pythonEvaluatorService.evaluateThread(code, context);
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
-            verify(builder, times(2)).post(any(Entity.class));
+            verify(asyncInvoker, times(2)).post(any(Entity.class), any(InvocationCallback.class));
         }
 
         @Test
@@ -346,18 +418,24 @@ class PythonEvaluatorServiceTest {
             var code = "def evaluate(messages): return 1.0";
             var context = List.of(podamFactory.manufacturePojo(ChatMessage.class));
 
-            setupHttpCall();
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
-            // All calls return 504
-            when(response.getStatusInfo()).thenReturn(Response.Status.GATEWAY_TIMEOUT);
-            when(response.getStatus()).thenReturn(504);
+            // Create immutable error response for all attempts
+            Response timeoutResponse = createMockResponse(Status.GATEWAY_TIMEOUT, null);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(timeoutResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluateThread(code, context))
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
-            verify(builder, times(5)).post(any(Entity.class));
+            verify(asyncInvoker, times(5)).post(any(Entity.class), any(InvocationCallback.class));
         }
     }
 
@@ -371,16 +449,25 @@ class PythonEvaluatorServiceTest {
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.of("input", "test input", "output", "test output");
 
-            setupHttpCall();
-            when(response.getStatusInfo()).thenReturn(Response.Status.BAD_REQUEST);
-            when(response.getStatus()).thenReturn(400);
-            when(response.hasEntity()).thenReturn(true);
-            when(response.bufferEntity()).thenReturn(true);
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
+            // Create immutable error response with fallback string behavior
+            Response badRequestResponse = mock(Response.class);
+            when(badRequestResponse.getStatusInfo()).thenReturn(Status.BAD_REQUEST);
+            when(badRequestResponse.getStatus()).thenReturn(400);
+            when(badRequestResponse.hasEntity()).thenReturn(true);
+            when(badRequestResponse.bufferEntity()).thenReturn(true);
             // First readEntity call fails, second succeeds with string
-            when(response.readEntity(PythonEvaluatorErrorResponse.class))
+            when(badRequestResponse.readEntity(PythonEvaluatorErrorResponse.class))
                     .thenThrow(new RuntimeException("JSON parsing failed"));
-            when(response.readEntity(String.class)).thenReturn("Custom error message");
+            when(badRequestResponse.readEntity(String.class)).thenReturn("Custom error message");
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(badRequestResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
@@ -394,17 +481,26 @@ class PythonEvaluatorServiceTest {
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.of("input", "test input", "output", "test output");
 
-            setupHttpCall();
-            when(response.getStatusInfo()).thenReturn(Response.Status.INTERNAL_SERVER_ERROR);
-            when(response.getStatus()).thenReturn(500);
-            when(response.hasEntity()).thenReturn(true);
-            when(response.bufferEntity()).thenReturn(true);
+            // Setup HTTP call chain
+            setupHttpCallChain();
 
+            // Create immutable error response with both parsing failures
+            Response serverErrorResponse = mock(Response.class);
+            when(serverErrorResponse.getStatusInfo()).thenReturn(Status.INTERNAL_SERVER_ERROR);
+            when(serverErrorResponse.getStatus()).thenReturn(500);
+            when(serverErrorResponse.hasEntity()).thenReturn(true);
+            when(serverErrorResponse.bufferEntity()).thenReturn(true);
             // Both readEntity calls fail
-            when(response.readEntity(PythonEvaluatorErrorResponse.class))
+            when(serverErrorResponse.readEntity(PythonEvaluatorErrorResponse.class))
                     .thenThrow(new RuntimeException("JSON parsing failed"));
-            when(response.readEntity(String.class))
+            when(serverErrorResponse.readEntity(String.class))
                     .thenThrow(new RuntimeException("String parsing failed"));
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(serverErrorResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
@@ -413,4 +509,28 @@ class PythonEvaluatorServiceTest {
                             "Python evaluation failed (HTTP 500): Unknown error during Python evaluation");
         }
     }
+
+    private Response createMockResponse(Status status, Object entity) {
+        Response mockResponse = mock(Response.class);
+
+        lenient().when(mockResponse.getStatusInfo()).thenReturn(status);
+        lenient().when(mockResponse.getStatus()).thenReturn(status.getStatusCode());
+        lenient().when(mockResponse.hasEntity()).thenReturn(entity != null);
+        lenient().when(mockResponse.bufferEntity()).thenReturn(entity != null);
+
+        if (entity != null) {
+            if (entity instanceof PythonEvaluatorResponse) {
+                lenient().when(mockResponse.readEntity(PythonEvaluatorResponse.class))
+                        .thenReturn((PythonEvaluatorResponse) entity);
+            } else if (entity instanceof PythonEvaluatorErrorResponse) {
+                lenient().when(mockResponse.readEntity(PythonEvaluatorErrorResponse.class))
+                        .thenReturn((PythonEvaluatorErrorResponse) entity);
+            } else if (entity instanceof String) {
+                lenient().when(mockResponse.readEntity(String.class)).thenReturn((String) entity);
+            }
+        }
+
+        return mockResponse;
+    }
+
 }
