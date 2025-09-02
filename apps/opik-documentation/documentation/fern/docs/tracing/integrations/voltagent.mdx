@@ -1,31 +1,25 @@
 ---
-description: How to send [FRAMEWORK_NAME] telemetry data to Opik using OpenTelemetry
+description: How to send VoltAgent telemetry data to Opik using OpenTelemetry
 ---
 
-# [FRAMEWORK_NAME] Integration via OpenTelemetry
+# VoltAgent Integration via OpenTelemetry
 
-[Brief description of the framework and what it's used for. For example: "[FRAMEWORK_NAME] is a Python framework designed to build production-grade AI applications."]
+VoltAgent is an agent framework designed to simplify the creation and management of AI agents with built-in support for tool usage, memory management, and multi-agent coordination. It provides a flexible architecture for building production-ready AI agent systems.
 
-[Brief explanation of the framework's primary advantage or key feature that makes it valuable for AI development.]
+VoltAgent's primary advantage is its modular design that allows developers to easily create, customize, and deploy AI agents with comprehensive tool integration and memory capabilities.
 
-<Frame>
-  <img src="/img/tracing/[framework_name]_integration.png" alt="[FRAMEWORK_NAME] tracing" />
-
-<!--
-Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png
-Documentation reference path: /img/tracing/[framework_name]_integration.png
--->
-</Frame>
 
 ## Getting started
 
-To use the [FRAMEWORK_NAME] integration with Opik, you will need to have [FRAMEWORK_NAME] and the required OpenTelemetry packages installed:
+To use the VoltAgent integration with Opik, you will need to have VoltAgent and the required OpenTelemetry packages installed:
 
 ```bash
-pip install --upgrade [framework_package] [framework_otel_packages] opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+npm install @voltagent/core @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
 ```
 
-In addition, you will need to set the following environment variables to configure OpenTelemetry to send data to Opik:
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
@@ -94,41 +88,31 @@ In addition, you will need to set the following environment variables to configu
 
 </Tabs>
 
-## Using Opik with [FRAMEWORK_NAME]
+## Using Opik with VoltAgent
 
-To track your [FRAMEWORK_NAME] applications, you will need to configure OpenTelemetry to instrument your framework:
+Set up OpenTelemetry instrumentation for VoltAgent:
 
-```python
-[framework_specific_instrumentation_code]
+```typescript
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+
+// Configure the OTLP exporter
+const otlpExporter = new OTLPTraceExporter();
+
+// Set up the tracer provider
+const provider = new NodeTracerProvider();
+provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+provider.register();
+
+// Your VoltAgent code will now automatically send traces to Opik
+import { Agent } from "@voltagent/core";
+
+const agent = new Agent();
+// ... agent configuration
 ```
-
-## Advanced usage
-
-<!--
-⚠️  DO NOT AUTO-GENERATE THIS SECTION ⚠️
-Only include this section if the framework has genuine advanced features to showcase.
-Examples of legitimate advanced features:
-- Framework-specific configuration options
-- Multi-agent workflows
-- Custom tool integrations
-- Production-ready enterprise configurations
-
-❌ DO NOT include:
-- Generic OpenTelemetry configurations
-- Batch vs Simple span processors
-- Generic resource configurations
-- Standard tracer provider setups
--->
-
-You can customize [FRAMEWORK_NAME] for more advanced use cases:
-
-```python
-[framework_specific_advanced_features]
-```
-
-[Description of framework-specific advanced features, not generic OpenTelemetry configurations.]
 
 ## Further improvements
 
-If you would like to see us improve this integration, simply open a new feature
-request on [Github](https://github.com/comet-ml/opik/issues).
+If you have any questions or suggestions for improving the VoltAgent integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
