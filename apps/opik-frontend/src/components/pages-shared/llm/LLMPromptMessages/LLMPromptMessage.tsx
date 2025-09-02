@@ -55,7 +55,7 @@ const theme = EditorView.theme({
     fontFamily: "inherit",
   },
   ".cm-placeholder": {
-    color: "#94A3B8",
+    color: "var(--codemirror-gutter)",
     fontWeight: 300,
   },
 });
@@ -114,7 +114,7 @@ const LLMPromptMessage = ({
         })}
       >
         <CardContent className="p-0">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_rgba(255,255,255,1)]">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))]">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="minimal" size="sm" className="min-w-4 p-0">
