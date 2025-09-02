@@ -22,7 +22,7 @@ jobs:
   build-apps:
     if: github.event.label.name == 'test-environment'
     uses: ./.github/workflows/build_apps.yml
-    secrets: inherit
+    secrets: inherit 
     with:
       version: ""
       is_release: false
