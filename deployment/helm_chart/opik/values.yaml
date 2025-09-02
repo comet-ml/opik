@@ -451,6 +451,9 @@ clickhouse:
 zookeeper:
     enabled: true
     fullnameOverride: opik-zookeeper
+    image:
+      repository: bitnamilegacy/zookeeper
+      tag: 3.9.3-debian-12-r16
     replicaCount: 1
     # podAntiAffinityPreset: hard
     podDisruptionBudget:
