@@ -2673,7 +2673,8 @@ class TraceDAOImpl implements TraceDAO {
                             Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
                             }
 
                             if (demoDataCreatedAt.isPresent()) {
@@ -2765,7 +2766,8 @@ class TraceDAOImpl implements TraceDAO {
                             Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
                             }
 
                             if (demoDataCreatedAt.isPresent()) {

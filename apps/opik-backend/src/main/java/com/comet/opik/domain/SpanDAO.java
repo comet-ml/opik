@@ -1153,7 +1153,7 @@ class SpanDAO {
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
              <if(excluded_project_ids)>AND id NOT IN (
-                SELECT id FROM spans WHERE project_id IN :excluded_project_ids 
+                SELECT id FROM spans WHERE project_id IN :excluded_project_ids
                 <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
             )
             <endif>
@@ -1169,7 +1169,7 @@ class SpanDAO {
             FROM spans
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
             <if(excluded_project_ids)>AND id NOT IN (
-                SELECT id FROM spans WHERE project_id IN :excluded_project_ids 
+                SELECT id FROM spans WHERE project_id IN :excluded_project_ids
                 <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
             )
             <endif>
