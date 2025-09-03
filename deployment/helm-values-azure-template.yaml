@@ -81,6 +81,7 @@ oauth2-proxy:
   ingress:
     enabled: false
 
+# Overriding component image configuration
 component:
   backend:
     image:
@@ -119,11 +120,8 @@ component:
 demoDataJob:
   enabled: false
 
-# =============================================================================
-# AZURE-SPECIFIC PERSISTENCE CONFIGURATION
-# =============================================================================
+# Storage class with retain policy for data persistence across cluster deletions
 persistence:
-  # Storage class with retain policy for data persistence across cluster deletions
   storageClass:
     create: true
     name: "managed-standard-retain"
