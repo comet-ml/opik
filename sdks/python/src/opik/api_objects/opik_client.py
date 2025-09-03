@@ -1188,7 +1188,7 @@ class Opik:
             List[Prompt]: A list of Prompt instances for the given name.
         """
         prompt_client = PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client.get_all_prompts(name=name)
+        fern_prompt_versions = prompt_client.get_all_prompt_versions(name=name)
         result = [
             Prompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions

@@ -106,7 +106,7 @@ class PromptClient:
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
-    def get_all_prompts(
+    def get_all_prompt_versions(
         self, name: str
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
@@ -135,39 +135,7 @@ class PromptClient:
                 raise ValueError("No prompts found for name: " + name)
 
             prompt_id = filtered_prompt_list[0]
-
-            page = 1
-            size = 100
-
-            prompts: List[prompt_version_detail.PromptVersionDetail] = []
-            while True:
-                prompt_versions = self._rest_client.prompts.get_prompt_versions(
-                    id=prompt_id, page=page, size=size
-                ).content
-
-                prompts.extend(
-                    [
-                        # Converting to PromptVersionDetail for consistency with other methods.
-                        # TODO: backend should implement non-frontend endpoint which will return PromptVersionDetail objects
-                        prompt_version_detail.PromptVersionDetail(
-                            id=version.id,
-                            prompt_id=version.prompt_id,
-                            template=version.template,
-                            type=version.type,
-                            metadata=version.metadata,
-                            commit=version.commit,
-                            created_at=version.created_at,
-                            created_by=version.created_by,
-                        )
-                        for version in prompt_versions
-                    ]
-                )
-
-                if len(prompt_versions) < size:
-                    break
-                page += 1
-
-            return prompts
+            return self._get_prompt_versions_by_id_paginated(prompt_id)
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
@@ -215,44 +183,48 @@ class PromptClient:
                 return []
 
             prompt_id = filtered_prompt_ids[0]
-
-            page = 1
-            size = 100
-
-            prompts: List[prompt_version_detail.PromptVersionDetail] = []
-            while True:
-                page_response = self._rest_client.prompts.get_prompt_versions(
-                    id=prompt_id, page=page, size=size
-                ).content
-
-                versions = page_response or []
-                prompts.extend(
-                    [
-                        # Converting to PromptVersionDetail for consistency with other methods.
-                        prompt_version_detail.PromptVersionDetail(
-                            id=version.id,
-                            prompt_id=version.prompt_id,
-                            template=version.template,
-                            type=version.type,
-                            metadata=version.metadata,
-                            commit=version.commit,
-                            created_at=version.created_at,
-                            created_by=version.created_by,
-                        )
-                        for version in versions
-                    ]
-                )
-
-                if len(versions) < size:
-                    break
-                page += 1
-
-            return prompts
+            return self._get_prompt_versions_by_id_paginated(prompt_id)
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
                 raise e
             return []
+
+    def _get_prompt_versions_by_id_paginated(
+        self, prompt_id: str
+    ) -> List[prompt_version_detail.PromptVersionDetail]:
+        page = 1
+        size = 100
+        prompts: List[prompt_version_detail.PromptVersionDetail] = []
+        while True:
+            prompt_versions_page = self._rest_client.prompts.get_prompt_versions(
+                id=prompt_id, page=page, size=size
+            ).content
+
+            versions = prompt_versions_page or []
+            prompts.extend(
+                [
+                    # Converting to PromptVersionDetail for consistency with other methods.
+                    # TODO: backend should implement non-frontend endpoint which will return PromptVersionDetail objects
+                    prompt_version_detail.PromptVersionDetail(
+                        id=version.id,
+                        prompt_id=version.prompt_id,
+                        template=version.template,
+                        type=version.type,
+                        metadata=version.metadata,
+                        commit=version.commit,
+                        created_at=version.created_at,
+                        created_by=version.created_by,
+                    )
+                    for version in versions
+                ]
+            )
+
+            if len(versions) < size:
+                break
+            page += 1
+
+        return prompts
 
     def search_prompts(
         self,
