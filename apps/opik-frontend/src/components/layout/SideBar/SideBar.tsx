@@ -295,7 +295,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     ]);
 
     if (SidebarInviteDevButton) {
-      bottomItems.splice(2, 0, <SidebarInviteDevButton expanded={expanded} />);
+      bottomItems.splice(
+        2,
+        0,
+        <SidebarInviteDevButton key="inviteDevButton" expanded={expanded} />,
+      );
     }
 
     return bottomItems;

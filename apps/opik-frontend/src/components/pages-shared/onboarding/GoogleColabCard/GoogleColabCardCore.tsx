@@ -7,7 +7,7 @@ export type GoogleColabCardCoreProps = {
 };
 const GoogleColabCardCore: React.FC<GoogleColabCardCoreProps> = ({ link }) => {
   return (
-    <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border bg-white p-6">
+    <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border bg-background p-6">
       <div className="comet-title-xs text-foreground-secondary">
         Full example
       </div>

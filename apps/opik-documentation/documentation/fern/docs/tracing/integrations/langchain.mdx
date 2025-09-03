@@ -67,51 +67,20 @@ print(result.content)
 
 The `OpikTracer` will automatically log the run and its details to Opik, including the input prompt, the output, and metadata for each step in the chain.
 
-## OpikTracer Configuration
-
-The `OpikTracer` constructor accepts several parameters to customize its behavior:
-
-```python
-from opik.integrations.langchain import OpikTracer
-from opik.types import DistributedTraceHeadersDict
-
-# Example distributed headers (optional)
-distributed_headers = DistributedTraceHeadersDict(
-    opik_trace_id="trace-id-from-upstream",
-    opik_parent_span_id="parent-span-id-from-upstream"
-)
-
-opik_tracer = OpikTracer(
-    tags=["langchain", "production"],           # List of tags for all traces
-    metadata={"version": "1.0", "env": "prod"}, # Additional metadata
-    project_name="my-langchain-project",        # Project name for traces
-    thread_id="conversation-123",               # Thread ID for grouping traces
-    distributed_headers=distributed_headers,    # For distributed tracing
-    graph=graph                               # LangGraph object for visualization
-)
-```
-
-### Parameters
-
-- **`tags`** (Optional[List[str]]): List of tags to be applied to each trace logged by the tracer
-- **`metadata`** (Optional[Dict[str, Any]]): Additional metadata for each trace logged by the tracer  
-- **`project_name`** (Optional[str]): The name of the project to log data to
-- **`thread_id`** (Optional[str]): Thread ID for grouping related conversations or interactions
-- **`distributed_headers`** (Optional[DistributedTraceHeadersDict]): Headers for connecting traces across services
-- **`graph`** (Optional[Graph]): A LangGraph Graph object to track the Graph Definition in Opik
+For detailed parameter information, see the [OpikTracer SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html).
 
 ## Cost Tracking
 
-The `OpikTracer` automatically tracks costs for supported LLM providers. Cost tracking works with Chat models from major providers including:
+The `OpikTracer` automatically tracks token usage and cost for all supported LLM models used within LangChain applications.
 
-- **OpenAI** (ChatOpenAI)
-- **Anthropic** (ChatAnthropic) 
-- **Anthropic Vertex AI** (ChatAnthropicVertex)
-- **Google AI** (ChatGoogleGenerativeAI)
-- **Google Vertex AI** (ChatVertexAI)
-- **AWS Bedrock** (ChatBedrock)
-- **Groq** (ChatGroq)
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
 
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>
 
 For streaming with cost tracking, ensure `stream_usage=True` is set:
 
@@ -205,9 +174,9 @@ for trace in traces:
     trace.log_feedback_score(name="user-feedback", value=0.5)
 ```
 
-## Compatibility with @opik.track Decorator
+## Compatibility with @track Decorator
 
-The `OpikTracer` is fully compatible with the `@opik.track` decorator, allowing you to create hybrid tracing approaches:
+The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches:
 
 ```python
 import opik

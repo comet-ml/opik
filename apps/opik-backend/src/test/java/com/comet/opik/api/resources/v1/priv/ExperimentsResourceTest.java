@@ -1021,6 +1021,18 @@ class ExperimentsResourceTest {
                             "$.model[0].nullField",
                             "NUL"),
                     Arguments.of(
+                            Operator.NOT_CONTAINS,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT 2.0"),
+                    Arguments.of(
+                            Operator.STARTS_WITH,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT"),
+                    Arguments.of(
+                            Operator.ENDS_WITH,
+                            "$.model[0].version",
+                            "Chat-GPT 4.0"),
+                    Arguments.of(
                             Operator.GREATER_THAN,
                             "model[0].year",
                             "2021"),
