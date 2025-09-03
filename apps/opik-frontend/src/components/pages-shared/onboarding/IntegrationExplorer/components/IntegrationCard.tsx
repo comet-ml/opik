@@ -24,7 +24,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
   return (
     <div
       className={cn(
-        "relative flex gap-2 items-center rounded-lg border bg-card p-4 transition-all duration-200 hover:bg-primary-foreground cursor-pointer",
+        "relative flex gap-2 items-center rounded-lg border bg-background p-4 transition-all duration-200 hover:bg-primary-foreground cursor-pointer",
         className,
       )}
       onClick={onClick}

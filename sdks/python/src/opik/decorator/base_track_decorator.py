@@ -193,7 +193,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.error(
                     logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -211,7 +211,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -243,7 +243,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.error(
                     logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -261,7 +261,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -294,7 +294,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -348,7 +348,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -395,7 +395,7 @@ class BaseTrackDecorator(abc.ABC):
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                func.__name__,
+                inspect_helpers.get_function_name(func),
                 (args, kwargs),
                 str(exception),
                 exc_info=True,
@@ -424,14 +424,14 @@ class BaseTrackDecorator(abc.ABC):
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                func.__name__,
+                inspect_helpers.get_function_name(func),
                 (args, kwargs),
                 str(exception),
                 exc_info=True,
             )
 
             start_span_arguments = arguments_helpers.StartSpanParameters(
-                name=func.__name__,
+                name=inspect_helpers.get_function_name(func),
                 type=track_options.type,
                 tags=track_options.tags,
                 metadata=track_options.metadata,
