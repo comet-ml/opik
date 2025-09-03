@@ -143,53 +143,6 @@ class PromptClient:
 
         return []
 
-    def get_prompts(
-        self,
-        *,
-        name: str,
-        parsed_filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[prompt_version_detail.PromptVersionDetail]:
-        """
-        Retrieve all prompt versions for a given prompt name using the prompts GET endpoint
-        with optional parsed filters.
-
-        Parameters:
-            name: The prompt name to retrieve versions for.
-            parsed_filters: List of parsed filters (OQL) that will be stringified for the backend.
-
-        Returns:
-            List[PromptVersionDetail]: All versions of the specified prompt.
-        """
-        try:
-            filters_str = (
-                json.dumps(parsed_filters) if parsed_filters is not None else None
-            )
-            prompts_page = self._rest_client.prompts.get_prompts(
-                name=name,
-                filters=filters_str,
-            )
-
-            prompts_matching_name = prompts_page.content or []
-            if len(prompts_matching_name) == 0:
-                return []
-
-            # There can be multiple prompts in page content; select id by exact name match
-            filtered_prompt_ids = [
-                x.id
-                for x in prompts_matching_name
-                if x.name == name and x.id is not None
-            ]
-            if len(filtered_prompt_ids) == 0:
-                return []
-
-            prompt_id = filtered_prompt_ids[0]
-            return self._get_prompt_versions_by_id_paginated(prompt_id)
-
-        except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-            return []
-
     def _get_prompt_versions_by_id_paginated(
         self, prompt_id: str
     ) -> List[prompt_version_detail.PromptVersionDetail]:
