@@ -1,7 +1,7 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
 import { CellContext } from "@tanstack/react-table";
-
+import Linkify from "linkify-react";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
@@ -41,7 +41,21 @@ const CompareExperimentsConfigCell: React.FC<
         {showDiffView ? (
           <TextDiff content1={toString(baseData)} content2={toString(data)} />
         ) : (
-          toString(data)
+          <Linkify
+            options={{
+              defaultProtocol: "https",
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className:
+                "break-all text-blue-600 underline hover:text-blue-800",
+              ignoreTags: ["script", "style"],
+              validate: {
+                url: (value) => /^https?:\/\//.test(value),
+              },
+            }}
+          >
+            {toString(data)}
+          </Linkify>
         )}
       </div>
     );

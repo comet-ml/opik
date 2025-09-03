@@ -238,8 +238,10 @@ services:
     hostname: frontend
     ports:
       - "5173:5173" # Frontend server port
+      - "2020:2020" # Fluent Bit HTTP server (when enabled)
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
+      - ./fluent-bit.conf:/etc/fluent-bit/fluent-bit.conf:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -251,6 +253,10 @@ services:
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      # OTEL log shipping configuration (Fluent Bit integrated in frontend container)
+      ENABLE_OTEL_LOG_EXPORT: ${ENABLE_OTEL_LOG_EXPORT:-false}
+      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
+      OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
 
 networks:
   default:
