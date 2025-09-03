@@ -4,15 +4,15 @@
 
 ### [https://52.155.251.75](https://52.155.251.75)
 
-*Click the link above to access the live instance.*
+
 *Make sure you are in the ["Opik Users"](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/647828ca-5ea9-4084-9bef-009557c71925) group to log in.*
 
 </div>
 
----
 
-> **Original Project**: [Comet Opik](https://github.com/comet-ml/opik)  
-> **This Repository**: Unilab's self-hosted Azure deployment with custom modifications.
+
+> [!NOTE]
+> This is a fork of the original [Opik](https://github.com/comet-ml/opik) project, tailored for Unilab's specific needs and hosted on our Azure tenant.
 
 ## Quick Start
 
@@ -21,12 +21,12 @@
 1. **Configure Environment**
    ```bash
    cd deployment
-   cp .env.azure.example .env.azure
+   nano .env.azure
    # Edit .env.azure with your Azure credentials
    ```
 
 > [!IMPORTANT]
-> Use DevScope's account to run the script.
+> This script will only work with DevScope's account.
 > Run `az login` with it first.
 
 2. **Deploy to Azure**
@@ -41,6 +41,7 @@
 git fetch upstream && git merge upstream/main
 
 # 2. Update version in deployment/.env.azure
+# Check the commit tag for the version.
 OPIK_VERSION=new_version
 
 # 3. Redeploy (preserves all data)
@@ -52,7 +53,7 @@ cd deployment && ./deploy-azure.sh
 #### Delete Cluster
 - Go to **Azure Portal** → **Resource Groups** → [**`opik-rg`**](https://portal.azure.com/#@unilabspt.com/resource/subscriptions/dcfd8c01-e074-4660-bfb9-2c793a8a8f3f/resourceGroups/opik-rg/overview)
 - Delete the **`opik-aks`** cluster
-- ✅ **Your data will be preserved** (stored in persistent disks)
+- **The data will be preserved** (stored in persistent disks in the resource group)
 
 #### Recover Data After Cluster Recreation
 
@@ -70,13 +71,13 @@ Your existing data will be automatically preserved and reattached.
 
 ## More Information
 
-📁 **Detailed Documentation**: 
+**Detailed Documentation**: 
 See [`deployment/`](deployment/) folder for:
 - Complete deployment guide
 - Configuration options
 - Troubleshooting
 - Network architecture
 
----
+> [!NOTE]
+> For general Opik documentation and features, visit the [original repository](https://github.com/comet-ml/opik).
 
-*For general Opik documentation and features, visit the [original repository](https://github.com/comet-ml/opik)*

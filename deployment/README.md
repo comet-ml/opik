@@ -2,11 +2,19 @@
 
 > **🎯 Complete guide to deploy Opik on Azure Kubernetes Service (AKS) with external access**
 
-Here you can deploy Opik to Azure with production-ready networking using Azure Application Gateway Ingress Controller (AGIC) for external access without port forwarding.
+This guide will provide an overview
+of how this Opik repository is being deployed
+to Azure Kubernetes Service (AKS) with external access through Azure Application Gateway.
+
+We recommend you read all the sections
+because some assumptions were made based on the source code (especially for the [Application Gateway Routing Configuration](#application-gateway-routing-configuration) section).
+
 
 ## 📋 Prerequisites
 
-> [!IMPORTANT] > **Required**: Use the **DevScope** Azure account. Run `az login` and select the DevScope account before deployment.
+> [!IMPORTANT] 
+> To run any script, 
+> you need to use the **DevScope** Azure account. Run `az login` and select the DevScope account before deployment.
 
 ### Install Required Tools
 
@@ -40,18 +48,19 @@ docker info
 ### 1. Navigate to Deployment Directory
 
 ```bash
-cd /Users/luisarteiro/Documents/opik/deployment
+cd /opik/deployment
 ```
 
 ### 2. Configure the Deployment
 
-> [!TIP] > **Only edit `.env.azure`** - never modify the template files directly.
+> [!TIP] 
+> **Only edit `.env.azure`** - never modify the template files directly.
 
 To configure the Azure resources that you're going to deploy, edit the `.env.azure` file.
 
 ```bash
 # Edit configuration file
-vim .env.azure
+nano .env.azure
 ```
 
 ### 3. Deploy
@@ -60,7 +69,8 @@ vim .env.azure
 ./deploy-azure.sh
 ```
 
-> [!NOTE] > **First deployment takes 15-20 minutes** - the script builds images, creates infrastructure, and deploys services.
+> [!NOTE] 
+> **First deployment takes 15-30 minutes** - the script builds images, creates infrastructure, and deploys services.
 
 ## 🔄 Upgrading Opik Versions
 
@@ -72,29 +82,25 @@ git remote add upstream https://github.com/comet-ml/opik.git
 git fetch upstream && git merge upstream/main
 
 # 2. Update version
-vim .env.azure  # Change OPIK_VERSION="1.9.0"
+nano .env.azure  # Change OPIK_VERSION="NEW.VERSION.HERE"
 
 # 3. Deploy upgrade (preserves all data)
 ./deploy-azure.sh
 ```
 
-### Rollback if Needed
+
+### Rollback if needed
+
+All data persists through upgrades. Rollback available if issues occur.
 
 ```bash
 # Option 1: Helm rollback
 helm rollback opik -n opik
 
 # Option 2: Version rollback
-vim .env.azure  # Set previous version
+nano .env.azure  # Set previous version
 ./deploy-azure.sh
 ```
-
-### What Happens During Upgrade
-
-- ✅ **Zero downtime** - Rolling update of pods
-- ✅ **Data preserved** - All persistent storage intact
-- ✅ **Automatic migrations** - Database schemas updated if needed
-- ✅ **Same URL/config** - No changes to access or authentication
 
 ### Monitor Upgrade
 
@@ -106,77 +112,86 @@ kubectl get pods -n opik -w
 kubectl rollout status deployment/opik-backend -n opik
 ```
 
-> **Safety**: All data persists through upgrades. Rollback available if issues occur.
 
 ## 🏗️ What the Deployment Does
 
 The script automatically handles everything:
 
-### 🔧 Infrastructure Creation
+### Infrastructure Creation
 
 - **Resource Group**: Container for all Azure resources
 - **Virtual Network**: Isolated network with subnets for AKS and Application Gateway
 - **Application Gateway**: Load balancer with public IP for external access
 - **AKS Cluster**: Kubernetes cluster with Azure CNI networking
-- **Container Registry**: Private registry for your Docker images
+- **Container Registry**: Private registry for the Docker images
 
-### 📦 Image Building & Publishing
+### Image Building & Publishing
 
 - Builds all Opik services from source:
-  - `opik-backend` (Java/Dropwizard API)
-  - `opik-python-backend` (Python evaluator service)
-  - `opik-frontend` (React web application)
-  - `opik-sandbox-executor-python` (Code execution sandbox)
-- Pushes images to Azure Container Registry
+  - `opik-backend`
+  - `opik-python-backend`
+  - `opik-frontend`
+  - `opik-sandbox-executor-python`
+- Pushes images to Azure Container Registry.
 
-### ⚙️ Application Deployment
+### Application Deployment
 
 - Deploys using Helm with proper ingress configuration
-- Sets up databases: MySQL, ClickHouse, Redis
+- Sets up databases: `MySQL`, `ClickHouse`, `Redis`
 - Configures external access through Application Gateway
 - Enables health monitoring and auto-scaling
+
 
 ## 🌐 Accessing the Application
 
 After successful deployment, the output will show something like this:
 
 ```
+==== Application Gateway Ready ====
 ✓ 🌐 Application available at: https://52.155.251.75 (HTTPS - Recommended)
 ℹ Also available at: http://52.155.251.75 (HTTP)
 ⚠ HTTPS uses self-signed certificate - accept browser security warning
 ℹ It may take a few minutes for Application Gateway to configure backend pools
 ℹ If you get 502 errors, wait a few minutes and try again
+
+┌─ 💾 Data Persistence Information ─
+✓ ✅ Data is stored on persistent disks in the main resource group
+ℹ Your data will survive cluster deletion and recreation!
+ℹ Disk Resource Information:
+   Resource Group      : opik-rg
+ℹ 
+ℹ Created Opik Data Disks:
+   MySQL               : opik-mysql-data-1756776933
+   ClickHouse          : opik-clickhouse-data-1756776966
+   MinIO               : opik-minio-data-1756776969
+   Redis               : opik-redis-data-1756776972
+✓ ✅ Data will persist across cluster deletions!
+ℹ Safe to delete cluster - data disks remain in main resource group
+⚠ To delete data permanently, manually delete the opik-*-data-* disks
 ✓ 🎉 Deployment completed successfully!
 ```
 
-### Primary Access (Recommended)
+You can then access the application through the link that is provided.
+It has a static IP address `52.155.251.75`
+that can be accessed through HTTP (port `80`) or HTTPS (port `443`).
 
-**Direct Browser Access:**
+> Alternatively, you can port-forward the service to access it locally:
+> ```bash
+> kubectl port-forward -n opik svc/opik-frontend 5173:5173
+> ```
+> Then visit: `http://localhost:5173`
 
-```
-http://PUBLIC_IP_ADDRESS
-```
-
-### Fallback Access (Troubleshooting)
-
-**Port Forwarding:**
-
-```bash
-kubectl port-forward -n opik svc/opik-frontend 5173:5173
-```
-
-Then visit: `http://localhost:5173`
 
 ## 🔄 Updating the Deployment
 
-> [!IMPORTANT] > **To update**: Only change `OPIK_VERSION` in `.env.azure` and re-run the script.
+> [!IMPORTANT]
+> To update, only change `OPIK_VERSION` in `.env.azure` and re-run the script.
 
-### Update to New Version
 
 ```bash
 # 1. Edit .env.azure
-vim .env.azure
-# Change: OPIK_VERSION="v2.0.0"
+nano .env.azure
+# Change to a new version, like OPIK_VERSION="v2.0.0"
 
 # 2. Redeploy
 ./deploy-azure.sh
@@ -229,7 +244,8 @@ curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/ # API endpoint
 
 ## 🌐 Public Access Through Ingress
 
-> [!IMPORTANT] > **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
+> [!IMPORTANT] 
+> **All services are publicly accessible** through the Application Gateway at the public IP address. **Azure Entra ID authentication is required** - users will be redirected to Microsoft login.
 
 ### 🔓 Publicly Available Endpoints (with Authentication)
 
@@ -323,7 +339,8 @@ graph TB
 
 The routing configuration is **tightly coupled with the application source code** and follows this priority order:
 
-> [!IMPORTANT] > **Route Priority**: More specific paths are matched first, then fallback to less specific paths.
+> [!IMPORTANT]
+> **Route Priority**: More specific paths are matched first, then fallback to less specific paths.
 
 ### 🎯 Route Mapping (Source Code Dependent)
 
@@ -364,7 +381,8 @@ The routing configuration was discovered by analyzing the source code:
 
 ### ⚠️ Critical Routing Dependencies
 
-> [!WARNING] > **If you modify API endpoints in the source code, you MUST update the ingress routing in `helm-values-azure-template.yaml`**
+> [!WARNING]
+> **If you modify API endpoints in the source code, you MUST update the ingress routing in `helm-values-azure-template.yaml`**
 
 - **Frontend expects**: All API calls to start with `/v1/private/`
 - **Java Backend serves**: Most `/v1/private/*` endpoints (projects, datasets, traces, etc.)
@@ -390,16 +408,16 @@ This routing setup ensures that:
 
 ### Automatic Data Protection
 
-The deployment script automatically creates persistent disks in your **main resource group** (`opik-rg`), ensuring your data survives cluster deletion and recreation.
+The deployment script automatically creates persistent disks in the **main resource group** (`opik-rg`), ensuring the data survives cluster deletion and recreation.
 
 ### How Data Persistence Works
 
 During deployment, the script:
 
-1. **🔍 Discovers existing data disks** with `opik-*` naming pattern
-2. **♻️ Reuses existing disks** automatically (preserves your data)
-3. **🆕 Creates new disks** only if none exist (fresh deployment)
-4. **📍 Stores disks in main resource group** (survives cluster deletion)
+1. **Discovers existing data disks** with `opik-*` naming pattern
+2. **Reuses existing disks** automatically (preserves the data)
+3. **Creates new disks** only if none exist (fresh deployment)
+4. **Stores disks in main resource group** (survives cluster deletion)
 
 ### Safe Cluster Operations
 
@@ -411,7 +429,7 @@ You can safely delete the entire AKS cluster without losing data:
 # ✅ Safe - deletes cluster but preserves data disks in main resource group
 az aks delete --resource-group opik-rg --name opik-aks
 
-# ✅ Also safe - the auto-generated resource group does NOT contain your data
+# ✅ Also safe - the auto-generated resource group does NOT contain the data
 # MC_opik-rg_opik-aks_northeurope can be deleted without data loss
 ```
 
@@ -429,21 +447,3 @@ After cluster deletion/recreation, simply redeploy:
 cd deployment
 ./deploy-azure.sh
 ```
-
-**The script automatically:**
-
-- ✅ Detects your existing data disks
-- ✅ Reattaches them to the new cluster
-- ✅ Preserves all your historical data
-- ✅ No manual intervention required
-
-**No separate recovery script needed** - everything is handled automatically!
-
-### Multiple Deployment Safety
-
-Running the deployment script multiple times is completely safe:
-
-- **🔄 Idempotent operations** - script can be run repeatedly
-- **📊 Data preservation** - existing data is never overwritten
-- **⚙️ Infrastructure updates** - safely updates infrastructure while preserving data
-- **🚀 Version upgrades** - update `OPIK_VERSION` and redeploy safely
