@@ -25,6 +25,7 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
+import { parseCompletionOutput } from "@/lib/playground";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -87,7 +88,7 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     startTime: run.startTime,
     endTime: run.endTime,
     input: { messages: run.providerMessages },
-    output: { output: run.result || run.providerError },
+    output: { output: parseCompletionOutput(run) },
   };
 };
 
