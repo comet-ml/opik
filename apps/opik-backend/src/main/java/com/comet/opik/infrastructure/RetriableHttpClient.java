@@ -16,14 +16,13 @@ import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 import reactor.util.retry.Retry;
 
-import java.util.Objects;
 import java.util.function.Function;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RetriableHttpClient {
 
-    private final Client client;
+    private final @NonNull Client client;
 
     /**
      * Fluent interface for building and executing retryable HTTP POST requests.
@@ -33,14 +32,10 @@ public class RetriableHttpClient {
         @NonNull Function<Client, WebTarget> callEndpoint();
 
         static RetryableHttpPost of(@NonNull Function<Client, WebTarget> requestFunction) {
-            Objects.requireNonNull(requestFunction);
             return () -> requestFunction;
         }
 
         default RetryableHttpCallContext withRetryPolicy(@NonNull Retry retryPolicy) {
-
-            Objects.requireNonNull(retryPolicy);
-
             return () -> Tuples.of(this, retryPolicy);
         }
 
@@ -50,8 +45,6 @@ public class RetriableHttpClient {
         Tuple2<RetryableHttpPost, Retry> getRequestWithContext();
 
         default RetryableHttpCallContextWithResponse withRequestBody(@NonNull Entity<?> requestEntity) {
-            Objects.requireNonNull(requestEntity);
-
             return () -> Tuples.of(this, requestEntity);
         }
     }
@@ -68,7 +61,7 @@ public class RetriableHttpClient {
 
         Tuple2<RetryableHttpCallContextWithResponse, Function<Response, T>> getFullContext();
 
-        default T execute(RetriableHttpClient httpClient) {
+        default T execute(@NonNull RetriableHttpClient httpClient) {
             Function<Client, WebTarget> requestFunction = getFullContext().getT1().getRequestWithContextAndFunction()
                     .getT1().getRequestWithContext().getT1().callEndpoint();
             Retry retrySpec = getFullContext().getT1().getRequestWithContextAndFunction().getT1()

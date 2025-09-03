@@ -54,9 +54,6 @@ class PythonEvaluatorServiceTest {
     private OpikConfiguration config;
 
     @Mock
-    private PythonEvaluatorConfig pythonEvaluatorConfig;
-
-    @Mock
     private WebTarget webTarget;
 
     @Mock
@@ -70,13 +67,17 @@ class PythonEvaluatorServiceTest {
 
     private PythonEvaluatorService pythonEvaluatorService;
 
+    private PythonEvaluatorConfig pythonEvaluatorConfig;
+
     @BeforeEach
     void setUp() {
+        pythonEvaluatorConfig = new PythonEvaluatorConfig();
+        pythonEvaluatorConfig.setUrl("http://localhost:8000");
+        pythonEvaluatorConfig.setMaxAttempts(4);
+        pythonEvaluatorConfig.setMinRetryDelay(Duration.milliseconds(100));
+        pythonEvaluatorConfig.setMaxRetryDelay(Duration.milliseconds(100));
+
         lenient().when(config.getPythonEvaluator()).thenReturn(pythonEvaluatorConfig);
-        lenient().when(pythonEvaluatorConfig.getUrl()).thenReturn("http://localhost:8000");
-        lenient().when(pythonEvaluatorConfig.getMaxRetryAttempts()).thenReturn(4);
-        lenient().when(pythonEvaluatorConfig.getMinRetryDelay()).thenReturn(Duration.milliseconds(100));
-        lenient().when(pythonEvaluatorConfig.getMaxRetryDelay()).thenReturn(Duration.milliseconds(100));
 
         pythonEvaluatorService = new PythonEvaluatorService(new RetriableHttpClient(client), config);
     }
