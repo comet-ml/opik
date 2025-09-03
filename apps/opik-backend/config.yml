@@ -468,4 +468,4 @@ feedbackScores:
 responseFormatting:
   # Default: 10001
   # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
-  truncationSize: ${OPIK_RESPONSE_TRUNCATION_SIZE:-10001}
+  truncationSize: ${OPIK_RESPONSE_TRUNCATION_CHAR_LIMIT:-10001}

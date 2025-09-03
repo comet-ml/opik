@@ -54,7 +54,7 @@ public class JsonUtils {
     public static JsonNode getJsonNodeFromStringWithFallback(@NonNull String value) {
         try {
             return getJsonNodeFromString(value);
-        } catch (Exception e) {
+        } catch (UncheckedIOException e) {
             return TextNode.valueOf(value);
         }
     }
