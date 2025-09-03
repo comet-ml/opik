@@ -5,7 +5,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -22,7 +22,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.HashMap;
 import java.util.List;
@@ -699,7 +698,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
-    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
@@ -917,7 +916,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     Set<Column> columns = result.getValue();
 
                     ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
-                    template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+                    template = template.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
 
                     return Flux.from(connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
@@ -990,7 +990,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
-                    selectTemplate = selectTemplate.add("truncationSize", responseFormattingConfig.getTruncationSize());
+                    selectTemplate = selectTemplate.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())

@@ -19,13 +19,12 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
-import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -45,7 +44,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -2044,7 +2042,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
-    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
@@ -2271,16 +2269,16 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
@@ -2335,14 +2333,6 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
                 .build());
-    }
-
-    private JsonNode getJsonNode(String value) {
-        try {
-            return JsonUtils.getJsonNodeFromString(value);
-        } catch (Exception e) {
-            return TextNode.valueOf(value);
-        }
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
@@ -2444,7 +2434,7 @@ class TraceDAOImpl implements TraceDAO {
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
-        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
@@ -2778,7 +2768,8 @@ class TraceDAOImpl implements TraceDAO {
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-                    template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+                    template = template.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
                     template = template.add("offset", offset);
 
                     var finalTemplate = template;
@@ -2819,7 +2810,7 @@ class TraceDAOImpl implements TraceDAO {
 
             ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-            template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             template.add("limit", limit)
                     .add("stream", true);
@@ -3014,7 +3005,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())

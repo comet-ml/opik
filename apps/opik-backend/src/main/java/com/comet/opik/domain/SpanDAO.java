@@ -13,11 +13,10 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
-import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -36,7 +35,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -1177,7 +1175,7 @@ class SpanDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
-    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
+    private final @NonNull OpikConfiguration configuration;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1580,14 +1578,6 @@ class SpanDAO {
         return row.get(fieldName, clazz);
     }
 
-    private JsonNode getJsonNode(String value) {
-        try {
-            return JsonUtils.getJsonNodeFromString(value);
-        } catch (Exception e) {
-            return TextNode.valueOf(value);
-        }
-    }
-
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
         return result.map((row, rowMetadata) -> Span.builder()
@@ -1604,16 +1594,16 @@ class SpanDAO {
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(this::getJsonNode)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class), null))
                 .provider(StringUtils.defaultIfBlank(
@@ -1704,7 +1694,7 @@ class SpanDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
         template = template.add("stream", true);
 
@@ -1729,7 +1719,7 @@ class SpanDAO {
         template.add("offset", (page - 1) * size);
 
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
-        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
         bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
 

@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.infrastructure.ResponseFormattingConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -19,7 +19,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -302,7 +301,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
+    private final @NonNull OpikConfiguration configuration;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -415,7 +414,7 @@ class ExperimentItemDAO {
             template.add("lastRetrievedId", lastRetrievedId);
         }
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                 .bind("limit", limit);
