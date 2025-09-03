@@ -54,7 +54,7 @@ def parse_litellm_model_output(
         else:
             # Compute score using top logprobs
             score_token_position = 3
-            log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
+            log_probs_content = content.choices[0]["logprobs"]["content"][
                 score_token_position
             ]
 
