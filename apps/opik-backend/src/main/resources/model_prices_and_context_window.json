@@ -5817,16 +5817,6 @@
         "supports_response_schema": true,
         "supports_tool_choice": true
     },
-    "groq/llama3-8b-8192": {
-        "max_tokens": 8192,
-        "max_input_tokens": 8192,
-        "max_output_tokens": 8192,
-        "input_cost_per_token": 5e-08,
-        "output_cost_per_token": 8e-08,
-        "litellm_provider": "groq",
-        "mode": "chat",
-        "supports_tool_choice": true
-    },
     "groq/llama-3.2-1b-preview": {
         "max_tokens": 8192,
         "max_input_tokens": 8192,
@@ -5906,17 +5896,6 @@
         "supports_vision": true,
         "supports_tool_choice": true,
         "deprecation_date": "2025-04-14"
-    },
-    "groq/llama3-70b-8192": {
-        "max_tokens": 8192,
-        "max_input_tokens": 8192,
-        "max_output_tokens": 8192,
-        "input_cost_per_token": 5.9e-07,
-        "output_cost_per_token": 7.9e-07,
-        "litellm_provider": "groq",
-        "mode": "chat",
-        "supports_response_schema": true,
-        "supports_tool_choice": true
     },
     "groq/llama-3.1-8b-instant": {
         "max_tokens": 8192,
@@ -9904,6 +9883,28 @@
         "supports_reasoning": true,
         "supports_tool_choice": true,
         "supports_prompt_caching": true
+    },
+    "vertex_ai/openai/gpt-oss-20b-maas": {
+        "max_tokens": 32768,
+        "max_input_tokens": 131072,
+        "max_output_tokens": 32768,
+        "input_cost_per_token": 0.075e-06,
+        "output_cost_per_token": 0.30e-06,
+        "litellm_provider": "vertex_ai-openai_models",
+        "mode": "chat",
+        "supports_reasoning": true,
+        "source": "https://console.cloud.google.com/vertex-ai/publishers/openai/model-garden/gpt-oss-120b-maas"
+    },
+    "vertex_ai/openai/gpt-oss-120b-maas": {
+        "max_tokens": 32768,
+        "max_input_tokens": 131072,
+        "max_output_tokens": 32768,
+        "input_cost_per_token": 0.15e-06,
+        "output_cost_per_token": 0.60e-06,
+        "litellm_provider": "vertex_ai-openai_models",
+        "mode": "chat",
+        "supports_reasoning": true,
+        "source": "https://console.cloud.google.com/vertex-ai/publishers/openai/model-garden/gpt-oss-120b-maas"
     },
     "vertex_ai/qwen/qwen3-coder-480b-a35b-instruct-maas": {
         "max_tokens": 32768,
