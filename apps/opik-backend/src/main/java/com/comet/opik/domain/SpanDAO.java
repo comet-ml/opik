@@ -14,6 +14,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.StringTemplateManager;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -1198,7 +1199,7 @@ class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = new ST(BULK_INSERT)
+            var template = StringTemplateManager.getInstance().getTemplate(BULK_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1330,7 +1331,7 @@ class SpanDAO {
     }
 
     private ST newInsertTemplate(Span span) {
-        var template = new ST(INSERT);
+        var template = StringTemplateManager.getInstance().getTemplate(INSERT);
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
