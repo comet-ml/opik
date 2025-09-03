@@ -17,6 +17,7 @@ import com.comet.opik.infrastructure.ResponseFormattingConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -1579,6 +1580,14 @@ class SpanDAO {
         return row.get(fieldName, clazz);
     }
 
+    private JsonNode getJsonNode(String value) {
+        try {
+            return JsonUtils.getJsonNodeFromString(value);
+        } catch (Exception e) {
+            return TextNode.valueOf(value);
+        }
+    }
+
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
         return result.map((row, rowMetadata) -> Span.builder()
@@ -1595,16 +1604,16 @@ class SpanDAO {
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class), null))
                 .provider(StringUtils.defaultIfBlank(

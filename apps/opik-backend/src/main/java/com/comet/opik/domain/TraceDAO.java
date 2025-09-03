@@ -25,6 +25,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -2270,16 +2271,16 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(this::getJsonNode)
                         .orElse(null))
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
@@ -2334,6 +2335,14 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
                 .build());
+    }
+
+    private JsonNode getJsonNode(String value) {
+        try {
+            return JsonUtils.getJsonNodeFromString(value);
+        } catch (Exception e) {
+            return TextNode.valueOf(value);
+        }
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
