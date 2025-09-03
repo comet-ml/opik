@@ -111,6 +111,57 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 
 Stop the backend container, because you don't need it.
 
+## Log Shipping to OpenTelemetry
+
+Opik frontend can ship NGINX access logs and Fluent Bit metrics to an OpenTelemetry Collector.
+
+### Configuration
+
+Set the following environment variables to enable log shipping:
+
+```bash
+# Enable log shipping
+export ENABLE_OTEL_LOG_EXPORT=true
+
+# Configure collector endpoint
+export OTEL_COLLECTOR_HOST=your-otel-collector-host
+export OTEL_COLLECTOR_PORT=4317
+
+# Run with log shipping enabled
+docker compose up -d
+```
+
+### What Gets Shipped
+
+When enabled, the frontend will export:
+
+- **NGINX Access Logs**: All HTTP requests to the frontend
+- **Fluent Bit Metrics**: Internal metrics about log processing performance
+
+### Monitoring Endpoints
+
+When log shipping is enabled, additional monitoring endpoints are available:
+
+- **Frontend**: `http://localhost:5173/` (main application)
+- **Fluent Bit**: `http://localhost:2020/` (metrics and health checks)
+
+### Configuration Files
+
+- `fluent-bit.conf`: Fluent Bit configuration for log tailing and metrics collection
+- `nginx_default_local.conf`: NGINX configuration with standard access logging
+
+### Disabling Log Shipping
+
+To disable log shipping (default):
+
+```bash
+export ENABLE_OTEL_LOG_EXPORT=false
+# or simply omit the variable
+docker compose up -d
+```
+
+When disabled, NGINX logs normally to files and Fluent Bit does not run.
+
 ## Stop Opik
 
 ```bash
