@@ -1177,7 +1177,7 @@ class Opik:
 
         return Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
-    def get_all_prompt_versions(self, name: str) -> List[Prompt]:
+    def get_prompt_history(self, name: str) -> List[Prompt]:
         """
         Retrieve all the prompt versions history for a given prompt name.
 
@@ -1197,7 +1197,7 @@ class Opik:
 
     def get_all_prompts(self, name: str) -> List[Prompt]:
         """
-        DEPRECATED: Please use Opik.get_all_prompt_versions() instead.
+        DEPRECATED: Please use Opik.get_prompt_history() instead.
         Retrieve all the prompt versions history for a given prompt name.
 
         Parameters:
@@ -1207,9 +1207,9 @@ class Opik:
             List[Prompt]: A list of Prompt instances for the given name.
         """
         LOGGER.warning(
-            "Opik.get_all_prompts() is deprecated. Please use Opik.get_all_prompt_versions() instead."
+            "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
         )
-        return self.get_all_prompt_versions(name)
+        return self.get_prompt_history(name)
 
     def search_prompts(
         self, name: Optional[str] = None, filter_string: Optional[str] = None
