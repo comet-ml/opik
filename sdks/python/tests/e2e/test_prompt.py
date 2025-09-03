@@ -214,3 +214,49 @@ def test_prompt__type_in_new_version(opik_client: opik.Opik):
     assert (
         new_prompt.__internal_api__version_id__ != prompt.__internal_api__version_id__
     )
+
+
+def test_prompt__search_prompts__returns_all_versions(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name_1 = f"some-prompt-name-{unique_identifier}"
+    prompt_name_2 = f"some-prompt-name-{unique_identifier}-v2"
+
+    opik_client.create_prompt(name=prompt_name_1, prompt="old-template-1")
+    opik_client.create_prompt(name=prompt_name_1, prompt="new-template-1")
+    opik_client.create_prompt(name=prompt_name_2, prompt="some-template-2")
+
+    prompts = opik_client.search_prompts()
+
+    templates = {p.prompt for p in prompts}
+    assert "new-template-1" in templates
+    assert "some-template-2" in templates
+
+
+def test_prompt__get_prompts__with_filters__happyflow(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template_1 = f"some-prompt-text-{unique_identifier}"
+    prompt_template_2 = f"some-prompt-text-{unique_identifier}-v2"
+
+    # Create two versions for the same prompt
+    _ = opik_client.create_prompt(name=prompt_name, prompt=prompt_template_1)
+    prompt_version2 = opik_client.create_prompt(
+        name=prompt_name, prompt=prompt_template_2
+    )
+
+    # Add tags to prompt version 2
+    opik_client.rest_client.prompts.update_prompt(
+        id=prompt_version2.__internal_api__prompt_id__,
+        name=prompt_version2.name,
+        tags=["alpha", "beta"],
+    )
+
+    filtered_prompts = opik_client.search_prompts(
+        name=prompt_name,
+        filter_string='tags contains "alpha" AND tags contains "beta"',
+    )
+
+    assert len(filtered_prompts) == 1
+    assert filtered_prompts[0].prompt == prompt_template_2
