@@ -86,7 +86,7 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
-    List<Project> findByGlobalNames(List<String> names);
+    Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
 
     Mono<Project> getOrCreate(String projectName);
 
@@ -484,8 +484,14 @@ class ProjectServiceImpl implements ProjectService {
         });
     }
 
-    @Override
-    public List<Project> findByGlobalNames(List<String> names) {
+    public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {
+        return Mono.fromCallable(() -> this.findByGlobalNames(DemoData.PROJECTS))
+                .map(projects -> projects.stream()
+                        .collect(Collectors.toMap(Project::id, Project::createdAt)))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private List<Project> findByGlobalNames(List<String> names) {
         if (names.isEmpty()) {
             return List.of();
         }

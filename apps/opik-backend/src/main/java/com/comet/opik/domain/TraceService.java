@@ -19,7 +19,6 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
-import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -395,10 +394,7 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
 
-        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
-                .getDemoProjectIdsWithTimestamps(projectService);
-
-        return demoProjectIds
+        return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of()))
                 .flatMapMany(dao::countTracesPerWorkspace)
                 .collectList()
@@ -413,10 +409,7 @@ class TraceServiceImpl implements TraceService {
     public Mono<BiInformationResponse> getTraceBIInformation() {
         log.info("Getting trace BI events daily data");
 
-        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
-                .getDemoProjectIdsWithTimestamps(projectService);
-
-        return demoProjectIds
+        return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of()))
                 .flatMapMany(dao::getTraceBIInformation)
                 .collectList()
@@ -437,11 +430,8 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-
-        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
-                .getDemoProjectIdsWithTimestampsForWorkspace(projectService, ProjectService.DEFAULT_WORKSPACE_ID);
-
-        return demoProjectIds.switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
     }
 
     @Override

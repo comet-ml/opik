@@ -11,7 +11,6 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.domain.attachment.AttachmentService;
-import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -311,11 +310,7 @@ public class SpanService {
 
     @WithSpan
     public Mono<SpansCountResponse> countSpansPerWorkspace() {
-
-        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
-                .getDemoProjectIdsWithTimestamps(projectService);
-
-        return demoProjectIds
+        return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of()))
                 .flatMapMany(spanDAO::countSpansPerWorkspace)
                 .collectList()
@@ -329,11 +324,7 @@ public class SpanService {
     @WithSpan
     public Mono<BiInformationResponse> getSpanBIInformation() {
         log.info("Getting span BI events daily data");
-
-        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
-                .getDemoProjectIdsWithTimestamps(projectService);
-
-        return demoProjectIds
+        return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of()))
                 .flatMapMany(spanDAO::getSpanBIInformation)
                 .collectList()

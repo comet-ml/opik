@@ -13,6 +13,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -37,10 +38,8 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1931,10 +1930,7 @@ class SpanDAO {
     public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace(
             @NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        Optional<Instant> demoDataCreatedAt = excludedProjectIds.values()
-                .stream()
-                .max(Comparator.naturalOrder())
-                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
         ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
 
@@ -1970,10 +1966,7 @@ class SpanDAO {
     public Flux<BiInformationResponse.BiInformation> getSpanBIInformation(
             @NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        Optional<Instant> demoDataCreatedAt = excludedProjectIds.values()
-                .stream()
-                .max(Comparator.naturalOrder())
-                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
         ST template = new ST(SPAN_DAILY_BI_INFORMATION);
 
