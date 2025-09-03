@@ -1,0 +1,7 @@
+# Claude Code SDK requirements for testing
+# Note: This file contains the dependencies needed to test the Claude Code integration
+# Users will need to install claude-code-sdk separately
+
+# For testing purposes, we use mock objects, so no external dependencies are required
+# When the actual Claude Code SDK is available, add it here:
+# claude-code-sdk>=0.1.0
