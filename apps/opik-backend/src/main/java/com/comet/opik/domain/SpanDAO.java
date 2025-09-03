@@ -37,8 +37,10 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1146,23 +1148,31 @@ class SpanDAO {
             """;
 
     private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
-                SELECT
-                     workspace_id,
-                     COUNT(DISTINCT id) as span_count
-                 FROM spans
-                 WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                 GROUP BY workspace_id
+            SELECT
+                 workspace_id,
+                 COUNT(DISTINCT id) as span_count
+             FROM spans
+             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM spans WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+            )
+            <endif>
+             GROUP BY workspace_id
             ;
             """;
 
     private static final String SPAN_DAILY_BI_INFORMATION = """
-                SELECT
-                     workspace_id,
-                     created_by AS user,
-                     COUNT(DISTINCT id) AS span_count
-                FROM spans
-                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id, created_by
+            SELECT
+                    workspace_id,
+                    created_by AS user,
+                    COUNT(DISTINCT id) AS span_count
+            FROM spans
+            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM spans WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+            )
+            <endif>
+            GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -1918,10 +1928,36 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace() {
+    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace(
+            @NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        Optional<Instant> demoDataCreatedAt = excludedProjectIds.values()
+                .stream()
+                .max(Comparator.naturalOrder())
+                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
+
+        ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet());
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get());
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SPAN_COUNT_BY_WORKSPACE_ID);
+                    var statement = connection.createStatement(template.render());
+
+                    if (!excludedProjectIds.isEmpty()) {
+                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                    }
+
+                    if (demoDataCreatedAt.isPresent()) {
+                        statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                    }
+
                     return Flux.from(statement.execute());
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
@@ -1931,12 +1967,38 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation() {
+    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation(
+            @NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        Optional<Instant> demoDataCreatedAt = excludedProjectIds.values()
+                .stream()
+                .max(Comparator.naturalOrder())
+                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
+
+        ST template = new ST(SPAN_DAILY_BI_INFORMATION);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get());
+        }
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SPAN_DAILY_BI_INFORMATION);
-                    return Flux.from(statement.execute());
+
+                    var statement = connection.createStatement(template.render());
+
+                    if (!excludedProjectIds.isEmpty()) {
+                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                    }
+
+                    if (demoDataCreatedAt.isPresent()) {
+                        statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                    }
+
+                    return statement.execute();
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
                         .workspaceId(row.get("workspace_id", String.class))

@@ -19,6 +19,7 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -394,12 +395,16 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
 
-        return template.stream(dao::countTracesPerWorkspace)
+        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
+                .getDemoProjectIdsWithTimestamps(projectService);
+
+        return demoProjectIds
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(dao::countTracesPerWorkspace)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        TraceCountResponse.builder()
-                                .workspacesTracesCount(items)
-                                .build()))
+                .map(items -> TraceCountResponse.builder()
+                        .workspacesTracesCount(items)
+                        .build())
                 .switchIfEmpty(Mono.just(TraceCountResponse.empty()));
     }
 
@@ -407,12 +412,17 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<BiInformationResponse> getTraceBIInformation() {
         log.info("Getting trace BI events daily data");
-        return template.stream(dao::getTraceBIInformation)
+
+        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
+                .getDemoProjectIdsWithTimestamps(projectService);
+
+        return demoProjectIds
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(dao::getTraceBIInformation)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        BiInformationResponse.builder()
-                                .biInformation(items)
-                                .build()))
+                .map(items -> BiInformationResponse.builder()
+                        .biInformation(items)
+                        .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 
@@ -427,14 +437,11 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        Mono<List<UUID>> projects = Mono
-                .fromCallable(() -> projectService.findByNames(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.PROJECTS)
-                        .stream()
-                        .map(Project::id)
-                        .toList())
-                .subscribeOn(Schedulers.boundedElastic());
 
-        return projects.switchIfEmpty(Mono.just(List.of())).flatMap(dao::getDailyTraces);
+        Mono<Map<UUID, Instant>> demoProjectIds = DemoDataExclusionUtils
+                .getDemoProjectIdsWithTimestampsForWorkspace(projectService, ProjectService.DEFAULT_WORKSPACE_ID);
+
+        return demoProjectIds.switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
     }
 
     @Override

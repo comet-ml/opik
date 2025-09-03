@@ -86,6 +86,8 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
+    List<Project> findByGlobalNames(List<String> names);
+
     Mono<Project> getOrCreate(String projectName);
 
     Project retrieveByName(String projectName);
@@ -479,6 +481,20 @@ class ProjectServiceImpl implements ProjectService {
             var repository = handle.attach(ProjectDAO.class);
 
             return repository.findByNames(workspaceId, names);
+        });
+    }
+
+    @Override
+    public List<Project> findByGlobalNames(List<String> names) {
+        if (names.isEmpty()) {
+            return List.of();
+        }
+
+        return template.inTransaction(READ_ONLY, handle -> {
+
+            var repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByGlobalNames(names);
         });
     }
 
