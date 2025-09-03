@@ -19,6 +19,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.ResponseFormattingConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -43,6 +44,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -734,9 +736,9 @@ class TraceDAOImpl implements TraceDAO {
             )
             SELECT
                   t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(!exclude_input)>, <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> substring(replaceRegexpAll(metadata, '<truncate>', '"[image]"'), 1, <truncationSize>) as metadata <else> metadata <endif><endif>
                   <if(!exclude_feedback_scores)>
                   , fsagg.feedback_scores_list as feedback_scores_list
                   , fsagg.feedback_scores as feedback_scores
@@ -1498,8 +1500,8 @@ class TraceDAOImpl implements TraceDAO {
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                        <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
                         sumMap(s.usage) as usage,
@@ -1749,8 +1751,8 @@ class TraceDAOImpl implements TraceDAO {
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
-                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                    <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -2041,6 +2043,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
 
     @Override
     @WithSpan
@@ -2432,6 +2435,7 @@ class TraceDAOImpl implements TraceDAO {
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
+        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
@@ -2765,6 +2769,7 @@ class TraceDAOImpl implements TraceDAO {
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                    template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
                     template = template.add("offset", offset);
 
                     var finalTemplate = template;
@@ -2805,6 +2810,7 @@ class TraceDAOImpl implements TraceDAO {
 
             ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
 
             template.add("limit", limit)
                     .add("stream", true);
@@ -2999,6 +3005,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())

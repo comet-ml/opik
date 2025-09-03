@@ -13,6 +13,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.ResponseFormattingConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,6 +35,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -833,9 +835,9 @@ class SpanDAO {
             )
             SELECT
                 s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
-                <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
-                <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
+                <if(!exclude_input)>, <if(truncate)> substring(replaceRegexpAll(s.input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> s.input as input<endif> <endif>
+                <if(!exclude_output)>, <if(truncate)> substring(replaceRegexpAll(s.output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> s.output as output<endif> <endif>
+                <if(!exclude_metadata)>, <if(truncate)> substring(replaceRegexpAll(s.metadata, '<truncate>', '"[image]"'), 1, <truncationSize>) as metadata <else> s.metadata as metadata<endif> <endif>
                 <if(!exclude_feedback_scores)>
                 , fsa.feedback_scores_list as feedback_scores_list
                 , fsa.feedback_scores as feedback_scores
@@ -1174,6 +1176,7 @@ class SpanDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull @Config ResponseFormattingConfig responseFormattingConfig;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1692,6 +1695,7 @@ class SpanDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
 
         template = template.add("stream", true);
 
@@ -1716,6 +1720,7 @@ class SpanDAO {
         template.add("offset", (page - 1) * size);
 
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
+        template = template.add("truncationSize", responseFormattingConfig.getTruncationSize());
 
         bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
 

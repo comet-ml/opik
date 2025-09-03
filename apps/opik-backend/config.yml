@@ -463,3 +463,9 @@ feedbackScores:
   # Default: false
   # Description: Whether to write feedback scores by their author or not
   writeToAuthored: ${OPIK_FEEDBACK_SCORES_WRITE_TO_AUTHORED:-false}
+
+# Response formatting configuration
+responseFormatting:
+  # Default: 10001
+  # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
+  truncationSize: ${OPIK_RESPONSE_TRUNCATION_SIZE:-10001}
