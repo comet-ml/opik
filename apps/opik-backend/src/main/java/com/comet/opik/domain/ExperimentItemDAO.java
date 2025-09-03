@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -237,8 +238,8 @@ class ExperimentItemDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
                         visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
@@ -300,6 +301,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull OpikConfiguration configuration;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -412,6 +414,7 @@ class ExperimentItemDAO {
             template.add("lastRetrievedId", lastRetrievedId);
         }
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                 .bind("limit", limit);

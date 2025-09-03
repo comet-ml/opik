@@ -86,4 +86,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private FeedbackScoresConfig feedbackScores = new FeedbackScoresConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ResponseFormattingConfig responseFormatting = new ResponseFormattingConfig();
 }
