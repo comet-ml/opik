@@ -23,30 +23,30 @@ def tiny_test(test_mode: bool = False) -> opik.Dataset:
 
         download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
         ds.disable_progress_bar()
+        try:
+            # Load only the core_en subset JSONL from the repo
+            # Use the generic JSON loader with streaming for efficiency
+            hf_dataset = ds.load_dataset(
+                "json",
+                data_files="hf://datasets/vincentkoc/tiny_qa_benchmark_pp/data/core_en/core_en.jsonl",
+                streaming=True,
+                download_config=download_config,
+            )["train"]
 
-        # Load only the core_en subset JSONL from the repo
-        # Use the generic JSON loader with streaming for efficiency
-        hf_dataset = ds.load_dataset(
-            "json",
-            data_files="hf://datasets/vincentkoc/tiny_qa_benchmark_pp/data/core_en/core_en.jsonl",
-            streaming=True,
-            download_config=download_config,
-        )["train"]
+            data = []
+            for i, item in enumerate(hf_dataset):
+                if i >= nb_items:
+                    break
+                data.append(
+                    {
+                        "text": item.get("text", ""),
+                        "label": item.get("label", ""),
+                        # Preserve original tiny_test shape with metadata.context
+                        "metadata": {"context": item.get("context", "")},
+                    }
+                )
 
-        data = []
-        for i, item in enumerate(hf_dataset):
-            if i >= nb_items:
-                break
-            data.append(
-                {
-                    "text": item.get("text", ""),
-                    "label": item.get("label", ""),
-                    # Preserve original tiny_test shape with metadata.context
-                    "metadata": {"context": item.get("context", "")},
-                }
-            )
-
-        ds.enable_progress_bar()
-
-        dataset.insert(data)
-        return dataset
+            dataset.insert(data)
+            return dataset
+        finally:
+            ds.enable_progress_bar()
