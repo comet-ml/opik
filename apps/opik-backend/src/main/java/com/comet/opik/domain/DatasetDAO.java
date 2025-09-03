@@ -191,7 +191,7 @@ public interface DatasetDAO {
                 AND id NOT IN (
                     SELECT id
                     FROM datasets
-                    AND name IN (<excluded_names>)
+                    WHERE name IN (<excluded_names>)
                 )
                 GROUP BY workspace_id, created_by
             """)

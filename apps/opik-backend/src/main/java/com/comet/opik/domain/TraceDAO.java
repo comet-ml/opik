@@ -47,7 +47,6 @@ import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -764,8 +763,9 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM traces WHERE project_id IN :excluded_project_ids
-             <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+             <if(excluded_project_ids)> AND id NOT IN (
+                SELECT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
              )
              <endif>
              GROUP BY workspace_id
@@ -779,8 +779,9 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM traces WHERE project_id IN :excluded_project_ids
-            <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+            <if(excluded_project_ids)> AND id NOT IN (
+                SELECT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
             )
             <endif>
             GROUP BY workspace_id, created_by
@@ -2659,11 +2660,11 @@ class TraceDAOImpl implements TraceDAO {
         ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", new ArrayList<>(excludedProjectIds.keySet()));
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
         }
 
         if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get());
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return asyncTemplate
@@ -2672,12 +2673,11 @@ class TraceDAOImpl implements TraceDAO {
                             Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids",
-                                        excludedProjectIds.keySet().toArray(UUID[]::new));
+                                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
                             }
 
                             if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                             }
 
                             return Mono.from(statement.execute());
@@ -2701,7 +2701,7 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get());
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return asyncTemplate.nonTransaction(connection -> {
@@ -2712,7 +2712,7 @@ class TraceDAOImpl implements TraceDAO {
             }
 
             if (demoDataCreatedAt.isPresent()) {
-                statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
             }
 
             return Mono.from(statement.execute());
@@ -2756,7 +2756,7 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get());
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return asyncTemplate
@@ -2765,11 +2765,11 @@ class TraceDAOImpl implements TraceDAO {
                             Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids", new ArrayList<>(excludedProjectIds.keySet()));
+                                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
                             }
 
                             if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                             }
 
                             return Mono.from(statement.execute());

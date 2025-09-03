@@ -1152,7 +1152,8 @@ class SpanDAO {
                  COUNT(DISTINCT id) as span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM spans WHERE project_id IN :excluded_project_ids
+             <if(excluded_project_ids)>AND id NOT IN (
+                SELECT id FROM spans WHERE project_id IN :excluded_project_ids 
                 <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
             )
             <endif>
@@ -1167,7 +1168,8 @@ class SpanDAO {
                     COUNT(DISTINCT id) AS span_count
             FROM spans
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND id NOT IN (SELECT id FROM spans WHERE project_id IN :excluded_project_ids
+            <if(excluded_project_ids)>AND id NOT IN (
+                SELECT id FROM spans WHERE project_id IN :excluded_project_ids 
                 <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
             )
             <endif>
@@ -1935,11 +1937,11 @@ class SpanDAO {
         ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet());
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
         }
 
         if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get());
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return Mono.from(connectionFactory.create())
@@ -1951,10 +1953,10 @@ class SpanDAO {
                     }
 
                     if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                     }
 
-                    return Flux.from(statement.execute());
+                    return statement.execute();
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
                         .workspace(row.get("workspace_id", String.class))
@@ -1975,7 +1977,7 @@ class SpanDAO {
         }
 
         if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get());
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return Mono.from(connectionFactory.create())
@@ -1988,7 +1990,7 @@ class SpanDAO {
                     }
 
                     if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get());
+                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                     }
 
                     return statement.execute();
