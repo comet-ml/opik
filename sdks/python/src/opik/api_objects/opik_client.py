@@ -1179,13 +1179,13 @@ class Opik:
 
     def get_all_prompt_versions(self, name: str) -> List[Prompt]:
         """
-        Retrieve all the prompt versions for a given prompt name.
+        Retrieve all the prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            List[Prompt]: A list of Prompt instances for the given name.
         """
         prompt_client = PromptClient(self._rest_client)
         fern_prompt_versions = prompt_client.get_all_prompts(name=name)
@@ -1198,13 +1198,13 @@ class Opik:
     def get_all_prompts(self, name: str) -> List[Prompt]:
         """
         DEPRECATED: Please use Opik.get_all_prompt_versions() instead.
-        Retrieve all the prompt versions for a given prompt name.
+        Retrieve all the prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            List[Prompt]: A list of Prompt instances for the given name.
         """
         LOGGER.warning(
             "Opik.get_all_prompts() is deprecated. Please use Opik.get_all_prompt_versions() instead."
@@ -1223,7 +1223,7 @@ class Opik:
                 converted into a stringified list of filters expected by the backend.
 
         Returns:
-            List[Prompt]: A list of `Prompt` instances.
+            List[Prompt]: A list of Prompt instances found.
         """
         parsed_filters = None
         if filter_string:
