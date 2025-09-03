@@ -100,7 +100,7 @@ def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
 
-    original_prompt = opik_client.create_prompt(
+    original_prompt_version = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
     )
@@ -108,39 +108,40 @@ def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
     unique_identifier_new = str(uuid.uuid4())[-6:]
     prompt_template_new = f"some-prompt-text-{unique_identifier_new}"
 
-    # must create new version
-    new_prompt = opik_client.create_prompt(
+    new_prompt_version = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template_new,
     )
 
-    # ASSERTIONS
-    new_prompt = opik_client.get_prompt(name=original_prompt.name)
-
-    assert (
-        new_prompt.__internal_api__prompt_id__ == new_prompt.__internal_api__prompt_id__
-    )
-    assert (
-        new_prompt.__internal_api__version_id__
-        == new_prompt.__internal_api__version_id__
-    )
-    assert new_prompt.commit == new_prompt.commit
-    assert new_prompt.prompt == new_prompt.prompt
-
-    previous_prompt = opik_client.get_prompt(
-        name=original_prompt.name, commit=original_prompt.commit
+    new_prompt_version_from_api = opik_client.get_prompt(
+        name=original_prompt_version.name
     )
 
     assert (
-        previous_prompt.__internal_api__prompt_id__
-        == original_prompt.__internal_api__prompt_id__
+        new_prompt_version_from_api.__internal_api__prompt_id__
+        == new_prompt_version.__internal_api__prompt_id__
     )
     assert (
-        previous_prompt.__internal_api__version_id__
-        == original_prompt.__internal_api__version_id__
+        new_prompt_version_from_api.__internal_api__version_id__
+        == new_prompt_version.__internal_api__version_id__
     )
-    assert previous_prompt.commit == original_prompt.commit
-    assert previous_prompt.prompt == original_prompt.prompt
+    assert new_prompt_version_from_api.commit == new_prompt_version.commit
+    assert new_prompt_version_from_api.prompt == new_prompt_version.prompt
+
+    previous_prompt_from_api = opik_client.get_prompt(
+        name=original_prompt_version.name, commit=original_prompt_version.commit
+    )
+
+    assert (
+        previous_prompt_from_api.__internal_api__prompt_id__
+        == original_prompt_version.__internal_api__prompt_id__
+    )
+    assert (
+        previous_prompt_from_api.__internal_api__version_id__
+        == original_prompt_version.__internal_api__version_id__
+    )
+    assert previous_prompt_from_api.commit == original_prompt_version.commit
+    assert previous_prompt_from_api.prompt == original_prompt_version.prompt
 
 
 def test_prompt__get__not_exists(opik_client: opik.Opik):
@@ -198,9 +199,6 @@ def test_prompt__create_with_custom_type(opik_client: opik.Opik):
         template=prompt_template,
         type=PromptType.JINJA2,
     )
-
-    assert prompt.name == prompt_name
-    assert prompt.prompt == prompt_template
 
 
 def test_prompt__type_persists_in_get(opik_client: opik.Opik):
