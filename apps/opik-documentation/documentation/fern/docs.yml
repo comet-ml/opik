@@ -17,8 +17,6 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
-  - path: ./dify_chatbot.js
-    strategy: lazyOnload
 css: ./styles.css
 
 analytics:
