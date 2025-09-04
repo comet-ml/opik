@@ -1,22 +1,22 @@
 import React, { useMemo } from "react";
-import sortBy from "lodash/sortBy";
 import { TraceFeedbackScore } from "@/types/traces";
-import FeedbackScoreRowDeleteCell from "./FeedbackScoreRowDeleteCell";
-import FeedbackScoreValueCell from "./FeedbackScoreValueCell";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
-import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
-import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
-import FeedbackScoreTableNoData from "./FeedbackScoreTableNoData";
-
+import FeedbackScoreTableNoData from "../FeedbackScoreTableNoData";
+import { DEFAULT_SELECTED_COLUMNS } from "./constants";
+import { ExpandingFeedbackScoreRow } from "./types";
+import { mapFeedbackScoresToRowsWithExpanded } from "./utils";
+import NameCell from "./cells/NameCell";
+import { ExpandedState } from "@tanstack/react-table";
+import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
+import AuthorCell from "./cells/AuthorCell";
 const SELECTED_COLUMNS_KEY = "feedback-scores-tab-selected-columns";
 const COLUMNS_ORDER_KEY = "feedback-scores-tab-columns-order";
 
-export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
+export const DEFAULT_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
   {
     id: "source",
     label: "Source",
@@ -29,34 +29,32 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
     label: "Key",
     type: COLUMN_TYPE.string,
     size: 100,
-    cell: FeedbackScoreNameCell as never,
+    cell: NameCell as never,
   },
+  //   {
+  //     id: "value",
+  //     label: "Score",
+  //     type: COLUMN_TYPE.string,
+  //     cell: FeedbackScoreValueCell as never,
+  //     size: 100,
+  //   },
+  //   {
+  //     id: "reason",
+  //     label: "Reason",
+  //     type: COLUMN_TYPE.string,
+  //     cell: FeedbackScoreReasonCell as never,
+  //     size: 100,
+  //   },
   {
-    id: "value",
-    label: "Score",
+    id: "created_by",
+    label: "Scored by",
     type: COLUMN_TYPE.string,
-    cell: FeedbackScoreValueCell as never,
+    cell: AuthorCell as never,
     size: 100,
   },
-  {
-    id: "reason",
-    label: "Reason",
-    type: COLUMN_TYPE.string,
-    cell: FeedbackScoreReasonCell as never,
-    size: 100,
-  },
-  // {
-  //   id: "created_by",
-  //   label: "Scored by",
-  //   type: COLUMN_TYPE.string,
-  //   cell: FeedbackScoreAuthorCell as never,
-  //   size: 100,
-  // },
 ];
 
-const DEFAULT_SELECTED_COLUMNS = ["name", "value", "reason"];
-
-type FeedbackScoreTabProps = {
+type FeedbackScoreTableProps = {
   onDeleteFeedbackScore: (name: string) => void;
   onAddHumanReview: () => void;
   entityName: string;
@@ -64,13 +62,18 @@ type FeedbackScoreTabProps = {
   entityType: "trace" | "thread";
 };
 
-const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
-  onDeleteFeedbackScore,
+const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   onAddHumanReview,
-  entityName,
   feedbackScores = [],
   entityType,
 }) => {
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const expandingConfig = {
+    expanded,
+    setExpanded,
+    autoResetExpanded: false,
+  };
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${entityType}-${SELECTED_COLUMNS_KEY}`,
     {
@@ -85,33 +88,18 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
     },
   );
 
+  const rows = useMemo(() => {
+    return mapFeedbackScoresToRowsWithExpanded(feedbackScores);
+  }, [feedbackScores]);
+
+  console.log(rows);
+
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<
-      TraceFeedbackScore,
-      TraceFeedbackScore
+    return convertColumnDataToColumn<
+      ExpandingFeedbackScoreRow,
+      ExpandingFeedbackScoreRow
     >(DEFAULT_COLUMNS, { selectedColumns, columnsOrder });
-
-    retVal.push({
-      id: "delete",
-      enableHiding: false,
-      cell: FeedbackScoreRowDeleteCell,
-      meta: {
-        custom: {
-          onDelete: onDeleteFeedbackScore,
-          entityName,
-        },
-      },
-      size: 48,
-      enableResizing: false,
-    });
-
-    return retVal;
-  }, [onDeleteFeedbackScore, selectedColumns, columnsOrder, entityName]);
-
-  const sortedFeedbackScores: TraceFeedbackScore[] = useMemo(
-    () => sortBy(feedbackScores, "name"),
-    [feedbackScores],
-  );
+  }, [selectedColumns, columnsOrder]);
 
   return (
     <>
@@ -127,7 +115,10 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
 
       <DataTable
         columns={columns}
-        data={sortedFeedbackScores}
+        data={rows}
+        expandingConfig={expandingConfig}
+        getRowId={(row: ExpandingFeedbackScoreRow) => row.id}
+        getSubRows={(row: ExpandingFeedbackScoreRow) => row?.subRows}
         noData={
           <FeedbackScoreTableNoData
             entityType={entityType}
@@ -139,4 +130,4 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
   );
 };
 
-export default FeedbackScoreTab;
+export default FeedbackScoreTable;

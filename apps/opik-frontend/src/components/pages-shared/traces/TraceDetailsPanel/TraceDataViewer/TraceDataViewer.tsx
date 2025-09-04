@@ -23,7 +23,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TagList from "../TagList/TagList";
 import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
-import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
 import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
@@ -38,6 +37,7 @@ import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import FeedbackScoreTable from "./FeedbackScoreTable/FeedbackScoreTable";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -241,7 +241,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <FeedbackScoreTab
+            <FeedbackScoreTable
               feedbackScores={data.feedback_scores}
               onDeleteFeedbackScore={onDeleteFeedbackScore}
               entityName={entityName}

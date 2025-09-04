@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import {
   FEEDBACK_SCORE_TYPE,
-  MultiValueFeedbackScore,
+  FeedbackScoreValueByAuthorMap,
   Trace,
   TraceFeedbackScore,
 } from "@/types/traces";
@@ -24,7 +24,9 @@ export const FEEDBACK_SCORE_SOURCE_MAP = {
 
 export function isMultiValueFeedbackScore(
   score: unknown,
-): score is MultiValueFeedbackScore {
+): score is TraceFeedbackScore & {
+  value_by_author: FeedbackScoreValueByAuthorMap;
+} {
   return Boolean(
     score &&
       typeof score === "object" &&
@@ -38,8 +40,12 @@ export function isMultiValueFeedbackScore(
 
 export function hasValuesByAuthor(
   score: TraceFeedbackScore,
-): score is MultiValueFeedbackScore {
-  return Boolean("value_by_author" in score);
+): score is TraceFeedbackScore & {
+  value_by_author: FeedbackScoreValueByAuthorMap;
+} {
+  return Boolean(
+    score && typeof score === "object" && "value_by_author" in score,
+  );
 }
 
 export const setExperimentsCompareCache = async (

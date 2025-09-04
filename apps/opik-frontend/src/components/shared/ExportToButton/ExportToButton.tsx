@@ -27,6 +27,9 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
     const fileName = generateFileName("csv");
     const mappedRows = getData();
 
+    console.log("mappedRows", mappedRows);
+    return;
+
     FileSaver.saveAs(
       new Blob(
         [

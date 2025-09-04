@@ -34,6 +34,20 @@ const ThreadsActionsPanel: React.FunctionComponent<
   }, [projectId, mutate, rows]);
 
   const mapRowData = useCallback(() => {
+    console.log(
+      "columnsToExport",
+      rows,
+      rows.map((row) => {
+        return columnsToExport.reduce<Record<string, unknown>>(
+          (acc, column) => {
+            acc[column] = get(row, column, "");
+
+            return acc;
+          },
+          {},
+        );
+      }),
+    );
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         acc[column] = get(row, column, "");
