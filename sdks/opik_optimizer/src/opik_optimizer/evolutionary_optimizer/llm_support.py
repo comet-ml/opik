@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 import logging
 import os
+import time
+import random
 
 import litellm
 from litellm import exceptions as litellm_exceptions
@@ -15,9 +17,13 @@ from .. import _throttle
 logger = logging.getLogger(__name__)
 
 
-# Using disk cache for LLM calls (shared across optimizer instances)
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
+# Configure LiteLLM cache with safe fallback
+try:
+    disk_cache_dir = os.path.expanduser("~/.litellm_cache")
+    litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
+except Exception:
+    # Fall back to in-memory cache to avoid disk timeouts/locks
+    litellm.cache = Cache(type=LiteLLMCacheType.MEMORY)
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -31,57 +37,79 @@ class LlmSupport:
         optimization_id: Optional[str] = None,
     ) -> str:
         """Call the model with the given prompt and return the response string."""
+        # Build base call params
+        llm_config_params: Dict[str, Any] = {
+            "temperature": getattr(self, "temperature", 0.3),
+            "max_tokens": getattr(self, "max_tokens", 1000),
+            "top_p": getattr(self, "top_p", 1.0),
+            "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
+            "presence_penalty": getattr(self, "presence_penalty", 0.0),
+        }
+
+        # Add Opik metadata unless disabled
         try:
-            llm_config_params: Dict[str, Any] = {
-                "temperature": getattr(self, "temperature", 0.3),
-                "max_tokens": getattr(self, "max_tokens", 1000),
-                "top_p": getattr(self, "top_p", 1.0),
-                "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
-                "presence_penalty": getattr(self, "presence_penalty", 0.0),
-            }
+            disable_monitoring_env = os.getenv(
+                "OPIK_OPTIMIZER_DISABLE_LITELLM_MONITORING", "0"
+            )
+            disable_monitoring = (
+                getattr(self, "disable_litellm_monitoring", False)
+                or disable_monitoring_env.lower() in ("1", "true", "yes")
+            )
 
-            # Metadata for Opik
-            metadata_for_opik: Dict[str, Any] = {}
-            if getattr(self, "project_name", None):
-                metadata_for_opik["project_name"] = self.project_name
-                metadata_for_opik["opik"] = {"project_name": self.project_name}
-            if optimization_id:
-                if "opik" in metadata_for_opik:
+            if not disable_monitoring:
+                metadata_for_opik: Dict[str, Any] = {}
+                if getattr(self, "project_name", None):
+                    metadata_for_opik["project_name"] = self.project_name
+                    metadata_for_opik["opik"] = {"project_name": self.project_name}
+                if optimization_id and "opik" in metadata_for_opik:
                     metadata_for_opik["opik"]["optimization_id"] = optimization_id
-            metadata_for_opik["optimizer_name"] = self.__class__.__name__
-            metadata_for_opik["opik_call_type"] = (
-                "reasoning" if is_reasoning else "evaluation_llm_task_direct"
-            )
-            if metadata_for_opik:
-                llm_config_params["metadata"] = metadata_for_opik
+                metadata_for_opik["optimizer_name"] = self.__class__.__name__
+                metadata_for_opik["opik_call_type"] = (
+                    "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+                )
+                if metadata_for_opik:
+                    llm_config_params["metadata"] = metadata_for_opik
 
-            # Add Opik monitoring params
-            final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
-                llm_config_params.copy()
-            )
-
-            logger.debug(
-                f"Calling model '{self.model}' with messages: {messages}, final params: {final_call_params}"
-            )
-
-            response = litellm.completion(
-                model=self.model, messages=messages, **final_call_params
-            )
-            self.llm_call_counter += 1
-
-            logger.debug(f"Response: {response}")
-            return response.choices[0].message.content
-        except litellm_exceptions.RateLimitError as e:
-            logger.error(f"LiteLLM Rate Limit Error: {e}")
-            raise
-        except litellm_exceptions.APIConnectionError as e:
-            logger.error(f"LiteLLM API Connection Error: {e}")
-            raise
-        except litellm_exceptions.ContextWindowExceededError as e:
-            logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
-            raise
+                # Try to add Opik monitoring callbacks; fall back silently on failure
+                llm_config_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(  # type: ignore
+                    llm_config_params.copy()
+                )
         except Exception as e:
-            logger.error(
-                f"Error calling model '{self.model}': {type(e).__name__} - {e}"
-            )
-            raise
+            logger.debug(f"Skipping Opik-LiteLLM monitoring setup: {e}")
+
+        # Retry policy for transient errors
+        max_retries = int(os.getenv("OPIK_OPTIMIZER_LITELLM_MAX_RETRIES", "3"))
+        base_sleep = float(os.getenv("OPIK_OPTIMIZER_LITELLM_BACKOFF", "0.5"))
+
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(
+                    f"Calling model '{self.model}' with messages: {messages}, params: {llm_config_params} (attempt {attempt+1})"
+                )
+                response = litellm.completion(
+                    model=self.model, messages=messages, **llm_config_params
+                )
+                self.llm_call_counter += 1
+                return response.choices[0].message.content
+            except (
+                litellm_exceptions.RateLimitError,
+                litellm_exceptions.APIConnectionError,
+                litellm_exceptions.InternalServerError,
+            ) as e:
+                if attempt < max_retries:
+                    sleep_s = min(10.0, base_sleep * (2**attempt)) + random.uniform(0, 0.25)
+                    logger.warning(
+                        f"LiteLLM transient error ({type(e).__name__}): {e}. Retrying in {sleep_s:.2f}s..."
+                    )
+                    time.sleep(sleep_s)
+                    continue
+                logger.error(f"LiteLLM error (final attempt): {e}")
+                raise
+            except litellm_exceptions.ContextWindowExceededError as e:
+                logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
+                raise
+            except Exception as e:
+                logger.error(
+                    f"Error calling model '{self.model}': {type(e).__name__} - {e}"
+                )
+                raise
