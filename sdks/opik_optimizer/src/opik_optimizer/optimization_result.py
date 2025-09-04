@@ -205,4 +205,11 @@ class OptimizationResult(pydantic.BaseModel):
         """
         console = get_console()
         console.print(self)
-        print("Optimization run link:", self.get_run_link())
+        # Gracefully handle cases where optimization tracking isn't available
+        if self.dataset_id and self.optimization_id:
+            try:
+                print("Optimization run link:", self.get_run_link())
+            except Exception:
+                print("Optimization run link: No optimization run link available")
+        else:
+            print("Optimization run link: No optimization run link available")
