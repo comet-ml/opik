@@ -1212,13 +1212,12 @@ class Opik:
         return self.get_prompt_history(name)
 
     def search_prompts(
-        self, name: Optional[str] = None, filter_string: Optional[str] = None
+        self, filter_string: Optional[str] = None
     ) -> List[Prompt]:
         """
         Retrieve the latest prompt versions for the given search parameters.
 
         Parameters:
-            name: The substring of the prompt name to search for. If you have an exact name, consider using the `get_prompt` method instead since the name is a unique identifier.
             filter_string: A filter string using Opik Query Language. It will be parsed and
                 converted into a stringified list of filters expected by the backend.
 
@@ -1232,7 +1231,7 @@ class Opik:
 
         prompt_client = PromptClient(self._rest_client)
         name_and_versions = prompt_client.search_prompts(
-            name=name, parsed_filters=parsed_filters
+            parsed_filters=parsed_filters
         )
         prompts: List[Prompt] = [
             Prompt.from_fern_prompt_version(prompt_name, version)
