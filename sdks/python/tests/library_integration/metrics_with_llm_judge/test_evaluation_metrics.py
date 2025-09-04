@@ -10,6 +10,7 @@ from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema impor
     FewShotExampleStructuredOutputCompliance,
 )
 
+
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
@@ -325,6 +326,22 @@ def test__structured_output_compliance__with_few_shot_examples(model):
     )
 
     result = structured_output_metric.score(output='{"name": "John", "age": 30}')
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_json_schema(model):
+    """Test structured output compliance with JSON schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+    schema = '{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}'
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema=schema
+    )
 
     assert_helpers.assert_score_result(result)
     assert result.value > 0.5
