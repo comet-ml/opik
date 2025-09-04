@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
+from opik.api_objects import opik_query_language
 
 from .threads import threads_client
 from .. import (
@@ -1176,23 +1177,63 @@ class Opik:
 
         return Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
-    def get_all_prompts(self, name: str) -> List[Prompt]:
+    def get_prompt_history(self, name: str) -> List[Prompt]:
         """
-        Retrieve all the prompt versions for a given prompt name.
+        Retrieve all the prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            List[Prompt]: A list of Prompt instances for the given name.
         """
         prompt_client = PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client.get_all_prompts(name=name)
+        fern_prompt_versions = prompt_client.get_all_prompt_versions(name=name)
         result = [
             Prompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
+
+    def get_all_prompts(self, name: str) -> List[Prompt]:
+        """
+        DEPRECATED: Please use Opik.get_prompt_history() instead.
+        Retrieve all the prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+
+        Returns:
+            List[Prompt]: A list of Prompt instances for the given name.
+        """
+        LOGGER.warning(
+            "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
+        )
+        return self.get_prompt_history(name)
+
+    def search_prompts(self, filter_string: Optional[str] = None) -> List[Prompt]:
+        """
+        Retrieve the latest prompt versions for the given search parameters.
+
+        Parameters:
+            filter_string: A filter string using Opik Query Language. It will be parsed and
+                converted into a stringified list of filters expected by the backend.
+
+        Returns:
+            List[Prompt]: A list of Prompt instances found.
+        """
+        parsed_filters = None
+        if filter_string:
+            oql = opik_query_language.OpikQueryLanguage(filter_string)
+            parsed_filters = oql.get_filter_expressions()
+
+        prompt_client = PromptClient(self._rest_client)
+        name_and_versions = prompt_client.search_prompts(parsed_filters=parsed_filters)
+        prompts: List[Prompt] = [
+            Prompt.from_fern_prompt_version(prompt_name, version)
+            for (prompt_name, version) in name_and_versions
+        ]
+        return prompts
 
     def create_optimization(
         self,

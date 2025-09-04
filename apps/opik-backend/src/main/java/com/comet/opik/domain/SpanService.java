@@ -310,7 +310,9 @@ public class SpanService {
 
     @WithSpan
     public Mono<SpansCountResponse> countSpansPerWorkspace() {
-        return spanDAO.countSpansPerWorkspace()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::countSpansPerWorkspace)
                 .collectList()
                 .flatMap(items -> Mono.just(
                         SpansCountResponse.builder()
@@ -322,12 +324,13 @@ public class SpanService {
     @WithSpan
     public Mono<BiInformationResponse> getSpanBIInformation() {
         log.info("Getting span BI events daily data");
-        return spanDAO.getSpanBIInformation()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::getSpanBIInformation)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        BiInformationResponse.builder()
-                                .biInformation(items)
-                                .build()))
+                .map(items -> BiInformationResponse.builder()
+                        .biInformation(items)
+                        .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 }

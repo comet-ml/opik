@@ -5,6 +5,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -137,7 +138,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 id,
                 dataset_id,
-                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), data) as data <else> data <endif>,
+                <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
                 trace_id,
                 span_id,
                 source,
@@ -530,7 +531,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 ei.dataset_item_id AS id,
                 :datasetId AS dataset_id,
-                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
+                <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                 COALESCE(di.data, map()) AS data,
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
@@ -589,8 +590,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
                         visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
@@ -697,6 +698,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
@@ -914,6 +916,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     Set<Column> columns = result.getValue();
 
                     ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
+                    template = template.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
 
                     return Flux.from(connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
@@ -986,6 +990,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
+                    selectTemplate = selectTemplate.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())
