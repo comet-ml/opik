@@ -184,7 +184,7 @@ def evaluate_experiment(
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
-    """Update existing experiment with new evaluation metrics.
+    """Update the existing experiment with new evaluation metrics.
 
     Args:
         experiment_name: The name of the experiment to update.
