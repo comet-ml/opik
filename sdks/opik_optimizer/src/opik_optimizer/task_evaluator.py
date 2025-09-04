@@ -2,8 +2,9 @@ import logging
 from typing import Any, Callable, Dict, List, Optional
 
 import opik
-from opik.evaluation import evaluator as opik_evaluator, samplers
+from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.samplers import base_dataset_sampler
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ def evaluate(
     n_samples: Optional[int] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
-    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    dataset_sampler: Optional[base_dataset_sampler.BaseDatasetSampler] = None,
 ) -> float:
     """
     Evaluate a task on a dataset.
