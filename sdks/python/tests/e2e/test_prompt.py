@@ -284,8 +284,7 @@ def test_prompt__get_prompts__with_filters__happyflow(opik_client: opik.Opik):
     )
 
     filtered_prompts = opik_client.search_prompts(
-        name=prompt_name,
-        filter_string='tags contains "alpha" AND tags contains "beta"',
+        filter_string=f'name contains "{prompt_name}" AND tags contains "alpha" AND tags contains "beta"',
     )
 
     assert len(filtered_prompts) == 1
@@ -304,8 +303,8 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     opik_client.create_prompt(name=prompt_name_2, prompt="template-2")
     opik_client.create_prompt(name=prompt_name_3, prompt="template-3")
 
-    # Search by name substring (no filters) to retrieve only two matching prompts
-    results = opik_client.search_prompts(name="common-prefix")
+    # Search by name substring via OQL (no additional filters) to retrieve only two matching prompts
+    results = opik_client.search_prompts(filter_string='name contains "common-prefix"')
 
     names = set(p.name for p in results)
     assert len(results) == 2
