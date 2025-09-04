@@ -51,10 +51,9 @@ class LlmSupport:
             disable_monitoring_env = os.getenv(
                 "OPIK_OPTIMIZER_DISABLE_LITELLM_MONITORING", "0"
             )
-            disable_monitoring = (
-                getattr(self, "disable_litellm_monitoring", False)
-                or disable_monitoring_env.lower() in ("1", "true", "yes")
-            )
+            disable_monitoring = getattr(
+                self, "disable_litellm_monitoring", False
+            ) or disable_monitoring_env.lower() in ("1", "true", "yes")
 
             if not disable_monitoring:
                 metadata_for_opik: Dict[str, Any] = {}
@@ -71,8 +70,10 @@ class LlmSupport:
                     llm_config_params["metadata"] = metadata_for_opik
 
                 # Try to add Opik monitoring callbacks; fall back silently on failure
-                llm_config_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(  # type: ignore
-                    llm_config_params.copy()
+                llm_config_params = (
+                    opik_litellm_monitor.try_add_opik_monitoring_to_params(  # type: ignore
+                        llm_config_params.copy()
+                    )
                 )
         except Exception as e:
             logger.debug(f"Skipping Opik-LiteLLM monitoring setup: {e}")
@@ -97,7 +98,9 @@ class LlmSupport:
                 litellm_exceptions.InternalServerError,
             ) as e:
                 if attempt < max_retries:
-                    sleep_s = min(10.0, base_sleep * (2**attempt)) + random.uniform(0, 0.25)
+                    sleep_s = min(10.0, base_sleep * (2**attempt)) + random.uniform(
+                        0, 0.25
+                    )
                     logger.warning(
                         f"LiteLLM transient error ({type(e).__name__}): {e}. Retrying in {sleep_s:.2f}s..."
                     )
