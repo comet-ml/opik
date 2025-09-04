@@ -17,10 +17,12 @@ console = get_console()
 def baseline_evaluation(verbose: int = 1) -> Any:
     if verbose >= 1:
         console.print("> Establishing baseline performance (seed prompt)")
+
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
                 console.print(f"  Baseline score: {s:.4f}")
+
     with suppress_opik_logs():
         with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
             yield Reporter()
@@ -30,13 +32,14 @@ def baseline_evaluation(verbose: int = 1) -> Any:
 def start_gepa_optimization(verbose: int = 1) -> Any:
     if verbose >= 1:
         console.print("> Starting GEPA optimization")
+
     class Reporter:
         def info(self, message: str) -> None:
             if verbose >= 1:
                 console.print(f"│   {message}")
+
     try:
         yield Reporter()
     finally:
         if verbose >= 1:
             console.print("")
-

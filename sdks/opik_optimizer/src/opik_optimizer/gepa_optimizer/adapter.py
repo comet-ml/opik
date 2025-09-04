@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, Tuple, List, Type
+from typing import Any, Callable, Dict, Optional, List, Type
 
 from ..optimization_config import chat_prompt
 
@@ -31,7 +31,9 @@ def make_opik_eval_fn(
             )
             if getattr(optimizer, "verbose", 0) >= 1:
                 snippet = (sys_text or "").replace("\n", " ")[:140]
-                print(f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}")
+                print(
+                    f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}"
+                )
             # Prefer a logging-aware evaluator if available on the optimizer
             if hasattr(optimizer, "_evaluate_prompt_logged"):
                 s = optimizer._evaluate_prompt_logged(  # type: ignore[attr-defined]
@@ -52,7 +54,9 @@ def make_opik_eval_fn(
                     verbose=0,
                 )
             if getattr(optimizer, "verbose", 0) >= 1:
-                print(f"[DBG][GEPA] Adapter eval (phase={phase_label}) — score: {float(s):.4f}")
+                print(
+                    f"[DBG][GEPA] Adapter eval (phase={phase_label}) — score: {float(s):.4f}"
+                )
             return float(s)
         except Exception as e:
             if getattr(optimizer, "verbose", 0) >= 1:
@@ -75,10 +79,12 @@ def build_adapter_if_available(
     DefaultAdapter = None
     try:
         from gepa.adapters.default import DefaultAdapter as _DefaultAdapter  # type: ignore
+
         DefaultAdapter = _DefaultAdapter
     except Exception:
         try:
             from gepa.adapter.default import DefaultAdapter as _DefaultAdapter  # type: ignore
+
             DefaultAdapter = _DefaultAdapter
         except Exception:
             try:
@@ -86,6 +92,7 @@ def build_adapter_if_available(
                 from gepa.adapters.default_adapter.default_adapter import (
                     DefaultAdapter as _DefaultAdapter,  # type: ignore
                 )
+
                 DefaultAdapter = _DefaultAdapter
             except Exception:
                 DefaultAdapter = None
@@ -113,7 +120,13 @@ def build_adapter_if_available(
 
             # GEPA adapters typically expose an evaluate() or score() API
             # Match DefaultAdapter signature: evaluate(batch, candidate, capture_traces=False)
-            def evaluate(self, batch: List[Dict[str, Any]], candidate: Any, *args: Any, **kwargs: Any):  # noqa: ANN401
+            def evaluate(
+                self,
+                batch: List[Dict[str, Any]],
+                candidate: Any,
+                *args: Any,
+                **kwargs: Any,
+            ):  # noqa: ANN401
                 # Trigger Opik-logged evaluation as a side effect for observability
                 try:
                     _ = self._opik_eval_fn(candidate)

@@ -56,7 +56,11 @@ class GepaOptimizer(BaseOptimizer):
             # Try common places where context may be stored
             # tiny_test uses metadata["context"].
             meta = item.get("metadata") or {}
-            if isinstance(meta, dict) and "context" in meta and isinstance(meta["context"], str):
+            if (
+                isinstance(meta, dict)
+                and "context" in meta
+                and isinstance(meta["context"], str)
+            ):
                 addl_context["context"] = meta["context"]
             elif "context" in item and isinstance(item["context"], str):
                 addl_context["context"] = item["context"]
@@ -138,6 +142,7 @@ class GepaOptimizer(BaseOptimizer):
                     return float(s)
                 except Exception:
                     return 0.0
+
             return _eval_fn
 
         # Preferred: Provide a custom adapter if supported
@@ -151,18 +156,48 @@ class GepaOptimizer(BaseOptimizer):
                 optimization_id,
                 phase_label="gepa_adapter_eval",
             )
-            adapter_obj = build_adapter_if_available(gepa, self.model, self.reflection_model, eval_fn)
+            adapter_obj = build_adapter_if_available(
+                gepa, self.model, self.reflection_model, eval_fn
+            )
 
-        if optimize_sig and ("adapter" in optimize_sig.parameters) and adapter_obj is not None:
+        if (
+            optimize_sig
+            and ("adapter" in optimize_sig.parameters)
+            and adapter_obj is not None
+        ):
             kwargs["adapter"] = adapter_obj
             # When providing an adapter, GEPA expects task_lm=None but still requires a reflection_lm
             kwargs["task_lm"] = None
             kwargs["reflection_lm"] = self.reflection_model
-        elif optimize_sig and any(
-            name in optimize_sig.parameters for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
-        ) and dataset is not None and metric is not None:
+        elif (
+            optimize_sig
+            and any(
+                name in optimize_sig.parameters
+                for name in (
+                    "eval_fn",
+                    "score_fn",
+                    "objective_fn",
+                    "metric_fn",
+                    "scorer",
+                )
+            )
+            and dataset is not None
+            and metric is not None
+        ):
             # Fallback: pass metric function directly if accepted
-            kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = make_opik_eval_fn(
+            kwargs[
+                next(
+                    name
+                    for name in (
+                        "eval_fn",
+                        "score_fn",
+                        "objective_fn",
+                        "metric_fn",
+                        "scorer",
+                    )
+                    if name in optimize_sig.parameters
+                )
+            ] = make_opik_eval_fn(
                 self,
                 dataset,
                 metric,
@@ -288,7 +323,9 @@ class GepaOptimizer(BaseOptimizer):
             phase = (extra_metadata or {}).get("phase") if extra_metadata else None
             sys_text = self._extract_system_text(prompt)
             snippet = (sys_text or "").replace("\n", " ")[:140]
-            print(f"[DBG][GEPA] Logged eval — phase={phase} opt_id={optimization_id} dataset={dataset.name} n_samples={n_samples or 'all'} score={score:.4f} prompt_snippet={snippet!r}")
+            print(
+                f"[DBG][GEPA] Logged eval — phase={phase} opt_id={optimization_id} dataset={dataset.name} n_samples={n_samples or 'all'} score={score:.4f} prompt_snippet={snippet!r}"
+            )
         return score
 
     def optimize_prompt(
@@ -327,7 +364,7 @@ class GepaOptimizer(BaseOptimizer):
         items = dataset.get_items()
         if n_samples is not None and n_samples > 0 and n_samples < len(items):
             # deterministic sub-sample for reproducibility
-            items = items[: n_samples]
+            items = items[:n_samples]
 
         trainset = self._to_gepa_default_datainst(items, input_key, output_key)
         valset = None  # default: GEPA uses trainset if valset is None
@@ -360,6 +397,7 @@ class GepaOptimizer(BaseOptimizer):
                 verbose=self.verbose,
             )
             from ..reporting_utils import display_configuration as _display_config
+
             _display_config(
                 messages=prompt.get_messages(),
                 optimizer_config={
@@ -445,8 +483,14 @@ class GepaOptimizer(BaseOptimizer):
             best_idx = getattr(gepa_result, "best_idx", 0) or 0
             score = float(val_scores[best_idx]) if val_scores else 0.0
 
-        best_candidate = candidates[best_idx] if candidates else getattr(gepa_result, "best_candidate", {})
-        best_prompt_text = list(best_candidate.values())[0] if best_candidate else seed_prompt_text
+        best_candidate = (
+            candidates[best_idx]
+            if candidates
+            else getattr(gepa_result, "best_candidate", {})
+        )
+        best_prompt_text = (
+            list(best_candidate.values())[0] if best_candidate else seed_prompt_text
+        )
 
         # Build history with both GEPA and Opik rescoring where available
         history: List[Dict[str, Any]] = []
@@ -492,6 +536,7 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         from ..reporting_utils import display_result as _display_result
+
         _display_result(
             initial_score=initial_score,
             best_score=score,
