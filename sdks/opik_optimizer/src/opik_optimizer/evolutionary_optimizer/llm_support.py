@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import logging
 import os
@@ -29,6 +29,17 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
 class LlmSupport:
+    if TYPE_CHECKING:
+        model: str
+        llm_call_counter: int
+        project_name: Optional[str]
+        disable_litellm_monitoring: bool
+        temperature: float
+        max_tokens: int
+        top_p: float
+        frequency_penalty: float
+        presence_penalty: float
+
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
@@ -57,9 +68,10 @@ class LlmSupport:
 
             if not disable_monitoring:
                 metadata_for_opik: Dict[str, Any] = {}
-                if getattr(self, "project_name", None):
-                    metadata_for_opik["project_name"] = self.project_name
-                    metadata_for_opik["opik"] = {"project_name": self.project_name}
+                pn = getattr(self, "project_name", None)
+                if pn:
+                    metadata_for_opik["project_name"] = pn
+                    metadata_for_opik["opik"] = {"project_name": pn}
                 if optimization_id and "opik" in metadata_for_opik:
                     metadata_for_opik["opik"]["optimization_id"] = optimization_id
                 metadata_for_opik["optimizer_name"] = self.__class__.__name__
@@ -116,3 +128,5 @@ class LlmSupport:
                     f"Error calling model '{self.model}': {type(e).__name__} - {e}"
                 )
                 raise
+        # Should never reach here
+        raise RuntimeError("LLM call did not return a response and did not raise")

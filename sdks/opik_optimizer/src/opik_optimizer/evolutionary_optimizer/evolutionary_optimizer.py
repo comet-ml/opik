@@ -1,7 +1,7 @@
 import json
 import logging
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast, Type, TYPE_CHECKING
 import sys
 import warnings
 
@@ -79,6 +79,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
 
     # Prompt constants moved into prompts.py
+    if TYPE_CHECKING:
+        _llm_deap_crossover: Any
+        _deap_crossover: Any
+        _deap_mutation: Any
+        _initialize_population: Any
+        _evaluate_prompt: Any
+        _infer_output_style_from_dataset: Any
 
     def __init__(
         self,

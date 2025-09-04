@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING, Type
 
 
 from .. import task_evaluator
@@ -7,6 +7,10 @@ import opik
 
 
 class EvaluationOps:
+    if TYPE_CHECKING:
+        agent_class: Type[Any]
+        num_threads: int
+
     def _evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
