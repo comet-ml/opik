@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Configure LiteLLM cache with safe fallback
 try:
-    disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-    litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
-except Exception:
+except (PermissionError, OSError, FileNotFoundError):
     # Fall back to in-memory cache to avoid disk timeouts/locks
     litellm.cache = Cache(type=LiteLLMCacheType.MEMORY)
 
