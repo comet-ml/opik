@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, Tuple, List
+from typing import Any, Callable, Dict, Optional, Tuple, List, Type
 
 from ..optimization_config import chat_prompt
 
@@ -10,6 +10,7 @@ def make_opik_eval_fn(
     dataset: Any,
     metric: Callable[[Dict[str, Any], str], Any],
     n_samples: Optional[int],
+    optimization_id: Optional[str] = None,
 ) -> Callable[[Any], float]:
     """Create a scoring function for GEPA that evaluates a candidate using Opik metric."""
 
@@ -27,13 +28,24 @@ def make_opik_eval_fn(
                 model=optimizer.model,
                 **optimizer.model_kwargs,
             )
-            s = optimizer.evaluate_prompt(  # type: ignore[attr-defined]
-                prompt=cp,
-                dataset=dataset,
-                metric=metric,
-                n_samples=n_samples,
-                verbose=0,
-            )
+            # Prefer a logging-aware evaluator if available on the optimizer
+            if hasattr(optimizer, "_evaluate_prompt_logged"):
+                s = optimizer._evaluate_prompt_logged(  # type: ignore[attr-defined]
+                    prompt=cp,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    verbose=0,
+                    optimization_id=optimization_id,
+                )
+            else:
+                s = optimizer.evaluate_prompt(  # type: ignore[attr-defined]
+                    prompt=cp,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    verbose=0,
+                )
             return float(s)
         except Exception:
             return 0.0
@@ -65,13 +77,43 @@ def build_adapter_if_available(
     if DefaultAdapter is None:
         return None
 
+    # Build an adapter subclass that overrides evaluate() to use our Opik metric
+    OpikAdapter: Optional[Type[Any]] = None
+    try:
+        class _OpikAdapter(DefaultAdapter):  # type: ignore[name-defined]
+            def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+                super().__init__(*args, **kwargs)
+                self._opik_eval_fn = eval_fn
+
+            # GEPA adapters typically expose an evaluate() or score() API
+            def evaluate(self, candidate: Any, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
+                return float(self._opik_eval_fn(candidate))
+
+            def score(self, candidate: Any, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
+                return float(self._opik_eval_fn(candidate))
+
+        OpikAdapter = _OpikAdapter
+    except Exception:
+        OpikAdapter = None
+
+    if OpikAdapter is not None:
+        try:
+            # Try passing task/reflection LMs similar to anymaths adapter style
+            try:
+                adapter = OpikAdapter(task_lm=task_lm, reflection_lm=reflection_lm)  # type: ignore[call-arg]
+            except TypeError:
+                # Constructor mismatch – try minimal
+                adapter = OpikAdapter()  # type: ignore[call-arg]
+            return adapter
+        except Exception:
+            pass
+
+    # Fallback: instantiate DefaultAdapter and attach eval_fn as attributes
     try:
         adapter = DefaultAdapter(task_lm=task_lm, reflection_lm=reflection_lm)  # type: ignore[call-arg]
     except TypeError:
-        # Constructor signature mismatch; try minimal
         adapter = DefaultAdapter()  # type: ignore[call-arg]
 
-    # Attach scoring function under common attribute names
     for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer"):
         try:
             setattr(adapter, attr, eval_fn)
@@ -79,7 +121,6 @@ def build_adapter_if_available(
         except Exception:
             continue
 
-    # As last resort, override a generic evaluate method
     if not any(
         hasattr(adapter, attr)
         for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
@@ -90,4 +131,3 @@ def build_adapter_if_available(
             pass
 
     return adapter
-
