@@ -181,6 +181,91 @@ that can be accessed through HTTP (port `80`) or HTTPS (port `443`).
 > ```
 > Then visit: `http://localhost:5173`
 
+## 🔒 SSL Certificate Management
+
+### Automatic SSL Certificate Provisioning
+
+The deployment script **automatically sets up HTTPS with trusted SSL certificates** when a domain name is configured in `.env.azure`:
+
+```bash
+# Configure domain and SSL in .env.azure
+DOMAIN_NAME="opik.yourdomain.com"          # The domain name
+EMAIL_FOR_LETSENCRYPT="you@yourdomain.com" # Required for Let's Encrypt
+ENABLE_AUTO_SSL="true"                     # Enable automatic SSL
+```
+
+Here's what happens when we run `deploy-azure.sh`:
+
+1. **cert-manager installation**: Installs cert-manager for certificate automation
+2. **Let's Encrypt ClusterIssuer**: Creates production-ready certificate issuer
+3. **Domain-based OAuth2**: Configures authentication with domain callback URL
+4. **HTTPS ingress**: Sets up Application Gateway with SSL termination
+5. **Certificate renewal**: Automatic 90-day renewal (no manual intervention)
+
+### SSL Certificate Status
+
+After deployment, we can check the certificate status:
+
+```bash
+# Check certificate readiness
+kubectl get certificates -n opik
+
+# Expected output:
+# NAME              READY   SECRET            AGE
+# opik-tls-secret   True    opik-tls-secret   5m
+
+# View certificate details
+kubectl describe certificate opik-tls-secret -n opik
+```
+
+### Domain Setup Requirements
+
+**Before deployment**, ensure the domain points to the Application Gateway IP:
+
+```bash
+# 1. Deploy first to get the public IP
+./deploy-azure.sh
+
+# 2. Get the Application Gateway IP
+az network public-ip show --name opik-appgw-ip --resource-group opik-rg --query "ipAddress" -o tsv
+
+# 3. Create DNS A record: opik.yourdomain.com → [IP_ADDRESS]
+```
+
+### Manual SSL Configuration (setup-ssl.sh)
+
+The `setup-ssl.sh` script is primarily used for **changing domains** or **manual SSL management** after initial deployment:
+
+```bash
+# Change domain and re-configure SSL
+./setup-ssl.sh new-domain.yourdomain.com
+```
+
+This `setup-ssl.sh` script does the following:
+
+1. Updates OAuth2 redirect URLs to use the new domain
+2. Creates new SSL certificate for the new domain
+3. Updates ingress configuration
+4. Reconfigures Application Gateway routing
+
+
+### SSL Troubleshooting
+
+If SSL certificates fail to issue:
+
+```bash
+# Check certificate status
+kubectl describe certificate opik-tls-secret -n opik
+
+# Check ACME challenges
+kubectl get challenges -n opik
+
+# Check ClusterIssuer status
+kubectl describe clusterissuer letsencrypt-prod
+
+# View cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager -f
+```
 
 ## 🔄 Updating the Deployment
 

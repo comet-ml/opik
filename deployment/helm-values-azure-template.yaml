@@ -28,8 +28,15 @@ oauth2-proxy:
     # =================================================================
     email-domain: "*" # Allow any email domain (restrict via groups instead)
     http-address: "0.0.0.0:4180" # Listen on all interfaces, port 4180
-    redirect-url: "https://$PUBLIC_IP_ADDRESS/oauth2/callback" # OAuth2 callback URL after authentication
+    redirect-url: "https://$DOMAIN_NAME/oauth2/callback" # OAuth2 callback URL after authentication
     skip-provider-button: "true" # Skip provider selection page (single provider)
+    
+    # =================================================================
+    # ACME Challenge Support for Let's Encrypt
+    # =================================================================
+    # Allow ACME challenges to bypass OAuth2 authentication
+    # This enables Let's Encrypt certificate validation
+    skip-auth-regex: "^/\\.well-known/acme-challenge/.*$"
 
     # =================================================================
     # MINIMAL HEADER FORWARDING (Fixes 431 Errors)
@@ -165,3 +172,13 @@ minio:
     enabled: true
     size: 128Gi
     storageClass: "managed-standard-retain"
+
+ssl:
+  # Enable automatic SSL certificate provisioning
+  enabled: $SSL_ENABLED
+  
+  # cert-manager cluster issuer (letsencrypt-prod or letsencrypt-staging)
+  issuer: "$SSL_ISSUER"
+  
+  # Hosts for SSL certificate (set dynamically by deployment script)
+  hosts: []

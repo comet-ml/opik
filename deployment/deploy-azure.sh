@@ -1167,6 +1167,139 @@ fi
 cd deployment
 
 # =============================================================================
+# CERT-MANAGER AND SSL SETUP
+# =============================================================================
+
+print_step "🔒 Setting up SSL certificate management"
+
+# Check if automatic SSL is enabled
+if [ "${ENABLE_AUTO_SSL:-true}" = "true" ]; then
+    print_info "Automatic SSL setup is enabled"
+    
+    # Install cert-manager if not already installed
+    if ! kubectl get namespace cert-manager &>/dev/null; then
+        print_info "Installing cert-manager..."
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+        
+        print_info "Waiting for cert-manager to be ready..."
+        kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=300s
+        kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n cert-manager --timeout=300s
+        kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=300s
+        
+        print_success "cert-manager installed and ready"
+    else
+        print_success "cert-manager already installed"
+    fi
+    
+    # Create Let's Encrypt ClusterIssuer if email is provided
+    if [ -n "${EMAIL_FOR_LETSENCRYPT:-}" ]; then
+        print_info "Creating Let's Encrypt ClusterIssuer with correct ingress class..."
+        
+        cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${EMAIL_FOR_LETSENCRYPT}
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: azure-application-gateway
+EOF
+        
+        print_success "Let's Encrypt ClusterIssuer created with correct format"
+        
+        # Also create staging issuer for testing
+        cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ${EMAIL_FOR_LETSENCRYPT}
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: azure-application-gateway
+EOF
+        
+        print_success "Let's Encrypt staging ClusterIssuer created (for testing)"
+    else
+        print_warning "EMAIL_FOR_LETSENCRYPT not set - SSL certificates will be self-signed"
+    fi
+    
+    # Set SSL configuration for Helm values
+    if [ -n "${DOMAIN_NAME:-}" ]; then
+        print_info "Domain name configured: $DOMAIN_NAME"
+        print_info "SSL certificates will be automatically provisioned"
+        export SSL_ENABLED="true"
+        export SSL_ISSUER="letsencrypt-prod"
+    else
+        print_info "No domain name set - using self-signed certificates"
+        export SSL_ENABLED="false"
+        export SSL_ISSUER=""
+    fi
+else
+    print_info "Automatic SSL setup is disabled"
+    export SSL_ENABLED="false"
+    export SSL_ISSUER=""
+fi
+
+# =============================================================================
+# INGRESS CONFIGURATION VALIDATION
+# =============================================================================
+
+print_step "🌐 Validating ingress configuration"
+
+# Function to validate and fix ingress class conflicts
+validate_ingress_configuration() {
+    print_info "Checking for ingress configuration issues..."
+    
+    # Check if there are any existing ingresses with conflicting configurations
+    EXISTING_INGRESSES=$(kubectl get ingress -n $NAMESPACE --no-headers 2>/dev/null | wc -l || echo "0")
+    
+    if [ "$EXISTING_INGRESSES" -gt 0 ]; then
+        print_info "Found $EXISTING_INGRESSES existing ingress(es) in namespace $NAMESPACE"
+        kubectl get ingress -n $NAMESPACE -o wide
+        
+        # Check for ingresses with dual ingress class configurations (annotation + spec)
+        print_info "Checking for dual ingress class configurations..."
+        
+        kubectl get ingress -n $NAMESPACE -o json | jq -r '.items[] | select(.metadata.annotations["kubernetes.io/ingress.class"] and .spec.ingressClassName) | .metadata.name' 2>/dev/null | while read ingress_name; do
+            if [ -n "$ingress_name" ]; then
+                print_warning "Ingress $ingress_name has both annotation and spec ingressClassName - fixing..."
+                kubectl annotate ingress "$ingress_name" -n $NAMESPACE kubernetes.io/ingress.class- || true
+                print_success "Removed duplicate ingress class annotation from $ingress_name"
+            fi
+        done
+    fi
+    
+    # Validate AGIC backend pools are being created
+    print_info "Validating Application Gateway backend pool configuration..."
+    BACKEND_POOLS=$(az network application-gateway address-pool list --gateway-name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP --query "length([?backendAddresses && length(backendAddresses) > \`0\`])" -o tsv 2>/dev/null || echo "0")
+    
+    if [ "$BACKEND_POOLS" -gt 0 ]; then
+        print_success "Application Gateway has $BACKEND_POOLS active backend pool(s)"
+        az network application-gateway address-pool list --gateway-name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP --query "[?backendAddresses && length(backendAddresses) > \`0\`].{name:name, addresses:backendAddresses[].ipAddress}" -o table 2>/dev/null || true
+    else
+        print_warning "Application Gateway has no active backend pools"
+        print_info "This is expected for new deployments - AGIC will populate them after ingress creation"
+    fi
+}
+
+# Run ingress validation
+validate_ingress_configuration
+
+# =============================================================================
 # HELM CHART PREPARATION AND DEPLOYMENT
 # =============================================================================
 
@@ -1177,6 +1310,7 @@ cd helm_chart/opik
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo add altinity https://docs.altinity.com/clickhouse-operator/
 helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+helm repo add jetstack https://charts.jetstack.io  # For cert-manager if needed
 helm repo update
 
 # Update dependencies to latest versions and rebuild lock file
@@ -1348,6 +1482,9 @@ export TOGGLE_GUARDRAILS_ENABLED
 export DOMAIN_NAME
 export PUBLIC_IP_ADDRESS
 export NAMESPACE
+export SSL_ENABLED
+export SSL_ISSUER
+export EMAIL_FOR_LETSENCRYPT
 
 # Re-export authentication variables to ensure they're available for envsubst
 print_info "Re-exporting authentication variables for envsubst"
@@ -1378,6 +1515,31 @@ print_success "Authentication variables validated successfully"
 
 # Create a temporary values file with substituted variables
 envsubst < helm-values-azure-template.yaml > helm-values-azure-resolved.yaml
+
+# Update SSL hosts configuration based on domain name
+if [ -n "${DOMAIN_NAME:-}" ] && [ "$DOMAIN_NAME" != "" ]; then
+    print_info "Configuring SSL certificate for domain: $DOMAIN_NAME"
+    # Use yq to update the hosts array, or sed if yq is not available
+    if command -v yq &> /dev/null; then
+        yq eval ".ssl.hosts = [\"$DOMAIN_NAME\"]" -i helm-values-azure-resolved.yaml
+        # Update OAuth2 redirect URL to use domain instead of IP
+        yq eval ".oauth2-proxy.extraArgs.redirect-url = \"https://$DOMAIN_NAME/oauth2/callback\"" -i helm-values-azure-resolved.yaml
+    else
+        # Fallback to sed for updating the hosts array
+        sed -i.bak "s/hosts: \[\]/hosts: [\"$DOMAIN_NAME\"]/g" helm-values-azure-resolved.yaml
+        # Update OAuth2 redirect URL to use domain
+        sed -i.bak "s|\$PUBLIC_IP_ADDRESS|$DOMAIN_NAME|g" helm-values-azure-resolved.yaml
+        rm -f helm-values-azure-resolved.yaml.bak
+    fi
+    print_success "SSL certificate will be provisioned for $DOMAIN_NAME"
+    print_success "OAuth2 redirect URL configured for $DOMAIN_NAME"
+else
+    print_info "No domain configured - using self-signed certificates for IP access"
+fi
+
+# Configure OAuth2 proxy to skip authentication for ACME challenges
+print_info "OAuth2 proxy is pre-configured for ACME challenge compatibility"
+print_success "ACME challenges will bypass OAuth2 authentication automatically"
 
 print_success "Environment variables substituted in Helm values"
 
@@ -1757,11 +1919,21 @@ if [ -n "$DOMAIN_NAME" ]; then
     print_key_value "HTTPS URL (Recommended)" "https://$DOMAIN_NAME"
     print_key_value "HTTP URL" "http://$DOMAIN_NAME"
     print_warning "Configure DNS: $DOMAIN_NAME → $PUBLIC_IP_ADDRESS"
+    
+    # SSL certificate status for domain
+    if [ "${SSL_ENABLED:-false}" = "true" ] && [ -n "${SSL_ISSUER:-}" ]; then
+        print_info "🔒 SSL Certificate: Automatic (Let's Encrypt)"
+        print_info "Certificate will be provisioned automatically in 5-10 minutes"
+        print_warning "Initial access may show security warning until certificate is ready"
+    else
+        print_warning "🔒 SSL Certificate: Self-signed (browser warnings expected)"
+    fi
 else
     print_key_value "HTTPS URL (Recommended)" "https://$PUBLIC_IP_ADDRESS"
     print_key_value "HTTP URL" "http://$PUBLIC_IP_ADDRESS"
+    print_warning "🔒 HTTPS uses self-signed certificate - browsers will show security warnings"
+    print_info "💡 To enable trusted SSL: Set DOMAIN_NAME in .env.azure and redeploy"
 fi
-print_warning "🔒 HTTPS uses self-signed certificate - browsers will show security warnings"
 
 print_section "🔗 Available Endpoints"
 print_key_value "Frontend" "/"
@@ -1844,6 +2016,30 @@ print_info "  kubectl rollout restart deployment -l app=ingress-appgw -n kube-sy
 print_info ""
 print_info "Check Application Gateway backend health:"
 print_info "  az network application-gateway show-backend-health --name $APP_GATEWAY_NAME --resource-group $RESOURCE_GROUP"
+print_info ""
+print_info "SSL Certificate troubleshooting:"
+if [ "${SSL_ENABLED:-false}" = "true" ] && [ -n "${SSL_ISSUER:-}" ]; then
+    print_info "  # Check certificate status:"
+    print_info "  kubectl get certificate -n $NAMESPACE"
+    print_info "  kubectl describe certificate opik-tls-secret -n $NAMESPACE"
+    print_info ""
+    print_info "  # Check cert-manager logs:"
+    print_info "  kubectl logs -n cert-manager deployment/cert-manager --tail=50"
+    print_info ""
+    print_info "  # Force certificate renewal:"
+    print_info "  kubectl delete certificate opik-tls-secret -n $NAMESPACE"
+    print_info "  kubectl delete secret opik-tls-secret -n $NAMESPACE"
+    print_info ""
+    print_info "  # Check ClusterIssuer status:"
+    print_info "  kubectl describe clusterissuer letsencrypt-prod"
+else
+    print_info "  # SSL is using self-signed certificates"
+    print_info "  # To enable Let's Encrypt SSL:"
+    print_info "  # 1. Set DOMAIN_NAME in .env.azure"
+    print_info "  # 2. Set EMAIL_FOR_LETSENCRYPT in .env.azure"
+    print_info "  # 3. Configure DNS: yourdomain.com → $PUBLIC_IP_ADDRESS"
+    print_info "  # 4. Run ./deploy-azure.sh again"
+fi
 print_info ""
 print_info "Restart AGIC if needed:"
 print_info "  kubectl rollout restart deployment/ingress-appgw-deployment -n kube-system"
