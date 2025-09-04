@@ -8,11 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
-import reactor.util.retry.Retry;
-import reactor.util.retry.RetryBackoffSpec;
 
-import java.net.SocketException;
-import java.time.Duration;
 import java.util.Optional;
 
 @UtilityClass
@@ -63,19 +59,6 @@ public class AsyncUtils {
 
             return action.subscriberContext(userName, workspaceId);
         });
-    }
-
-    public static RetryBackoffSpec handleConnectionError() {
-        return Retry.backoff(3, Duration.ofMillis(100))
-                .doBeforeRetry(retrySignal -> log.debug("Retrying due to: {}", retrySignal.failure().getMessage()))
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
-                .filter(throwable -> {
-                    log.debug("Filtering for retry: {}", throwable.getMessage());
-
-                    return SocketException.class.isAssignableFrom(throwable.getClass())
-                            || (throwable instanceof IllegalStateException
-                                    && throwable.getMessage().contains("Connection pool shut down"));
-                });
     }
 
 }
