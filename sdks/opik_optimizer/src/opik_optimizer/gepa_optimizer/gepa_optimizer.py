@@ -10,6 +10,7 @@ from ..optimization_config import chat_prompt
 from ..optimization_result import OptimizationResult
 from ..utils import optimization_context
 from . import reporting as gepa_reporting
+from .adapter import make_opik_eval_fn, build_adapter_if_available
 
 
 logger = logging.getLogger(__name__)
@@ -83,17 +84,6 @@ class GepaOptimizer(BaseOptimizer):
         try:
             import gepa
             import inspect
-            # Try to import a default adapter we can customize
-            DefaultAdapter = None
-            try:
-                from gepa.adapters.default import DefaultAdapter as _DefaultAdapter  # type: ignore
-                DefaultAdapter = _DefaultAdapter
-            except Exception:
-                try:
-                    from gepa.adapter.default import DefaultAdapter as _DefaultAdapter  # type: ignore
-                    DefaultAdapter = _DefaultAdapter
-                except Exception:
-                    DefaultAdapter = None
         except Exception as e:  # pragma: no cover - only triggered if not installed
             raise ImportError(
                 "gepa package is required for GepaOptimizer. Install with `pip install gepa`."
@@ -150,30 +140,9 @@ class GepaOptimizer(BaseOptimizer):
 
         # Preferred: Provide a custom adapter if supported
         adapter_obj = None
-        if DefaultAdapter is not None and dataset is not None and metric is not None:
-            try:
-                sig = inspect.signature(DefaultAdapter)  # type: ignore
-                adapter_kwargs: Dict[str, Any] = {}
-                for pname in ("task_lm", "reflection_lm"):
-                    if pname in sig.parameters:
-                        adapter_kwargs[pname] = self.model if pname == "task_lm" else self.reflection_model
-                adapter_obj = DefaultAdapter(**adapter_kwargs)  # type: ignore
-                # Attach our metric evaluation function under common names
-                eval_fn = _make_eval_fn()
-                for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer"):
-                    try:
-                        setattr(adapter_obj, attr, eval_fn)
-                        break
-                    except Exception:
-                        continue
-                # If no attribute matched, attempt to override a generic evaluate method
-                if not any(
-                    hasattr(adapter_obj, attr)
-                    for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
-                ) and hasattr(adapter_obj, "evaluate"):
-                    setattr(adapter_obj, "evaluate", eval_fn)
-            except Exception:
-                adapter_obj = None
+        if dataset is not None and metric is not None:
+            eval_fn = make_opik_eval_fn(self, dataset, metric, n_samples)
+            adapter_obj = build_adapter_if_available(gepa, self.model, self.reflection_model, eval_fn)
 
         if optimize_sig and ("adapter" in optimize_sig.parameters) and adapter_obj is not None:
             kwargs["adapter"] = adapter_obj
@@ -181,7 +150,9 @@ class GepaOptimizer(BaseOptimizer):
             name in optimize_sig.parameters for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
         ) and dataset is not None and metric is not None:
             # Fallback: pass metric function directly if accepted
-            kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = _make_eval_fn()
+            kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = make_opik_eval_fn(
+                self, dataset, metric, n_samples
+            )
 
         result = gepa.optimize(**kwargs)
         return result
