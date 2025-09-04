@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Tuple
 
 import logging
 import random
+import json
 
 from deap import creator as _creator
 
@@ -116,13 +117,31 @@ class CrossoverOps:
             )
             logger.debug(f"Raw LLM response for crossover: {response_content}")
 
-            json_response = utils.json_to_dict(response_content)
-            if not isinstance(json_response, list) or len(json_response) < 1:
-                raise ValueError("LLM response is not a list of prompts")
+            # First, try strict JSON parsing
+            json_response = None
+            try:
+                json_response = utils.json_to_dict(response_content)
+            except Exception:
+                # Continue with heuristic extraction below
+                json_response = None
+            children: List[List[Dict[str, str]]] = []
+            if isinstance(json_response, list):
+                children = [c for c in json_response if isinstance(c, list)]
 
-            children: List[List[Dict[str, str]]] = [
-                c for c in json_response if isinstance(c, list)
-            ]
+            # If strict parse failed to yield children, try extracting arrays heuristically
+            if not children:
+                extracted = self._extract_json_arrays(response_content)
+                for arr in extracted:
+                    try:
+                        parsed = json.loads(arr)
+                        if isinstance(parsed, list) and all(
+                            isinstance(m, dict) and {"role", "content"} <= set(m.keys())
+                            for m in parsed
+                        ):
+                            children.append(parsed)
+                    except Exception:
+                        continue
+
             if len(children) == 0:
                 raise ValueError("LLM response did not include any valid child prompts")
 
@@ -135,3 +154,36 @@ class CrossoverOps:
                 f"LLM-driven crossover failed: {e}. Falling back to original parents."
             )
             return ind1, ind2
+
+    def _extract_json_arrays(self, text: str) -> List[str]:
+        """Extract top-level JSON array substrings from arbitrary text.
+        This helps when models return multiple arrays like `[...],\n[...]`.
+        """
+        arrays: List[str] = []
+        depth = 0
+        start: Optional[int] = None
+        in_str = False
+        escape = False
+        for i, ch in enumerate(text):
+            if escape:
+                # current char is escaped; skip special handling
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == "[":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == "]" and depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    arrays.append(text[start : i + 1])
+                    start = None
+        return arrays
