@@ -95,7 +95,7 @@ class DatasetItemResultMapper {
         if (null == field || StringUtils.isBlank(field.toString())) {
             return null;
         }
-        return JsonUtils.getJsonNodeFromString(field.toString());
+        return JsonUtils.getJsonNodeFromStringWithFallback(field.toString());
     }
 
     static Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
@@ -175,7 +175,7 @@ class DatasetItemResultMapper {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromString(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
