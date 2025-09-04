@@ -17,9 +17,7 @@ from opik_optimizer.gepa_optimizer import GepaOptimizer
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-    return LevenshteinRatio().score(
-        reference=dataset_item["label"], output=llm_output
-    )
+    return LevenshteinRatio().score(reference=dataset_item["label"], output=llm_output)
 
 
 def main() -> None:
