@@ -11,6 +11,7 @@ def make_opik_eval_fn(
     metric: Callable[[Dict[str, Any], str], Any],
     n_samples: Optional[int],
     optimization_id: Optional[str] = None,
+    phase_label: Optional[str] = "gepa_adapter_eval",
 ) -> Callable[[Any], float]:
     """Create a scoring function for GEPA that evaluates a candidate using Opik metric."""
 
@@ -28,6 +29,9 @@ def make_opik_eval_fn(
                 model=optimizer.model,
                 **optimizer.model_kwargs,
             )
+            if getattr(optimizer, "verbose", 0) >= 1:
+                snippet = (sys_text or "").replace("\n", " ")[:140]
+                print(f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}")
             # Prefer a logging-aware evaluator if available on the optimizer
             if hasattr(optimizer, "_evaluate_prompt_logged"):
                 s = optimizer._evaluate_prompt_logged(  # type: ignore[attr-defined]
@@ -37,6 +41,7 @@ def make_opik_eval_fn(
                     n_samples=n_samples,
                     verbose=0,
                     optimization_id=optimization_id,
+                    extra_metadata={"phase": phase_label},
                 )
             else:
                 s = optimizer.evaluate_prompt(  # type: ignore[attr-defined]
@@ -46,8 +51,12 @@ def make_opik_eval_fn(
                     n_samples=n_samples,
                     verbose=0,
                 )
+            if getattr(optimizer, "verbose", 0) >= 1:
+                print(f"[DBG][GEPA] Adapter eval (phase={phase_label}) — score: {float(s):.4f}")
             return float(s)
-        except Exception:
+        except Exception as e:
+            if getattr(optimizer, "verbose", 0) >= 1:
+                print(f"[DBG][GEPA] Adapter eval error: {e}")
             return 0.0
 
     return _eval_fn
@@ -72,7 +81,14 @@ def build_adapter_if_available(
             from gepa.adapter.default import DefaultAdapter as _DefaultAdapter  # type: ignore
             DefaultAdapter = _DefaultAdapter
         except Exception:
-            DefaultAdapter = None
+            try:
+                # Newer GEPA layout
+                from gepa.adapters.default_adapter.default_adapter import (
+                    DefaultAdapter as _DefaultAdapter,  # type: ignore
+                )
+                DefaultAdapter = _DefaultAdapter
+            except Exception:
+                DefaultAdapter = None
 
     if DefaultAdapter is None:
         return None
@@ -80,14 +96,31 @@ def build_adapter_if_available(
     # Build an adapter subclass that overrides evaluate() to use our Opik metric
     OpikAdapter: Optional[Type[Any]] = None
     try:
+        # Import EvaluationBatch type if available to construct correct return types
+        try:
+            from gepa.core.adapter import EvaluationBatch  # type: ignore
+        except Exception:
+            EvaluationBatch = None  # type: ignore
+
         class _OpikAdapter(DefaultAdapter):  # type: ignore[name-defined]
             def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-                super().__init__(*args, **kwargs)
+                # Ensure model is provided to base DefaultAdapter
+                try:
+                    super().__init__(model=task_lm)  # type: ignore[misc]
+                except TypeError:
+                    super().__init__(task_lm)  # type: ignore[misc]
                 self._opik_eval_fn = eval_fn
 
             # GEPA adapters typically expose an evaluate() or score() API
-            def evaluate(self, candidate: Any, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
-                return float(self._opik_eval_fn(candidate))
+            # Match DefaultAdapter signature: evaluate(batch, candidate, capture_traces=False)
+            def evaluate(self, batch: List[Dict[str, Any]], candidate: Any, *args: Any, **kwargs: Any):  # noqa: ANN401
+                # Trigger Opik-logged evaluation as a side effect for observability
+                try:
+                    _ = self._opik_eval_fn(candidate)
+                except Exception:
+                    pass
+                # Delegate to the base DefaultAdapter to produce proper trajectories for reflection
+                return super().evaluate(batch, candidate, *args, **kwargs)
 
             def score(self, candidate: Any, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
                 return float(self._opik_eval_fn(candidate))
@@ -99,20 +132,16 @@ def build_adapter_if_available(
     if OpikAdapter is not None:
         try:
             # Try passing task/reflection LMs similar to anymaths adapter style
-            try:
-                adapter = OpikAdapter(task_lm=task_lm, reflection_lm=reflection_lm)  # type: ignore[call-arg]
-            except TypeError:
-                # Constructor mismatch – try minimal
-                adapter = OpikAdapter()  # type: ignore[call-arg]
+            adapter = OpikAdapter()  # __init__ handles model
             return adapter
         except Exception:
             pass
 
     # Fallback: instantiate DefaultAdapter and attach eval_fn as attributes
     try:
-        adapter = DefaultAdapter(task_lm=task_lm, reflection_lm=reflection_lm)  # type: ignore[call-arg]
+        adapter = DefaultAdapter(model=task_lm)  # type: ignore[call-arg]
     except TypeError:
-        adapter = DefaultAdapter()  # type: ignore[call-arg]
+        adapter = DefaultAdapter(task_lm)  # type: ignore[call-arg]
 
     for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer"):
         try:

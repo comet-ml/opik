@@ -62,8 +62,8 @@ prompt = ChatPrompt(
 
 # Optimize it with GEPA
 optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",
-    reflection_model="openai/gpt-4o-mini",  # consider stronger reflector if available
+    model="openai/gpt-4o-mini",            # smaller task model (valid LiteLLM)
+    reflection_model="openai/gpt-4o",      # larger reflection model (valid LiteLLM)
     project_name="GEPA-Hotpot",
     temperature=0.7,  # slight increase for more exploration
     max_tokens=400,

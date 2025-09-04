@@ -143,19 +143,39 @@ class GepaOptimizer(BaseOptimizer):
         # Preferred: Provide a custom adapter if supported
         adapter_obj = None
         if dataset is not None and metric is not None:
-            eval_fn = make_opik_eval_fn(self, dataset, metric, n_samples, optimization_id)
+            eval_fn = make_opik_eval_fn(
+                self,
+                dataset,
+                metric,
+                n_samples,
+                optimization_id,
+                phase_label="gepa_adapter_eval",
+            )
             adapter_obj = build_adapter_if_available(gepa, self.model, self.reflection_model, eval_fn)
 
         if optimize_sig and ("adapter" in optimize_sig.parameters) and adapter_obj is not None:
             kwargs["adapter"] = adapter_obj
+            # When providing an adapter, GEPA expects task_lm=None but still requires a reflection_lm
+            kwargs["task_lm"] = None
+            kwargs["reflection_lm"] = self.reflection_model
         elif optimize_sig and any(
             name in optimize_sig.parameters for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
         ) and dataset is not None and metric is not None:
             # Fallback: pass metric function directly if accepted
             kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = make_opik_eval_fn(
-                self, dataset, metric, n_samples, optimization_id
+                self,
+                dataset,
+                metric,
+                n_samples,
+                optimization_id,
+                phase_label="gepa_adapter_eval",
             )
 
+        if self.verbose >= 1:
+            has_adapter = adapter_obj is not None
+            print(
+                f"[DBG][GEPA] Calling gepa.optimize(adapter={has_adapter}, max_metric_calls={max_metric_calls}, minibatch={reflection_minibatch_size}, strategy={candidate_selection_strategy}, opt_id={optimization_id})"
+            )
         result = gepa.optimize(**kwargs)
         return result
 
@@ -218,6 +238,7 @@ class GepaOptimizer(BaseOptimizer):
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
         optimization_id: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
         verbose: int = 1,
     ) -> float:
         # Ensure prompt has model settings
@@ -244,7 +265,10 @@ class GepaOptimizer(BaseOptimizer):
                 "agent_config": prompt.to_dict(),
                 "metric": metric.__name__,
                 "dataset": dataset.name,
-                "configuration": {"prompt": prompt.get_messages()},
+                "configuration": {
+                    "prompt": prompt.get_messages(),
+                    "gepa": (extra_metadata or {}),
+                },
             },
         }
 
@@ -260,6 +284,11 @@ class GepaOptimizer(BaseOptimizer):
             n_samples=n_samples,
             verbose=verbose,
         )
+        if self.verbose >= 1:
+            phase = (extra_metadata or {}).get("phase") if extra_metadata else None
+            sys_text = self._extract_system_text(prompt)
+            snippet = (sys_text or "").replace("\n", " ")[:140]
+            print(f"[DBG][GEPA] Logged eval — phase={phase} opt_id={optimization_id} dataset={dataset.name} n_samples={n_samples or 'all'} score={score:.4f} prompt_snippet={snippet!r}")
         return score
 
     def optimize_prompt(
@@ -354,6 +383,7 @@ class GepaOptimizer(BaseOptimizer):
                             metric=metric,
                             n_samples=n_samples,
                             optimization_id=opt_id,
+                            extra_metadata={"phase": "baseline"},
                             verbose=0,
                         )
                     )
@@ -398,9 +428,12 @@ class GepaOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     optimization_id=opt_id,
+                    extra_metadata={"phase": "rescoring", "candidate_index": i},
                     verbose=0,
                 )
-            except Exception:
+            except Exception as e:
+                if self.verbose >= 1:
+                    print(f"[DBG][GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
             rescored.append(float(s))
 
