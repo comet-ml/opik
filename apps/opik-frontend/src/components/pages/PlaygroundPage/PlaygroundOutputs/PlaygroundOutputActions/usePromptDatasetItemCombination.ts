@@ -16,6 +16,7 @@ import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
+import { parseCompletionOutput } from "@/lib/playground";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -157,9 +158,6 @@ const usePromptDatasetItemCombination = ({
           },
         });
 
-        const error =
-          run.opikError || run.providerError || run.pythonProxyError;
-
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
         });
@@ -176,8 +174,13 @@ const usePromptDatasetItemCombination = ({
           datasetItemId: datasetItemId,
         });
 
-        if (error) {
-          throw new Error(error);
+        if (
+          run.opikError ||
+          run.providerError ||
+          run.pythonProxyError ||
+          !run.result
+        ) {
+          throw new Error(parseCompletionOutput(run));
         }
       } catch (error) {
         const typedError = error as Error;
