@@ -148,8 +148,9 @@ After successful deployment, the output will show something like this:
 
 ```
 ==== Application Gateway Ready ====
-✓ 🌐 Application available at: https://52.155.251.75 (HTTPS - Recommended)
-ℹ Also available at: http://52.155.251.75 (HTTP)
+✓ 🌐 Application available at: https://opik.unilabspt.com (HTTPS - Recommended)
+ℹ Also available at: http://opik.unilabspt.com (HTTP)
+⚠ Configure DNS: opik.unilabspt.com → 52.155.251.75
 ⚠ HTTPS uses self-signed certificate - accept browser security warning
 ℹ It may take a few minutes for Application Gateway to configure backend pools
 ℹ If you get 502 errors, wait a few minutes and try again
@@ -173,7 +174,8 @@ After successful deployment, the output will show something like this:
 
 You can then access the application through the link that is provided.
 It has a static IP address `52.155.251.75`
-that can be accessed through HTTP (port `80`) or HTTPS (port `443`).
+that can be accessed through HTTP (port `80`) or HTTPS (port `443`),
+though we've mapped the domain `opik.unilabspt.com` to this IP.
 
 > Alternatively, you can port-forward the service to access it locally:
 > ```bash

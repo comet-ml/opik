@@ -2,7 +2,7 @@
 
 <div align="center">
 
-### [https://52.155.251.75](https://52.155.251.75)
+### [https://opik.unilabspt.com/](https://opik.unilabspt.com/)
 
 
 *Make sure you are in the ["Opik Users"](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/647828ca-5ea9-4084-9bef-009557c71925) group to log in.*
