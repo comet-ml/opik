@@ -171,7 +171,7 @@ test('should render user profile with data', async () => {
 ```python
 def test_create_user__happyflow(fake_backend):
     # Given
-    request = podamFactory.manufacturePojo(UserCreateRequest.class)
+    request = UserCreateRequest(name="John Doe", email="john@example.com")
     
     # When
     actual_user = user_service.create_user(request)
