@@ -117,6 +117,16 @@ def initializing_population(verbose: int = 1) -> Any:
                     f"│    Generating {num_fresh_starts} fresh prompts based on the task description."
                 )
 
+        def failed_fresh_prompts(self, num_fresh_starts: int, error: str) -> None:
+            if verbose >= 1:
+                console.print(
+                    Text(
+                        f"│       Failed to generate {num_fresh_starts} fresh prompts: {error}",
+                        style="dim red",
+                    )
+                )
+                console.print("│")
+
         def success_fresh_prompts(self, num_fresh_starts: int) -> None:
             if verbose >= 1:
                 console.print(
