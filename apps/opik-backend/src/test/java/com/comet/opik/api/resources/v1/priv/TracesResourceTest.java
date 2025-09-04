@@ -5081,7 +5081,55 @@ class TracesResourceTest {
             }
         }
 
-        @Test
+    @Test
+    void createTraceCommentsBatch_Success() {
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var ids = traces.stream().limit(3).map(Trace::id).toList();
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
+    }
+
+    @Test
+    void createTraceCommentsBatch_ValidationErrors() {
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var responseEmptyIds = traceResourceClient.callTraceCommentsBatchCreate(java.util.List.of(), "x", API_KEY, TEST_WORKSPACE);
+        assertThat(responseEmptyIds.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+
+        var ids = traces.stream().limit(1).map(Trace::id).toList();
+        var responseBlankText = traceResourceClient.callTraceCommentsBatchCreate(ids, "  ", API_KEY, TEST_WORKSPACE);
+        assertThat(responseBlankText.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
+    void createTraceCommentsBatch_OverLimit() {
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var ids = traces.stream().limit(11).map(Trace::id).toList();
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
+    void createTraceCommentsBatch_MixedWorkspace_BadRequest() {
+        var trace1 = factory.manufacturePojo(Trace.class);
+        var trace2 = factory.manufacturePojo(Trace.class);
+
+        traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+
+        String otherWorkspaceName = java.util.UUID.randomUUID().toString();
+        String otherWorkspaceId = java.util.UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, otherWorkspaceName, otherWorkspaceId);
+        traceResourceClient.createTrace(trace2, API_KEY, otherWorkspaceName);
+
+        var ids = java.util.List.of(trace1.id(), trace2.id());
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
+    }
         @DisplayName("When filtering by thread tag, should return only threads with matching tags")
         void whenFilterByTags__thenReturnThreadsWithMatchingTags() {
 
