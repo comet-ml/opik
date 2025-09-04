@@ -6,9 +6,10 @@ from opik import Dataset
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from ..base_optimizer import BaseOptimizer
-from ..optimization_config import chat_prompt
+from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
-from ..utils import optimization_context
+from ..utils import optimization_context, create_litellm_agent_class
+from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import make_opik_eval_fn, build_adapter_if_available
 
@@ -80,6 +81,7 @@ class GepaOptimizer(BaseOptimizer):
         dataset: Optional[Dataset] = None,
         metric: Optional[Callable[[Dict[str, Any], str], ScoreResult]] = None,
         n_samples: Optional[int] = None,
+        optimization_id: Optional[str] = None,
     ):
         try:
             import gepa
@@ -141,7 +143,7 @@ class GepaOptimizer(BaseOptimizer):
         # Preferred: Provide a custom adapter if supported
         adapter_obj = None
         if dataset is not None and metric is not None:
-            eval_fn = make_opik_eval_fn(self, dataset, metric, n_samples)
+            eval_fn = make_opik_eval_fn(self, dataset, metric, n_samples, optimization_id)
             adapter_obj = build_adapter_if_available(gepa, self.model, self.reflection_model, eval_fn)
 
         if optimize_sig and ("adapter" in optimize_sig.parameters) and adapter_obj is not None:
@@ -151,7 +153,7 @@ class GepaOptimizer(BaseOptimizer):
         ) and dataset is not None and metric is not None:
             # Fallback: pass metric function directly if accepted
             kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = make_opik_eval_fn(
-                self, dataset, metric, n_samples
+                self, dataset, metric, n_samples, optimization_id
             )
 
         result = gepa.optimize(**kwargs)
@@ -207,6 +209,59 @@ class GepaOptimizer(BaseOptimizer):
         )
         return score
 
+    def _evaluate_prompt_logged(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable[[Dict[str, Any], str], ScoreResult],
+        n_samples: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict[str, Any]] = None,
+        optimization_id: Optional[str] = None,
+        verbose: int = 1,
+    ) -> float:
+        # Ensure prompt has model settings
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        agent_class = create_litellm_agent_class(prompt)
+        agent = agent_class(prompt)
+
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            messages = prompt.get_messages(dataset_item)
+            raw = agent.invoke(messages)
+            return {mappers.EVALUATED_LLM_TASK_OUTPUT: raw.strip()}
+
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = agent_class.__name__
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "agent_class": agent_class.__name__,
+                "agent_config": prompt.to_dict(),
+                "metric": metric.__name__,
+                "dataset": dataset.name,
+                "configuration": {"prompt": prompt.get_messages()},
+            },
+        }
+
+        score = task_evaluator.evaluate(
+            dataset=dataset,
+            dataset_item_ids=dataset_item_ids,
+            metric=metric,
+            evaluated_task=llm_task,
+            num_threads=self.num_threads,
+            project_name=agent_class.project_name,
+            experiment_config=experiment_config,
+            optimization_id=optimization_id,
+            n_samples=n_samples,
+            verbose=verbose,
+        )
+        return score
+
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
@@ -223,9 +278,9 @@ class GepaOptimizer(BaseOptimizer):
         Run GEPA optimization using DefaultAdapter over the given dataset and metric.
 
         Args:
-            dataset: An Opik dataset name or object.
-            metric: Opik metric function (dataset_item, llm_output) -> ScoreResult.
-            task_config: TaskConfig mapping input/output fields and optional tools.
+            prompt: Seed `ChatPrompt` with a system and input mapping.
+            dataset: Opik dataset name or object.
+            metric: Opik metric function `(dataset_item, llm_output) -> ScoreResult`.
             max_metric_calls: GEPA budget for total metric calls across the run.
             reflection_minibatch_size: Batch size GEPA uses for reflective updates.
             candidate_selection_strategy: 'pareto' (default) or 'best'.
@@ -248,52 +303,63 @@ class GepaOptimizer(BaseOptimizer):
         trainset = self._to_gepa_default_datainst(items, input_key, output_key)
         valset = None  # default: GEPA uses trainset if valset is None
 
-        # Pretty header and configuration
-        # Pretty header and configuration
-        gepa_reporting.display_header(
-            algorithm="GEPA", optimization_id=None, dataset_id=None, verbose=self.verbose
-        )
-        from ..reporting_utils import display_configuration as _display_config
-        _display_config(
-            messages=prompt.get_messages(),
-            optimizer_config={
-                "optimizer": "GEPA",
-                "model": self.model,
-                "reflection_model": self.reflection_model,
-                "max_metric_calls": max_metric_calls,
-                "reflection_minibatch_size": reflection_minibatch_size,
-                "candidate_selection_strategy": candidate_selection_strategy,
-                "n_samples": n_samples or "all",
-            },
-            verbose=self.verbose,
-        )
-
-        # Baseline evaluation using provided prompt
+        # Pretty header and configuration will be displayed after obtaining optimization IDs
         initial_score: float = 0.0
-        with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
-            try:
-                initial_score = float(
-                    self.evaluate_prompt(
-                        dataset=dataset,
-                        metric=metric,
-                        prompt=prompt,
-                        n_samples=n_samples,
-                        verbose=0,
-                    )
-                )
-                baseline.set_score(initial_score)
-            except Exception:
-                # Baseline is optional; continue even if it fails
-                pass
+        initial_prompt_messages = prompt.get_messages()
 
         # Track optimization run in Opik
         self._opik_client = opik.Opik(project_name=self.project_name)
+        opt_id: Optional[str] = None
+        ds_id: Optional[str] = getattr(dataset, "id", None)
         with optimization_context(
             client=self._opik_client,
             dataset_name=dataset.name,
             objective_name=metric.__name__,
             metadata={"optimizer": self.__class__.__name__},
         ) as optimization:
+            # Now that we may have IDs, show header and config with link
+            opt_id = None
+            try:
+                opt_id = optimization.id if optimization is not None else None
+            except Exception:
+                opt_id = None
+
+            gepa_reporting.display_header(
+                algorithm="GEPA",
+                optimization_id=opt_id,
+                dataset_id=getattr(dataset, "id", None),
+                verbose=self.verbose,
+            )
+            from ..reporting_utils import display_configuration as _display_config
+            _display_config(
+                messages=prompt.get_messages(),
+                optimizer_config={
+                    "optimizer": "GEPA",
+                    "model": self.model,
+                    "reflection_model": self.reflection_model,
+                    "max_metric_calls": max_metric_calls,
+                    "reflection_minibatch_size": reflection_minibatch_size,
+                    "candidate_selection_strategy": candidate_selection_strategy,
+                    "n_samples": n_samples or "all",
+                },
+                verbose=self.verbose,
+            )
+            # Baseline evaluation tied to the optimization for tracking
+            with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
+                try:
+                    initial_score = float(
+                        self._evaluate_prompt_logged(
+                            prompt=prompt,
+                            dataset=dataset,
+                            metric=metric,
+                            n_samples=n_samples,
+                            optimization_id=opt_id,
+                            verbose=0,
+                        )
+                    )
+                    baseline.set_score(initial_score)
+                except Exception:
+                    pass
             with gepa_reporting.start_gepa_optimization(verbose=self.verbose):
                 gepa_result = self._call_gepa_optimize(
                     seed_prompt_text=seed_prompt_text,
@@ -305,7 +371,12 @@ class GepaOptimizer(BaseOptimizer):
                     dataset=dataset,
                     metric=metric,
                     n_samples=n_samples,
+                    optimization_id=opt_id,
                 )
+                try:
+                    opt_id = optimization.id if optimization is not None else None
+                except Exception:
+                    opt_id = None
 
         # Build OptimizationResult (re-score candidates with Opik metric to pick best)
         candidates: List[Dict[str, str]] = getattr(gepa_result, "candidates", []) or []
@@ -321,13 +392,13 @@ class GepaOptimizer(BaseOptimizer):
                 **self.model_kwargs,
             )
             try:
-                s = super().evaluate_prompt(
+                s = self._evaluate_prompt_logged(
                     prompt=cp,
                     dataset=dataset,
                     metric=metric,
-                    n_threads=self.num_threads,
-                    verbose=0,
                     n_samples=n_samples,
+                    optimization_id=opt_id,
+                    verbose=0,
                 )
             except Exception:
                 s = 0.0
@@ -378,6 +449,10 @@ class GepaOptimizer(BaseOptimizer):
             prompt=[{"role": "system", "content": best_prompt_text}],
             score=score,
             metric_name=metric.__name__,
+            optimization_id=opt_id,
+            dataset_id=ds_id,
+            initial_prompt=initial_prompt_messages,
+            initial_score=initial_score,
             details=details,
             history=history,
             llm_calls=None,  # not tracked for GEPA DefaultAdapter
