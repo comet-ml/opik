@@ -11,10 +11,12 @@ export const DeleteFeedbackScore: core.serialization.ObjectSchema<
     OpikApi.DeleteFeedbackScore
 > = core.serialization.object({
     name: core.serialization.string(),
+    author: core.serialization.string().optional(),
 });
 
 export declare namespace DeleteFeedbackScore {
     export interface Raw {
         name: string;
+        author?: string | null;
     }
 }

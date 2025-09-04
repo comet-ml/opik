@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
@@ -40,11 +41,11 @@ public interface FeedbackScoreDAO {
     Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId,
             @Nullable String author);
 
-    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name);
+    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score);
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
-    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names);
+    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author);
 
     Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
@@ -112,6 +113,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
+            <if(author)>AND author = :author<endif>
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
@@ -134,6 +136,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
+            <if(author)>AND author = :author<endif>
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
@@ -369,31 +372,47 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name) {
+    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score) {
 
         return asyncTemplate.nonTransaction(connection -> {
-            // Delete from feedback_scores table
-            String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
-                    .add("table_name", "feedback_scores")
-                    .render();
-            var statement1 = connection.createStatement(deleteFeedbackScore);
-            statement1
-                    .bind("entity_id", id)
-                    .bind("entity_type", entityType.getType())
-                    .bind("name", name);
 
-            // Delete from authored_feedback_scores table
-            String deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
-                    .add("table_name", "authored_feedback_scores")
-                    .render();
-            var statement2 = connection.createStatement(deleteAuthoredFeedbackScore);
+            Mono<Long> deleteNonAuthoredOperation;
+
+            if (StringUtils.isBlank(score.author())) {
+                // Delete from feedback_scores table only if author is not available
+                String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                        .add("table_name", "feedback_scores")
+                        .render();
+                var statement1 = connection.createStatement(deleteFeedbackScore);
+                statement1
+                        .bind("entity_id", id)
+                        .bind("entity_type", entityType.getType())
+                        .bind("name", score.name());
+
+                deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                        .flatMap(result -> Mono.from(result.getRowsUpdated()));
+            } else {
+                // Skip statement1 execution if author is not null
+                deleteNonAuthoredOperation = Mono.just(0L);
+            }
+
+            // Always delete from authored_feedback_scores table
+            var deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "authored_feedback_scores");
+            Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", author));
+
+            var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
-                    .bind("name", name);
+                    .bind("name", score.name());
+            Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(author -> statement2.bind("author", author));
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+            return deleteNonAuthoredOperation
                     .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
                     .then();
@@ -425,35 +444,51 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<Long> deleteByEntityIdAndNames(@NonNull EntityType entityType, @NonNull UUID entityId,
-            @NonNull Set<String> names) {
+            @NonNull Set<String> names, String author) {
 
         if (names.isEmpty()) {
             return Mono.just(0L);
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-            // Delete from feedback_scores table
-            ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-            template1.add("names", names);
-            template1.add("table_name", "feedback_scores");
 
-            var statement1 = connection.createStatement(template1.render())
-                    .bind("entity_ids", Set.of(entityId))
-                    .bind("entity_type", entityType.getType())
-                    .bind("names", names);
+            Mono<Long> deleteNonAuthoredOperation;
 
-            // Delete from authored_feedback_scores table
+            if (StringUtils.isBlank(author)) {
+                // Delete from feedback_scores table only if author is not available
+                ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+                template1.add("names", names);
+                template1.add("table_name", "feedback_scores");
+
+                var statement1 = connection.createStatement(template1.render())
+                        .bind("entity_ids", Set.of(entityId))
+                        .bind("entity_type", entityType.getType())
+                        .bind("names", names);
+
+                deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                        .flatMap(result -> Mono.from(result.getRowsUpdated()));
+            } else {
+                // Skip statement1 execution if author is not null
+                deleteNonAuthoredOperation = Mono.just(0L);
+            }
+
+            // Always delete from authored_feedback_scores table
             ST template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
+            Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(a -> template2.add("author", a));
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
                     .bind("names", names);
+            Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(a -> statement2.bind("author", a));
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+            return deleteNonAuthoredOperation
                     .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
