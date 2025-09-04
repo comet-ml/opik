@@ -28,6 +28,7 @@ jobs:
               cd deployment/helm_chart/opik
               helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
+              helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
               helm dependency build
               helm lint --values values.yaml .
               cd -
