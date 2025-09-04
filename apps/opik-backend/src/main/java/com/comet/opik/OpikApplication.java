@@ -1,5 +1,6 @@
 package com.comet.opik;
 
+import com.comet.opik.api.error.ConstraintViolationExceptionMapper;
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.DatabaseUtils;
@@ -121,5 +122,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
         jersey.register(JsonProcessingExceptionMapper.class);
+        jersey.register(ConstraintViolationExceptionMapper.class);
     }
 }

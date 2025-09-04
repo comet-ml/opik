@@ -78,6 +78,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -4153,6 +4154,36 @@ class ExperimentsResourceTest {
                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                     .build())
                             .collect(toList()));
+        }
+
+        @Test
+        void streamExperimentItems__whenInvalidPayload__thenReturn422WithValidationError() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Send invalid payload that should trigger validation error
+            var response = client.target(getExperimentItemsPath())
+                    .path("stream")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .post(Entity.json("{\"aaa\": \"bbb\"}"));
+
+            try {
+                // Should return 422 with validation error body
+                assertThat(response.getStatus()).isEqualTo(422);
+                assertThat(response.hasEntity()).isTrue();
+
+                // Read the response body to ensure it's properly serialized
+                var responseBody = response.readEntity(String.class);
+                assertThat(responseBody).isNotEmpty();
+                assertThat(responseBody).contains("errors");
+            } finally {
+                response.close();
+            }
         }
     }
 
