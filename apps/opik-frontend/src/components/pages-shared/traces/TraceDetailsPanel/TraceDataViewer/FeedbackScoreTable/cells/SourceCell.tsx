@@ -13,20 +13,14 @@ const SourceCell = (
   const sourceText = FEEDBACK_SCORE_SOURCE_MAP[row.source];
 
   // Apply text-light-slate style if it's a multi-value score and has no author
-  const isMultiValue = isMultiValueFeedbackScore(row);
-  const hasNoAuthor = !row.author;
-  const shouldApplyLightSlate = isMultiValue && hasNoAuthor;
+  const isMultiValue = isMultiValueFeedbackScore(row) && !row.author;
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span
-        className={`truncate ${
-          shouldApplyLightSlate ? "text-light-slate" : ""
-        }`}
-      >
+      <span className={`truncate ${isMultiValue ? "text-light-slate" : ""}`}>
         {sourceText}
       </span>
     </CellWrapper>
