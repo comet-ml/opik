@@ -156,9 +156,9 @@ class CrossoverOps:
             return creator.Individual(first_child), creator.Individual(second_child)
         except Exception as e:
             logger.warning(
-                f"LLM-driven crossover failed: {e}. Falling back to original parents."
+                f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."
             )
-            return ind1, ind2
+            return self._deap_crossover(ind1, ind2)
 
     def _extract_json_arrays(self, text: str) -> List[str]:
         """Extract top-level JSON array substrings from arbitrary text.
