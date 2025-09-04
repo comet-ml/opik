@@ -76,10 +76,24 @@ class GepaOptimizer(BaseOptimizer):
         max_metric_calls: int,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
+        dataset: Optional[Dataset] = None,
+        metric: Optional[Callable[[Dict[str, Any], str], ScoreResult]] = None,
+        n_samples: Optional[int] = None,
     ):
         try:
             import gepa
             import inspect
+            # Try to import a default adapter we can customize
+            DefaultAdapter = None
+            try:
+                from gepa.adapters.default import DefaultAdapter as _DefaultAdapter  # type: ignore
+                DefaultAdapter = _DefaultAdapter
+            except Exception:
+                try:
+                    from gepa.adapter.default import DefaultAdapter as _DefaultAdapter  # type: ignore
+                    DefaultAdapter = _DefaultAdapter
+                except Exception:
+                    DefaultAdapter = None
         except Exception as e:  # pragma: no cover - only triggered if not installed
             raise ImportError(
                 "gepa package is required for GepaOptimizer. Install with `pip install gepa`."
@@ -106,13 +120,68 @@ class GepaOptimizer(BaseOptimizer):
             track_best_outputs=False,
         )
 
-        # If the installed GEPA supports a custom adapter/eval path, prefer it.
-        # We try common parameter names conservatively; otherwise fallback.
-        if optimize_sig and ("adapter" in optimize_sig.parameters):
-            # Defer to GEPA DefaultAdapter via strings; adapter construction
-            # is handled internally when an adapter instance is not provided.
-            # If explicit adapter is required, caller can provide via kwargs in future.
-            pass
+        # If the installed GEPA supports a custom scoring function, inject our Opik metric
+        def _make_eval_fn():
+            def _eval_fn(candidate: Any, **_: Any) -> float:
+                try:
+                    # candidate can be dict {"system_prompt": text} or text
+                    if isinstance(candidate, dict):
+                        sys_text = next(iter(candidate.values()))
+                    else:
+                        sys_text = str(candidate)
+                    cp = chat_prompt.ChatPrompt(
+                        messages=[{"role": "system", "content": sys_text}],
+                        project_name=self.project_name,
+                        model=self.model,
+                        **self.model_kwargs,
+                    )
+                    s = super(GepaOptimizer, self).evaluate_prompt(  # type: ignore[misc]
+                        prompt=cp,
+                        dataset=dataset,  # type: ignore[arg-type]
+                        metric=metric,  # type: ignore[arg-type]
+                        n_threads=self.num_threads,
+                        verbose=0,
+                        n_samples=n_samples,
+                    )
+                    return float(s)
+                except Exception:
+                    return 0.0
+            return _eval_fn
+
+        # Preferred: Provide a custom adapter if supported
+        adapter_obj = None
+        if DefaultAdapter is not None and dataset is not None and metric is not None:
+            try:
+                sig = inspect.signature(DefaultAdapter)  # type: ignore
+                adapter_kwargs: Dict[str, Any] = {}
+                for pname in ("task_lm", "reflection_lm"):
+                    if pname in sig.parameters:
+                        adapter_kwargs[pname] = self.model if pname == "task_lm" else self.reflection_model
+                adapter_obj = DefaultAdapter(**adapter_kwargs)  # type: ignore
+                # Attach our metric evaluation function under common names
+                eval_fn = _make_eval_fn()
+                for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer"):
+                    try:
+                        setattr(adapter_obj, attr, eval_fn)
+                        break
+                    except Exception:
+                        continue
+                # If no attribute matched, attempt to override a generic evaluate method
+                if not any(
+                    hasattr(adapter_obj, attr)
+                    for attr in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
+                ) and hasattr(adapter_obj, "evaluate"):
+                    setattr(adapter_obj, "evaluate", eval_fn)
+            except Exception:
+                adapter_obj = None
+
+        if optimize_sig and ("adapter" in optimize_sig.parameters) and adapter_obj is not None:
+            kwargs["adapter"] = adapter_obj
+        elif optimize_sig and any(
+            name in optimize_sig.parameters for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer")
+        ) and dataset is not None and metric is not None:
+            # Fallback: pass metric function directly if accepted
+            kwargs[next(name for name in ("eval_fn", "score_fn", "objective_fn", "metric_fn", "scorer") if name in optimize_sig.parameters)] = _make_eval_fn()
 
         result = gepa.optimize(**kwargs)
         return result
@@ -209,9 +278,15 @@ class GepaOptimizer(BaseOptimizer):
         valset = None  # default: GEPA uses trainset if valset is None
 
         # Pretty header and configuration
-        gepa_reporting.display_header(verbose=self.verbose)
-        gepa_reporting.display_configuration(
-            {
+        # Pretty header and configuration
+        gepa_reporting.display_header(
+            algorithm="GEPA", optimization_id=None, dataset_id=None, verbose=self.verbose
+        )
+        from ..reporting_utils import display_configuration as _display_config
+        _display_config(
+            messages=prompt.get_messages(),
+            optimizer_config={
+                "optimizer": "GEPA",
                 "model": self.model,
                 "reflection_model": self.reflection_model,
                 "max_metric_calls": max_metric_calls,
@@ -223,16 +298,19 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         # Baseline evaluation using provided prompt
+        initial_score: float = 0.0
         with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
             try:
-                baseline_score = self.evaluate_prompt(
-                    dataset=dataset,
-                    metric=metric,
-                    prompt=prompt,
-                    n_samples=n_samples,
-                    verbose=0,
+                initial_score = float(
+                    self.evaluate_prompt(
+                        dataset=dataset,
+                        metric=metric,
+                        prompt=prompt,
+                        n_samples=n_samples,
+                        verbose=0,
+                    )
                 )
-                baseline.set_score(float(baseline_score))
+                baseline.set_score(initial_score)
             except Exception:
                 # Baseline is optional; continue even if it fails
                 pass
@@ -253,6 +331,9 @@ class GepaOptimizer(BaseOptimizer):
                     max_metric_calls=max_metric_calls,
                     reflection_minibatch_size=reflection_minibatch_size,
                     candidate_selection_strategy=candidate_selection_strategy,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
                 )
 
         # Build OptimizationResult (re-score candidates with Opik metric to pick best)
@@ -331,7 +412,13 @@ class GepaOptimizer(BaseOptimizer):
             llm_calls=None,  # not tracked for GEPA DefaultAdapter
         )
 
-        gepa_reporting.display_result(result, verbose=self.verbose)
+        from ..reporting_utils import display_result as _display_result
+        _display_result(
+            initial_score=initial_score,
+            best_score=score,
+            best_prompt=[{"role": "system", "content": best_prompt_text}],
+            verbose=self.verbose,
+        )
         return result
 
     def _extract_system_text(self, prompt: chat_prompt.ChatPrompt) -> str:
