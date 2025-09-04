@@ -103,4 +103,7 @@ interface ProjectDAO {
             " AND (last_updated_trace_at IS NULL OR last_updated_trace_at < :lastUpdatedAt)")
     int[] recordLastUpdatedTrace(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    @SqlQuery("SELECT * FROM projects WHERE name IN (<names>)")
+    List<Project> findByGlobalNames(@BindList("names") Collection<String> names);
 }
