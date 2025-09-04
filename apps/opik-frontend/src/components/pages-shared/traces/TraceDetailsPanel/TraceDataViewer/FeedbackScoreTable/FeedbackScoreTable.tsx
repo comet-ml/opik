@@ -11,8 +11,10 @@ import { ExpandingFeedbackScoreRow } from "./types";
 import { mapFeedbackScoresToRowsWithExpanded } from "./utils";
 import NameCell from "./cells/NameCell";
 import { ExpandedState } from "@tanstack/react-table";
-import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import AuthorCell from "./cells/AuthorCell";
+import ValueCell from "./cells/ValueCell";
+import ReasonCell from "./cells/ReasonCell";
+import SourceCell from "./cells/SourceCell";
 const SELECTED_COLUMNS_KEY = "feedback-scores-tab-selected-columns";
 const COLUMNS_ORDER_KEY = "feedback-scores-tab-columns-order";
 
@@ -22,7 +24,7 @@ export const DEFAULT_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     label: "Source",
     type: COLUMN_TYPE.string,
     size: 100,
-    accessorFn: (row) => FEEDBACK_SCORE_SOURCE_MAP[row.source],
+    cell: SourceCell as never,
   },
   {
     id: "name",
@@ -31,20 +33,20 @@ export const DEFAULT_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     size: 100,
     cell: NameCell as never,
   },
-  //   {
-  //     id: "value",
-  //     label: "Score",
-  //     type: COLUMN_TYPE.string,
-  //     cell: FeedbackScoreValueCell as never,
-  //     size: 100,
-  //   },
-  //   {
-  //     id: "reason",
-  //     label: "Reason",
-  //     type: COLUMN_TYPE.string,
-  //     cell: FeedbackScoreReasonCell as never,
-  //     size: 100,
-  //   },
+  {
+    id: "value",
+    label: "Score",
+    type: COLUMN_TYPE.string,
+    cell: ValueCell as never,
+    size: 100,
+  },
+  {
+    id: "reason",
+    label: "Reason",
+    type: COLUMN_TYPE.string,
+    cell: ReasonCell as never,
+    size: 100,
+  },
   {
     id: "created_by",
     label: "Scored by",
@@ -91,8 +93,6 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   const rows = useMemo(() => {
     return mapFeedbackScoresToRowsWithExpanded(feedbackScores);
   }, [feedbackScores]);
-
-  console.log(rows);
 
   const columns = useMemo(() => {
     return convertColumnDataToColumn<
