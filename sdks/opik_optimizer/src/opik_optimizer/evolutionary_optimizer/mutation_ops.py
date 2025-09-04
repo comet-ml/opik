@@ -109,7 +109,14 @@ class MutationOps:
                 is_reasoning=True,
             )
 
-            return chat_prompt.ChatPrompt(messages=utils.json_to_dict(response.strip()))
+            try:
+                messages = utils.json_to_dict(response.strip())
+            except Exception as parse_exc:
+                raise RuntimeError(
+                    f"Error parsing semantic mutation response as JSON. "
+                    f"Response: {response!r}\nOriginal error: {parse_exc}"
+                ) from parse_exc
+            return chat_prompt.ChatPrompt(messages=messages)
         except Exception as e:
             reporting.display_error(
                 f"      Error in semantic mutation, this is usually a parsing error: {e}",
