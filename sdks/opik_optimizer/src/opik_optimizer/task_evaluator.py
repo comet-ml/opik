@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional
 
 import opik
-from opik.evaluation import evaluator as opik_evaluator
+from opik.evaluation import evaluator as opik_evaluator, samplers
 from opik.evaluation.metrics import base_metric, score_result
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ def evaluate(
     n_samples: Optional[int] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
+    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
 ) -> float:
     """
     Evaluate a task on a dataset.
@@ -63,6 +64,8 @@ def evaluate(
         experiment_config: The dictionary with parameters that describe experiment
         optimization_id: Optional optimization ID for the experiment.
         verbose: Whether to print debug information.
+        dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
+            If not provided, all samples in the dataset will be evaluated.
 
     Returns:
         float: The average score of the evaluated task.
@@ -89,6 +92,7 @@ def evaluate(
             nb_samples=n_samples,
             experiment_config=experiment_config,
             verbose=verbose,
+            dataset_sampler=dataset_sampler,
         )
     else:
         result = opik_evaluator.evaluate(
@@ -101,6 +105,7 @@ def evaluate(
             nb_samples=n_samples,
             experiment_config=experiment_config,
             verbose=verbose,
+            dataset_sampler=dataset_sampler,
         )
 
     if not result.test_results:
