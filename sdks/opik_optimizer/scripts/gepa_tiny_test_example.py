@@ -12,7 +12,7 @@ from typing import Any, Dict
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer import TaskConfig, datasets
+from opik_optimizer import ChatPrompt, datasets
 from opik_optimizer.gepa_optimizer import GepaOptimizer
 
 
@@ -26,14 +26,11 @@ def main() -> None:
     # Use a small, quick dataset
     dataset = datasets.tiny_test()
 
-    task_config = TaskConfig(
-        instruction_prompt=(
+    prompt = ChatPrompt(
+        system=(
             "You are a helpful assistant. Answer concisely with the exact answer string."
         ),
-        input_dataset_fields=["text"],
-        output_dataset_field="label",
-        use_chat_prompt=True,
-        tools=[],
+        user="{text}",
     )
 
     optimizer = GepaOptimizer(
@@ -45,9 +42,9 @@ def main() -> None:
     )
 
     result = optimizer.optimize_prompt(
+        prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        task_config=task_config,
         max_metric_calls=12,  # small budget for demo
         reflection_minibatch_size=2,
         n_samples=5,
