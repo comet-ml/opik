@@ -20,7 +20,9 @@ import dspy
 
 
 def search_wikipedia(query: str) -> list[str]:
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(query, k=3)
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=3
+    )
     return [item["text"] for item in results]
 
 
@@ -73,8 +75,8 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=60,              # slight budget increase
-    reflection_minibatch_size=5,      # small bump
+    max_metric_calls=60,  # slight budget increase
+    reflection_minibatch_size=5,  # small bump
     candidate_selection_strategy="best",
     n_samples=12,  # test on a few more items
 )
