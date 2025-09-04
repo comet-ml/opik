@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional, TYPE_CHECKING
 
 import logging
 import random
@@ -16,6 +16,11 @@ creator = _creator  # backward compt.
 
 
 class CrossoverOps:
+    if TYPE_CHECKING:
+        verbose: int
+        output_style_guidance: str
+        _call_model: Any
+
     def _deap_crossover_chunking_strategy(
         self, messages_1_str: str, messages_2_str: str
     ) -> Tuple[str, str]:

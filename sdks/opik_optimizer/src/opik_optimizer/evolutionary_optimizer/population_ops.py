@@ -1,4 +1,4 @@
-from typing import Any, List, Set
+from typing import Any, List, Set, TYPE_CHECKING
 
 import json
 import logging
@@ -17,6 +17,11 @@ creator = _creator
 
 
 class PopulationOps:
+    if TYPE_CHECKING:
+        _get_task_description_for_llm: Any
+        output_style_guidance: str
+        _call_model: Any
+        toolbox: Any
     # Hints for mixin attributes provided by the primary optimizer class
     _gens_since_pop_improvement: int
     _best_primary_score_history: List[float]

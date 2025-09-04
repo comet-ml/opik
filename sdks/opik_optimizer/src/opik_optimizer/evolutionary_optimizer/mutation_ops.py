@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
 import json
 import logging
@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 class MutationOps:
+    if TYPE_CHECKING:
+        _calculate_population_diversity: Any
+        DEFAULT_DIVERSITY_THRESHOLD: float
+        verbose: int
+        output_style_guidance: str
+        _get_task_description_for_llm: Any
+        _call_model: Any
+
     def _deap_mutation(
         self, individual: Any, initial_prompt: chat_prompt.ChatPrompt
     ) -> Any:
