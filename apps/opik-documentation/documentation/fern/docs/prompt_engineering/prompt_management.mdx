@@ -158,12 +158,13 @@ import opik
 client = opik.Opik()
 
 # Search by name substring only
-latest_versions = client.search_prompts(name="summary_for_")
+latest_versions = client.search_prompts(
+    filter_string='name contains "summary"'
+)
 
 # Search by name substring and tags filter
 filtered = client.search_prompts(
-    name="summary_for_",
-    filter_string='tags contains "alpha" AND tags contains "beta"',
+    filter_string='name contains "summary" AND tags contains "alpha" AND tags contains "beta"',
 )
 
 for prompt in filtered:

@@ -19,6 +19,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
@@ -93,17 +94,17 @@ interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
-    Flux<BiInformation> getTraceBIInformation(Connection connection);
+    Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
-    Mono<Long> getDailyTraces(List<UUID> excludedProjectIds);
+    Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
@@ -763,7 +764,11 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
+             <if(excluded_project_ids)> AND id NOT IN (
+                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+             )
+             <endif>
              GROUP BY workspace_id
             ;
             """;
@@ -775,6 +780,11 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            <if(excluded_project_ids)> AND id NOT IN (
+                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+            )
+            <endif>
             GROUP BY workspace_id, created_by
             ;
             """;
@@ -2646,22 +2656,71 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
+    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(@NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        var statement = connection.createStatement(new ST(TRACE_COUNT_BY_WORKSPACE_ID).render());
-        return Mono.from(statement.execute())
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+
+        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
+        }
+
+        return asyncTemplate
+                .nonTransaction(
+                        connection -> {
+                            Statement statement = connection.createStatement(template.render());
+
+                            if (!excludedProjectIds.isEmpty()) {
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
+                            }
+
+                            if (demoDataCreatedAt.isPresent()) {
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
+                            }
+
+                            return Mono.from(statement.execute());
+                        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
-                        .traceCount(row.get("trace_count", Integer.class)).build()));
+                        .traceCount(row.get("trace_count", Integer.class))
+                        .build()));
     }
 
     @Override
     @WithSpan
-    public Flux<BiInformation> getTraceBIInformation(Connection connection) {
+    public Flux<BiInformation> getTraceBIInformation(@NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        var statement = connection.createStatement(TRACE_DAILY_BI_INFORMATION);
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        return Mono.from(statement.execute())
+        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(template.render());
+
+            if (!excludedProjectIds.isEmpty()) {
+                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+            }
+
+            if (demoDataCreatedAt.isPresent()) {
+                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
+            }
+
+            return Mono.from(statement.execute());
+        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> BiInformation.builder()
                         .workspaceId(row.get("workspace_id", String.class))
                         .user(row.get("user", String.class))
@@ -2690,20 +2749,32 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> getDailyTraces(@NonNull List<UUID> excludedProjectIds) {
-        ST sql = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+    public Mono<Long> getDailyTraces(@NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+
+        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
-            sql.add("excluded_project_ids", excludedProjectIds);
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return asyncTemplate
                 .nonTransaction(
                         connection -> {
-                            Statement statement = connection.createStatement(sql.render());
+                            Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids", excludedProjectIds);
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
+                            }
+
+                            if (demoDataCreatedAt.isPresent()) {
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                             }
 
                             return Mono.from(statement.execute());
