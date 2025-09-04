@@ -21,6 +21,11 @@
       "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
       "env": {},
       "args": []
+    },
+    "Playwright": {
+      "command": "npx @playwright/mcp@latest",
+      "env": {},
+      "args": []
     }
   }
 }
