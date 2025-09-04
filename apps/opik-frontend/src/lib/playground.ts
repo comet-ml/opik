@@ -125,6 +125,6 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     run.opikError ||
     run.providerError ||
     run.pythonProxyError ||
-    "Empty response was received from AI provider, please try again"
+    "The AI provider returned an empty response. Please, try again."
   );
 };
