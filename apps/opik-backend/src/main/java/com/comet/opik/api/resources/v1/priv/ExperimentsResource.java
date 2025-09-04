@@ -38,7 +38,7 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -389,7 +389,7 @@ public class ExperimentsResource {
         log.info("Creating experiment items, count '{}'", newRequest.size());
         experimentItemService.create(newRequest)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Created experiment items, count '{}'", newRequest.size());
         return Response.noContent().build();
@@ -450,7 +450,7 @@ public class ExperimentsResource {
         experimentItemBulkIngestionService.ingest(experiment, items)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
         log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
