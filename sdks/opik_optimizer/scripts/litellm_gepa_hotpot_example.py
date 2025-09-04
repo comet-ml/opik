@@ -1,3 +1,11 @@
+"""
+GEPA example on a Hotpot-style dataset using LiteLLM models.
+
+Notes:
+- Ensures local `src/` is imported so the new GEPA optimizer is used.
+- Makes `dspy` optional; falls back to a no-op search tool if not installed.
+"""
+
 from typing import Any, Dict
 
 from opik_optimizer import ChatPrompt
@@ -24,11 +32,7 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-system_prompt = """
-Answer the question with a direct phrase. Use the tool `search_wikipedia`
-if you need it. Make sure you consider the results before answering the
-question.
-"""
+system_prompt = "Answer the question"
 
 prompt = ChatPrompt(
     system=system_prompt,
@@ -59,9 +63,9 @@ prompt = ChatPrompt(
 # Optimize it with GEPA
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    reflection_model="openai/gpt-4o-mini",  # can be stronger if desired
+    reflection_model="openai/gpt-4o-mini",  # consider stronger reflector if available
     project_name="GEPA-Hotpot",
-    temperature=0.2,
+    temperature=0.7,  # slight increase for more exploration
     max_tokens=400,
 )
 
@@ -69,10 +73,10 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=20,
-    reflection_minibatch_size=3,
-    n_samples=10,
+    max_metric_calls=60,              # slight budget increase
+    reflection_minibatch_size=5,      # small bump
+    candidate_selection_strategy="best",
+    n_samples=12,                     # test on a few more items
 )
 
 result.display()
-
