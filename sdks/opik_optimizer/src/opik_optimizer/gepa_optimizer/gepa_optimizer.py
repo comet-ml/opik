@@ -1,14 +1,15 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import opik
 from opik import Dataset
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from ..base_optimizer import BaseOptimizer
-from ..optimization_config.configs import TaskConfig
+from ..optimization_config import chat_prompt
 from ..optimization_result import OptimizationResult
 from ..utils import optimization_context
+from . import reporting as gepa_reporting
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class GepaOptimizer(BaseOptimizer):
     ):
         try:
             import gepa
+            import inspect
         except Exception as e:  # pragma: no cover - only triggered if not installed
             raise ImportError(
                 "gepa package is required for GepaOptimizer. Install with `pip install gepa`."
@@ -85,7 +87,13 @@ class GepaOptimizer(BaseOptimizer):
 
         # Use GEPA default adapter by passing task_lm as model string
         # reflection_lm must be provided when using DefaultAdapter
-        result = gepa.optimize(
+        optimize_sig = None
+        try:
+            optimize_sig = inspect.signature(gepa.optimize)
+        except Exception:
+            optimize_sig = None
+
+        kwargs: Dict[str, Any] = dict(
             seed_candidate={"system_prompt": seed_prompt_text},
             trainset=trainset,
             valset=valset or trainset,
@@ -94,18 +102,26 @@ class GepaOptimizer(BaseOptimizer):
             candidate_selection_strategy=candidate_selection_strategy,
             reflection_minibatch_size=reflection_minibatch_size,
             max_metric_calls=max_metric_calls,
-            # keep GEPA progress output modest; Opik handles reporting
             display_progress_bar=False,
             track_best_outputs=False,
         )
+
+        # If the installed GEPA supports a custom adapter/eval path, prefer it.
+        # We try common parameter names conservatively; otherwise fallback.
+        if optimize_sig and ("adapter" in optimize_sig.parameters):
+            # Defer to GEPA DefaultAdapter via strings; adapter construction
+            # is handled internally when an adapter instance is not provided.
+            # If explicit adapter is required, caller can provide via kwargs in future.
+            pass
+
+        result = gepa.optimize(**kwargs)
         return result
 
     def evaluate_prompt(
         self,
         dataset: Union[str, Dataset],
         metric: Callable[[Dict[str, Any], str], ScoreResult],
-        task_config: TaskConfig,
-        prompt: Optional[Union[str, OptimizationResult]] = None,
+        prompt: Optional[Union[chat_prompt.ChatPrompt, str, OptimizationResult]] = None,
         n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
@@ -118,8 +134,6 @@ class GepaOptimizer(BaseOptimizer):
         evaluator; GEPA's main entry point is optimize_prompt.
         """
         # Fallback to BaseOptimizer evaluation with a simple chat prompt
-        from ..optimization_config import chat_prompt
-
         if isinstance(dataset, str):
             client = opik.Opik(project_name=self.project_name)
             dataset = client.get_dataset(dataset)
@@ -127,19 +141,18 @@ class GepaOptimizer(BaseOptimizer):
         if isinstance(prompt, OptimizationResult):
             # If OptimizationResult provided, use its prompt messages
             prompt_messages = prompt.prompt
+        elif isinstance(prompt, chat_prompt.ChatPrompt):
+            prompt_messages = prompt.get_messages()
         elif isinstance(prompt, str):
             prompt_messages = [{"role": "system", "content": prompt}]
         else:
-            prompt_messages = [
-                {"role": "system", "content": task_config.instruction_prompt}
-            ]
+            raise ValueError("`prompt` must be provided for GEPA evaluation.")
 
         cp = chat_prompt.ChatPrompt(
             messages=prompt_messages,
-            input_key=task_config.input_dataset_fields[0],
             project_name=self.project_name,
             model=self.model,
-            model_kwargs=self.model_kwargs,
+            **self.model_kwargs,
         )
 
         score = super().evaluate_prompt(
@@ -156,9 +169,9 @@ class GepaOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
+        prompt: chat_prompt.ChatPrompt,
         dataset: Union[str, Dataset],
         metric: Callable[[Dict[str, Any], str], ScoreResult],
-        task_config: TaskConfig,
         max_metric_calls: int = 30,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -184,9 +197,8 @@ class GepaOptimizer(BaseOptimizer):
             dataset = client.get_dataset(dataset)
 
         # Prepare seed prompt and data
-        seed_prompt_text = task_config.instruction_prompt
-        input_key = task_config.input_dataset_fields[0]
-        output_key = task_config.output_dataset_field
+        seed_prompt_text = self._extract_system_text(prompt)
+        input_key, output_key = self._infer_dataset_keys(dataset)
 
         items = dataset.get_items()
         if n_samples is not None and n_samples > 0 and n_samples < len(items):
@@ -196,6 +208,35 @@ class GepaOptimizer(BaseOptimizer):
         trainset = self._to_gepa_default_datainst(items, input_key, output_key)
         valset = None  # default: GEPA uses trainset if valset is None
 
+        # Pretty header and configuration
+        gepa_reporting.display_header(verbose=self.verbose)
+        gepa_reporting.display_configuration(
+            {
+                "model": self.model,
+                "reflection_model": self.reflection_model,
+                "max_metric_calls": max_metric_calls,
+                "reflection_minibatch_size": reflection_minibatch_size,
+                "candidate_selection_strategy": candidate_selection_strategy,
+                "n_samples": n_samples or "all",
+            },
+            verbose=self.verbose,
+        )
+
+        # Baseline evaluation using provided prompt
+        with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
+            try:
+                baseline_score = self.evaluate_prompt(
+                    dataset=dataset,
+                    metric=metric,
+                    prompt=prompt,
+                    n_samples=n_samples,
+                    verbose=0,
+                )
+                baseline.set_score(float(baseline_score))
+            except Exception:
+                # Baseline is optional; continue even if it fails
+                pass
+
         # Track optimization run in Opik
         self._opik_client = opik.Opik(project_name=self.project_name)
         with optimization_context(
@@ -204,37 +245,66 @@ class GepaOptimizer(BaseOptimizer):
             objective_name=metric.__name__,
             metadata={"optimizer": self.__class__.__name__},
         ) as optimization:
-            gepa_result = self._call_gepa_optimize(
-                seed_prompt_text=seed_prompt_text,
-                trainset=trainset,
-                valset=valset,
-                max_metric_calls=max_metric_calls,
-                reflection_minibatch_size=reflection_minibatch_size,
-                candidate_selection_strategy=candidate_selection_strategy,
+            with gepa_reporting.start_gepa_optimization(verbose=self.verbose):
+                gepa_result = self._call_gepa_optimize(
+                    seed_prompt_text=seed_prompt_text,
+                    trainset=trainset,
+                    valset=valset,
+                    max_metric_calls=max_metric_calls,
+                    reflection_minibatch_size=reflection_minibatch_size,
+                    candidate_selection_strategy=candidate_selection_strategy,
+                )
+
+        # Build OptimizationResult (re-score candidates with Opik metric to pick best)
+        candidates: List[Dict[str, str]] = getattr(gepa_result, "candidates", []) or []
+        val_scores: List[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
+
+        rescored: List[float] = []
+        for i, cand in enumerate(candidates):
+            cand_prompt_text = list(cand.values())[0] if cand else ""
+            cp = chat_prompt.ChatPrompt(
+                messages=[{"role": "system", "content": cand_prompt_text}],
+                project_name=self.project_name,
+                model=self.model,
+                **self.model_kwargs,
             )
+            try:
+                s = super().evaluate_prompt(
+                    prompt=cp,
+                    dataset=dataset,
+                    metric=metric,
+                    n_threads=self.num_threads,
+                    verbose=0,
+                    n_samples=n_samples,
+                )
+            except Exception:
+                s = 0.0
+            rescored.append(float(s))
 
-        # Build OptimizationResult
-        best_idx = gepa_result.best_idx
-        best_candidate = gepa_result.best_candidate
-        # DefaultAdapter uses the first value as the system prompt
-        best_prompt_text = list(best_candidate.values())[0]
-        score = gepa_result.val_aggregate_scores[best_idx]
+        # Choose best by Opik metric if we have rescored values; otherwise fallback to GEPA index
+        if rescored:
+            best_idx = max(range(len(rescored)), key=lambda idx: rescored[idx])
+            score = rescored[best_idx]
+        else:
+            best_idx = getattr(gepa_result, "best_idx", 0) or 0
+            score = float(val_scores[best_idx]) if val_scores else 0.0
 
-        # Build a lightweight history from GEPA candidates
+        best_candidate = candidates[best_idx] if candidates else getattr(gepa_result, "best_candidate", {})
+        best_prompt_text = list(best_candidate.values())[0] if best_candidate else seed_prompt_text
+
+        # Build history with both GEPA and Opik rescoring where available
         history: List[Dict[str, Any]] = []
-        for i, cand in enumerate(gepa_result.candidates):
+        for i, cand in enumerate(candidates):
             cand_prompt = list(cand.values())[0] if cand else ""
-            cand_score = gepa_result.val_aggregate_scores[i]
+            gepa_s = val_scores[i] if i < len(val_scores) else None
+            opik_s = rescored[i] if i < len(rescored) else None
             history.append(
                 {
                     "iteration": i + 1,
                     "prompt_candidate": cand_prompt,
                     "scores": [
-                        {
-                            "metric_name": metric.__name__,
-                            "score": cand_score,
-                            "opik_evaluation_id": None,
-                        }
+                        {"metric_name": f"GEPA-{metric.__name__}", "score": gepa_s},
+                        {"metric_name": metric.__name__, "score": opik_s},
                     ],
                 }
             )
@@ -245,13 +315,13 @@ class GepaOptimizer(BaseOptimizer):
             "optimizer": self.__class__.__name__,
             "num_candidates": getattr(gepa_result, "num_candidates", None),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
-            "val_scores": gepa_result.val_aggregate_scores,
+            "val_scores": val_scores,
             "parents": gepa_result.parents,
         }
         if experiment_config:
             details.update({"experiment": experiment_config})
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=[{"role": "system", "content": best_prompt_text}],
             score=score,
@@ -260,3 +330,31 @@ class GepaOptimizer(BaseOptimizer):
             history=history,
             llm_calls=None,  # not tracked for GEPA DefaultAdapter
         )
+
+        gepa_reporting.display_result(result, verbose=self.verbose)
+        return result
+
+    def _extract_system_text(self, prompt: chat_prompt.ChatPrompt) -> str:
+        msgs = prompt.get_messages()
+        for m in msgs:
+            if m.get("role") == "system":
+                return str(m.get("content", "")).strip()
+        # No explicit system; synthesize from first user message
+        for m in msgs:
+            if m.get("role") == "user":
+                return f"You are a helpful assistant. Respond to: {m.get('content','')}"
+        return "You are a helpful assistant."
+
+    def _infer_dataset_keys(self, dataset: Dataset) -> Tuple[str, str]:
+        """Heuristically infer input/output keys from dataset items."""
+        items = dataset.get_items(1)
+        if not items:
+            return "text", "label"
+        sample = items[0]
+        # Prefer common output keys
+        output_candidates = ["label", "answer", "output", "expected_output"]
+        output_key = next((k for k in output_candidates if k in sample), "label")
+        # Pick first non-output textual field as input
+        excluded = set([output_key, "id", "metadata"])
+        input_key = next((k for k in sample.keys() if k not in excluded), "text")
+        return input_key, output_key
