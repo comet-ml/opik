@@ -40,7 +40,7 @@ const ChartHorizontalLegendContent = React.forwardRef<
     >
       <div
         className={
-          "group inline-flex max-w-full flex-wrap items-center justify-center space-x-2"
+          "group inline-flex max-w-full max-h-20 overflow-y-auto flex-wrap items-center justify-center space-x-2 gap-y-1"
         }
       >
         {payload.map((item, idx) => {
