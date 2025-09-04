@@ -2,6 +2,8 @@ import json
 import logging
 import random
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast, Type
+import sys
+import warnings
 
 import rapidfuzz.distance.Indel
 import numpy as np
@@ -118,6 +120,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         # Initialize base class first
+        if sys.version_info >= (3, 13):
+            warnings.warn(
+                "Python 3.13 is not officially supported (python_requires <3.13). "
+                "You may see asyncio teardown warnings. Prefer Python 3.12.",
+                RuntimeWarning,
+            )
         if "project_name" in model_kwargs:
             print(
                 "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
