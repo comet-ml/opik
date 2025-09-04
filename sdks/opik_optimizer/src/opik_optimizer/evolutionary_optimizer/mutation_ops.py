@@ -270,7 +270,13 @@ class MutationOps:
             logger.info(
                 f"Radical innovation LLM result (truncated): {new_prompt_str[:200]}"
             )
-            new_messages = utils.json_to_dict(new_prompt_str)
+            try:
+                new_messages = utils.json_to_dict(new_prompt_str)
+            except Exception as parse_exc:
+                logger.warning(
+                    f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {new_prompt_str[:200]}. Error: {parse_exc}. Returning original."
+                )
+                return prompt
             return chat_prompt.ChatPrompt(messages=new_messages)
         except Exception as e:
             logger.warning(
