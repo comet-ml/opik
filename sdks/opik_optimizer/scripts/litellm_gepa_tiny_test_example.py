@@ -1,6 +1,6 @@
 """
 Example: Use GEPA to optimize a simple system prompt on the tiny_test dataset
-using Opik datasets and metrics.
+using Opik datasets and metrics (LiteLLM models).
 
 Requires:
   pip install gepa
@@ -33,7 +33,7 @@ def main() -> None:
 
     optimizer = GepaOptimizer(
         model="openai/gpt-4o-mini",
-        reflection_model="openai/gpt-5",  # stronger reflector, optional
+        reflection_model="openai/gpt-4o",  # stronger reflector, optional
         project_name="GEPA_TinyTest",
         temperature=0.2,
         max_tokens=200,
