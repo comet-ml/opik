@@ -87,12 +87,13 @@ public class RetriableHttpClient {
     private <T> T executePostWithRetry(Entity<?> request, Retry retrySpec, Function<Client, WebTarget> requestFunction,
             Function<Response, T> responseFunction) {
         return Mono.defer(() -> performHttpPost(request, requestFunction)
-                .flatMap(response -> {
+                  .flatMap(response -> {
                     int statusCode = response.getStatus();
 
                     if (isRetryableStatusCode(statusCode)) {
+                        String body = response.readEntity(String.class);
                         return Mono.error(new RetryUtils.RetryableHttpException(
-                                "Service temporarily unavailable (HTTP " + statusCode + ")", statusCode));
+                                "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode, body), statusCode));
                     }
 
                     return Mono.just(response);
