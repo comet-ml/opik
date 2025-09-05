@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional, List, Type
+import logging
 
 from ..optimization_config import chat_prompt
+
+logger = logging.getLogger(__name__)
 
 
 def make_opik_eval_fn(
