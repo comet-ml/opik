@@ -63,7 +63,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
           </div>
         )}
         <FeedbackScoresEditor
-          key={spanId ?? traceId}
+          key={`${spanId}-${traceId}`}
           feedbackScores={data.feedback_scores || []}
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
