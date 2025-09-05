@@ -7,6 +7,8 @@ from opik_optimizer import (
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 
+# NOTE: functions are automatically tracked in the ChatPrompt
+
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 

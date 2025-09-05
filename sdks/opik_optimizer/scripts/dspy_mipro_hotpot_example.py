@@ -36,7 +36,7 @@ from opik_optimizer.utils import optimization_context
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
-
+search_wikipedia = opik.track(type="tool")(search_wikipedia)
 
 # First, we set the Opik callback for all dspy calls:
 project_name = "DSPy-MIPROv2"

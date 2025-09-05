@@ -9,6 +9,7 @@ from opik_optimizer import ChatPrompt
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 
+# NOTE: functions are automatically tracked in the ChatPrompt
 
 dataset = hotpot_300()
 

@@ -10,6 +10,8 @@ from opik_optimizer import (
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 
+# NOTE: functions are automatically tracked in the ChatPrompt
+
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()

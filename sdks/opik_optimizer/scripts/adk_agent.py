@@ -7,6 +7,7 @@ from opik_optimizer import (
 from opik_optimizer.utils import search_wikipedia
 
 from opik.integrations.adk import OpikTracer
+from opik import track
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -30,7 +31,7 @@ def create_agent(project_name: str) -> Any:
         name="wikipedia_agent_tool",
         description="Retrieves wikipedia information using a specific tool.",
         instruction="",  # We'll use the chat-prompt in this example
-        tools=[search_wikipedia],
+        tools=[track(type="tool")(search_wikipedia)],
         input_schema=SearchInput,
         output_key="wikipedia_tool_result",  # Store final text response
         before_agent_callback=opik_tracer.before_agent_callback,

@@ -2,8 +2,9 @@ from typing import Any, List, Dict
 from typing_extensions import TypedDict
 
 from opik.integrations.langchain import OpikTracer
-from opik_optimizer.utils import search_wikipedia
+from opik import track
 
+from opik_optimizer.utils import search_wikipedia
 from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
@@ -13,6 +14,8 @@ from langgraph.graph import StateGraph
 from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
+
+search_wikipedia = track(type="tool")(search_wikipedia)
 
 
 class InputState(TypedDict):
