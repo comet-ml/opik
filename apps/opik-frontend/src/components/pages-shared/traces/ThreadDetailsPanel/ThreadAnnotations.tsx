@@ -93,7 +93,8 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
-        entityCopy="threads"
+        header={<FeedbackScoresEditor.Header />}
+        footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
       />
     </DetailsActionSectionLayout>
   );

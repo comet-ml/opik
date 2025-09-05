@@ -86,15 +86,6 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     };
   }, [feedbackScore, userName]);
 
-  console.log(
-    "feedbackScoreValue",
-    !!feedbackScore && isMultiValueFeedbackScore(feedbackScore)
-      ? "MultiValue"
-      : "SingleValue",
-    feedbackScore?.name,
-    feedbackScoreData,
-  );
-
   const [categoryName, setCategoryName] = useState<string | undefined>(
     feedbackScoreData.reason,
   );

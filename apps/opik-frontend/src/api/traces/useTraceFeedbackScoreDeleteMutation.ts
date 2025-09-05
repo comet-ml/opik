@@ -22,6 +22,7 @@ type UseTraceFeedbackScoreDeleteMutationParams = {
   name: string;
   spanId?: string;
   traceId: string;
+  author?: string;
 };
 
 const useTraceFeedbackScoreDeleteMutation = () => {
@@ -33,12 +34,13 @@ const useTraceFeedbackScoreDeleteMutation = () => {
       name,
       spanId,
       traceId,
+      author,
     }: UseTraceFeedbackScoreDeleteMutationParams) => {
       const endpoint = spanId
         ? `${SPANS_REST_ENDPOINT}${spanId}/feedback-scores/delete`
         : `${TRACES_REST_ENDPOINT}${traceId}/feedback-scores/delete`;
 
-      const { data } = await api.post(endpoint, { name });
+      const { data } = await api.post(endpoint, { name, author });
 
       return data;
     },
@@ -60,7 +62,7 @@ const useTraceFeedbackScoreDeleteMutation = () => {
         traceId: params.traceId,
       };
 
-      const deleteMutation = generateDeleteMutation(params.name);
+      const deleteMutation = generateDeleteMutation(params.name, params.author);
 
       if (params.spanId) {
         // make optimistic update for spans

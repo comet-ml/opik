@@ -2,8 +2,8 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
-import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
 import { cn } from "@/lib/utils";
+import { getIsParentFeedbackScoreRow } from "../utils";
 
 const ReasonCell = (
   context: CellContext<ExpandingFeedbackScoreRow, string>,
@@ -11,10 +11,9 @@ const ReasonCell = (
   const value = context.getValue();
   const rowData = context.row.original;
 
-  const isMultiValueScore =
-    isMultiValueFeedbackScore(rowData) && !rowData.author;
+  const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(rowData);
 
-  const reasons = isMultiValueScore
+  const reasons = isParentFeedbackScoreRow
     ? Object.entries(rowData.value_by_author)
         .map(([author, { reason, last_updated_at, value }]) => ({
           author,
@@ -40,7 +39,9 @@ const ReasonCell = (
     >
       <FeedbackScoreReasonTooltip reasons={reasons}>
         <span
-          className={cn("truncate", isMultiValueScore && "text-light-slate")}
+          className={cn("truncate", {
+            "text-light-slate": isParentFeedbackScoreRow,
+          })}
         >
           {reasonsList}
         </span>

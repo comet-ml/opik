@@ -213,10 +213,24 @@ export const generateUpdateMutation =
   };
 
 export const generateDeleteMutation =
-  (name: string) => (feedbackScores?: TraceFeedbackScore[]) =>
-    (feedbackScores || []).filter(
-      (feedbackScore) => feedbackScore.name !== name,
-    );
+  (name: string, author?: string) =>
+  (feedbackScores?: TraceFeedbackScore[]) => {
+    const retVal = feedbackScores || [];
+    if (!author) {
+      return retVal.filter((feedbackScore) => feedbackScore.name !== name);
+    }
+
+    return retVal
+      .map((feedbackScore) => {
+        if (feedbackScore.name !== name && feedbackScore.value_by_author) {
+          delete feedbackScore.value_by_author[author];
+          return feedbackScore;
+        }
+
+        return feedbackScore;
+      })
+      .filter(Boolean);
+  };
 
 export const categoryOptionLabelRenderer = (
   name: string,

@@ -79,7 +79,8 @@ const TraceAnnotateViewer: React.FunctionComponent<
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
-        entityCopy="traces"
+        header={<FeedbackScoresEditor.Header />}
+        footer={<FeedbackScoresEditor.Footer entityCopy="traces" />}
       />
     </DetailsActionSectionLayout>
   );

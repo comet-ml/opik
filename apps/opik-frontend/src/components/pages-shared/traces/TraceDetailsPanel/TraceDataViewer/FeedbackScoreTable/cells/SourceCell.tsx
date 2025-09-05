@@ -1,10 +1,9 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
-import {
-  FEEDBACK_SCORE_SOURCE_MAP,
-  isMultiValueFeedbackScore,
-} from "@/lib/feedback-scores";
+import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
+import { getIsParentFeedbackScoreRow } from "../utils";
+import { cn } from "@/lib/utils";
 
 const SourceCell = (
   context: CellContext<ExpandingFeedbackScoreRow, string>,
@@ -12,15 +11,18 @@ const SourceCell = (
   const row = context.row.original;
   const sourceText = FEEDBACK_SCORE_SOURCE_MAP[row.source];
 
-  // Apply text-light-slate style if it's a multi-value score and has no author
-  const isMultiValue = isMultiValueFeedbackScore(row) && !row.author;
+  const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(row);
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className={`truncate ${isMultiValue ? "text-light-slate" : ""}`}>
+      <span
+        className={cn("truncate", {
+          "text-light-slate": isParentFeedbackScoreRow,
+        })}
+      >
         {sourceText}
       </span>
     </CellWrapper>

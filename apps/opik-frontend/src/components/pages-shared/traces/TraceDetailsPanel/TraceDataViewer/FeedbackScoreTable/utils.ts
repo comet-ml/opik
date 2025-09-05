@@ -1,4 +1,7 @@
-import { TraceFeedbackScore } from "@/types/traces";
+import {
+  FeedbackScoreValueByAuthorMap,
+  TraceFeedbackScore,
+} from "@/types/traces";
 import { ExpandingFeedbackScoreRow } from "./types";
 import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
 import { PARENT_ROW_ID_PREFIX } from "./constants";
@@ -39,4 +42,12 @@ export const mapFeedbackScoresToRowsWithExpanded = (
   });
 
   return rows;
+};
+
+export const getIsParentFeedbackScoreRow = (
+  row: ExpandingFeedbackScoreRow,
+): row is ExpandingFeedbackScoreRow & {
+  value_by_author: FeedbackScoreValueByAuthorMap;
+} => {
+  return isMultiValueFeedbackScore(row) && !row.author;
 };
