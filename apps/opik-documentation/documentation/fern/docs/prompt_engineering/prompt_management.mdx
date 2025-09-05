@@ -171,6 +171,25 @@ for prompt in filtered:
     print(prompt.name, prompt.commit, prompt.prompt)
 ```
 
+The `filter_string` parameter uses Opik Query Language (OQL) with the format:
+`"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
+
+**Supported columns for prompts:**
+
+| Column       | Type   | Operators                                                                   |
+| ------------ | ------ | --------------------------------------------------------------------------- |
+| `id`         | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`       | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `tags`       | List   | `contains`                                                                  |
+
+**Examples:**
+
+- `tags contains "production"` - Filter by tag
+- `name contains "summary"` - Filter by name substring
+- `created_by = "user@example.com"` - Filter by creator
+- `tags contains "alpha" AND tags contains "beta"` - Multiple tag filtering
+
 `search_prompts` returns the **latest** version for each matching prompt.
 
 ## Linking prompts to Experiments
