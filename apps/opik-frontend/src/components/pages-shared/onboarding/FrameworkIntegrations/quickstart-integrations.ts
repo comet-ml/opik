@@ -3,8 +3,10 @@ import pythonLogoUrl from "/images/integrations/python.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
 import liteLLMLogoUrl from "/images/integrations/litellm.png";
 import openAILogoUrl from "/images/integrations/openai.png";
+import openAIWhiteLogoUrl from "/images/integrations/openai-white.png";
 import anthropicLogoUrl from "/images/integrations/anthropic.png";
 import bedrockLogoUrl from "/images/integrations/bedrock.png";
+import bedrockWhiteLogoUrl from "/images/integrations/bedrock-white.png";
 import ragasLogoUrl from "/images/integrations/ragas.png";
 import langGraphLogoUrl from "/images/integrations/langgraph.png";
 import llamaIndexLogoUrl from "/images/integrations/llamaindex.png";
@@ -32,6 +34,7 @@ import { integrationLogsMap } from "./integration-logs";
 export type FrameworkIntegration = {
   label: string;
   logo: string;
+  logoWhite?: string;
   colab: string;
   documentation: string;
   code: string;
@@ -55,6 +58,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
     label: "OpenAI",
     logo: openAILogoUrl,
+    logoWhite: openAIWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
@@ -75,6 +79,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
     label: "Bedrock",
     logo: bedrockLogoUrl,
+    logoWhite: bedrockWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),

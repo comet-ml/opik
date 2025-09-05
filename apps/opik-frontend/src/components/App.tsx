@@ -27,7 +27,7 @@ function App() {
     <SentryErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <QueryParamProvider adapter={WindowHistoryAdapter}>
-          <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+          <ThemeProvider>
             <TooltipProvider
               delayDuration={TOOLTIP_DELAY_DURATION}
               skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}

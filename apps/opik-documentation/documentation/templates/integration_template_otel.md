@@ -10,6 +10,11 @@ description: How to send [FRAMEWORK_NAME] telemetry data to Opik using OpenTelem
 
 <Frame>
   <img src="/img/tracing/[framework_name]_integration.png" alt="[FRAMEWORK_NAME] tracing" />
+
+<!--
+Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png
+Documentation reference path: /img/tracing/[framework_name]_integration.png
+-->
 </Frame>
 
 ## Getting started

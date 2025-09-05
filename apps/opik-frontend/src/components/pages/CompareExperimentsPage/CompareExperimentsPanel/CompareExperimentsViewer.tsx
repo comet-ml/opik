@@ -110,7 +110,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
       {renderOutput()}
 
       {isTraceExist && (
-        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-white contain-content">
+        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-background contain-content">
           <div className="box-border flex min-h-14 shrink grow flex-col border-y">
             <ExperimentFeedbackScoresViewer
               feedbackScores={feedbackScores}

@@ -20,7 +20,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   if (isStringMarkdown(children)) {
     return (
       <ReactMarkdown
-        className={cn("prose comet-markdown", className)}
+        className={cn("prose dark:prose-invert comet-markdown", className)}
         remarkPlugins={[remarkBreaks, remarkGfm]}
       >
         {children}

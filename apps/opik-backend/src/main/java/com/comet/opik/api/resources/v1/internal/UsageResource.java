@@ -31,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor(onConstructor_ = @jakarta.inject.Inject)
 @Tag(name = "System usage", description = "System usage related resource")
 public class UsageResource {
+
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull ExperimentService experimentService;

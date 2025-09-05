@@ -211,7 +211,7 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
               <h3 className="comet-title-s mb-3">
                 2. Wait for prompt response
               </h3>
-              <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
+              <div className="flex items-center gap-3 rounded-lg border bg-background p-4">
                 <div className="flex items-center gap-2">
                   <div
                     className={`size-2 rounded-full ${

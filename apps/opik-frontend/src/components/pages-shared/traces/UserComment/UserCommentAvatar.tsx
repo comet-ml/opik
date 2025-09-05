@@ -26,7 +26,7 @@ type CounterProps = VariantProps<typeof userCommentAvatarVariants> & {
 const Counter: React.FC<CounterProps> = ({ count, size, className }) => {
   return (
     <Avatar className={cn(userCommentAvatarVariants({ size }), className)}>
-      <AvatarFallback className="bg-slate-200 text-muted-slate">
+      <AvatarFallback className="bg-border text-muted-slate">
         +{count}
       </AvatarFallback>
     </Avatar>

@@ -49,14 +49,21 @@ def parse_litellm_model_output(
     """
     try:
         if not log_probs_supported:
-            text_content = content.choices[0].message.content
-            return parse_model_output_string(text_content, name)
+            return _extract_score_from_text_content(content, name=name)
         else:
             # Compute score using top logprobs
-            score_token_position = 3
-            log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
-                score_token_position
-            ]
+            choice = content.choices[0]
+            # Ensure choice is a dict for safe key access
+            if not isinstance(choice, dict):
+                # Try to convert to dict if possible (e.g., Pydantic model)
+                if hasattr(choice, "model_dump") and callable(choice.model_dump):
+                    choice = choice.model_dump()
+                else:
+                    # fallback to simple logic
+                    return _extract_score_from_text_content(content, name=name)
+
+            score_token_position = 3  # (first token is `{"`, followed by `score`, `":` and the score token)
+            log_probs_content = choice["logprobs"]["content"][score_token_position]
 
             top_score_logprobs = log_probs_content["top_logprobs"]
             log_probs_token = log_probs_content["token"]
@@ -109,3 +116,10 @@ def parse_litellm_model_output(
     except Exception as exception:
         LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
         raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception
+
+
+def _extract_score_from_text_content(
+    content: "LiteLLMModelResponse", name: str
+) -> score_result.ScoreResult:
+    text_content = content.choices[0].message.content
+    return parse_model_output_string(text_content, name)

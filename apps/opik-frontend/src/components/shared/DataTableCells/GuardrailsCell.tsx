@@ -79,7 +79,7 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
           </div>
         </HoverCardTrigger>
         <HoverCardContent
-          className="w-[240px] bg-popover p-0"
+          className="w-[240px] bg-background p-0"
           onClick={(event) => event.stopPropagation()}
           side="top"
           align="end"

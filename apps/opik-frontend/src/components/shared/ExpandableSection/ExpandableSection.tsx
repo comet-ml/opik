@@ -48,7 +48,7 @@ const ExpandableSection: React.FC<ExpandableSectionProps> = ({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <Button
-        className="my-2 flex w-full justify-between hover:bg-[#F1F5F9] hover:text-foreground active:text-foreground"
+        className="my-2 flex w-full justify-between hover:bg-muted hover:text-foreground active:text-foreground"
         variant="ghost"
         onClick={toggleIsExpanded}
       >

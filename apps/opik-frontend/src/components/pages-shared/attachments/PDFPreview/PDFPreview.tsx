@@ -48,7 +48,7 @@ const PDFPreview: React.FC<PDFPreviewProps> = ({
 
     return (
       <div className="absolute inset-x-0 bottom-0 flex flex-row items-center justify-center gap-2 pb-2">
-        <div className="flex flex-row items-center gap-2 rounded bg-white p-2 shadow-xl">
+        <div className="flex flex-row items-center gap-2 rounded bg-background p-2 shadow-xl">
           <Button
             variant="outline"
             size="icon-sm"

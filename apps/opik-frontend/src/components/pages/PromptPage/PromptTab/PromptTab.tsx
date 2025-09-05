@@ -98,7 +98,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         </Button>
       </div>
 
-      <div className="mt-4 flex gap-6 rounded-md border bg-white p-6">
+      <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
           <p className="comet-body-s-accented text-foreground">Prompt</p>
           <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">

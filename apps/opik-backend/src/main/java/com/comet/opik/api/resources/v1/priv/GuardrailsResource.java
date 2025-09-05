@@ -6,7 +6,7 @@ import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.domain.GuardrailsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -53,7 +53,7 @@ public class GuardrailsResource {
 
         guardrailsService.addTraceGuardrails(batch.guardrails())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
         log.info("Done adding guardrails batch, size {} on  workspaceId '{}'", batch.guardrails().size(),

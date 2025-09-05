@@ -42,12 +42,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.runner.RunWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -320,14 +320,19 @@ class OpenTelemetryResourceTest {
             sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
         }
 
-        @Test
-        void testRuleMapping() {
+        @ParameterizedTest
+        @ValueSource(strings = {"model_name", "gen_ai.request.model", "gen_ai.response.model", "gen_ai.request_model",
+                "gen_ai.response_model"})
+        void testRuleMapping(String modelKey) {
             String randomKeyArray = UUID.randomUUID().toString();
             String randomKeyJson = UUID.randomUUID().toString();
             String randomKeyInt = UUID.randomUUID().toString();
 
             var attributes = List.of(
-                    KeyValue.newBuilder().setKey("model_name").setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                    KeyValue.newBuilder().setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder().setKey(modelKey).setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
                             .build(),
                     KeyValue.newBuilder().setKey("code.line").setValue(AnyValue.newBuilder().setIntValue(11)).build(),
                     KeyValue.newBuilder().setKey("input")
@@ -370,6 +375,7 @@ class OpenTelemetryResourceTest {
 
             // checks key-values with rules
             assertThat(span.model()).isEqualTo("gpt-4o");
+            assertThat(span.provider()).isEqualTo("openai");
             assertThat(span.type()).isEqualTo(SpanType.llm);
 
             assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);

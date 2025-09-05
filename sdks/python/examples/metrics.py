@@ -94,6 +94,20 @@ if True:
     )
     print("context_recall_score:", context_recall_score)
 
+
+# Structured Output Compliance metric example
+if True:
+    print("\n\nStructured Output Compliance metric example:")
+
+    structured_output_metric = metrics.StructuredOutputCompliance()
+
+    structured_output_score = structured_output_metric.score(
+        output='{"name": "Alice", "age": 30}',
+        schema='{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}',
+    )
+
+    print("structured_output_score:", structured_output_score)
+
 # TrajectoryAccuracy metric example
 if True:
     print("\n\nTrajectoryAccuracy metric example:")

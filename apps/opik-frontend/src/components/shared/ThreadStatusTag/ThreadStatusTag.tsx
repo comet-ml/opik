@@ -11,12 +11,12 @@ const StatusMap = {
   [ThreadStatus.INACTIVE]: {
     Icon: MessageCircleOff,
     text: "Inactive",
-    className: "bg-[#E2EFFD]",
+    className: "bg-[var(--thread-inactive)]",
   },
   [ThreadStatus.ACTIVE]: {
     Icon: MessageCircleMore,
     text: "Active",
-    className: "bg-[#EBF2F5]",
+    className: "bg-[var(--thread-active)]",
   },
 };
 
