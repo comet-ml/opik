@@ -1,6 +1,5 @@
 [project]
 name = "opik_optimizer"
-version = "1.0.6"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
@@ -36,7 +35,6 @@ disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
 exclude = "src/opik_optimizer/mipro_optimizer/"
-
 
 [tool.uv]
 managed = false
