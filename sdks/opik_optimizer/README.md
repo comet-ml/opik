@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/opik-optimizer.svg)](https://pypi.org/project/opik-optimizer/)
 [![Python versions](https://img.shields.io/pypi/pyversions/opik-optimizer.svg)](https://pypi.org/project/opik-optimizer/)
 [![Downloads](https://static.pepy.tech/badge/opik-optimizer)](https://pepy.tech/project/opik-optimizer)
-[![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, including:
 
