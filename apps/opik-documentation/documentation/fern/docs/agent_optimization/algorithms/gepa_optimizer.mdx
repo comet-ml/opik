@@ -77,7 +77,7 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
-> Reference implementation: `sdks/opik_optimizer/scripts/gepa_tiny_test_example.py`
+> Reference implementation: `sdks/opik_optimizer/scripts/litellm_gepa_tiny_test_example.py`
 
 ## Example (Hotpot-style with LiteLLM)
 
@@ -86,9 +86,11 @@ The following mirrors our example that uses a Hotpot-style dataset and LiteLLM m
 ```python
 from typing import Any, Dict
 
+import opik
 from opik_optimizer import ChatPrompt
 from opik_optimizer.gepa_optimizer import GepaOptimizer
 from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.utils import search_wikipedia
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -102,6 +104,26 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
 prompt = ChatPrompt(
     system="Answer the question",
     user="{question}",
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "This function is used to search wikipedia abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The query parameter is the term or phrase to search for.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+    ],
+    function_map={"search_wikipedia": opik.track(type="tool")(search_wikipedia)},
 )
 
 optimizer = GepaOptimizer(
