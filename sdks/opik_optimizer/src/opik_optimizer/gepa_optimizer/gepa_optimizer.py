@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import opik
@@ -11,10 +12,19 @@ from ..optimization_result import OptimizationResult
 from ..utils import optimization_context, create_litellm_agent_class
 from .. import task_evaluator
 from . import reporting as gepa_reporting
-from .adapter import make_opik_eval_fn, build_adapter_if_available
+from .adapter import make_opik_eval_fn, build_adapter_if_available, build_protocol_adapter
 
 
 logger = logging.getLogger(__name__)
+_GEPA_DEBUG = bool(os.environ.get("OPIK_GEPA_DEBUG"))
+if _GEPA_DEBUG:
+    if logger.level > logging.INFO:
+        logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        _h = logging.StreamHandler()
+        _h.setLevel(logging.INFO)
+        _h.setFormatter(logging.Formatter("[GEPA] %(message)s"))
+        logger.addHandler(_h)
 
 
 class GepaOptimizer(BaseOptimizer):
@@ -39,6 +49,8 @@ class GepaOptimizer(BaseOptimizer):
         # GEPA reflection LLM; defaults to same as task model if not provided
         self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
+        # Debug counter: how many times live metric was invoked by GEPA
+        self._gepa_live_metric_calls = 0
 
     def _to_gepa_default_datainst(
         self,
@@ -76,6 +88,7 @@ class GepaOptimizer(BaseOptimizer):
 
     def _call_gepa_optimize(
         self,
+        base_prompt: chat_prompt.ChatPrompt,
         seed_prompt_text: str,
         trainset: List[Dict[str, Any]],
         valset: Optional[List[Dict[str, Any]]],
@@ -148,18 +161,51 @@ class GepaOptimizer(BaseOptimizer):
         # Preferred: Provide a custom adapter if supported
         adapter_obj = None
         if dataset is not None and metric is not None:
-            eval_fn = make_opik_eval_fn(
-                self,
-                dataset,
-                metric,
-                n_samples,
-                optimization_id,
-                phase_label="gepa_adapter_eval",
-            )
-            adapter_obj = build_adapter_if_available(
-                gepa, self.model, self.reflection_model, eval_fn
-            )
+            # Preferred: Build protocol adapter using Opik prompt + metric
+            try:
+                # Use the original prompt structure (preserve user/tools), but swap the system text
+                base_cp = base_prompt.copy()
+                base_cp.system = seed_prompt_text
+                base_cp.project_name = self.project_name
+                base_cp.model = self.model
+                base_cp.model_kwargs = self.model_kwargs
+                adapter_obj = build_protocol_adapter(
+                    base_prompt=base_cp,
+                    optimizer=self,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    optimization_id=optimization_id,
+                )
+                if _GEPA_DEBUG:
+                    print(f"[GEPA] Protocol adapter build: {'OK' if adapter_obj is not None else 'FAILED'}")
+            except Exception as e:
+                adapter_obj = None
+                if _GEPA_DEBUG:
+                    import traceback
+                    print(f"[GEPA] Protocol adapter build ERROR: {e}")
+                    traceback.print_exc()
+                if os.environ.get("OPIK_GEPA_REQUIRE_PROTOCOL"):
+                    raise
+            # Fallback: try to patch DefaultAdapter
+            if adapter_obj is None and not os.environ.get("OPIK_GEPA_REQUIRE_PROTOCOL"):
+                eval_fn = make_opik_eval_fn(
+                    self,
+                    dataset,
+                    metric,
+                    n_samples,
+                    optimization_id,
+                    phase_label="gepa_adapter_eval",
+                )
+                adapter_obj = build_adapter_if_available(
+                    gepa, self.model, self.reflection_model, eval_fn
+                )
+                if _GEPA_DEBUG:
+                    print(f"[GEPA] DefaultAdapter patch: {'OK' if adapter_obj is not None else 'FAILED'}")
+            if adapter_obj is None and os.environ.get("OPIK_GEPA_REQUIRE_PROTOCOL"):
+                raise RuntimeError("Protocol adapter required but could not be constructed.")
 
+        used_live_metric = False
         if (
             optimize_sig
             and ("adapter" in optimize_sig.parameters)
@@ -169,6 +215,17 @@ class GepaOptimizer(BaseOptimizer):
             # When providing an adapter, GEPA expects task_lm=None but still requires a reflection_lm
             kwargs["task_lm"] = None
             kwargs["reflection_lm"] = self.reflection_model
+            used_live_metric = True
+            if _GEPA_DEBUG:
+                is_protocol = bool(getattr(adapter_obj, "_is_opik_protocol_adapter", False))
+                kind = getattr(adapter_obj, "_opik_adapter_kind", "unknown")
+                print(
+                    f"[GEPA] Using protocol adapter path (adapter=…) protocol={is_protocol} kind={kind}"
+                )
+                if os.environ.get("OPIK_GEPA_REQUIRE_PROTOCOL") and not is_protocol:
+                    raise RuntimeError(
+                        "OPIK_GEPA_REQUIRE_PROTOCOL set, but non-protocol adapter was used."
+                    )
         elif (
             optimize_sig
             and any(
@@ -205,13 +262,39 @@ class GepaOptimizer(BaseOptimizer):
                 optimization_id,
                 phase_label="gepa_adapter_eval",
             )
+            used_live_metric = True
+            if _GEPA_DEBUG:
+                print("[GEPA] Using eval_fn path (metric injected) — no protocol adapter")
+        else:
+            if _GEPA_DEBUG:
+                print("[GEPA] No adapter/eval_fn path available — GEPA will use its default scoring")
 
-        if self.verbose >= 1:
+        # Optional hard requirement for protocol adapter
+        if os.environ.get("OPIK_GEPA_REQUIRE_PROTOCOL") and kwargs.get("adapter") is None:
+            raise RuntimeError("OPIK_GEPA_REQUIRE_PROTOCOL set, but protocol adapter is unavailable.")
+
+        if self.verbose >= 1 or _GEPA_DEBUG:
             has_adapter = adapter_obj is not None
-            logger.debug(
-                f"[DBG][GEPA] Calling gepa.optimize(adapter={has_adapter}, max_metric_calls={max_metric_calls}, minibatch={reflection_minibatch_size}, strategy={candidate_selection_strategy}, opt_id={optimization_id})"
+            msg = (
+                f"Calling gepa.optimize(adapter={has_adapter}, max_metric_calls={max_metric_calls}, minibatch={reflection_minibatch_size}, "
+                f"strategy={candidate_selection_strategy}, opt_id={optimization_id})"
             )
+            if _GEPA_DEBUG:
+                print("[GEPA] " + msg)
+            else:
+                logger.debug("[DBG][GEPA] " + msg)
+            msg2 = f"Live metric used during GEPA optimize: {used_live_metric}"
+            if _GEPA_DEBUG:
+                print("[GEPA] " + msg2)
+            else:
+                logger.debug("[DBG][GEPA] " + msg2)
         result = gepa.optimize(**kwargs)
+        # Attach a hint flag to result if possible
+        try:
+            setattr(result, "_opik_used_live_metric", used_live_metric)
+            setattr(result, "_opik_live_metric_calls", int(self._gepa_live_metric_calls))
+        except Exception:
+            pass
         return result
 
     def gepa_evaluate_prompt(
@@ -434,6 +517,7 @@ class GepaOptimizer(BaseOptimizer):
                     pass
             with gepa_reporting.start_gepa_optimization(verbose=self.verbose):
                 gepa_result = self._call_gepa_optimize(
+                    base_prompt=prompt,
                     seed_prompt_text=seed_prompt_text,
                     trainset=trainset,
                     valset=valset,
@@ -535,6 +619,9 @@ class GepaOptimizer(BaseOptimizer):
                 }
             )
 
+        # Determine whether live metric was used inside GEPA
+        used_live_metric_flag = bool(getattr(self, "_gepa_live_metric_calls", 0))
+
         details: Dict[str, Any] = {
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
@@ -543,6 +630,8 @@ class GepaOptimizer(BaseOptimizer):
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
             "val_scores": val_scores,
             "parents": gepa_result.parents,
+            "gepa_live_metric_used": used_live_metric_flag,
+            "gepa_live_metric_call_count": int(getattr(self, "_gepa_live_metric_calls", 0)),
         }
         if experiment_config:
             details.update({"experiment": experiment_config})
