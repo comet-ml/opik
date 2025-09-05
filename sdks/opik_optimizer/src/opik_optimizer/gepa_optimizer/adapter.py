@@ -31,7 +31,7 @@ def make_opik_eval_fn(
             )
             if getattr(optimizer, "verbose", 0) >= 1:
                 snippet = (sys_text or "").replace("\n", " ")[:140]
-                print(
+                logger.debug(
                     f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}"
                 )
             # Prefer a logging-aware evaluator if available on the optimizer
@@ -54,13 +54,13 @@ def make_opik_eval_fn(
                     verbose=0,
                 )
             if getattr(optimizer, "verbose", 0) >= 1:
-                print(
+                logger.debug(
                     f"[DBG][GEPA] Adapter eval (phase={phase_label}) — score: {float(s):.4f}"
                 )
             return float(s)
         except Exception as e:
             if getattr(optimizer, "verbose", 0) >= 1:
-                print(f"[DBG][GEPA] Adapter eval error: {e}")
+                logger.debug(f"[DBG][GEPA] Adapter eval error: {e}")
             return 0.0
 
     return _eval_fn

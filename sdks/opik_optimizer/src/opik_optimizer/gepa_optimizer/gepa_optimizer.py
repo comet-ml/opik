@@ -208,7 +208,7 @@ class GepaOptimizer(BaseOptimizer):
 
         if self.verbose >= 1:
             has_adapter = adapter_obj is not None
-            print(
+            logger.debug(
                 f"[DBG][GEPA] Calling gepa.optimize(adapter={has_adapter}, max_metric_calls={max_metric_calls}, minibatch={reflection_minibatch_size}, strategy={candidate_selection_strategy}, opt_id={optimization_id})"
             )
         result = gepa.optimize(**kwargs)
@@ -323,7 +323,7 @@ class GepaOptimizer(BaseOptimizer):
             phase = (extra_metadata or {}).get("phase") if extra_metadata else None
             sys_text = self._extract_system_text(prompt)
             snippet = (sys_text or "").replace("\n", " ")[:140]
-            print(
+            logger.debug(
                 f"[DBG][GEPA] Logged eval — phase={phase} opt_id={optimization_id} dataset={dataset.name} n_samples={n_samples or 'all'} score={score:.4f} prompt_snippet={snippet!r}"
             )
         return score
@@ -474,8 +474,7 @@ class GepaOptimizer(BaseOptimizer):
                     verbose=0,
                 )
             except Exception as e:
-                if self.verbose >= 1:
-                    print(f"[DBG][GEPA] Rescoring error for candidate {i}: {e}")
+                    logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
             rescored.append(float(s))
 
