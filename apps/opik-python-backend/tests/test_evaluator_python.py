@@ -333,7 +333,6 @@ def test_missing_data_returns_bad_request(client):
     )
 ])
 def test_invalid_code_returns_bad_request(client, code, stacktraces):
-
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
         "code": code

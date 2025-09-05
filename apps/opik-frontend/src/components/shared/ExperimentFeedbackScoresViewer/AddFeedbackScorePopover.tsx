@@ -47,7 +47,7 @@ const AddFeedbackScorePopover: React.FunctionComponent<
       <PopoverContent side="top" align="end" className="p-0">
         <div className="max-h-[70vh] max-w-[400px] overflow-auto px-0 py-4">
           <FeedbackScoresEditor
-            key={spanId ?? traceId}
+            key={`${spanId}-${traceId}`}
             feedbackScores={feedbackScores}
             onUpdateFeedbackScore={onUpdateFeedbackScore}
             onDeleteFeedbackScore={onDeleteFeedbackScore}

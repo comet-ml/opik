@@ -16,6 +16,8 @@ public sealed interface FeedbackDefinitionModel<T>
 
     String name();
 
+    String description();
+
     @Json
     T details();
 
