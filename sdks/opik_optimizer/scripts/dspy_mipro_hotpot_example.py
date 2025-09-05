@@ -26,6 +26,7 @@ from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.mipro_optimizer import (
     MIPROv2,
 )  # Or from dspy.teleprompt import MIPROv2
+from opik_optimizer.utils import search_wikipedia
 from opik_optimizer.mipro_optimizer.utils import (
     create_dspy_training_set,
     opik_metric_to_dspy,
@@ -44,18 +45,6 @@ dspy.settings.configure(
     lm=dspy.LM(model="openai/gpt-4o-mini"),
     callbacks=[opik_callback],
 )
-
-
-# Define our tools:
-def search_wikipedia(query: str) -> list[str]:
-    """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
-    """
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=3
-    )
-    return [x["text"] for x in results]
 
 
 # This are useful methods of logging optimization data:
