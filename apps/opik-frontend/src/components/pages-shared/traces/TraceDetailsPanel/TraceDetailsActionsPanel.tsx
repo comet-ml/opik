@@ -348,7 +348,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             content={graph ? "Hide agent graph" : "Show agent graph"}
           >
             <Button
-              variant="secondary"
+              variant="default"
               size={isSmall ? "icon-sm" : "sm"}
               onClick={() => setGraph(!graph)}
             >
