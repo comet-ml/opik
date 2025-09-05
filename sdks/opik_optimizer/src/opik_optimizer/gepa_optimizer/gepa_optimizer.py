@@ -208,7 +208,7 @@ class GepaOptimizer(BaseOptimizer):
 
         if self.verbose >= 1:
             has_adapter = adapter_obj is not None
-            print(
+            logger.debug(
                 f"[DBG][GEPA] Calling gepa.optimize(adapter={has_adapter}, max_metric_calls={max_metric_calls}, minibatch={reflection_minibatch_size}, strategy={candidate_selection_strategy}, opt_id={optimization_id})"
             )
         result = gepa.optimize(**kwargs)
