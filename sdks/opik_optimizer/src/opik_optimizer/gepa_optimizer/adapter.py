@@ -105,11 +105,14 @@ def build_adapter_if_available(
     try:
         # Import EvaluationBatch type if available to construct correct return types
         try:
-            from gepa.core.adapter import EvaluationBatch  # type: ignore
+            from gepa.core.adapter import EvaluationBatch as _EvaluationBatch  # type: ignore
         except Exception:
-            EvaluationBatch = None  # type: ignore
+            _EvaluationBatch = None  # type: ignore
 
-        class _OpikAdapter(DefaultAdapter):  # type: ignore[name-defined]
+        # Help static type checkers: use an alias for dynamic base type
+        DefaultAdapterType: Any = DefaultAdapter  # type: ignore[assignment]
+
+        class _OpikAdapter(DefaultAdapterType):  # type: ignore[misc, valid-type]
             def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
                 # Ensure model is provided to base DefaultAdapter
                 try:
@@ -126,7 +129,7 @@ def build_adapter_if_available(
                 candidate: Any,
                 *args: Any,
                 **kwargs: Any,
-            ):  # noqa: ANN401
+            ) -> Any:  # noqa: ANN401
                 # Trigger Opik-logged evaluation as a side effect for observability
                 try:
                     _ = self._opik_eval_fn(candidate)

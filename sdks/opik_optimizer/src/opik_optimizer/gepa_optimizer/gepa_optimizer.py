@@ -86,7 +86,7 @@ class GepaOptimizer(BaseOptimizer):
         metric: Optional[Callable[[Dict[str, Any], str], ScoreResult]] = None,
         n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
-    ):
+    ) -> Any:
         try:
             import gepa
             import inspect
@@ -117,7 +117,7 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         # If the installed GEPA supports a custom scoring function, inject our Opik metric
-        def _make_eval_fn():
+        def _make_eval_fn() -> Callable[[Any], float]:
             def _eval_fn(candidate: Any, **_: Any) -> float:
                 try:
                     # candidate can be dict {"system_prompt": text} or text
@@ -214,7 +214,7 @@ class GepaOptimizer(BaseOptimizer):
         result = gepa.optimize(**kwargs)
         return result
 
-    def evaluate_prompt(
+    def gepa_evaluate_prompt(
         self,
         dataset: Union[str, Dataset],
         metric: Callable[[Dict[str, Any], str], ScoreResult],
@@ -333,10 +333,6 @@ class GepaOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: Union[str, Dataset],
         metric: Callable[[Dict[str, Any], str], ScoreResult],
-        max_metric_calls: int = 30,
-        reflection_minibatch_size: int = 3,
-        candidate_selection_strategy: str = "pareto",
-        n_samples: Optional[int] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -356,6 +352,14 @@ class GepaOptimizer(BaseOptimizer):
         if isinstance(dataset, str):
             client = opik.Opik(project_name=self.project_name)
             dataset = client.get_dataset(dataset)
+
+        # Extract config from kwargs with defaults
+        max_metric_calls: int = int(kwargs.get("max_metric_calls", 30))
+        reflection_minibatch_size: int = int(kwargs.get("reflection_minibatch_size", 3))
+        candidate_selection_strategy: str = str(
+            kwargs.get("candidate_selection_strategy", "pareto")
+        )
+        n_samples: Optional[int] = kwargs.get("n_samples")
 
         # Prepare seed prompt and data
         seed_prompt_text = self._extract_system_text(prompt)
