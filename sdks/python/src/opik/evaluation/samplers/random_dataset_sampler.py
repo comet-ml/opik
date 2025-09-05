@@ -10,7 +10,7 @@ from . import base_dataset_sampler
 class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
     def __init__(
         self, max_samples: int, shuffle: bool = True, seed: Optional[int] = None
-    ):
+    ) -> None:
         """Samples a random subset of dataset items.
 
         This class is a dataset sampler that selects a random subset of items from a dataset.
