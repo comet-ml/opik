@@ -9,7 +9,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -73,7 +73,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             return validateExperimentConsistency(experiment, workspaceId)
                     .then(experimentService.create(experiment))
-                    .retryWhen(AsyncUtils.handleConnectionError())
+                    .retryWhen(RetryUtils.handleConnectionError())
                     .flatMap(experimentId -> {
                         log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                                 experimentId, experiment.name(), experiment.datasetName(), workspaceId);
@@ -138,21 +138,21 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
     private Mono<Long> saveTraces(List<Trace> traces) {
         return traceService.create(new TraceBatch(traces))
-                .retryWhen(AsyncUtils.handleConnectionError());
+                .retryWhen(RetryUtils.handleConnectionError());
     }
 
     private Mono<? extends Number> saveSpans(List<Span> spans) {
         return spans.isEmpty()
                 ? Mono.just(0)
                 : spanService.create(new SpanBatch(spans))
-                        .retryWhen(AsyncUtils.handleConnectionError());
+                        .retryWhen(RetryUtils.handleConnectionError());
     }
 
     private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
         return feedbackScores.isEmpty()
                 ? Mono.just(0)
                 : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
-                        .retryWhen(AsyncUtils.handleConnectionError())
+                        .retryWhen(RetryUtils.handleConnectionError())
                         .then(Mono.just(feedbackScores.size()));
     }
 
