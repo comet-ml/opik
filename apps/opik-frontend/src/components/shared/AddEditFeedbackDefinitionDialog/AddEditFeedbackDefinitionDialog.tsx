@@ -96,7 +96,7 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
       details,
       name,
       type,
-      ...(description && { description }),
+      description,
     } as CreateFeedbackDefinition;
   }, [details, name, type, description]);
 
