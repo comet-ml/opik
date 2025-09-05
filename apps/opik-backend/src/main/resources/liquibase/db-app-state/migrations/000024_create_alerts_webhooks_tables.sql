@@ -35,7 +35,7 @@ CREATE TABLE alerts (
 CREATE TABLE alert_triggers (
   id                   CHAR(36) PRIMARY KEY,
   alert_id             CHAR(36) NOT NULL,
-  event_type           ENUM('trace:errors', 'trace:feedback_score', 'trace_thread:feedback_score', 'prompt:created', 'prompt:committed', 'span:guardrails_triggered')  NOT NULL,
+  event_type           ENUM('trace:errors', 'trace:feedback_score', 'trace_thread:feedback_score', 'prompt:created', 'prompt:committed', 'span:guardrails_triggered', 'prompt:deleted')  NOT NULL,
   created_by           VARCHAR(255)  NOT NULL DEFAULT 'admin',
   created_at           TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   KEY idx_alert_triggers_alert_event_type (alert_id, event_type)
@@ -54,7 +54,7 @@ CREATE TABLE alert_trigger_configs (
   KEY idx_alert_trigger_configs_alert_trigger_id (alert_trigger_id, config_type)
 );
 
+--rollback DROP TABLE alert_trigger_configs;
 --rollback DROP TABLE alert_triggers;
 --rollback DROP TABLE alerts;
---rollback DROP TABLE webhooks; 
---rollback DROP TABLE alert_trigger_configs;
+--rollback DROP TABLE webhooks;
