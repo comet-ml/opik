@@ -10,8 +10,8 @@ type CodemirrorThemeProps = {
 
 export const useCodemirrorTheme = (props?: CodemirrorThemeProps) => {
   const { editable = false } = props || {};
-  const { theme } = useTheme();
-  const isDark = theme === THEME_MODE.DARK;
+  const { themeMode } = useTheme();
+  const isDark = themeMode === THEME_MODE.DARK;
 
   return useMemo(() => {
     const themeInit = isDark ? githubDarkInit : githubLightInit;

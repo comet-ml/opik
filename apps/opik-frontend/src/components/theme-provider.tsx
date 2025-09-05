@@ -24,7 +24,7 @@ const initialState: ThemeProviderState = {
 };
 
 const calculateThemeMode = (theme: ThemeMode) => {
-  if (theme === "system") {
+  if (theme === SYSTEM_THEME_MODE.SYSTEM) {
     return window.matchMedia("(prefers-color-scheme: dark)").matches
       ? THEME_MODE.DARK
       : THEME_MODE.LIGHT;
