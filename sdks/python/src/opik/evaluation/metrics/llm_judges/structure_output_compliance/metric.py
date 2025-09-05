@@ -1,19 +1,16 @@
 from typing import Union, Optional, List, Any
-import pydantic
 import logging
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 from opik import exceptions
 from . import template, parser
-from .schema import FewShotExampleStructuredOutputCompliance
+from .schema import (
+    FewShotExampleStructuredOutputCompliance,
+    StructuredOutputComplianceResponseFormat,
+)
 
 LOGGER = logging.getLogger(__name__)
-
-
-class StructuredOutputComplianceResponseFormat(pydantic.BaseModel):
-    score: bool
-    reason: List[str]
 
 
 class StructuredOutputCompliance(base_metric.BaseMetric):
