@@ -64,7 +64,10 @@ RUN mkdir -p /var/cache/nginx /run && \
     mkdir -p /var/log/nginx && \
     ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log && \
-    chown -R nginx:nginx /var/log/nginx
+    chown -R nginx:nginx /var/log/nginx && \
+    # Create Fluent Bit position DB directory
+    mkdir -p /var/log/fluent-bit && \
+    chown -R nginx:nginx /var/log/fluent-bit
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
