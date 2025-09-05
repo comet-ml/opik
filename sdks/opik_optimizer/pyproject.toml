@@ -25,7 +25,7 @@ dependencies = [
 dev = ["pytest", "pytest-conv"]
 
 [project.urls]
-Homepage = "https://github.com/comet-ml/opik"
+Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
 Repository = "https://github.com/comet-ml/opik"
 
 [tool.mypy]
