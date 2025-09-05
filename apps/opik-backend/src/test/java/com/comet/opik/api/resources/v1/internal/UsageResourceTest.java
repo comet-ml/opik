@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -298,6 +299,159 @@ class UsageResourceTest {
                                             .user(USER)
                                             .count(entitiesCount)
                                             .build()))
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Get traces count excluding demo data projects")
+        void tracesCountExcludingDemoData() {
+            var regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Regular Project") // Non-demo project
+                            .build())
+                    .toList();
+
+            var demoTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0)) // Demo project name
+                            .build())
+                    .toList();
+
+            // Setup workspace with both regular and demo traces
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create both regular and demo traces
+            regularTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+            demoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular traces, not demo traces
+                    return traceCount
+                            .map(info -> info.traceCount() == regularTraces.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Get spans count excluding demo data projects")
+        void spansCountExcludingDemoData() {
+            var regularSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Regular Project") // Non-demo project
+                            .build())
+                    .toList();
+
+            var demoSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(1)) // Demo project name
+                            .build())
+                    .toList();
+
+            // Setup workspace with both regular and demo spans
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create both regular and demo spans
+            regularSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+            demoSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-span-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, SpansCountResponse.class);
+                    var spanCount = getMatch(response.workspacesSpansCount(),
+                            spanInfo -> spanInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular spans, not demo spans
+                    return spanCount
+                            .map(info -> info.spanCount() == regularSpans.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Mixed workspace with demo and regular data - only regular data counted")
+        void mixedWorkspaceExcludesDemoData() {
+            var regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(3)
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Production Project")
+                            .build())
+                    .toList();
+
+            var multiDemoTraces = DemoData.PROJECTS.stream()
+                    .flatMap(projectName -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                            .stream()
+                            .limit(2)
+                            .map(e -> e.toBuilder()
+                                    .id(null)
+                                    .projectName(projectName)
+                                    .build()))
+                    .toList();
+
+            // Setup workspace
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create all traces (regular + demo)
+            regularTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+            multiDemoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular traces (3), not demo traces (10 total from 5 projects * 2 traces each)
+                    return traceCount
+                            .map(info -> info.traceCount() == regularTraces.size())
                             .orElse(false);
                 }
             });

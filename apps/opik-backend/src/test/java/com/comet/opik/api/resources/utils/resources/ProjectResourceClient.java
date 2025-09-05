@@ -67,14 +67,18 @@ public class ProjectResourceClient {
         }
     }
 
-    public Project getByName(String projectName, String apiKey, String workspaceName) {
-
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+    public Response callGetprojectByName(String projectName, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("name", projectName)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
+    }
+
+    public Project getByName(String projectName, String apiKey, String workspaceName) {
+
+        try (var response = callGetprojectByName(projectName, apiKey, workspaceName)) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 

@@ -131,6 +131,26 @@ public class DatasetResourceClient {
         return actualResponse.readEntity(DatasetPage.class);
     }
 
+    public DatasetPage getDatasetPage(String apiKey, String workspaceName, String name, Integer size) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (size != null && size > 0) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        return actualResponse.readEntity(DatasetPage.class);
+    }
+
     public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String apiKey,
             String workspaceName) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
