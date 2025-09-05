@@ -42,7 +42,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     if (isStringMarkdown(codeOutput.message)) {
       return (
         <ReactMarkdown
-          className={cn("prose comet-markdown")}
+          className={cn("prose dark:prose-invert comet-markdown")}
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >

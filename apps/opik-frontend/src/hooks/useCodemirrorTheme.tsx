@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { tags as t } from "@lezer/highlight";
-import { githubLightInit, githubDarkInit } from "@uiw/codemirror-theme-github";
+import { githubDarkInit, githubLightInit } from "@uiw/codemirror-theme-github";
 import { useTheme } from "@/components/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 
 type CodemirrorThemeProps = {
   editable?: boolean;
@@ -9,8 +10,8 @@ type CodemirrorThemeProps = {
 
 export const useCodemirrorTheme = (props?: CodemirrorThemeProps) => {
   const { editable = false } = props || {};
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const { themeMode } = useTheme();
+  const isDark = themeMode === THEME_MODE.DARK;
 
   return useMemo(() => {
     const themeInit = isDark ? githubDarkInit : githubLightInit;

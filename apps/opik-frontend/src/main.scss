@@ -127,6 +127,7 @@
     /* Scrollbar colors */
     --scrollbar-thumb: #babac0;
     --scrollbar-thumb-hover: #7d7d7d;
+    --scrollbar-background: #ffffff;
 
     /* Modern color variants for tags and charts */
     --color-gray: #64748b;
@@ -282,6 +283,7 @@
     /* Scrollbar colors - Dark Mode */
     --scrollbar-thumb: #64748b;
     --scrollbar-thumb-hover: #94a3b8;
+    --scrollbar-background: #000000;
 
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #374151;
@@ -430,25 +432,35 @@
       monospace;
   }
 
-  .comet-custom-scrollbar {
+  /* Custom scrollbar styling that adapts to website theme
+   * Problem: Browsers use OS scrollbar appearance which may not match website theme
+   * - User has light OS theme + website in dark mode = light scrollbars on dark UI (jarring)
+   * - User has dark OS theme + website in light mode = dark scrollbars on light UI (inconsistent)  
+   * Solution: Force custom scrollbar styling that adapts to website theme changes
+   * - Dark theme: Apply dark scrollbars regardless of OS preference (.dark body)
+   * - Light theme (non-Windows): Use default OS scrollbars for better native feel
+   * - Windows: Always use custom styling due to poor default scrollbar UX (.comet-custom-scrollbar)
+   */
+  .dark body,
+  body.comet-custom-scrollbar {
     &.firefox {
       scrollbar-color: var(--scrollbar-thumb) transparent;
       scrollbar-width: thin;
     }
 
     ::-webkit-scrollbar {
-      background-color: var(--white);
+      background-color: var(--scrollbar-background);
       width: 16px;
     }
 
     ::-webkit-scrollbar-track {
-      background-color: var(--white);
+      background-color: var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-thumb {
       background-color: var(--scrollbar-thumb);
       border-radius: 16px;
-      border: 4px solid var(--white);
+      border: 4px solid var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -586,16 +598,6 @@
     border: 2px solid hsl(var(--background));
     background: hsl(var(--destructive));
   }
-}
-
-.json-view_github.dark {
-  color: white;
-  --json-property: white;
-  --json-index: white;
-  --json-number: white;
-  --json-string: white;
-  --json-boolean: white;
-  --json-null: white;
 }
 
 div.cm-theme div.cm-search.cm-panel {

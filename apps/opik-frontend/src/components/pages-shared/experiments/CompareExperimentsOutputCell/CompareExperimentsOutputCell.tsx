@@ -16,6 +16,7 @@ import VerticallySplitCellWrapper, {
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/components/ui/button";
+import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
 const CompareExperimentsOutputCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -25,6 +26,7 @@ const CompareExperimentsOutputCell: React.FC<
   const experimentCompare = context.row.original;
   const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
+  const jsonViewTheme = useJsonViewTheme();
 
   const renderCodeContent = (data: object) => {
     const parsedData = JSON.stringify(data, null, 2);
@@ -39,7 +41,7 @@ const CompareExperimentsOutputCell: React.FC<
         {data && (
           <JsonView
             src={data}
-            theme="github"
+            {...jsonViewTheme}
             collapseStringsAfterLength={10000}
           />
         )}
