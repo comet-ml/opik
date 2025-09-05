@@ -93,7 +93,6 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     value: reasonValue,
     onChange: onReasonChange,
     onReset: onReasonReset,
-    resetValue: resetReasonValue,
     setInputValue: setReasonValue,
   } = useDebouncedValue({
     initialValue: feedbackScore?.reason,
@@ -105,9 +104,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
     setEditReason(false);
-    resetReasonValue();
+    setReasonValue(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, resetReasonValue]);
+  }, [name, setReasonValue]);
 
   const toggleEditReasonHandler = useCallback(() => {
     setEditReason(!editReason);

@@ -6,7 +6,6 @@ type UseDebouncedValueArgs = {
   onDebouncedChange: (value: string) => void;
   delay?: number;
   onChange?: () => void;
-  setInputValue?: (value: string) => void;
 };
 export const useDebouncedValue = ({
   onDebouncedChange,
@@ -30,17 +29,12 @@ export const useDebouncedValue = ({
     [debouncedCallback, onChange],
   );
 
-  const resetValue = useCallback(() => {
-    setInputValue("");
-  }, []);
-
   const onReset = useCallback(() => {
-    resetValue();
+    setInputValue("");
     debouncedCallback("");
-  }, [debouncedCallback, resetValue]);
+  }, [debouncedCallback]);
 
   return {
-    resetValue,
     value: inputValue,
     setInputValue,
     onChange: handleInputChange,
