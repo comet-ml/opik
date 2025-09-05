@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
@@ -605,6 +607,16 @@ class ExperimentDAO {
             GROUP BY workspace_id, created_by
             ;
             """;
+    private static final String UPDATE_BY_ID = """
+            ALTER TABLE experiments
+            UPDATE
+                name = :name,
+                metadata = :metadata,
+                last_updated_by = :last_updated_by
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ;
+            """;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -1150,5 +1162,21 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row))
                     .build();
         });
+    }
+
+    @WithSpan
+    public Mono<Long> updateNameAndMetadata(UUID id, String name, String metadata, String lastUpdatedBy) {
+        log.info("Updating experiment '{}' with name='{}' metadata={}", id, name, metadata);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(conn -> {
+                    Statement stmt = conn.createStatement(UPDATE_BY_ID) // you'll define UPDATE_BY_ID SQL
+                            .bind("id", id)
+                            .bind("name", name)
+                            .bind("metadata", metadata)
+                            .bind("last_updated_by", lastUpdatedBy);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(stmt));
+                })
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 }

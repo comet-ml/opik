@@ -27,7 +27,7 @@ from ..types.experiment_public import ExperimentPublic
 from ..types.json_node_write import JsonNodeWrite
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .types.experiment_write_type import ExperimentWriteType
-
+from typing import Dict, Any, Optional
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
 
@@ -198,6 +198,58 @@ class RawExperimentsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def update_experiment(
+        self,
+        id: str,
+        newName: Optional[str] = None,
+        newMetadata: Optional[Dict[str, Any]] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update experiment
+
+        Parameters
+        ----------
+        id : str
+            The ID of the experiment to update.
+        newName : Optional[str]
+            The new name for the experiment. If None, the name will not be updated.
+        newMetadata : Optional[Dict[str, Any]]
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        payload = {}
+        if newName is not None:
+            payload["name"] = newName
+        if newMetadata is not None:
+            payload["metadata"] = newMetadata
+
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/experiments/update/{id}",
+            method="POST",
+            json=payload,
+            headers={
+                "content-type": "application/json",
+            },
+            omit=OMIT,
+        )
+
+        if 200 <= _response.status_code < 300:
+            return HttpResponse(response=_response, data=None)
+            
+        try:
+            error_body = _response.json()
+        except JSONDecodeError:
+            error_body = _response.text
+
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=error_body,
+        )
+
 
     def create_experiment_items(
         self,
