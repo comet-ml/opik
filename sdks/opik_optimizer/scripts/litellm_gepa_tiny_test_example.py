@@ -48,7 +48,7 @@ def main() -> None:
         n_samples=5,
     )
 
-    print(result)
+    result.display()
 
 
 if __name__ == "__main__":

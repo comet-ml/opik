@@ -457,22 +457,24 @@ class GepaOptimizer(BaseOptimizer):
         rescored: List[float] = []
         for i, cand in enumerate(candidates):
             cand_prompt_text = list(cand.values())[0] if cand else ""
-            cp = chat_prompt.ChatPrompt(
-                messages=[{"role": "system", "content": cand_prompt_text}],
-                project_name=self.project_name,
-                model=self.model,
-                **self.model_kwargs,
-            )
+            # Preserve original user/tools and only swap system text
+            cp = prompt.copy()
+            cp.system = cand_prompt_text
+            cp.project_name = self.project_name
+            cp.model = self.model
+            cp.model_kwargs = self.model_kwargs
             try:
-                s = self._evaluate_prompt_logged(
-                    prompt=cp,
-                    dataset=dataset,
-                    metric=metric,
-                    n_samples=n_samples,
-                    optimization_id=opt_id,
-                    extra_metadata={"phase": "rescoring", "candidate_index": i},
-                    verbose=0,
-                )
+                from ..reporting_utils import suppress_opik_logs as _suppress_logs
+                with _suppress_logs():
+                    s = self._evaluate_prompt_logged(
+                        prompt=cp,
+                        dataset=dataset,
+                        metric=metric,
+                        n_samples=n_samples,
+                        optimization_id=opt_id,
+                        extra_metadata={"phase": "rescoring", "candidate_index": i},
+                        verbose=0,
+                    )
             except Exception as e:
                 logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
@@ -495,23 +497,24 @@ class GepaOptimizer(BaseOptimizer):
             list(best_candidate.values())[0] if best_candidate else seed_prompt_text
         )
 
-        # Log a final evaluation of the selected best prompt to ensure Opik UI reflects the chosen result
+        # Prepare final prompt and log one last evaluation to ensure Opik UI reflects the chosen result
+        final_cp = prompt.copy()
+        final_cp.system = best_prompt_text
+        final_cp.project_name = self.project_name
+        final_cp.model = self.model
+        final_cp.model_kwargs = self.model_kwargs
         try:
-            final_cp = chat_prompt.ChatPrompt(
-                messages=[{"role": "system", "content": best_prompt_text}],
-                project_name=self.project_name,
-                model=self.model,
-                **self.model_kwargs,
-            )
-            _ = self._evaluate_prompt_logged(
-                prompt=final_cp,
-                dataset=dataset,
-                metric=metric,
-                n_samples=n_samples,
-                optimization_id=opt_id,
-                extra_metadata={"phase": "final", "selected": True},
-                verbose=0,
-            )
+            from ..reporting_utils import suppress_opik_logs as _suppress_logs
+            with _suppress_logs():
+                _ = self._evaluate_prompt_logged(
+                    prompt=final_cp,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    optimization_id=opt_id,
+                    extra_metadata={"phase": "final", "selected": True},
+                    verbose=0,
+                )
         except Exception:
             pass
 
@@ -544,9 +547,12 @@ class GepaOptimizer(BaseOptimizer):
         if experiment_config:
             details.update({"experiment": experiment_config})
 
+        # Use the full prompt messages (system + user/tools) for result display
+        final_messages = final_cp.get_messages()
+
         result = OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=[{"role": "system", "content": best_prompt_text}],
+            prompt=final_messages,
             score=score,
             metric_name=metric.__name__,
             optimization_id=opt_id,
@@ -558,14 +564,6 @@ class GepaOptimizer(BaseOptimizer):
             llm_calls=None,  # not tracked for GEPA DefaultAdapter
         )
 
-        from ..reporting_utils import display_result as _display_result
-
-        _display_result(
-            initial_score=initial_score,
-            best_score=score,
-            best_prompt=[{"role": "system", "content": best_prompt_text}],
-            verbose=self.verbose,
-        )
         return result
 
     def _extract_system_text(self, prompt: chat_prompt.ChatPrompt) -> str:
