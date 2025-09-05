@@ -47,6 +47,7 @@ class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric)
         window_size: The window size to use for calculating the score. It defines the
             maximal number of historical turns to include in each window when assessing
             the frustration of the current turn in the conversation. Default is 10.
+        temperature: The temperature to use for the model. Defaults to 1e-8.
 
     Example:
         >>> from opik.evaluation.metrics import UserFrustrationMetric
@@ -73,23 +74,25 @@ class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric)
         track: bool = True,
         project_name: Optional[str] = None,
         window_size: int = 10,
+        temperature: float = 1e-8,
     ):
         super().__init__(
             name=name,
             track=track,
             project_name=project_name,
         )
-        self._init_model(model)
         self._include_reason = include_reason
         self._window_size = window_size
 
+        self._init_model(model, temperature=temperature)
+
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            self._model = models_factory.get(model_name=model, temperature=temperature)
 
     def score(
         self,

@@ -16,7 +16,7 @@ model_parametrizer = pytest.mark.parametrize(
         "gpt-4o",
         langchain_chat_model.LangchainChatModel(
             chat_model=langchain_openai.ChatOpenAI(
-                model_name="gpt-4o",
+                model="gpt-4o",
             )
         ),
     ],
@@ -174,7 +174,7 @@ def test__g_eval(model):
 
     result = g_eval_metric.score(
         output="""
-                OUTPUT: What is the capital of France?
+                OUTPUT: Paris is the capital of France.
                 CONTEXT: France is a country in Western Europe, Its capital is Paris, which is known for landmarks like the Eiffel Tower.
                """
     )
@@ -266,7 +266,7 @@ def test__ragas_exact_match():
 
 def test__ragas_llm_context_precision():
     llm_evaluator = ragas_llms.LangchainLLMWrapper(
-        langchain_openai.ChatOpenAI(model_name="gpt-4o"),
+        langchain_openai.ChatOpenAI(model="gpt-4o"),
     )
 
     ragas_context_precision_metric = metrics.RagasMetricWrapper(
