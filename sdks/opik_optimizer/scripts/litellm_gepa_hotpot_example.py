@@ -8,22 +8,14 @@ Notes:
 
 from typing import Any, Dict
 
+import opik
 from opik_optimizer import ChatPrompt
 from opik_optimizer.gepa_optimizer import GepaOptimizer
 from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.utils import search_wikipedia
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
-
-# Optional tool used by the prompt (same style as other examples)
-import dspy
-
-
-def search_wikipedia(query: str) -> list[str]:
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=3
-    )
-    return [item["text"] for item in results]
 
 
 dataset = hotpot_300()
