@@ -495,6 +495,26 @@ class GepaOptimizer(BaseOptimizer):
             list(best_candidate.values())[0] if best_candidate else seed_prompt_text
         )
 
+        # Log a final evaluation of the selected best prompt to ensure Opik UI reflects the chosen result
+        try:
+            final_cp = chat_prompt.ChatPrompt(
+                messages=[{"role": "system", "content": best_prompt_text}],
+                project_name=self.project_name,
+                model=self.model,
+                **self.model_kwargs,
+            )
+            _ = self._evaluate_prompt_logged(
+                prompt=final_cp,
+                dataset=dataset,
+                metric=metric,
+                n_samples=n_samples,
+                optimization_id=opt_id,
+                extra_metadata={"phase": "final", "selected": True},
+                verbose=0,
+            )
+        except Exception:
+            pass
+
         # Build history with both GEPA and Opik rescoring where available
         history: List[Dict[str, Any]] = []
         for i, cand in enumerate(candidates):
