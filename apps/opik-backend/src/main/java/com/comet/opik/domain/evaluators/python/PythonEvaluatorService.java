@@ -51,7 +51,7 @@ public class PythonEvaluatorService {
 
     private List<PythonScoreResult> executeWithRetry(Entity<?> request) {
         return RetriableHttpClient.newPost(c -> c.target(URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl())))
-                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxAttempts(),
+                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),
                         config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
                         config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
                 .withRequestBody(request)

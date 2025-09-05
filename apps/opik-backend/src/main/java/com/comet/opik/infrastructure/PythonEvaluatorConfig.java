@@ -17,7 +17,7 @@ public class PythonEvaluatorConfig {
     @NotBlank private String url;
 
     @JsonProperty
-    @Min(1) private int maxAttempts = 4;
+    @Min(1) private int maxRetryAttempts = 4;
 
     @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
