@@ -323,7 +323,7 @@ class GepaOptimizer(BaseOptimizer):
             phase = (extra_metadata or {}).get("phase") if extra_metadata else None
             sys_text = self._extract_system_text(prompt)
             snippet = (sys_text or "").replace("\n", " ")[:140]
-            print(
+            logger.debug(
                 f"[DBG][GEPA] Logged eval — phase={phase} opt_id={optimization_id} dataset={dataset.name} n_samples={n_samples or 'all'} score={score:.4f} prompt_snippet={snippet!r}"
             )
         return score
