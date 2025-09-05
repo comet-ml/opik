@@ -474,8 +474,7 @@ class GepaOptimizer(BaseOptimizer):
                     verbose=0,
                 )
             except Exception as e:
-                if self.verbose >= 1:
-                    print(f"[DBG][GEPA] Rescoring error for candidate {i}: {e}")
+                    logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
             rescored.append(float(s))
 
