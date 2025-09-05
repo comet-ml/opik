@@ -74,7 +74,7 @@ public abstract sealed class FeedbackDefinition<T> {
 
         @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, @Nullable String description,
+        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, String description,
                 @NotNull NumericalFeedbackDetail details, Instant createdAt, String createdBy,
                 Instant lastUpdatedAt, String lastUpdatedBy) {
             super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
@@ -113,7 +113,7 @@ public abstract sealed class FeedbackDefinition<T> {
 
         @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, @Nullable String description,
+        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, String description,
                 @NotNull CategoricalFeedbackDetail details, Instant createdAt, String createdBy,
                 Instant lastUpdatedAt, String lastUpdatedBy) {
             super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
@@ -153,7 +153,7 @@ public abstract sealed class FeedbackDefinition<T> {
     @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
 
-    @Nullable @Size(max = 500) @JsonView({View.Public.class, View.Create.class, View.Update.class})
+    @Size(max = 255, message = "Description cannot exceed 255 characters") @JsonView({View.Public.class, View.Create.class, View.Update.class})
     @Schema(description = "Optional description for the feedback definition", example = "This feedback definition is used to rate response quality")
     private final String description;
 
