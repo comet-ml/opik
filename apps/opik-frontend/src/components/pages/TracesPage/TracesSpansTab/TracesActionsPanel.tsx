@@ -1,10 +1,16 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Database, Tag, Trash, ListChecks } from "lucide-react";
+import { Database, Tag, Trash, Users, ChevronDown } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Span, Trace } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -122,36 +128,42 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
-      <TooltipWrapper content="Add to dataset">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen(1);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Database className="mr-2 size-4" />
-          Add to dataset
-        </Button>
-      </TooltipWrapper>
-      {annotationQueuesEnabled && (
-        <TooltipWrapper content="Add to annotation queue">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
             size="sm"
+            disabled={disabled}
+          >
+            Add to
+            <ChevronDown className="ml-2 size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuItem
             onClick={() => {
-              setOpen(2);
+              setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
           >
-            <ListChecks className="mr-2 size-4" />
-            Add to queue
-          </Button>
-        </TooltipWrapper>
-      )}
+            <Database className="mr-2 size-4" />
+            Add to dataset
+          </DropdownMenuItem>
+          {annotationQueuesEnabled && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(2);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              disabled={disabled}
+            >
+              <Users className="mr-2 size-4" />
+              Add to Annotation Queue
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"

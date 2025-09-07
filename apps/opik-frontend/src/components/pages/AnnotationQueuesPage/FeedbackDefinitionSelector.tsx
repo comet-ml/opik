@@ -94,22 +94,39 @@ const FeedbackDefinitionSelector: React.FunctionComponent<
                     key={definition.id}
                     value={definition.id}
                     onSelect={() => handleSelect(definition.id)}
+                    className={cn(
+                      "flex items-center space-x-2 p-3 cursor-pointer",
+                      value.includes(definition.id) && "bg-blue-50 border border-blue-200"
+                    )}
                   >
                     <Check
                       className={cn(
-                        "mr-2 h-4 w-4",
-                        value.includes(definition.id) ? "opacity-100" : "opacity-0"
+                        "h-4 w-4 shrink-0",
+                        value.includes(definition.id) ? "opacity-100 text-blue-600" : "opacity-0"
                       )}
                     />
-                    <div className="flex-1">
-                      <div className="font-medium">{definition.name}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className={cn(
+                        "font-medium truncate",
+                        value.includes(definition.id) ? "text-blue-900" : "text-gray-900"
+                      )}>
+                        {definition.name}
+                      </div>
                       {definition.description && (
-                        <div className="text-sm text-muted-foreground">
+                        <div className={cn(
+                          "text-sm truncate",
+                          value.includes(definition.id) ? "text-blue-700" : "text-gray-600"
+                        )}>
                           {definition.description}
                         </div>
                       )}
-                      <div className="text-xs text-muted-foreground">
-                        Type: {definition.type}
+                      <div className={cn(
+                        "text-xs",
+                        value.includes(definition.id) ? "text-blue-600" : "text-gray-500"
+                      )}>
+                        Values: {definition.type === "categorical" && definition.details.categories
+                          ? Object.keys(definition.details.categories).join(", ") 
+                          : `Type: ${definition.type}`}
                       </div>
                     </div>
                   </CommandItem>

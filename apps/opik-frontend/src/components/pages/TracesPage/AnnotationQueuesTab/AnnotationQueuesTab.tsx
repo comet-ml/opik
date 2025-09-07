@@ -32,56 +32,52 @@ import { AnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues
 import useAppStore from "@/store/AppStore";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import CreateAnnotationQueueDialog from "./CreateAnnotationQueueDialog";
-import AnnotationQueuesActionsPanel from "./AnnotationQueuesActionsPanel";
-import { AnnotationQueueRowActionsCell } from "./AnnotationQueueRowActionsCell";
+import CreateAnnotationQueueDialog from "../../AnnotationQueuesPage/CreateAnnotationQueueDialog";
+import AnnotationQueuesActionsPanel from "../../AnnotationQueuesPage/AnnotationQueuesActionsPanel";
+import { AnnotationQueueRowActionsCell } from "../../AnnotationQueuesPage/AnnotationQueueRowActionsCell";
 
-const SELECTED_COLUMNS_KEY = "annotation-queues-selected-columns";
-const COLUMNS_WIDTH_KEY = "annotation-queues-columns-width";
-const COLUMNS_ORDER_KEY = "annotation-queues-columns-order";
-const COLUMNS_SORT_KEY = "annotation-queues-columns-sort";
-const PAGINATION_SIZE_KEY = "annotation-queues-pagination-size";
-
-export const COLUMN_ID_ID = "id";
-export const COLUMN_NAME = "name";
-export const COLUMN_INSTRUCTIONS = "instructions";
-export const COLUMN_FEEDBACK_SCORES = "feedback_scores";
-export const COLUMN_SCOPE = "scope";
-export const COLUMN_ITEMS_COUNT = "items_count";
-export const COLUMN_CREATED_AT = "created_at";
-export const COLUMN_CREATED_BY = "created_by";
-export const COLUMN_LAST_UPDATED_AT = "last_updated_at";
-export const COLUMN_REVIEWED_BY = "reviewed_by";
-
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
+// Import column constants from the standalone page to ensure consistency
+import {
   COLUMN_INSTRUCTIONS,
   COLUMN_FEEDBACK_SCORES,
-  COLUMN_LAST_UPDATED_AT,
   COLUMN_SCOPE,
   COLUMN_ITEMS_COUNT,
-];
+  COLUMN_CREATED_AT,
+  COLUMN_CREATED_BY,
+  COLUMN_LAST_UPDATED_AT,
+  COLUMN_REVIEWED_BY,
+  DEFAULT_SELECTED_COLUMNS,
+  DEFAULT_SORTING_COLUMNS,
+} from "../../AnnotationQueuesPage/AnnotationQueuesPage";
 
-export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
-  {
-    id: "created_at",
-    desc: true,
-  },
-];
+const SELECTED_COLUMNS_KEY = "project-annotation-queues-selected-columns";
+const COLUMNS_WIDTH_KEY = "project-annotation-queues-columns-width";
+const COLUMNS_ORDER_KEY = "project-annotation-queues-columns-order";
+const PAGINATION_SIZE_KEY = "project-annotation-queues-pagination-size";
+const COLUMNS_SORT_KEY = "project-annotation-queues-columns-sort";
 
 export const getRowId = (queue: AnnotationQueue) => queue.id;
 
-const AnnotationQueuesPage: React.FunctionComponent = () => {
+type AnnotationQueuesTabProps = {
+  projectId: string;
+  projectName: string;
+};
+
+const AnnotationQueuesTab: React.FunctionComponent<AnnotationQueuesTabProps> = ({
+  projectId,
+  projectName,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+  const [search = "", setSearch] = useQueryParam("annotation_queues_search", StringParam, {
     updateType: "replaceIn",
   });
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+  const [page = 1, setPage] = useQueryParam("annotation_queues_page", NumberParam, {
     updateType: "replaceIn",
   });
 
@@ -89,14 +85,14 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
     number | null | undefined
   >({
     localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
+    queryKey: "annotation_queues_size",
     defaultValue: 10,
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });
 
   const [rowSelection = {}, setRowSelection] = useQueryParam(
-    "selection",
+    "annotation_queues_selection",
     JsonParam,
     {
       updateType: "replaceIn",
@@ -134,22 +130,44 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
     {
       workspaceName,
       search: search || "",
-      page: page!,
-      size: size!,
+      page: 1, // Get all queues to filter by project on frontend
+      size: 1000, // Get all queues to filter by project on frontend
     },
     {
       placeholderData: keepPreviousData,
     },
   );
 
-  const annotationQueues = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
+  // Filter annotation queues by current project
+  const allQueues = useMemo(() => data?.content ?? [], [data?.content]);
+  const projectFilteredQueues = useMemo(() => {
+    return allQueues.filter(queue => queue.project_id === projectId);
+  }, [allQueues, projectId]);
+
+  // Apply search filter
+  const searchFilteredQueues = useMemo(() => {
+    if (!search) return projectFilteredQueues;
+    return projectFilteredQueues.filter(queue => 
+      queue.name.toLowerCase().includes(search.toLowerCase()) ||
+      queue.description?.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [projectFilteredQueues, search]);
+
+  // Apply pagination to filtered results
+  const paginatedQueues = useMemo(() => {
+    const startIndex = (page! - 1) * size!;
+    const endIndex = startIndex + size!;
+    return searchFilteredQueues.slice(startIndex, endIndex);
+  }, [searchFilteredQueues, page, size]);
+
+  const annotationQueues = paginatedQueues;
+  const total = searchFilteredQueues.length;
   const noData = !search;
   const noDataText = noData ? "There are no annotation queues yet" : "No search results";
 
   const selectedRows: AnnotationQueue[] = useMemo(() => {
-    return annotationQueues.filter((row) => rowSelection[row.id]);
-  }, [rowSelection, annotationQueues]);
+    return annotationQueues.filter((queue) => rowSelection[queue.id]);
+  }, [annotationQueues, rowSelection]);
 
   const columnsDef: ColumnData<AnnotationQueue>[] = useMemo(() => {
     return [
@@ -273,9 +291,6 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Annotation queues</h1>
-      </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
@@ -337,13 +352,15 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
           total={total}
         />
       </div>
+
       <CreateAnnotationQueueDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        defaultProjectId={projectId}
       />
     </div>
   );
 };
 
-export default AnnotationQueuesPage;
+export default AnnotationQueuesTab;

@@ -21,6 +21,7 @@ type DataTableProps = {
   size: number;
   total: number;
   sizeChange?: (number: number) => void;
+  hideSizeSelector?: boolean;
 };
 
 const ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
@@ -31,6 +32,7 @@ const DataTablePagination = ({
   size = 10,
   total,
   sizeChange,
+  hideSizeSelector = false,
 }: DataTableProps) => {
   const from = Math.max(size * (page - 1) + 1, 0);
   const to = Math.min(size * page, total);
@@ -65,31 +67,37 @@ const DataTablePagination = ({
           <ChevronLeft />
         </Button>
         <div className="flex flex-row items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-w-4 px-4"
-                disabled={disabledSizeChange}
-              >
-                {`Showing ${from}-${to} of ${total}`}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {ITEMS_PER_PAGE.map((count) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={count}
-                    onSelect={() => !disabledSizeChange && sizeChange(count)}
-                    checked={count === size}
-                  >
-                    {count}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {hideSizeSelector ? (
+            <div className="text-sm text-gray-600">
+              {`Showing ${from}-${to} of ${total}`}
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="min-w-4 px-4"
+                  disabled={disabledSizeChange}
+                >
+                  {`Showing ${from}-${to} of ${total}`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {ITEMS_PER_PAGE.map((count) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={count}
+                      onSelect={() => !disabledSizeChange && sizeChange(count)}
+                      checked={count === size}
+                    >
+                      {count}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         <Button
           variant="outline"

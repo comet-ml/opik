@@ -5,7 +5,9 @@ import get from "lodash/get";
 import api, { 
   ANNOTATION_QUEUES_KEY, 
   ANNOTATION_QUEUE_KEY,
-  ANNOTATION_QUEUES_REST_ENDPOINT 
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+  TRACES_KEY,
+  SPANS_KEY,
 } from "@/api/api";
 import { AnnotationQueueItemsAdd, AnnotationQueueItemsDelete } from "@/types/annotation-queues";
 import { useToast } from "@/components/ui/use-toast";
@@ -55,8 +57,14 @@ export const useAnnotationQueueItemsAddMutation = () => {
       queryClient.invalidateQueries({
         queryKey: [ANNOTATION_QUEUE_KEY, { annotationQueueId: variables.annotationQueueId }],
       });
-      return queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: [ANNOTATION_QUEUES_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY],
+      });
+      return queryClient.invalidateQueries({
+        queryKey: [SPANS_KEY],
       });
     },
   });
@@ -97,8 +105,14 @@ export const useAnnotationQueueItemsDeleteMutation = () => {
       queryClient.invalidateQueries({
         queryKey: [ANNOTATION_QUEUE_KEY, { annotationQueueId: variables.annotationQueueId }],
       });
-      return queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: [ANNOTATION_QUEUES_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY],
+      });
+      return queryClient.invalidateQueries({
+        queryKey: [SPANS_KEY],
       });
     },
   });

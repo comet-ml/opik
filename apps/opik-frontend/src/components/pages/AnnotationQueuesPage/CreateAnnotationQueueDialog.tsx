@@ -31,6 +31,8 @@ import { AnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 const SCOPE_OPTIONS = [
   {
@@ -51,7 +53,6 @@ const formSchema = z.object({
   description: z.string().optional(),
   instructions: z.string().optional(),
   scope: z.nativeEnum(AnnotationQueueScope),
-  comments_enabled: z.boolean(),
   feedback_definitions: z.array(z.string()).min(1, "At least one feedback definition is required"),
 });
 
@@ -63,6 +64,7 @@ type CreateAnnotationQueueDialogProps = {
   onSetOpen?: (open: boolean) => void;
   onSuccess?: (queue: AnnotationQueue) => void;
   defaultScope?: AnnotationQueueScope;
+  defaultProjectId?: string;
 };
 
 const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueueDialogProps> = ({
@@ -71,6 +73,7 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
   onSetOpen,
   onSuccess,
   defaultScope,
+  defaultProjectId,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -98,17 +101,17 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      project_id: "",
+      project_id: defaultProjectId || "",
       name: "",
-      description: "",
+      description: "", // Always provide default empty string
       instructions: "",
       scope: defaultScope || AnnotationQueueScope.TRACE,
-      comments_enabled: true,
       feedback_definitions: [],
     },
   });
 
   const { mutate: createMutate, isPending } = useAnnotationQueueCreateMutation();
+  const { toast } = useToast();
 
   // Update scope when defaultScope changes
   useEffect(() => {
@@ -116,6 +119,13 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
       form.setValue("scope", defaultScope);
     }
   }, [defaultScope, open, form]);
+
+  // Update project_id when defaultProjectId changes
+  useEffect(() => {
+    if (defaultProjectId && open) {
+      form.setValue("project_id", defaultProjectId);
+    }
+  }, [defaultProjectId, open, form]);
 
   const handleClose = useCallback((open: boolean) => {
     if (onSetOpen) {
@@ -134,23 +144,68 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
         annotationQueue: {
           project_id: data.project_id,
           name: data.name,
-          description: data.description || undefined,
-          instructions: data.instructions || undefined,
+          description: data.description || "Default description",
+          instructions: data.instructions || "Default instructions",
           scope: data.scope,
-          comments_enabled: data.comments_enabled,
+          comments_enabled: true,
           feedback_definitions: data.feedback_definitions,
         },
       },
       {
         onSuccess: (createdQueue) => {
           handleClose(false);
+          
+          // Show success toast with exact styling specifications
+          toast({
+            title: "Annotation queue created",
+            description: (
+              <div className="space-y-1">
+                <div>
+                  You can now add traces to the annotation queue.{" "}
+                  <a 
+                    href="#" 
+                    className="text-blue-600 hover:text-blue-800 underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // TODO: Navigate to workspace invite page
+                    }}
+                  >
+                    Invite annotators to your workspace
+                  </a>
+                  {" "}and share this queue with them so they can start annotating and provide feedback to improve the evaluation of your LLM application.
+                </div>
+                <div>
+                  <a 
+                    href="#" 
+                    className="text-blue-600 hover:text-blue-800 underline text-sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigator.clipboard.writeText(window.location.href);
+                    }}
+                  >
+                    Copy sharing link
+                  </a>
+                </div>
+              </div>
+            ),
+            className: "w-[468px] min-h-[120px] max-w-none flex flex-col items-start gap-1 self-stretch p-4 rounded-md border border-slate-200 bg-white shadow-lg",
+            style: {
+              boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10)",
+              position: "fixed",
+              right: "16px",
+              top: "auto",
+              bottom: "16px",
+              left: "auto"
+            }
+          });
+          
           if (onSuccess) {
             onSuccess(createdQueue);
           }
         },
       },
     );
-  }, [createMutate, handleClose, onSuccess]);
+  }, [createMutate, handleClose, onSuccess, toast]);
 
   const isValid = form.formState.isValid;
 
@@ -158,30 +213,11 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>Create annotation queue</DialogTitle>
+          <DialogTitle>Create a new annotation queue</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="project_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Project</FormLabel>
-                  <FormControl>
-                    <SelectBox
-                      placeholder="Select project"
-                      value={field.value}
-                      onChange={field.onChange}
-                      options={projectOptions}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="name"
@@ -189,121 +225,127 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<CreateAnnotationQueue
                 <FormItem>
                   <FormLabel>Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Queue name" {...field} />
+                    <Input placeholder="Annotation queue name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="Brief description of the annotation queue"
-                      rows={3}
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="scope"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Scope</FormLabel>
-                  <FormControl>
-                    <SelectBox
-                      placeholder="Select scope"
-                      value={field.value}
-                      onChange={field.onChange}
-                      options={SCOPE_OPTIONS}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="instructions"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instructions</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="Instructions for reviewers on how to annotate items"
-                      rows={4}
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="feedback_definitions"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Feedback Definitions</FormLabel>
-                  <FormControl>
-                    <FeedbackDefinitionSelector
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex items-center space-x-2">
+            <div className="flex gap-4">
               <FormField
                 control={form.control}
-                name="comments_enabled"
+                name="project_id"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormItem className="flex-1">
+                    <FormLabel>Project</FormLabel>
                     <FormControl>
-                      <input
-                        type="checkbox"
-                        checked={field.value}
-                        onChange={(e) => field.onChange(e.target.checked)}
-                        className="mt-1"
+                      <SelectBox
+                        placeholder="Default project"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={projectOptions}
+                        disabled={!!defaultProjectId}
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Enable comments</FormLabel>
-                      <p className="text-sm text-muted-foreground">
-                        Allow reviewers to add text comments when annotating
-                      </p>
-                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="scope"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Scope</FormLabel>
+                    <FormControl>
+                      <SelectBox
+                        placeholder="Trace"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={SCOPE_OPTIONS}
+                      />
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
 
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Annotation guidelines</h3>
+                <p className="text-sm text-muted-foreground">
+                  Set how items are scored and labeled, and provide instructions so annotators give consistent feedback.
+                </p>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="instructions"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Instructions</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Instructions for annotators"
+                        rows={4}
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="feedback_definitions"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Available feedback scores</FormLabel>
+                    <FormControl>
+                      <FeedbackDefinitionSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Share annotation queue</h3>
+                <p className="text-sm text-muted-foreground">
+                  You must{" "}
+                  <a 
+                    href="#" 
+                    className="text-blue-600 hover:text-blue-800 underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // TODO: Navigate to workspace invite page
+                    }}
+                  >
+                    invite annotators to your workspace
+                  </a>
+                  {" "}for them to review the items. After creating the queue, you'll get a direct link to share with them.
+                </p>
+              </div>
+            </div>
+
             <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline" type="button">
-                  Cancel
-                </Button>
-              </DialogClose>
+              <Button variant="outline" type="button" onClick={() => handleClose(false)}>
+                Cancel
+              </Button>
               <Button 
                 type="submit" 
                 disabled={!isValid || isPending}
               >
-                {isPending ? "Creating..." : "Create queue"}
+                {isPending ? "Creating..." : "Create annotation queue"}
               </Button>
             </DialogFooter>
           </form>

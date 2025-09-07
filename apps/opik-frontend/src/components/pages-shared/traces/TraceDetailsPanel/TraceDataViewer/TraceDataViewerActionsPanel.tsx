@@ -77,9 +77,10 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
               setOpen(2);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            className="bg-primary-50 border-primary-200 text-primary-700 hover:bg-primary-100"
           >
             <ListChecks className="size-3.5" />
-            {layoutSize === "lg" && <div className="pl-1">Add to queue</div>}
+            {layoutSize === "lg" && <div className="pl-1">Add to Annotation Queue</div>}
           </Button>
         </TooltipWrapper>
       )}

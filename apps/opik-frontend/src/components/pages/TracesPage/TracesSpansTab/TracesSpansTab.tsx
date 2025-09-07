@@ -196,6 +196,16 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
   },
+  {
+    id: "annotation_queue",
+    label: "Annotation queue",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => {
+      const trace = row as Trace;
+      return trace.annotation_queue_name || "-";
+    },
+    size: 200,
+  },
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
@@ -208,6 +218,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "input",
   "output",
   "duration",
+  "annotation_queue",
   COLUMN_COMMENTS_ID,
 ];
 
@@ -688,6 +699,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: COLUMN_CUSTOM_ID,
         label: "Custom filter",
         type: COLUMN_TYPE.dictionary,
+      },
+      {
+        id: "annotation_queue_name",
+        label: "Annotation queue",
+        type: COLUMN_TYPE.string,
       },
       ...(isGuardrailsEnabled
         ? [

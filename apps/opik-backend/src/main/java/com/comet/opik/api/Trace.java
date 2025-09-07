@@ -65,7 +65,11 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmSpanCount){
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmSpanCount,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String annotationQueueId,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String annotationQueueName){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -105,6 +109,8 @@ public record Trace(
         DURATION("duration"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
+        ANNOTATION_QUEUE_ID("annotation_queue_id"),
+        ANNOTATION_QUEUE_NAME("annotation_queue_name"),
         ;
 
         @JsonValue
