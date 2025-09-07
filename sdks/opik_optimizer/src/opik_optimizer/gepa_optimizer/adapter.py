@@ -317,12 +317,12 @@ def build_protocol_adapter(
                 # Per-example execution for reflection and accurate per-item scores
                 for di in batch:
                     input_text = str(di.get("input", ""))
-                    dataset_item = {
+                    dataset_item: Dict[str, str] = {
                         "text": input_text,
                         "question": input_text,
                         "input": input_text,
-                        "label": di.get("answer"),
-                        "answer": di.get("answer"),
+                        "label": str(di.get("answer", "")),
+                        "answer": str(di.get("answer", "")),
                     }
                     try:
                         messages = cp.get_messages(dataset_item)
@@ -379,8 +379,8 @@ def build_protocol_adapter(
                     "question": input_text,
                     "input": input_text,
                     # Provide both common label keys for metric
-                    "label": di.get("answer"),
-                    "answer": di.get("answer"),
+                    "label": str(di.get("answer", "")),
+                    "answer": str(di.get("answer", "")),
                 }
                 try:
                     messages = cp.get_messages(dataset_item)
