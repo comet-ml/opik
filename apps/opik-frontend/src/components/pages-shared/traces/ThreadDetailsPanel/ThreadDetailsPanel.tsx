@@ -7,13 +7,13 @@ import {
   Clock,
   Copy,
   Hash,
-  ListChecks,
   MessageCircleMore,
   MessageCircleOff,
   MessagesSquare,
   MoreHorizontal,
   Share,
   Trash,
+  Users,
 } from "lucide-react";
 import copy from "clipboard-copy";
 import isBoolean from "lodash/isBoolean";
@@ -103,9 +103,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [setInactiveOpen, changeSetInactiveOpen] = useState<boolean>(false);
   const [addToQueueOpen, setAddToQueueOpen] = useState<boolean>(false);
-  
+
   const annotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED,
   );
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
@@ -508,6 +508,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             tooltipContent={disabledAnnotationExplainer}
           />
 
+          {annotationQueuesEnabled && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Add to
+                  <ChevronDown className="ml-2 size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuItem onClick={() => setAddToQueueOpen(true)}>
+                  <Users className="mr-2 size-4" />
+                  Add to Annotation Queue
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon-sm">
@@ -540,15 +557,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Copy thread ID
                 </DropdownMenuItem>
               </TooltipWrapper>
-              {annotationQueuesEnabled && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setAddToQueueOpen(true)}>
-                    <ListChecks className="mr-2 size-4" />
-                    Add to queue
-                  </DropdownMenuItem>
-                </>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setPopupOpen(true)}>
                 <Trash className="mr-2 size-4" />
@@ -572,7 +580,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             threadId={threadId}
             projectId={projectId}
           />
-          
+
           <AddToQueueDialog
             open={addToQueueOpen}
             setOpen={setAddToQueueOpen}

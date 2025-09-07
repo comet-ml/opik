@@ -1,20 +1,26 @@
 import React, { useCallback, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
-import { SearchInput } from "@/components/shared/SearchInput/SearchInput";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import Loader from "@/components/shared/Loader/Loader";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 import { Span, Trace, Thread } from "@/types/traces";
-import { AnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues";
+import {
+  AnnotationQueue,
+  AnnotationQueueScope,
+} from "@/types/annotation-queues";
 import useAppStore from "@/store/AppStore";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import { useAnnotationQueueItemsAddMutation } from "@/api/annotation-queues/useAnnotationQueueItemsMutation";
@@ -35,190 +41,232 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [selectedQueueIds, setSelectedQueueIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(1); // Show only 1 queue at a time
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Get annotation queues for the appropriate scope
-  const scope = type === "threads" ? AnnotationQueueScope.THREAD : AnnotationQueueScope.TRACE;
-  
-  const { data: queuesData } = useAnnotationQueuesList({
-    workspaceName,
-    page: currentPage,
-    size: 5, // Show 5 per page as per wireframe
-    search: searchTerm,
-    scope,
-  });
+  const scope =
+    type === "threads"
+      ? AnnotationQueueScope.THREAD
+      : AnnotationQueueScope.TRACE;
+
+  const { data: queuesData, isPending } = useAnnotationQueuesList(
+    {
+      workspaceName,
+      page,
+      size,
+      search: searchTerm,
+      scope,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const addItemsMutation = useAnnotationQueueItemsAddMutation();
 
-  const handleQueueToggle = useCallback((queueId: string) => {
-    setSelectedQueueIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(queueId)) {
-        newSet.delete(queueId);
-      } else {
-        newSet.add(queueId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleAddToQueue = useCallback(async () => {
-    if (selectedQueueIds.size === 0 || rows.length === 0) {
-      return;
-    }
-
-    try {
-      // Add to each selected queue
-      for (const queueId of selectedQueueIds) {
-        await addItemsMutation.mutateAsync({
-          annotationQueueId: queueId,
-          itemIds: rows.map((row) => row.id),
-        });
-      }
-
-      toast({
-        title: "Success",
-        description: `Added ${rows.length} ${type} to ${selectedQueueIds.size} annotation queue${selectedQueueIds.size > 1 ? 's' : ''}`,
-      });
-
-      setOpen(false);
-      setSelectedQueueIds(new Set());
-      setSearchTerm("");
-      setCurrentPage(1);
-    } catch (error) {
-      // Error handling is done by the mutation hook
-    }
-  }, [selectedQueueIds, rows, addItemsMutation, toast, setOpen, type]);
-
-  const handleClose = useCallback(() => {
-    setOpen(false);
-    setSelectedQueueIds(new Set());
-    setSearchTerm("");
-    setCurrentPage(1);
-  }, [setOpen]);
-
-  const handleQueueCreated = useCallback((newQueue: AnnotationQueue) => {
-    // Close the create dialog
-    setShowCreateDialog(false);
-    // Auto-select the newly created queue
-    setSelectedQueueIds(new Set([newQueue.id]));
-    // Show success message
-    toast({
-      title: "Success",
-      description: `Created annotation queue "${newQueue.name}"`,
-    });
-  }, [toast]);
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-2xl max-h-[600px]">
-        <DialogHeader>
-          <DialogTitle>Add to Queue</DialogTitle>
-        </DialogHeader>
+  const handleQueueSelect = useCallback(
+    async (queue: AnnotationQueue) => {
+      try {
+        // Use thread_model_id for threads, or id for other types  
+        const itemIds = rows
+          .map((row) => {
+            // For threads, use thread_model_id (the actual UUID)
+            // For traces/spans, use id directly
+            if (type === "threads") {
+              return (row as Thread).thread_model_id;
+            }
+            return row.id;
+          })
+          .filter(id => {
+            // Basic validation - ensure it's a proper UUID-like string
+            return id && 
+                   typeof id === "string" &&
+                   id.length >= 32 && // UUID-like length 
+                   !id.includes("opik_"); // Avoid any opik_ prefixed placeholders
+          });
         
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Add {rows.length} selected {type} to an annotation queue for review.
-            </p>
-            
-            {/* Search Input with New Button */}
-            <div className="flex items-center space-x-2">
-              <div className="flex-1">
-                <SearchInput
-                  placeholder="Search queues..."
-                  searchText={searchTerm}
-                  setSearchText={setSearchTerm}
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCreateDialog(true)}
-              >
-                New
-              </Button>
-            </div>
-          </div>
+        if (itemIds.length === 0) {
+          toast({
+            title: "Error",
+            description: "No valid items selected. Please refresh the page and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        if (itemIds.length !== rows.length) {
+          console.warn("Some items were filtered out due to invalid IDs:", {
+            originalCount: rows.length,
+            validCount: itemIds.length,
+            filteredIds: itemIds
+          });
+        }
+        
+        await addItemsMutation.mutateAsync({
+          annotationQueueId: queue.id,
+          itemIds,
+        });
 
-          {/* Queue List */}
-          <div className="border rounded-md">
-            <div className="max-h-[300px] overflow-y-auto">
-              <div className="p-4 space-y-3">
-                {queuesData?.content?.map((queue: AnnotationQueue) => (
-                  <div
-                    key={queue.id}
-                    className="flex items-center space-x-3 p-3 rounded-md border hover:bg-muted/50 cursor-pointer"
-                    onClick={() => handleQueueToggle(queue.id)}
-                  >
-                    <Checkbox
-                      checked={selectedQueueIds.has(queue.id)}
-                      onChange={() => handleQueueToggle(queue.id)}
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium">{queue.name}</div>
-                      {queue.description && (
-                        <div className="text-sm text-muted-foreground">
-                          {queue.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {queuesData?.content?.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No queues found
-                  </div>
-                )}
+        toast({
+          title: `${
+            rows.length > 1
+              ? type.charAt(0).toUpperCase() + type.slice(1)
+              : type.charAt(0).toUpperCase() + type.slice(1, -1)
+          } added to annotation queue`,
+          description: (
+            <div className="flex flex-col gap-1">
+              <div>
+                <a
+                  href="#"
+                  className="text-blue-600 underline hover:text-blue-800"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    // TODO: Navigate to workspace invite page
+                  }}
+                >
+                  Invite annotators to your workspace
+                </a>{" "}
+                and share this queue with them so they can start annotating and
+                provide feedback to improve the evaluation of your LLM
+                application.
+              </div>
+              <div>
+                <a
+                  href="#"
+                  className="text-sm text-blue-600 underline hover:text-blue-800"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigator.clipboard.writeText(window.location.href);
+                  }}
+                >
+                  Copy sharing link
+                </a>
               </div>
             </div>
-          </div>
+          ),
+          className:
+            "w-[468px] min-h-[120px] max-w-none flex flex-col items-start gap-1 self-stretch p-4 rounded-md border border-slate-200 bg-white shadow-lg",
+          style: {
+            boxShadow:
+              "0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10)",
+            right: "max(16px, calc(100vw - 468px - 16px))",
+          },
+        });
 
-          {/* Pagination */}
-          {queuesData && queuesData.total > 5 && (
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * 5 + 1}-{Math.min(currentPage * 5, queuesData.total)} of {queuesData.total} queues
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => prev + 1)}
-                  disabled={currentPage * 5 >= queuesData.total}
-                >
-                  Next
-                </Button>
-              </div>
+        setOpen(false);
+        setSearchTerm("");
+        setPage(1);
+      } catch (error) {
+        // Error handling is done by the mutation hook
+      }
+    },
+    [addItemsMutation, rows, toast, setOpen, type],
+  );
+
+
+  const handleQueueCreated = useCallback(
+    (newQueue: AnnotationQueue) => {
+      // Close the create dialog
+      setShowCreateDialog(false);
+      // Immediately add to the newly created queue
+      handleQueueSelect(newQueue);
+    },
+    [handleQueueSelect],
+  );
+
+  const queues = queuesData?.content ?? [];
+  const total = queuesData?.total ?? 0;
+
+  const renderListItems = () => {
+    if (isPending) {
+      return <Loader />;
+    }
+
+    if (queues.length === 0) {
+      const text = searchTerm
+        ? "No search results"
+        : "There are no annotation queues in this project yet";
+
+      return (
+        <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
+          {text}
+        </div>
+      );
+    }
+
+    // Since we're showing 1 queue at a time, just return the first (and only) queue
+    const queue = queues[0];
+    if (!queue) return null;
+
+    return (
+      <div
+        className="cursor-pointer rounded-lg p-6 transition-colors hover:bg-muted"
+        onClick={() => handleQueueSelect(queue)}
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Users className="size-4 shrink-0 text-muted-slate" />
+            <span className="comet-body-s-accented w-full truncate">
+              {queue.name}
+            </span>
+          </div>
+          {queue.description && (
+            <div className="comet-body-s text-light-slate">
+              {queue.description}
             </div>
           )}
         </div>
+      </div>
+    );
+  };
 
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" onClick={handleClose}>
-              Cancel
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-2xl pb-8">
+        <DialogHeader>
+          <DialogTitle>Add to annotation queue</DialogTitle>
+          <DialogDescription>
+            Select an annotation queue to add the selected items for human review and feedback.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="w-full overflow-hidden">
+          <ExplainerDescription
+            className="mb-4"
+            title=""
+            description="Add traces to an annotation queue to collect human feedback on your LLM outputs. Only queues created in this project appear here, and traces can be added to them only."
+          />
+          <div className="flex gap-2.5">
+            <SearchInput
+              searchText={searchTerm}
+              setSearchText={setSearchTerm}
+              placeholder="Search annotation queues"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => setShowCreateDialog(true)}
+            >
+              Create annotation queue
             </Button>
-          </DialogClose>
-          <Button
-            onClick={handleAddToQueue}
-            disabled={selectedQueueIds.size === 0 || rows.length === 0 || addItemsMutation.isPending}
-          >
-            {addItemsMutation.isPending ? "Adding..." : `Add ${rows.length} ${type}`}
-          </Button>
-        </DialogFooter>
+          </div>
+          <div className="my-4 flex min-h-32 max-w-full flex-col justify-center">
+            {renderListItems()}
+          </div>
+          {total > 0 && (
+            <div className="border-t pt-4">
+              <DataTablePagination
+                page={page}
+                pageChange={setPage}
+                size={size}
+                sizeChange={setSize}
+                total={total}
+                hideSizeSelector={true}
+              />
+            </div>
+          )}
+        </div>
       </DialogContent>
 
       {/* Create Queue Dialog */}

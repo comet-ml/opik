@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { ANNOTATION_QUEUES_KEY, ANNOTATION_QUEUES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  ANNOTATION_QUEUES_KEY,
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+} from "@/api/api";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import { useToast } from "@/components/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
@@ -16,10 +19,15 @@ const useAnnotationQueueCreateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ annotationQueue }: UseAnnotationQueueCreateMutationParams) => {
-      const { data, headers } = await api.post(ANNOTATION_QUEUES_REST_ENDPOINT, {
-        ...annotationQueue,
-      });
+    mutationFn: async ({
+      annotationQueue,
+    }: UseAnnotationQueueCreateMutationParams) => {
+      const { data, headers } = await api.post(
+        ANNOTATION_QUEUES_REST_ENDPOINT,
+        {
+          ...annotationQueue,
+        },
+      );
 
       return data
         ? data
@@ -50,4 +58,3 @@ const useAnnotationQueueCreateMutation = () => {
 };
 
 export default useAnnotationQueueCreateMutation;
-

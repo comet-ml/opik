@@ -2,12 +2,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { 
-  ANNOTATION_QUEUES_KEY, 
+import api, {
+  ANNOTATION_QUEUES_KEY,
   ANNOTATION_QUEUE_KEY,
-  ANNOTATION_QUEUES_REST_ENDPOINT 
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+  TRACES_KEY,
+  SPANS_KEY,
 } from "@/api/api";
-import { AnnotationQueueItemsAdd, AnnotationQueueItemsDelete } from "@/types/annotation-queues";
+import {
+  AnnotationQueueItemsAdd,
+  AnnotationQueueItemsDelete,
+} from "@/types/annotation-queues";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseAnnotationQueueItemsAddMutationParams = {
@@ -25,9 +30,9 @@ export const useAnnotationQueueItemsAddMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ 
-      annotationQueueId, 
-      itemIds 
+    mutationFn: async ({
+      annotationQueueId,
+      itemIds,
     }: UseAnnotationQueueItemsAddMutationParams) => {
       const { data } = await api.post(
         `${ANNOTATION_QUEUES_REST_ENDPOINT}${annotationQueueId}/items/add`,
@@ -53,10 +58,19 @@ export const useAnnotationQueueItemsAddMutation = () => {
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUE_KEY, { annotationQueueId: variables.annotationQueueId }],
+        queryKey: [
+          ANNOTATION_QUEUE_KEY,
+          { annotationQueueId: variables.annotationQueueId },
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ANNOTATION_QUEUES_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY],
       });
       return queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUES_KEY],
+        queryKey: [SPANS_KEY],
       });
     },
   });
@@ -67,9 +81,9 @@ export const useAnnotationQueueItemsDeleteMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ 
-      annotationQueueId, 
-      itemIds 
+    mutationFn: async ({
+      annotationQueueId,
+      itemIds,
     }: UseAnnotationQueueItemsDeleteMutationParams) => {
       const { data } = await api.post(
         `${ANNOTATION_QUEUES_REST_ENDPOINT}${annotationQueueId}/items/delete`,
@@ -95,12 +109,20 @@ export const useAnnotationQueueItemsDeleteMutation = () => {
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUE_KEY, { annotationQueueId: variables.annotationQueueId }],
+        queryKey: [
+          ANNOTATION_QUEUE_KEY,
+          { annotationQueueId: variables.annotationQueueId },
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ANNOTATION_QUEUES_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY],
       });
       return queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUES_KEY],
+        queryKey: [SPANS_KEY],
       });
     },
   });
 };
-

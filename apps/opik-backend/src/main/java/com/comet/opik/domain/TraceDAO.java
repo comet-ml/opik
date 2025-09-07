@@ -11,6 +11,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
@@ -407,7 +408,9 @@ class TraceDAOImpl implements TraceDAO {
                 toInt64(countIf(s.type = 'llm')) AS llm_span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
-                any(gr.guardrails) as guardrails_validations
+                any(gr.guardrails) as guardrails_validations,
+                any(aqa.queue_id) as annotation_queue_id,
+                any(aqa.queue_name) as annotation_queue_name
             FROM (
                 SELECT
                     *,
@@ -501,6 +504,19 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id
+            LEFT JOIN (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                AND aqi.item_id = :id
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
+            ) AS aqa ON t.id = aqa.trace_id
             GROUP BY
                 t.*
             ;
@@ -669,6 +685,17 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), annotation_queue_agg AS (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -696,6 +723,9 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
+                <if(has_annotation_queue_filters)>
+                LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = t.id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -749,11 +779,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                  , aqa.queue_id as annotation_queue_id
+                  , aqa.queue_name as annotation_queue_name
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = t.id
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             ;
             """;
@@ -837,6 +870,17 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), annotation_queue_agg AS (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -869,6 +913,9 @@ class TraceDAOImpl implements TraceDAO {
                          NULL) AS duration
                     FROM traces
                         LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                    <if(has_annotation_queue_filters)>
+                    LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = traces.id
+                    <endif>
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -1189,6 +1236,17 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), annotation_queue_agg AS (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(project_stats)>
             ,    error_count_current AS (
@@ -1242,6 +1300,9 @@ class TraceDAOImpl implements TraceDAO {
                     error_info
                 FROM traces final
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                <if(has_annotation_queue_filters)>
+                LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = traces.id
+                <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
@@ -1714,6 +1775,18 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), annotation_queue_agg AS (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                AND aqi.item_id IN (SELECT DISTINCT id FROM traces_final)
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1748,7 +1821,9 @@ class TraceDAOImpl implements TraceDAO {
                 tt.tags as tags,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
-                c.comments AS comments
+                c.comments AS comments,
+                aqa.queue_id as annotation_queue_id,
+                aqa.queue_name as annotation_queue_name
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -1779,6 +1854,16 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            LEFT JOIN (
+                SELECT
+                    tf.thread_id,
+                    any(aqa.queue_id) as queue_id,
+                    any(aqa.queue_name) as queue_name
+                FROM traces_final tf
+                LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = tf.id
+                WHERE aqa.queue_id IS NOT NULL
+                GROUP BY tf.thread_id
+            ) aqa ON aqa.thread_id = t.id
             WHERE workspace_id = :workspace_id
             <if(feedback_scores_filters)>
             AND thread_model_id IN (
@@ -2342,6 +2427,10 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .annotationQueueId(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUE_ID, row, "annotation_queue_id",
+                        String.class))
+                .annotationQueueName(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUE_NAME, row,
+                        "annotation_queue_name", String.class))
                 .build());
     }
 
@@ -2415,6 +2504,15 @@ class TraceDAOImpl implements TraceDAO {
                 || sortFields.contains("total_estimated_cost");
     }
 
+    private boolean hasAnnotationQueueFilters(TraceSearchCriteria traceSearchCriteria) {
+        if (traceSearchCriteria.filters() == null || traceSearchCriteria.filters().isEmpty()) {
+            return false;
+        }
+        return traceSearchCriteria.filters().stream()
+                .anyMatch(filter -> filter.field() == TraceField.ANNOTATION_QUEUE_ID
+                        || filter.field() == TraceField.ANNOTATION_QUEUE_NAME);
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -2440,6 +2538,11 @@ class TraceDAOImpl implements TraceDAO {
 
                     finalTemplate.add("sort_fields", sortFields);
                 });
+
+        // Check if annotation queue filtering is used
+        if (hasAnnotationQueueFilters(traceSearchCriteria)) {
+            finalTemplate.add("has_annotation_queue_filters", true);
+        }
 
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
@@ -2540,6 +2643,11 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
+
+                    // Check if annotation queue filtering is needed
+                    if (hasAnnotationQueueFilters(traceSearchCriteria)) {
+                        template.add("has_annotation_queue_filters", true);
+                    }
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));

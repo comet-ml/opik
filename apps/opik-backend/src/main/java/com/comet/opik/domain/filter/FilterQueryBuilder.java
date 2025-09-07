@@ -75,6 +75,8 @@ public class FilterQueryBuilder {
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
+    private static final String ANNOTATION_QUEUE_ID_DB = "aqa.queue_id";
+    private static final String ANNOTATION_QUEUE_NAME_DB = "aqa.queue_name";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -187,6 +189,8 @@ public class FilterQueryBuilder {
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(TraceField.ANNOTATION_QUEUE_ID, ANNOTATION_QUEUE_ID_DB)
+                    .put(TraceField.ANNOTATION_QUEUE_NAME, ANNOTATION_QUEUE_NAME_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -286,6 +290,8 @@ public class FilterQueryBuilder {
                     .add(TraceField.GUARDRAILS)
                     .add(TraceField.VISIBILITY_MODE)
                     .add(TraceField.ERROR_INFO)
+                    .add(TraceField.ANNOTATION_QUEUE_ID)
+                    .add(TraceField.ANNOTATION_QUEUE_NAME)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)

@@ -85,6 +85,11 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
+  {
+    id: "annotation_queue_name",
+    label: "Annotation queue",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 interface ThreadMetricsSectionProps {

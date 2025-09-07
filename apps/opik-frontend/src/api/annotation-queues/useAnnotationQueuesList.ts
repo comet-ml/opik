@@ -1,6 +1,12 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import { AnnotationQueueScope, AnnotationQueuesResponse } from "@/types/annotation-queues";
-import api, { ANNOTATION_QUEUES_KEY, ANNOTATION_QUEUES_REST_ENDPOINT } from "@/api/api";
+import {
+  AnnotationQueueScope,
+  AnnotationQueuesResponse,
+} from "@/types/annotation-queues";
+import api, {
+  ANNOTATION_QUEUES_KEY,
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+} from "@/api/api";
 import { QueryConfig } from "@/api/api";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
@@ -45,4 +51,3 @@ export default function useAnnotationQueuesList(
     ...options,
   });
 }
-

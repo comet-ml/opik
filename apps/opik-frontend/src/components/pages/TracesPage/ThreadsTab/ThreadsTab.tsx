@@ -69,6 +69,8 @@ import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/Traces
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { ThreadStatus } from "@/types/thread";
+import { Filter } from "@/types/filters";
+import { v7 as uuidv7 } from "uuid";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -144,6 +146,16 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "End time",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.end_time),
+  },
+  {
+    id: "annotation_queue_name",
+    label: "Annotation queue",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => {
+      const thread = row as Thread;
+      return thread.annotation_queue_name || "-";
+    },
+    size: 200,
   },
 ];
 
@@ -404,9 +416,20 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const handleRowClick = useCallback(
     (row?: Thread) => {
       if (!row) return;
-      setThreadId(row.id);
+      
+      // Create filter for thread_id
+      const threadFilter: Filter = {
+        id: uuidv7(),
+        field: "thread_id",
+        type: COLUMN_TYPE.string,
+        operator: "=",
+        value: row.id,
+      };
+
+      // Navigate to traces tab with thread filter
+      window.location.href = `${window.location.pathname}?type=traces&traces_filters=${encodeURIComponent(JSON.stringify([threadFilter]))}`;
     },
-    [setThreadId],
+    [],
   );
 
   const columns = useMemo(() => {
