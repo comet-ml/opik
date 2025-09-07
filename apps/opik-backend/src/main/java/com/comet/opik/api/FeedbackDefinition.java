@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Data
 @SuperBuilder(toBuilder = true)
@@ -72,11 +74,12 @@ public abstract sealed class FeedbackDefinition<T> {
         @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
         private final NumericalFeedbackDetail details;
 
-        @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
+        @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull NumericalFeedbackDetail details,
+        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, @Nullable String description,
+                @NotNull NumericalFeedbackDetail details,
                 Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.details = details;
         }
 
@@ -110,11 +113,12 @@ public abstract sealed class FeedbackDefinition<T> {
         @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
         private final CategoricalFeedbackDetail details;
 
-        @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
+        @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull CategoricalFeedbackDetail details,
+        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, @Nullable String description,
+                @NotNull CategoricalFeedbackDetail details,
                 Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.details = details;
         }
 
@@ -150,6 +154,9 @@ public abstract sealed class FeedbackDefinition<T> {
 
     @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
+
+    @Nullable @JsonView({View.Public.class, View.Create.class, View.Update.class})
+    @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") private final String description;
 
     /**
      * JSON is ignored as details type is polymorphic per subclass, so it's excluded from the Swagger definition

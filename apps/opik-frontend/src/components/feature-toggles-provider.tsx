@@ -18,6 +18,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
+  [FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {

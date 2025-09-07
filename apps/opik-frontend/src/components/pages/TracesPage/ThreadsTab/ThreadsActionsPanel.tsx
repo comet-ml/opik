@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash } from "lucide-react";
+import { Trash, ListChecks } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 
@@ -11,6 +11,9 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import first from "lodash/first";
+import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ThreadsActionsPanelProps = {
   rows: Thread[];
@@ -27,6 +30,10 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !rows?.length;
+  
+  const annotationQueuesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+  );
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
@@ -70,6 +77,13 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   return (
     <div className="flex items-center gap-2">
+      <AddToQueueDialog
+        key={`queue-${resetKeyRef.current}`}
+        rows={rows}
+        open={open === 1}
+        setOpen={setOpen}
+        type="threads"
+      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}
@@ -80,6 +94,22 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
+      {annotationQueuesEnabled && (
+        <TooltipWrapper content="Add to annotation queue">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(1);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <ListChecks className="mr-2 size-4" />
+            Add to queue
+          </Button>
+        </TooltipWrapper>
+      )}
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}

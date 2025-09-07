@@ -8,6 +8,7 @@ import {
   GraduationCap,
   LayoutGrid,
   MessageCircleQuestion,
+  MessageSquareText,
   FileTerminal,
   LucideHome,
   Blocks,
@@ -40,6 +41,7 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -97,6 +99,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Database,
         label: "Datasets",
         count: "datasets",
+      },
+      {
+        id: "annotation_queues",
+        path: "/$workspaceName/annotation-queues",
+        type: MENU_ITEM_TYPE.router,
+        icon: MessageSquareText,
+        label: "Annotation queues",
+        featureFlag: FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED,
       },
     ],
   },
