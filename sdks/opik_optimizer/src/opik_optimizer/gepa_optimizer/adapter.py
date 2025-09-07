@@ -228,9 +228,15 @@ def build_protocol_adapter(
     except Exception as e:
         if _GEPA_DEBUG:
             print(f"[GEPA] Protocol types not importable, defining shim: {e}")
+
         # Define a shim with the same attribute names
         class EvaluationBatch:  # type: ignore
-            def __init__(self, outputs: List[str], scores: List[float], trajectories: Optional[List[Dict[str, Any]]] = None) -> None:
+            def __init__(
+                self,
+                outputs: List[str],
+                scores: List[float],
+                trajectories: Optional[List[Dict[str, Any]]] = None,
+            ) -> None:
                 self.outputs = outputs
                 self.scores = scores
                 self.trajectories = trajectories
@@ -254,7 +260,9 @@ def build_protocol_adapter(
                 except Exception:
                     logger.info("[GEPA Adapter] " + msg)
 
-        def _build_prompt_for_candidate(self, candidate: Dict[str, str]) -> "chat_prompt.ChatPrompt":
+        def _build_prompt_for_candidate(
+            self, candidate: Dict[str, str]
+        ) -> "chat_prompt.ChatPrompt":
             cp = self._base_prompt.copy()
             # Replace system prompt if provided
             sys_text = candidate.get("system_prompt") or candidate.get("system")
@@ -274,7 +282,9 @@ def build_protocol_adapter(
                     print(
                         f"[GEPA_ADAPTER] evaluate() called: batch_size={len(batch)} capture_traces={capture_traces} candidate_keys={list(candidate.keys())}"
                     )
-                    sys_snippet = (candidate.get("system_prompt") or candidate.get("system") or "").replace("\n", " ")[:160]
+                    sys_snippet = (
+                        candidate.get("system_prompt") or candidate.get("system") or ""
+                    ).replace("\n", " ")[:160]
                     print(f"[GEPA_ADAPTER] candidate.system_prompt: {sys_snippet!r}")
                 except Exception:
                     logger.info(
@@ -284,7 +294,9 @@ def build_protocol_adapter(
             # We still perform per-example execution to populate trajectories for reflection.
             outputs: List[str] = []
             scores: List[float] = []
-            trajectories: Optional[List[Dict[str, Any]]] = [] if capture_traces else None
+            trajectories: Optional[List[Dict[str, Any]]] = (
+                [] if capture_traces else None
+            )
             if os.environ.get("OPIK_GEPA_TRACE_EVAL"):
                 agg_score = 0.0
                 try:
@@ -343,7 +355,9 @@ def build_protocol_adapter(
                     outputs.append(output)
                     scores.append(score)
                     if capture_traces and trajectories is not None:
-                        trajectories.append({"input": input_text, "output": output, "score": score})
+                        trajectories.append(
+                            {"input": input_text, "output": output, "score": score}
+                        )
                 if _GEPA_DEBUG:
                     try:
                         mean = (sum(scores) / len(scores)) if scores else 0.0
@@ -352,9 +366,11 @@ def build_protocol_adapter(
                         )
                     except Exception:
                         pass
-                return EvaluationBatch(outputs=outputs, scores=scores, trajectories=trajectories)
+                return EvaluationBatch(
+                    outputs=outputs, scores=scores, trajectories=trajectories
+                )
 
-            
+            input_texts: List[str] = []
             for di in batch:
                 input_text = str(di.get("input", ""))
                 dataset_item = {
@@ -375,12 +391,27 @@ def build_protocol_adapter(
                     output = ""
                 try:
                     sr = metric(dataset_item, output)
-                    score = float(getattr(sr, "score", sr))
+                    # Robust ScoreResult parsing: prefer .value, then .score, else cast
+                    if hasattr(sr, "value"):
+                        score = float(getattr(sr, "value"))
+                    elif hasattr(sr, "score"):
+                        score = float(getattr(sr, "score"))
+                    else:
+                        try:
+                            score = float(sr)  # type: ignore[arg-type]
+                        except Exception:
+                            score = 0.0
                 except Exception as e:
                     logger.debug(f"[GEPA Adapter] metric error: {e}")
                     score = 0.0
+                # Mark live-metric usage even in non-traced mode
+                try:
+                    self._optimizer._gepa_live_metric_calls += 1  # type: ignore[attr-defined]
+                except Exception:
+                    pass
                 outputs.append(output)
                 scores.append(score)
+                input_texts.append(input_text)
                 if capture_traces and trajectories is not None:
                     trajectories.append(
                         {
@@ -397,7 +428,15 @@ def build_protocol_adapter(
                     )
                 except Exception:
                     logger.info("[GEPA Adapter] evaluate() done")
-            return EvaluationBatch(outputs=outputs, scores=scores, trajectories=trajectories)
+            batch_obj = EvaluationBatch(
+                outputs=outputs, scores=scores, trajectories=trajectories
+            )
+            # Attach inputs for downstream reflection fallback if supported
+            try:
+                setattr(batch_obj, "inputs", input_texts)
+            except Exception:
+                pass
+            return batch_obj
 
         def make_reflective_dataset(
             self,
@@ -421,7 +460,14 @@ def build_protocol_adapter(
                     )
             else:
                 # Fall back to outputs/scores only
-                for inp, out, sc in zip(getattr(eval_batch, "outputs", []), getattr(eval_batch, "outputs", []), getattr(eval_batch, "scores", [])):
+                inputs_fallback = list(getattr(eval_batch, "inputs", [])) or [""] * len(
+                    getattr(eval_batch, "outputs", [])
+                )
+                for inp, out, sc in zip(
+                    inputs_fallback,
+                    getattr(eval_batch, "outputs", []),
+                    getattr(eval_batch, "scores", []),
+                ):
                     records.append(
                         {
                             "Inputs": {"text": str(inp)[:200]},

@@ -42,30 +42,40 @@ if "litellm" not in sys.modules:
     sys.modules["litellm.integrations.opik.opik"] = opik_mod
     # caching submodule
     caching_mod = types.ModuleType("litellm.caching")
+
     class Cache:  # pragma: no cover - stub
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self._cfg = kwargs
+
         def clear(self) -> None: ...
+
     caching_mod.Cache = Cache  # type: ignore[attr-defined]
     sys.modules["litellm.caching"] = caching_mod
     # types.caching
     types_pkg = types.ModuleType("litellm.types")
     types_caching_mod = types.ModuleType("litellm.types.caching")
+
     class LiteLLMCacheType:  # pragma: no cover - stub
         DISK = "disk"
+
     types_caching_mod.LiteLLMCacheType = LiteLLMCacheType  # type: ignore[attr-defined]
     sys.modules["litellm.types"] = types_pkg
     sys.modules["litellm.types.caching"] = types_caching_mod
 
 if "pyrate_limiter" not in sys.modules:
     prl = types.ModuleType("pyrate_limiter")
+
     class Rate:  # pragma: no cover - stub
         def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
     class Duration:  # pragma: no cover - stub
         SECOND = 1
+
     class Limiter:  # pragma: no cover - stub
         def __init__(self, *args: Any, **kwargs: Any) -> None: ...
-        def try_acquire(self, key: str) -> bool: return True
+        def try_acquire(self, key: str) -> bool:
+            return True
+
     prl.Rate = Rate  # type: ignore[attr-defined]
     prl.Duration = Duration  # type: ignore[attr-defined]
     prl.Limiter = Limiter  # type: ignore[attr-defined]
@@ -74,7 +84,9 @@ if "pyrate_limiter" not in sys.modules:
 # Stub out evolutionary optimizer import to avoid heavy deps
 if "opik_optimizer.evolutionary_optimizer.evolutionary_optimizer" not in sys.modules:
     evo_pkg = types.ModuleType("opik_optimizer.evolutionary_optimizer")
-    evo_mod = types.ModuleType("opik_optimizer.evolutionary_optimizer.evolutionary_optimizer")
+    evo_mod = types.ModuleType(
+        "opik_optimizer.evolutionary_optimizer.evolutionary_optimizer"
+    )
 
     class EvolutionaryOptimizer:  # minimal stub to satisfy __all__
         pass
@@ -83,12 +95,19 @@ if "opik_optimizer.evolutionary_optimizer.evolutionary_optimizer" not in sys.mod
     evo_pkg.evolutionary_optimizer = evo_mod
     # Preload into sys.modules so package __init__ resolves these
     sys.modules["opik_optimizer.evolutionary_optimizer"] = evo_pkg
-    sys.modules["opik_optimizer.evolutionary_optimizer.evolutionary_optimizer"] = evo_mod
+    sys.modules["opik_optimizer.evolutionary_optimizer.evolutionary_optimizer"] = (
+        evo_mod
+    )
 
 # Stub out few_shot_bayesian_optimizer import to avoid optuna
-if "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer" not in sys.modules:
+if (
+    "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"
+    not in sys.modules
+):
     fsb_pkg = types.ModuleType("opik_optimizer.few_shot_bayesian_optimizer")
-    fsb_mod = types.ModuleType("opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer")
+    fsb_mod = types.ModuleType(
+        "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"
+    )
 
     class FewShotBayesianOptimizer:  # minimal stub
         pass
@@ -97,7 +116,9 @@ if "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer" not 
     fsb_pkg.FewShotBayesianOptimizer = FewShotBayesianOptimizer  # allow `from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer`
     fsb_pkg.few_shot_bayesian_optimizer = fsb_mod
     sys.modules["opik_optimizer.few_shot_bayesian_optimizer"] = fsb_pkg
-    sys.modules["opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"] = fsb_mod
+    sys.modules[
+        "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"
+    ] = fsb_mod
 
 # Provide a minimal fake 'opik' package if missing to avoid external dependency
 if "opik" not in sys.modules:
@@ -115,21 +136,27 @@ if "opik" not in sys.modules:
 
     # Expose Opik client class
     opik_mod.Opik = _DummyClient  # type: ignore[attr-defined]
+
     # Minimal Dataset class for type usage
     class Dataset:  # pragma: no cover - only for import compatibility
         name: str = "stub"
         id: Optional[str] = None
+
         def get_items(self, n: Optional[int] = None) -> List[Dict[str, Any]]:
             return []
 
     opik_mod.Dataset = Dataset  # type: ignore[attr-defined]
+
     def track(type: str = "tool") -> Any:  # pragma: no cover - stub
         def _wrap(func: Callable) -> Callable:
             def _inner(*args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
+
             _inner.__wrapped__ = func  # mimic wrapped function for ChatPrompt
             return _inner
+
         return _wrap
+
     opik_mod.track = track  # type: ignore[attr-defined]
 
     # config.get_from_user_inputs
@@ -142,9 +169,11 @@ if "opik" not in sys.modules:
         return _Cfg()
 
     config_pkg.get_from_user_inputs = _get_cfg  # type: ignore[attr-defined]
+
     class OpikConfig:  # minimal stub
         def __init__(self) -> None:
             self.is_cloud_installation = False
+
     config_pkg.OpikConfig = OpikConfig  # type: ignore[attr-defined]
     # attach to root opik module
     opik_mod.config = config_pkg  # type: ignore[attr-defined]
@@ -153,16 +182,26 @@ if "opik" not in sys.modules:
     eval_pkg = types.ModuleType("opik.evaluation")
     metrics_pkg = types.ModuleType("opik.evaluation.metrics")
     base_metric_mod = types.ModuleType("opik.evaluation.metrics.base_metric")
+
     class BaseMetric:  # pragma: no cover - stub
         def __init__(self) -> None:
             self.name = "metric"
+
         def score(self, llm_output: str, **kwargs: Any) -> Any:
             return ScoreResult(value=0.0)
+
     base_metric_mod.BaseMetric = BaseMetric  # type: ignore[attr-defined]
     score_result_mod = types.ModuleType("opik.evaluation.metrics.score_result")
 
     class ScoreResult:  # minimal shim
-        def __init__(self, name: str = "metric", value: float = 0.0, scoring_failed: bool = False, metadata: Optional[Dict[str, Any]] = None, reason: Optional[str] = None) -> None:
+        def __init__(
+            self,
+            name: str = "metric",
+            value: float = 0.0,
+            scoring_failed: bool = False,
+            metadata: Optional[Dict[str, Any]] = None,
+            reason: Optional[str] = None,
+        ) -> None:
             self.name = name
             self.value = float(value)
             self.scoring_failed = scoring_failed
@@ -177,7 +216,9 @@ if "opik" not in sys.modules:
     # evaluation.models.litellm.warning_filters
     models_pkg = types.ModuleType("opik.evaluation.models")
     litellm_pkg = types.ModuleType("opik.evaluation.models.litellm")
-    warning_filters_mod = types.ModuleType("opik.evaluation.models.litellm.warning_filters")
+    warning_filters_mod = types.ModuleType(
+        "opik.evaluation.models.litellm.warning_filters"
+    )
     opik_monitor_mod = types.ModuleType("opik.evaluation.models.litellm.opik_monitor")
 
     def add_warning_filters() -> None:  # pragma: no cover - trivial
@@ -185,9 +226,13 @@ if "opik" not in sys.modules:
 
     warning_filters_mod.add_warning_filters = add_warning_filters  # type: ignore[attr-defined]
     litellm_pkg.warning_filters = warning_filters_mod
+
     def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
         return params
-    opik_monitor_mod.try_add_opik_monitoring_to_params = try_add_opik_monitoring_to_params  # type: ignore[attr-defined]
+
+    opik_monitor_mod.try_add_opik_monitoring_to_params = (
+        try_add_opik_monitoring_to_params  # type: ignore[attr-defined]
+    )
     litellm_pkg.opik_monitor = opik_monitor_mod
     models_pkg.litellm = litellm_pkg
     eval_pkg.models = models_pkg
@@ -213,16 +258,20 @@ if "opik" not in sys.modules:
     evaluator_mod.evaluate_optimization_trial = _evaluate_trial  # type: ignore[attr-defined]
     eval_pkg.evaluator = evaluator_mod
     report_mod = types.ModuleType("opik.evaluation.report")
+
     def display_experiment_results(*args: Any, **kwargs: Any) -> None: ...
     def display_experiment_link(*args: Any, **kwargs: Any) -> None: ...
+
     report_mod.display_experiment_results = display_experiment_results  # type: ignore[attr-defined]
     report_mod.display_experiment_link = display_experiment_link  # type: ignore[attr-defined]
     eval_pkg.report = report_mod  # type: ignore[attr-defined]
     # engine.evaluation_tasks_executor
     engine_pkg = types.ModuleType("opik.evaluation.engine")
     ete_mod = types.ModuleType("opik.evaluation.engine.evaluation_tasks_executor")
+
     def _tqdm(iterable: Any, desc: str, disable: bool, total: int) -> Any:
         return iterable
+
     ete_mod._tqdm = _tqdm  # type: ignore[attr-defined]
     # Bind to evaluation package for attribute access
     engine_pkg.evaluation_tasks_executor = ete_mod  # type: ignore[attr-defined]
@@ -246,19 +295,25 @@ if "opik" not in sys.modules:
     sys.modules["opik.evaluation.report"] = report_mod
     # Additional submodules referenced by optimizer
     opik_context_mod = types.ModuleType("opik.opik_context")
+
     def get_current_span_data() -> Any:  # pragma: no cover - not used
         return None
+
     opik_context_mod.get_current_span_data = get_current_span_data  # type: ignore[attr-defined]
     sys.modules["opik.opik_context"] = opik_context_mod
     rest_api_core_mod = types.ModuleType("opik.rest_api.core")
+
     class ApiError(Exception): ...
+
     rest_api_core_mod.ApiError = ApiError  # type: ignore[attr-defined]
     sys.modules["opik.rest_api.core"] = rest_api_core_mod
     api_objects_pkg = types.ModuleType("opik.api_objects")
     optimization_mod = types.ModuleType("opik.api_objects.optimization")
     opik_client_mod = types.ModuleType("opik.api_objects.opik_client")
+
     class Optimization:  # pragma: no cover - stub
         def update(self, *args: Any, **kwargs: Any) -> None: ...
+
     optimization_mod.Optimization = Optimization  # type: ignore[attr-defined]
     opik_client_mod.Opik = _DummyClient  # type: ignore[attr-defined]
     sys.modules["opik.api_objects"] = api_objects_pkg
@@ -266,9 +321,13 @@ if "opik" not in sys.modules:
     sys.modules["opik.api_objects.opik_client"] = opik_client_mod
     # environment utilities
     env_mod = types.ModuleType("opik.environment")
+
     def get_tqdm_for_current_environment() -> Any:  # pragma: no cover - stub
-        def _tqdm(x: Any) -> Any: return x
+        def _tqdm(x: Any) -> Any:
+            return x
+
         return _tqdm
+
     env_mod.get_tqdm_for_current_environment = get_tqdm_for_current_environment  # type: ignore[attr-defined]
     sys.modules["opik.environment"] = env_mod
 
@@ -287,6 +346,7 @@ if "opik" not in sys.modules:
             @classmethod
             def grid(cls, *args: Any, **kwargs: Any) -> "Table":
                 return cls()
+
             def add_column(self, *args: Any, **kwargs: Any) -> None: ...
             def add_row(self, *args: Any, **kwargs: Any) -> None: ...
 
@@ -297,15 +357,33 @@ if "opik" not in sys.modules:
             return tuple(args)
 
         class Text:
-            def __init__(self, text: str = "", style: Optional[str] = None, overflow: Optional[str] = None) -> None:
+            def __init__(
+                self,
+                text: str = "",
+                style: Optional[str] = None,
+                overflow: Optional[str] = None,
+            ) -> None:
                 self._text = str(text)
-            def __str__(self) -> str: return self._text
-            def __add__(self, other: Any) -> "Text": return Text(self._text + str(other))
-            def __len__(self) -> int: return len(self._text)
-            def append(self, other: Any) -> "Text": return self
-            def stylize(self, *args: Any, **kwargs: Any) -> None: return None
+
+            def __str__(self) -> str:
+                return self._text
+
+            def __add__(self, other: Any) -> "Text":
+                return Text(self._text + str(other))
+
+            def __len__(self) -> int:
+                return len(self._text)
+
+            def append(self, other: Any) -> "Text":
+                return self
+
+            def stylize(self, *args: Any, **kwargs: Any) -> None:
+                return None
+
             @staticmethod
-            def from_ansi(s: str) -> "Text": return Text(s)
+            def from_ansi(s: str) -> "Text":
+                return Text(s)
+
             @staticmethod
             def assemble(*parts: Any) -> "Text":
                 buf = []
@@ -323,16 +401,26 @@ if "opik" not in sys.modules:
         class _Capture:
             def __init__(self) -> None:
                 self._buf: List[str] = []
-            def __enter__(self) -> "_Capture": return self
-            def __exit__(self, *args: Any) -> None: return None
-            def write(self, s: str) -> None: self._buf.append(s)
-            def get(self) -> str: return "".join(self._buf)
+
+            def __enter__(self) -> "_Capture":
+                return self
+
+            def __exit__(self, *args: Any) -> None:
+                return None
+
+            def write(self, s: str) -> None:
+                self._buf.append(s)
+
+            def get(self) -> str:
+                return "".join(self._buf)
 
         class Console:
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.is_jupyter = False
+
             def print(self, *args: Any, **kwargs: Any) -> None: ...
-            def capture(self) -> _Capture: return _Capture()
+            def capture(self) -> _Capture:
+                return _Capture()
 
         table_mod.Table = Table  # type: ignore[attr-defined]
         panel_mod.Panel = Panel  # type: ignore[attr-defined]
@@ -356,10 +444,13 @@ if "opik" not in sys.modules:
         sys.modules["rich.box"] = box_mod
         progress_mod.track = lambda iterable, **kw: iterable  # type: ignore[attr-defined]
         sys.modules["rich.progress"] = progress_mod
+
         class RichHandler:  # pragma: no cover
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 self.level = 0
+
             def handle(self, record: Any) -> None: ...
+
         logging_mod.RichHandler = RichHandler  # type: ignore[attr-defined]
         sys.modules["rich.logging"] = logging_mod
 
@@ -378,9 +469,7 @@ from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
 
 class FakeDataset:
     def __init__(self, items: List[Dict[str, Any]], name: str = "fake-ds") -> None:
-        self._items = [
-            {"id": str(i + 1), **it} for i, it in enumerate(items)
-        ]
+        self._items = [{"id": str(i + 1), **it} for i, it in enumerate(items)]
         self.name = name
         self.id = f"ds-{name}"
 
@@ -407,19 +496,27 @@ def make_fake_gepa(
         default_pkg = types.ModuleType("gepa.adapters.default")
 
         class DefaultAdapter:
-            def __init__(self, model: Optional[str] = None, *args: Any, **kwargs: Any) -> None:
+            def __init__(
+                self, model: Optional[str] = None, *args: Any, **kwargs: Any
+            ) -> None:
                 self.model = model
 
             # Simulate GEPA DefaultAdapter API returning an EvaluationBatch-like object
             def evaluate(
-                self, batch: List[Dict[str, Any]], candidate: Any, *args: Any, **kwargs: Any
+                self,
+                batch: List[Dict[str, Any]],
+                candidate: Any,
+                *args: Any,
+                **kwargs: Any,
             ) -> Any:
                 class EvaluationBatch:
                     def __init__(self, outputs: List[str], scores: List[float]) -> None:
                         self.outputs = outputs
                         self.scores = scores
 
-                return EvaluationBatch(outputs=["out"] * len(batch), scores=[0.0] * len(batch))
+                return EvaluationBatch(
+                    outputs=["out"] * len(batch), scores=[0.0] * len(batch)
+                )
 
         default_pkg.DefaultAdapter = DefaultAdapter
         adapters_pkg.default = default_pkg
@@ -439,7 +536,12 @@ def make_fake_gepa(
     core_adapter_mod = types.ModuleType("gepa.core.adapter")
 
     class EvaluationBatch:  # pragma: no cover - adapter shim in code covers missing type
-        def __init__(self, outputs: List[str], scores: List[float], trajectories: Optional[List[Dict[str, Any]]] = None) -> None:
+        def __init__(
+            self,
+            outputs: List[str],
+            scores: List[float],
+            trajectories: Optional[List[Dict[str, Any]]] = None,
+        ) -> None:
             self.outputs = outputs
             self.scores = scores
             self.trajectories = trajectories
@@ -476,7 +578,10 @@ def make_fake_gepa(
         # Optionally exercise the adapter to emulate live-metric usage
         adapter = adapter if accept_adapter else None
         if adapter is not None:
-            batch = [{"input": it.get("input", ""), "answer": it.get("answer", "")} for it in trainset][:2]
+            batch = [
+                {"input": it.get("input", ""), "answer": it.get("answer", "")}
+                for it in trainset
+            ][:2]
             try:
                 # capture_traces to populate trajectories
                 adapter.evaluate(batch, seed_candidate, capture_traces=True)
@@ -513,13 +618,20 @@ def simple_metric(dataset_item: Dict[str, Any], llm_output: str) -> float:
 # -----------------------------
 
 
-def test_protocol_adapter_evaluate_and_reflective_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_protocol_adapter_evaluate_and_reflective_dataset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Ensure adapter uses a simple stub agent that returns "A"
     from opik_optimizer.gepa_optimizer import adapter as adapter_mod  # type: ignore
+
     monkeypatch.setattr(
         adapter_mod,
         "create_litellm_agent_class",
-        lambda prompt: type("StubAgent", (), {"__init__": lambda self, p: None, "invoke": lambda self, msgs: "A"}),
+        lambda prompt: type(
+            "StubAgent",
+            (),
+            {"__init__": lambda self, p: None, "invoke": lambda self, msgs: "A"},
+        ),
     )
     # Seed prompt with user placeholder
     prompt = ChatPrompt(
@@ -531,7 +643,11 @@ def test_protocol_adapter_evaluate_and_reflective_dataset(monkeypatch: pytest.Mo
         invoke=lambda model, messages, tools, **kw: "A",
         model="openai/gpt-4o-mini",
     )
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o", project_name="proj")
+    opt = GepaOptimizer(
+        model="openai/gpt-4o-mini",
+        reflection_model="openai/gpt-4o",
+        project_name="proj",
+    )
 
     ds_items = [
         {"input": "x1", "answer": "A"},
@@ -551,13 +667,17 @@ def test_protocol_adapter_evaluate_and_reflective_dataset(monkeypatch: pytest.Mo
     assert getattr(adapter, "_is_opik_protocol_adapter", False) is True
 
     batch = ds_items
-    eval_batch = adapter.evaluate(batch, {"system_prompt": "seed sys"}, capture_traces=True)
+    eval_batch = adapter.evaluate(
+        batch, {"system_prompt": "seed sys"}, capture_traces=True
+    )
     assert hasattr(eval_batch, "outputs") and hasattr(eval_batch, "scores")
     assert len(eval_batch.outputs) == 2 and len(eval_batch.scores) == 2
     # Since invoke always returns "A": first item scores 1, second scores 0
     assert eval_batch.scores == [1.0, 0.0]
 
-    reflective = adapter.make_reflective_dataset({"system_prompt": "seed sys"}, eval_batch, ["system_prompt"])  # type: ignore[arg-type]
+    reflective = adapter.make_reflective_dataset(
+        {"system_prompt": "seed sys"}, eval_batch, ["system_prompt"]
+    )  # type: ignore[arg-type]
     assert "system_prompt" in reflective
     assert len(reflective["system_prompt"]) == 2
 
@@ -577,7 +697,9 @@ def test_make_opik_eval_fn_prefers_logged_eval(monkeypatch: pytest.MonkeyPatch) 
             return 0.0
 
     ds = FakeDataset([{"input": "x", "answer": "y"}])
-    eval_fn = make_opik_eval_fn(DummyOpt(), ds, simple_metric, n_samples=None, optimization_id="opt")
+    eval_fn = make_opik_eval_fn(
+        DummyOpt(), ds, simple_metric, n_samples=None, optimization_id="opt"
+    )
     got = eval_fn({"system_prompt": "hi"})
     assert got == 5.0
 
@@ -587,7 +709,9 @@ def test_make_opik_eval_fn_prefers_logged_eval(monkeypatch: pytest.MonkeyPatch) 
 # -----------------------------
 
 
-def test_call_gepa_optimize_uses_protocol_adapter_and_sets_live_metric(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_call_gepa_optimize_uses_protocol_adapter_and_sets_live_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     gepa_mod, calls = make_fake_gepa(accept_adapter=True, has_default_adapter=True)
 
     # Use trace mode to trigger live metric calls inside adapter.evaluate
@@ -614,11 +738,17 @@ def test_call_gepa_optimize_uses_protocol_adapter_and_sets_live_metric(monkeypat
     def _logged(self: GepaOptimizer, **kwargs: Any) -> float:  # type: ignore[no-redef]
         # Score equals number of items whose answer equals "A"
         n = len(ds.get_items(kwargs.get("n_samples")))
-        return float(sum(1 for it in ds.get_items()[: n or None] if it.get("answer") == "A"))
+        return float(
+            sum(1 for it in ds.get_items()[: n or None] if it.get("answer") == "A")
+        )
 
     monkeypatch.setattr(GepaOptimizer, "_evaluate_prompt_logged", _logged)
 
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o", project_name="proj")
+    opt = GepaOptimizer(
+        model="openai/gpt-4o-mini",
+        reflection_model="openai/gpt-4o",
+        project_name="proj",
+    )
     res = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
 
     # Confirm adapter/eval_fn path used (optimize received scoring injection)
@@ -634,17 +764,28 @@ def test_call_gepa_optimize_uses_protocol_adapter_and_sets_live_metric(monkeypat
     assert res.details.get("gepa_live_metric_call_count", 0) >= 1
 
 
-def test_require_protocol_adapter_raises_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_require_protocol_adapter_raises_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Prepare fake gepa that would accept adapter, but we force protocol adapter build to None
     _, calls = make_fake_gepa(accept_adapter=True, has_default_adapter=True)
     monkeypatch.setenv("OPIK_GEPA_REQUIRE_PROTOCOL", "1")
 
     # Force protocol adapter failure
-    monkeypatch.setattr("opik_optimizer.gepa_optimizer.gepa_optimizer.build_protocol_adapter", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "opik_optimizer.gepa_optimizer.gepa_optimizer.build_protocol_adapter",
+        lambda *a, **k: None,
+    )
 
     items = [{"input": "i1", "answer": "A"}]
     ds = FakeDataset(items)
-    prompt = ChatPrompt(messages=[{"role": "system", "content": "seed"}, {"role": "user", "content": "Q: {input}"}], model="m")
+    prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "seed"},
+            {"role": "user", "content": "Q: {input}"},
+        ],
+        model="m",
+    )
 
     opt = GepaOptimizer(model="m", reflection_model="m")
     with pytest.raises(RuntimeError):
@@ -654,41 +795,76 @@ def test_require_protocol_adapter_raises_when_unavailable(monkeypatch: pytest.Mo
 def test_default_adapter_patch_fallback_path(monkeypatch: pytest.MonkeyPatch) -> None:
     # Fake gepa with DefaultAdapter available but we disable protocol adapter
     _, calls = make_fake_gepa(accept_adapter=True, has_default_adapter=True)
-    monkeypatch.setattr("opik_optimizer.gepa_optimizer.gepa_optimizer.build_protocol_adapter", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "opik_optimizer.gepa_optimizer.gepa_optimizer.build_protocol_adapter",
+        lambda *a, **k: None,
+    )
     # Ensure require flag not set
     monkeypatch.delenv("OPIK_GEPA_REQUIRE_PROTOCOL", raising=False)
 
     items = [{"input": "i1", "answer": "A"}]
     ds = FakeDataset(items)
-    prompt = ChatPrompt(messages=[{"role": "system", "content": "seed"}, {"role": "user", "content": "Q: {input}"}], model="m")
+    prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "seed"},
+            {"role": "user", "content": "Q: {input}"},
+        ],
+        model="m",
+    )
 
     opt = GepaOptimizer(model="m", reflection_model="m")
     res = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
     adapter = calls["optimize_kwargs"]["adapter"]
     assert getattr(adapter, "_is_opik_protocol_adapter", False) is False
     # Either subclass or attr patch; verify kind marker present
-    assert getattr(adapter, "_opik_adapter_kind", None) in {"default_patched_subclass", "default_patched_attrs"}
+    assert getattr(adapter, "_opik_adapter_kind", None) in {
+        "default_patched_subclass",
+        "default_patched_attrs",
+    }
 
 
 def test_rescoring_overrides_gepa_best_index(monkeypatch: pytest.MonkeyPatch) -> None:
     # Fake gepa with two candidates; we'll make rescoring prefer index 0
     make_fake_gepa(accept_adapter=False, has_default_adapter=True)
 
-    ds = FakeDataset([
-        {"input": "i1", "answer": "A"},
-    ])
+    ds = FakeDataset(
+        [
+            {"input": "i1", "answer": "A"},
+        ]
+    )
 
     # Prompt with invoke that returns "A" if system prompt contains 'seed', else returns empty
-    def invoke(model: str, messages: List[Dict[str, str]], tools: Any, **kw: Any) -> str:
+    def invoke(
+        model: str, messages: List[Dict[str, str]], tools: Any, **kw: Any
+    ) -> str:
         sys_txt = next((m["content"] for m in messages if m["role"] == "system"), "")
         return "A" if "seed" in sys_txt else ""
 
-    prompt = ChatPrompt(messages=[{"role": "system", "content": "seed sys"}, {"role": "user", "content": "Q: {input}"}], invoke=invoke, model="m")
+    prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "seed sys"},
+            {"role": "user", "content": "Q: {input}"},
+        ],
+        invoke=invoke,
+        model="m",
+    )
 
     # Logged evaluation: simply apply metric to a single dataset item using the prompt's invoke logic
-    def _logged(self: GepaOptimizer, prompt: ChatPrompt, dataset: FakeDataset, metric: Callable, n_samples: Optional[int], **kw: Any) -> float:  # type: ignore[no-redef]
+    def _logged(
+        self: GepaOptimizer,
+        prompt: ChatPrompt,
+        dataset: FakeDataset,
+        metric: Callable,
+        n_samples: Optional[int],
+        **kw: Any,
+    ) -> float:  # type: ignore[no-redef]
         items = dataset.get_items(n_samples)
-        agent_output = prompt.invoke(prompt.model, prompt.get_messages(items[0]), prompt.tools, **prompt.model_kwargs)  # type: ignore[misc]
+        agent_output = prompt.invoke(
+            prompt.model,
+            prompt.get_messages(items[0]),
+            prompt.tools,
+            **prompt.model_kwargs,
+        )  # type: ignore[misc]
         return float(metric(items[0], agent_output))
 
     monkeypatch.setattr(GepaOptimizer, "_evaluate_prompt_logged", _logged)
@@ -697,11 +873,25 @@ def test_rescoring_overrides_gepa_best_index(monkeypatch: pytest.MonkeyPatch) ->
     res = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
     # Verify rescoring path executed per candidate via our patched logger
     call_counter: List[int] = []
-    def _logged(self: GepaOptimizer, prompt: ChatPrompt, dataset: FakeDataset, metric: Callable, n_samples: Optional[int], **kw: Any) -> float:  # type: ignore[no-redef]
+
+    def _logged(
+        self: GepaOptimizer,
+        prompt: ChatPrompt,
+        dataset: FakeDataset,
+        metric: Callable,
+        n_samples: Optional[int],
+        **kw: Any,
+    ) -> float:  # type: ignore[no-redef]
         call_counter.append(1)
         items = dataset.get_items(n_samples)
-        agent_output = prompt.invoke(prompt.model, prompt.get_messages(items[0]), prompt.tools, **prompt.model_kwargs)  # type: ignore[misc]
+        agent_output = prompt.invoke(
+            prompt.model,
+            prompt.get_messages(items[0]),
+            prompt.tools,
+            **prompt.model_kwargs,
+        )  # type: ignore[misc]
         return float(metric(items[0], agent_output))
+
     monkeypatch.setattr(GepaOptimizer, "_evaluate_prompt_logged", _logged)
     _ = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
     assert len(call_counter) >= 2  # rescored both candidates
@@ -727,16 +917,25 @@ def test_adapter_metric_exception_handling(monkeypatch: pytest.MonkeyPatch) -> N
     adapter = build_protocol_adapter(prompt, opt, ds, bad_metric)
     assert adapter is not None
     # Non-traced mode
-    eval_batch = adapter.evaluate(ds_items, {"system_prompt": "seed sys"}, capture_traces=False)
+    eval_batch = adapter.evaluate(
+        ds_items, {"system_prompt": "seed sys"}, capture_traces=False
+    )
     assert eval_batch.scores == [0.0]
     # Traced mode
     monkeypatch.setenv("OPIK_GEPA_TRACE_EVAL", "1")
-    eval_batch2 = adapter.evaluate(ds_items, {"system_prompt": "seed sys"}, capture_traces=True)
+    eval_batch2 = adapter.evaluate(
+        ds_items, {"system_prompt": "seed sys"}, capture_traces=True
+    )
     assert eval_batch2.scores == [0.0]
     # Ensure adapter uses a simple stub agent that returns "A"
     from opik_optimizer.gepa_optimizer import adapter as adapter_mod  # type: ignore
+
     monkeypatch.setattr(
         adapter_mod,
         "create_litellm_agent_class",
-        lambda prompt: type("StubAgent", (), {"__init__": lambda self, p: None, "invoke": lambda self, msgs: "A"}),
+        lambda prompt: type(
+            "StubAgent",
+            (),
+            {"__init__": lambda self, p: None, "invoke": lambda self, msgs: "A"},
+        ),
     )
