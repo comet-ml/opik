@@ -545,7 +545,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setAddToQueueOpen(true)}>
                     <ListChecks className="mr-2 size-4" />
-                    Add to queue
+                    Add to Annotation Queue
                   </DropdownMenuItem>
                 </>
               )}

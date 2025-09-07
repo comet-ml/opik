@@ -1,9 +1,15 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, ListChecks } from "lucide-react";
+import { Trash, ListChecks, MoreHorizontal } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Thread } from "@/types/traces";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
@@ -106,7 +112,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
             disabled={disabled}
           >
             <ListChecks className="mr-2 size-4" />
-            Add to queue
+            Add to Annotation Queue
           </Button>
         </TooltipWrapper>
       )}
