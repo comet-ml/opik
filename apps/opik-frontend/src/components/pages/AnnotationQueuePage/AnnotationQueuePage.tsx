@@ -47,7 +47,11 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
 
   useEffect(() => {
     if (annotationQueue?.name) {
-      setBreadcrumbParam("annotationQueueId", annotationQueueId as string, annotationQueue.name);
+      setBreadcrumbParam(
+        "annotationQueueId",
+        annotationQueueId as string,
+        annotationQueue.name,
+      );
     }
   }, [annotationQueueId, annotationQueue?.name, setBreadcrumbParam]);
 
@@ -60,8 +64,9 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-semibold">Annotation queue not found</h2>
-          <p className="text-muted-foreground mt-2">
-            The annotation queue you're looking for doesn't exist or you don't have access to it.
+          <p className="mt-2 text-muted-foreground">
+            The annotation queue you're looking for doesn't exist or you don't
+            have access to it.
           </p>
         </div>
       </div>
@@ -74,14 +79,24 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         {/* Header */}
         <div className="mb-1 flex items-center justify-between">
           <div>
-            <h1 className="comet-title-l truncate break-words">{annotationQueue.name}</h1>
+            <h1 className="comet-title-l truncate break-words">
+              {annotationQueue.name}
+            </h1>
             {annotationQueue.description && (
-              <p className="text-muted-foreground mt-2">{annotationQueue.description}</p>
+              <p className="mt-2 text-muted-foreground">
+                {annotationQueue.description}
+              </p>
             )}
           </div>
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm">Edit Queue</Button>
-            <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+            <Button variant="outline" size="sm">
+              Edit Queue
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 hover:text-red-700"
+            >
               Delete Queue
             </Button>
           </div>
@@ -100,7 +115,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
 
           {/* Items Tab */}
           <TabsContent value="items">
-            <AnnotationQueueItemsList 
+            <AnnotationQueueItemsList
               annotationQueue={annotationQueue}
               onItemClick={(itemId, itemType) => {
                 if (annotationQueue.scope === AnnotationQueueScope.TRACE) {
@@ -129,16 +144,30 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
                     <div>
                       <label className="text-sm font-medium">Scope</label>
                       <div className="mt-1">
-                        <Tag className={annotationQueue.scope === AnnotationQueueScope.TRACE ? "" : "bg-secondary"}>
+                        <Tag
+                          className={
+                            annotationQueue.scope === AnnotationQueueScope.TRACE
+                              ? ""
+                              : "bg-secondary"
+                          }
+                        >
                           {annotationQueue.scope}
                         </Tag>
                       </div>
                     </div>
-                    
+
                     <div>
-                      <label className="text-sm font-medium">Comments Enabled</label>
+                      <label className="text-sm font-medium">
+                        Comments Enabled
+                      </label>
                       <div className="mt-1">
-                        <Tag className={annotationQueue.comments_enabled ? "" : "bg-secondary"}>
+                        <Tag
+                          className={
+                            annotationQueue.comments_enabled
+                              ? ""
+                              : "bg-secondary"
+                          }
+                        >
                           {annotationQueue.comments_enabled ? "Yes" : "No"}
                         </Tag>
                       </div>
@@ -153,9 +182,13 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
 
                     {annotationQueue.last_scored_at && (
                       <div>
-                        <label className="text-sm font-medium">Last Scored</label>
+                        <label className="text-sm font-medium">
+                          Last Scored
+                        </label>
                         <div className="mt-1">
-                          {new Date(annotationQueue.last_scored_at).toLocaleDateString()}
+                          {new Date(
+                            annotationQueue.last_scored_at,
+                          ).toLocaleDateString()}
                         </div>
                       </div>
                     )}
@@ -169,13 +202,17 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
                   <CardContent>
                     <div className="space-y-2">
                       {annotationQueue.feedback_definitions?.length > 0 ? (
-                        annotationQueue.feedback_definitions.map((definitionId) => (
-                          <Tag key={definitionId} className="bg-outline">
-                            {definitionId}
-                          </Tag>
-                        ))
+                        annotationQueue.feedback_definitions.map(
+                          (definitionId) => (
+                            <Tag key={definitionId} className="bg-outline">
+                              {definitionId}
+                            </Tag>
+                          ),
+                        )
                       ) : (
-                        <p className="text-muted-foreground">No feedback definitions configured</p>
+                        <p className="text-muted-foreground">
+                          No feedback definitions configured
+                        </p>
                       )}
                     </div>
                   </CardContent>
@@ -189,48 +226,60 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
                     <CardTitle>Instructions</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="whitespace-pre-wrap">{annotationQueue.instructions}</p>
+                    <p className="whitespace-pre-wrap">
+                      {annotationQueue.instructions}
+                    </p>
                   </CardContent>
                 </Card>
               )}
 
               {/* Reviewers */}
-              {annotationQueue.reviewers && annotationQueue.reviewers.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Reviewers</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {annotationQueue.reviewers.map((reviewer) => (
-                        <div key={reviewer.username} className="flex items-center justify-between">
-                          <span>{reviewer.username}</span>
-                          <Tag className="bg-outline">Status: {reviewer.status}</Tag>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {annotationQueue.reviewers &&
+                annotationQueue.reviewers.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Reviewers</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {annotationQueue.reviewers.map((reviewer) => (
+                          <div
+                            key={reviewer.username}
+                            className="flex items-center justify-between"
+                          >
+                            <span>{reviewer.username}</span>
+                            <Tag className="bg-outline">
+                              Status: {reviewer.status}
+                            </Tag>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
               {/* Aggregated Feedback Scores */}
-              {annotationQueue.feedback_scores && annotationQueue.feedback_scores.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Feedback Scores Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {annotationQueue.feedback_scores.map((score) => (
-                        <div key={score.name} className="flex items-center justify-between">
-                          <span>{score.name}</span>
-                          <Tag className="bg-outline">{score.value}</Tag>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {annotationQueue.feedback_scores &&
+                annotationQueue.feedback_scores.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Feedback Scores Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {annotationQueue.feedback_scores.map((score) => (
+                          <div
+                            key={score.name}
+                            className="flex items-center justify-between"
+                          >
+                            <span>{score.name}</span>
+                            <Tag className="bg-outline">{score.value}</Tag>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
             </div>
           </TabsContent>
         </Tabs>

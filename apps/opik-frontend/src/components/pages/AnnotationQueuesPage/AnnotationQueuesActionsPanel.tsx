@@ -31,7 +31,9 @@ const AnnotationQueuesActionsPanel: React.FunctionComponent<
 
       toast({
         title: "Success",
-        description: `Deleted ${queues.length} annotation queue${queues.length > 1 ? 's' : ''}`,
+        description: `Deleted ${queues.length} annotation queue${
+          queues.length > 1 ? "s" : ""
+        }`,
       });
 
       if (onClearSelection) {
@@ -56,13 +58,17 @@ const AnnotationQueuesActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={handleDelete}
-        title={`Delete annotation queue${queues.length > 1 ? 's' : ''}?`}
-        description={`Are you sure you want to delete ${queues.length} annotation queue${queues.length > 1 ? 's' : ''}? This action cannot be undone.`}
+        title={`Delete annotation queue${queues.length > 1 ? "s" : ""}?`}
+        description={`Are you sure you want to delete ${
+          queues.length
+        } annotation queue${
+          queues.length > 1 ? "s" : ""
+        }? This action cannot be undone.`}
         confirmText="Delete"
         confirmButtonVariant="destructive"
       />
-      <Button 
-        variant="outline" 
+      <Button
+        variant="outline"
         size="sm"
         onClick={() => {
           setOpen(true);

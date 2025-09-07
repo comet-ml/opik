@@ -1,5 +1,9 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { ANNOTATION_QUEUE_KEY, ANNOTATION_QUEUES_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, {
+  ANNOTATION_QUEUE_KEY,
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
 
 type UseAnnotationQueueItemsListParams = {
   workspaceName: string;
@@ -16,7 +20,12 @@ type AnnotationQueueItemsResponse = {
 
 const getAnnotationQueueItemsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, annotationQueueId, page, size }: UseAnnotationQueueItemsListParams,
+  {
+    workspaceName,
+    annotationQueueId,
+    page,
+    size,
+  }: UseAnnotationQueueItemsListParams,
 ) => {
   const { data } = await api.get<AnnotationQueueItemsResponse>(
     `${ANNOTATION_QUEUES_REST_ENDPOINT}${annotationQueueId}/items`,

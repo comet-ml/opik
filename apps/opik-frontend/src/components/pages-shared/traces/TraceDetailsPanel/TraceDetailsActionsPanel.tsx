@@ -110,7 +110,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
   const annotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED,
   );
   const { toast } = useToast();
 
@@ -444,7 +444,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           confirmText="Delete trace"
           confirmButtonVariant="destructive"
         />
-        
+
         <AddToQueueDialog
           open={addToQueueOpen}
           setOpen={setAddToQueueOpen}

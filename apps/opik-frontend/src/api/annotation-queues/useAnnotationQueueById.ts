@@ -1,6 +1,9 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import api, { ANNOTATION_QUEUE_KEY, ANNOTATION_QUEUES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  ANNOTATION_QUEUE_KEY,
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+} from "@/api/api";
 import { QueryConfig } from "@/api/api";
 
 type UseAnnotationQueueByIdParams = {
@@ -35,4 +38,3 @@ export default function useAnnotationQueueById(
     ...options,
   });
 }
-

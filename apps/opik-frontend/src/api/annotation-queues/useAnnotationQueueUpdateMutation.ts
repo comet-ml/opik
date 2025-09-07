@@ -2,10 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { 
-  ANNOTATION_QUEUES_KEY, 
+import api, {
+  ANNOTATION_QUEUES_KEY,
   ANNOTATION_QUEUE_KEY,
-  ANNOTATION_QUEUES_REST_ENDPOINT 
+  ANNOTATION_QUEUES_REST_ENDPOINT,
 } from "@/api/api";
 import { AnnotationQueueUpdate } from "@/types/annotation-queues";
 import { useToast } from "@/components/ui/use-toast";
@@ -20,9 +20,9 @@ const useAnnotationQueueUpdateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ 
-      annotationQueueId, 
-      annotationQueue 
+    mutationFn: async ({
+      annotationQueueId,
+      annotationQueue,
     }: UseAnnotationQueueUpdateMutationParams) => {
       const { data } = await api.patch(
         `${ANNOTATION_QUEUES_REST_ENDPOINT}${annotationQueueId}`,
@@ -45,7 +45,10 @@ const useAnnotationQueueUpdateMutation = () => {
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
-        queryKey: [ANNOTATION_QUEUE_KEY, { annotationQueueId: variables.annotationQueueId }],
+        queryKey: [
+          ANNOTATION_QUEUE_KEY,
+          { annotationQueueId: variables.annotationQueueId },
+        ],
       });
       return queryClient.invalidateQueries({
         queryKey: [ANNOTATION_QUEUES_KEY],
@@ -55,4 +58,3 @@ const useAnnotationQueueUpdateMutation = () => {
 };
 
 export default useAnnotationQueueUpdateMutation;
-

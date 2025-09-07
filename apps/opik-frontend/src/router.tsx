@@ -436,7 +436,10 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
-      annotationQueuesRoute.addChildren([annotationQueuesListRoute, annotationQueueRoute]),
+      annotationQueuesRoute.addChildren([
+        annotationQueuesListRoute,
+        annotationQueueRoute,
+      ]),
     ]),
   ]),
 ]);

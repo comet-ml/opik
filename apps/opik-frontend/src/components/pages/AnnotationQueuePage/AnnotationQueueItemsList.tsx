@@ -1,6 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { JsonParam, NumberParam, StringParam, useQueryParam } from "use-query-params";
-import { keepPreviousData } from "@tanstack/react-query";
+import React, { useCallback, useMemo } from "react";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import { ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
@@ -14,19 +18,14 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { SelectBox } from "@/components/shared/SelectBox/SelectBox";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
-import {
-  COLUMN_NAME_ID,
-  COLUMN_SELECT_ID,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 
-import { AnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues";
+import {
+  AnnotationQueue,
+  AnnotationQueueScope,
+} from "@/types/annotation-queues";
 import useAppStore from "@/store/AppStore";
 import useAnnotationQueueItemsList from "@/api/annotation-queues/useAnnotationQueueItemsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -71,8 +70,8 @@ type QueueItem = {
   created_at: string;
   created_by: string;
   // TODO: Add more fields when backend provides them
-  input?: any;
-  output?: any;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
   reviewed_by?: string;
   score_1?: number;
   score_2?: number;
@@ -86,10 +85,9 @@ interface AnnotationQueueItemsListProps {
   onItemClick?: (itemId: string, itemType: string) => void;
 }
 
-const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsListProps> = ({
-  annotationQueue,
-  onItemClick,
-}) => {
+const AnnotationQueueItemsList: React.FunctionComponent<
+  AnnotationQueueItemsListProps
+> = ({ annotationQueue, onItemClick }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -145,14 +143,19 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
     defaultValue: {},
   });
 
-  const { data: itemsData, isPending: isLoading } = useAnnotationQueueItemsList({
-    workspaceName,
-    annotationQueueId: annotationQueue.id,
-    page: page!,
-    size: size!,
-  });
+  const { data: itemsData } = useAnnotationQueueItemsList(
+    {
+      workspaceName,
+      annotationQueueId: annotationQueue.id,
+      page: page!,
+      size: size!,
+    },
+  );
 
-  const items: QueueItem[] = useMemo(() => itemsData?.content || [], [itemsData?.content]);
+  const items: QueueItem[] = useMemo(
+    () => itemsData?.content || [],
+    [itemsData?.content],
+  );
   const total = itemsData?.total ?? 0;
   const noData = !search;
   const noDataText = noData ? "No items in queue yet" : "No search results";
@@ -162,7 +165,9 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
   }, [rowSelection, items]);
 
   const getScopeLabel = () => {
-    return annotationQueue.scope === AnnotationQueueScope.TRACE ? "Traces" : "Threads";
+    return annotationQueue.scope === AnnotationQueueScope.TRACE
+      ? "Traces"
+      : "Threads";
   };
 
   const columnsDef: ColumnData<QueueItem>[] = useMemo(() => {
@@ -178,13 +183,17 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
         id: COLUMN_INPUT,
         label: "Input",
         type: COLUMN_TYPE.string,
-        accessorFn: (row) => row.input ? JSON.stringify(row.input).substring(0, 100) + "..." : "-",
+        accessorFn: (row) =>
+          row.input ? JSON.stringify(row.input).substring(0, 100) + "..." : "-",
       },
       {
         id: COLUMN_OUTPUT,
-        label: "Output", 
+        label: "Output",
         type: COLUMN_TYPE.string,
-        accessorFn: (row) => row.output ? JSON.stringify(row.output).substring(0, 100) + "..." : "-",
+        accessorFn: (row) =>
+          row.output
+            ? JSON.stringify(row.output).substring(0, 100) + "..."
+            : "-",
       },
       {
         id: COLUMN_REVIEWED_BY,
@@ -200,7 +209,7 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
       },
       {
         id: COLUMN_SCORE_2,
-        label: "Score 2", 
+        label: "Score 2",
         type: COLUMN_TYPE.number,
         accessorFn: (row) => row.score_2 ?? "-",
       },
@@ -230,13 +239,10 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
         cell: IdCell as never,
         sortable: true,
       }),
-      ...convertColumnDataToColumn<QueueItem, QueueItem>(
-        columnsDef,
-        {
-          columnsOrder,
-          selectedColumns,
-        },
-      ),
+      ...convertColumnDataToColumn<QueueItem, QueueItem>(columnsDef, {
+        columnsOrder,
+        selectedColumns,
+      }),
     ];
   }, [columnsDef, selectedColumns, columnsOrder]);
 
@@ -249,12 +255,15 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleRowClick = useCallback((item: QueueItem) => {
-    // Open the item details in sidebar on the same page
-    if (onItemClick) {
-      onItemClick(item.id, item.type);
-    }
-  }, [onItemClick]);
+  const handleRowClick = useCallback(
+    (item: QueueItem) => {
+      // Open the item details in sidebar on the same page
+      if (onItemClick) {
+        onItemClick(item.id, item.type);
+      }
+    },
+    [onItemClick],
+  );
 
   const handleAddItems = useCallback(() => {
     // TODO: Implement add items functionality
@@ -264,7 +273,10 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
   const handleRemoveItems = useCallback(() => {
     if (selectedRows.length === 0) return;
     // TODO: Implement remove items functionality
-    console.log("Remove items from queue:", selectedRows.map(item => item.id));
+    console.log(
+      "Remove items from queue:",
+      selectedRows.map((item) => item.id),
+    );
   }, [selectedRows]);
 
   const clearRowSelection = useCallback(() => {
@@ -275,7 +287,9 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Queue Items - {getScopeLabel()}</h3>
+        <h3 className="text-lg font-semibold">
+          Queue Items - {getScopeLabel()}
+        </h3>
         <Button variant="outline" onClick={handleAddItems}>
           Add {getScopeLabel()}
         </Button>
@@ -308,8 +322,8 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
               <span className="text-nowrap text-sm text-muted-foreground">
                 {selectedRows.length} selected
               </span>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="text-red-600 hover:text-red-700"
                 onClick={handleRemoveItems}
@@ -350,7 +364,8 @@ const AnnotationQueueItemsList: React.FunctionComponent<AnnotationQueueItemsList
             {noData && (
               <div className="space-y-2">
                 <p className="text-muted-foreground">
-                  This queue doesn't contain any {getScopeLabel().toLowerCase()} yet.
+                  This queue doesn't contain any {getScopeLabel().toLowerCase()}{" "}
+                  yet.
                 </p>
                 <Button variant="link" onClick={handleAddItems}>
                   Add {getScopeLabel()}

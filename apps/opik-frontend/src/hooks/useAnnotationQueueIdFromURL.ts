@@ -6,4 +6,3 @@ export const useAnnotationQueueIdFromURL = () => {
     from: "/workspaceGuard/$workspaceName/annotation-queues/$annotationQueueId",
   });
 };
-

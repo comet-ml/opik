@@ -1,9 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
 import DatabasePlus from "@/icons/database-plus.svg?react";
-import { ListChecks } from "lucide-react";
+import { ChevronDown, ListChecks, Plus } from "lucide-react";
 
 import { Span, Trace } from "@/types/traces";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
@@ -30,9 +36,9 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
   const [open, setOpen] = useState<boolean | number>(false);
 
   const rows = useMemo(() => (data ? [data] : []), [data]);
-  
+
   const annotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED,
   );
 
   const annotationCount = data.feedback_scores?.length;
@@ -54,35 +60,39 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         type="traces"
       />
 
-      <TooltipWrapper content="Add to dataset">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen(1);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-        >
-          <DatabasePlus className="size-3.5" />
-          {layoutSize === "lg" && <div className="pl-1">Add to dataset</div>}
-        </Button>
-      </TooltipWrapper>
-      
-      {annotationQueuesEnabled && (
-        <TooltipWrapper content="Add to annotation queue">
-          <Button
-            variant="outline"
-            size="sm"
+      <DropdownMenu>
+        <TooltipWrapper content="Add to">
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Plus className="size-3.5" />
+              {layoutSize === "lg" && <div className="pl-1">Add to</div>}
+              <ChevronDown className="size-3 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuItem
             onClick={() => {
-              setOpen(2);
+              setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
           >
-            <ListChecks className="size-3.5" />
-            {layoutSize === "lg" && <div className="pl-1">Add to queue</div>}
-          </Button>
-        </TooltipWrapper>
-      )}
+            <DatabasePlus className="mr-2 size-4" />
+            Add to dataset
+          </DropdownMenuItem>
+          {annotationQueuesEnabled && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(2);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <ListChecks className="mr-2 size-4" />
+              Add to annotation queue
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <DetailsActionSectionToggle
         activeSection={activeSection}

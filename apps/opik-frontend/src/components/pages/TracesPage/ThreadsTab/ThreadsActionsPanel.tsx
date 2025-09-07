@@ -1,9 +1,15 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, ListChecks } from "lucide-react";
+import { Trash, ChevronDown, Users, MoreHorizontal } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Thread } from "@/types/traces";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
@@ -30,9 +36,9 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !rows?.length;
-  
+
   const annotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED,
   );
 
   const deleteThreadsHandler = useCallback(() => {
@@ -95,20 +101,31 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmButtonVariant="destructive"
       />
       {annotationQueuesEnabled && (
-        <TooltipWrapper content="Add to annotation queue">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            disabled={disabled}
-          >
-            <ListChecks className="mr-2 size-4" />
-            Add to queue
-          </Button>
-        </TooltipWrapper>
+        <DropdownMenu>
+          <TooltipWrapper content="Add to annotation queue">
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+              >
+                Add to
+                <ChevronDown className="ml-2 size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipWrapper>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(1);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <Users className="mr-2 size-4" />
+              Add to annotation queue
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}

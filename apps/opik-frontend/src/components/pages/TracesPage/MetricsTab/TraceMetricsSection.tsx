@@ -104,6 +104,11 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Custom filter",
     type: COLUMN_TYPE.dictionary,
   },
+  {
+    id: "annotation_queue_name",
+    label: "Annotation queue",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 interface TraceMetricsSectionProps {

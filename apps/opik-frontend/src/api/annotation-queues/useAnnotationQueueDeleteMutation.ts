@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { ANNOTATION_QUEUES_KEY, ANNOTATION_QUEUES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  ANNOTATION_QUEUES_KEY,
+  ANNOTATION_QUEUES_REST_ENDPOINT,
+} from "@/api/api";
 import { AnnotationQueuesBatchDelete } from "@/types/annotation-queues";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -47,4 +50,3 @@ const useAnnotationQueueDeleteMutation = () => {
 };
 
 export default useAnnotationQueueDeleteMutation;
-
