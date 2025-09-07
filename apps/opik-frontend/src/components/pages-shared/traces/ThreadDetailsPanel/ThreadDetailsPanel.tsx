@@ -7,6 +7,7 @@ import {
   Clock,
   Copy,
   Hash,
+  ListChecks,
   MessageCircleMore,
   MessageCircleOff,
   MessagesSquare,
@@ -66,6 +67,9 @@ import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
 import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
+import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -98,6 +102,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [setInactiveOpen, changeSetInactiveOpen] = useState<boolean>(false);
+  const [addToQueueOpen, setAddToQueueOpen] = useState<boolean>(false);
+  
+  const annotationQueuesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+  );
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     const contentHeight = node.clientHeight;
@@ -531,6 +540,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Copy thread ID
                 </DropdownMenuItem>
               </TooltipWrapper>
+              {annotationQueuesEnabled && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setAddToQueueOpen(true)}>
+                    <ListChecks className="mr-2 size-4" />
+                    Add to queue
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setPopupOpen(true)}>
                 <Trash className="mr-2 size-4" />
@@ -553,6 +571,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             setOpen={changeSetInactiveOpen}
             threadId={threadId}
             projectId={projectId}
+          />
+          
+          <AddToQueueDialog
+            open={addToQueueOpen}
+            setOpen={setAddToQueueOpen}
+            rows={thread ? [thread] : []}
+            type="threads"
           />
         </div>
       </div>

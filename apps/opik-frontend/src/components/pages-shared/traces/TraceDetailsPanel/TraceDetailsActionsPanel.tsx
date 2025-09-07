@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import copy from "clipboard-copy";
 import {
   Copy,
+  ListChecks,
   MessagesSquare,
   MoreHorizontal,
   Network,
@@ -51,6 +52,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
+import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import {
   DetailsActionSection,
@@ -100,11 +102,15 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
+  const [addToQueueOpen, setAddToQueueOpen] = useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
   const isAIInspectorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
+  );
+  const annotationQueuesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
   );
   const { toast } = useToast();
 
@@ -413,6 +419,15 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                 </DropdownMenuItem>
               </TooltipWrapper>
             )}
+            {annotationQueuesEnabled && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setAddToQueueOpen(true)}>
+                  <ListChecks className="mr-2 size-4" />
+                  Add to queue
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPopupOpen(true)}>
               <Trash className="mr-2 size-4" />
@@ -425,9 +440,16 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           setOpen={setPopupOpen}
           onConfirm={handleTraceDelete}
           title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
+          description="Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?"
           confirmText="Delete trace"
           confirmButtonVariant="destructive"
+        />
+        
+        <AddToQueueDialog
+          open={addToQueueOpen}
+          setOpen={setAddToQueueOpen}
+          rows={treeData || []}
+          type="traces"
         />
       </div>
     </div>

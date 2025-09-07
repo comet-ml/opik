@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Database, Tag, Trash } from "lucide-react";
+import { Database, Tag, Trash, ListChecks } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -9,11 +9,14 @@ import { Span, Trace } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -37,6 +40,10 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const tracesBatchDeleteMutation = useTracesBatchDeleteMutation();
   const disabled = !rows?.length;
+  
+  const annotationQueuesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANNOTATION_QUEUES_ENABLED
+  );
 
   const deleteTracesHandler = useCallback(() => {
     tracesBatchDeleteMutation.mutate({
@@ -89,9 +96,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         open={open === 1}
         setOpen={setOpen}
       />
+      <AddToQueueDialog
+        key={`queue-${resetKeyRef.current}`}
+        rows={rows}
+        open={open === 2}
+        setOpen={setOpen}
+        type={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
-        open={open === 2}
+        open={open === 3}
         setOpen={setOpen}
         onConfirm={deleteTracesHandler}
         title="Delete traces"
@@ -102,7 +116,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       <AddTagDialog
         key={`tag-${resetKeyRef.current}`}
         rows={rows}
-        open={open === 3}
+        open={open === 4}
         setOpen={setOpen}
         projectId={projectId}
         type={type}
@@ -122,12 +136,28 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           Add to dataset
         </Button>
       </TooltipWrapper>
+      {annotationQueuesEnabled && (
+        <TooltipWrapper content="Add to annotation queue">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(2);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <ListChecks className="mr-2 size-4" />
+            Add to queue
+          </Button>
+        </TooltipWrapper>
+      )}
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
           size="sm"
           onClick={() => {
-            setOpen(3);
+            setOpen(4);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
@@ -147,7 +177,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             variant="outline"
             size="icon-sm"
             onClick={() => {
-              setOpen(2);
+              setOpen(3);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
