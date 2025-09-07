@@ -21,6 +21,11 @@ on:
         required: true
         description: Is release build
         default: false
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
   workflow_call:
     inputs:
       version:
@@ -38,6 +43,11 @@ on:
         required: false
         description: Git ref to build from (branch, tag, or commit SHA)
         default: ""
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
         
     outputs:
       version:
@@ -136,6 +146,7 @@ jobs:
       is_release: ${{ inputs.is_release || false }}
 
   build-guardrails-backend:
+    if: inputs.build_guardrails != false 
     needs:
       - set-version
     secrets: inherit
