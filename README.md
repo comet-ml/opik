@@ -1,20 +1,26 @@
 # Opik - Unilab's Self-Hosted LLM Evaluation Platform
 
+A fork of the original [Opik](https://github.com/comet-ml/opik) project, tailored for Unilab's specific needs and hosted in our Azure tenant.
+
+
 <div align="center">
 
 ### [https://opik.unilabspt.com/](https://opik.unilabspt.com/)
 
-
-*Make sure you are in the ["Opik Users"](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/647828ca-5ea9-4084-9bef-009557c71925) group to log in.*
+Installed version: **`1.8.42`**
 
 </div>
 
-
-
 > [!NOTE]
-> This is a fork of the original [Opik](https://github.com/comet-ml/opik) project, tailored for Unilab's specific needs and hosted on our Azure tenant.
+> The version is the one specified in `.env.azure` as `OPIK_VERSION`. It refers to the [tag of the commit of the original Opik repository](https://github.com/comet-ml/opik/tags).
+
+
 
 ## Quick Start
+
+> [!TIP]
+> Make sure you are in the ["Opik Users"](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/647828ca-5ea9-4084-9bef-009557c71925) group to log in.
+
 
 ### First-Time Deployment
 
