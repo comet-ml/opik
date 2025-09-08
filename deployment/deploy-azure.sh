@@ -22,6 +22,52 @@ set -e
 # UTILITY FUNCTIONS
 # =============================================================================
 
+# Backup function to create snapshots before any recovery operations
+create_data_backup() {
+    print_step "💾 Creating Data Backup"
+    print_info "Creating Azure disk snapshots for data protection"
+    
+    # Load environment variables if .env.azure exists
+    if [ -f ".env.azure" ]; then
+        source .env.azure
+    else
+        print_error ".env.azure not found. Please run from deployment directory."
+        return 1
+    fi
+    
+    local timestamp=$(date +%Y%m%d-%H%M%S)
+    local backup_prefix="opik-backup-$timestamp"
+    
+    # Services to backup
+    local services=("mysql" "clickhouse" "minio" "redis")
+    
+    for service in "${services[@]}"; do
+        local service_upper=$(echo "$service" | tr '[:lower:]' '[:upper:]')
+        local disk_name_var="${service_upper}_DISK_NAME"
+        local disk_name="${!disk_name_var}"
+        
+        if [ -n "$disk_name" ]; then
+            local snapshot_name="${backup_prefix}-${service}"
+            print_info "Creating snapshot for $service disk: $disk_name"
+            
+            if az snapshot create \
+                --resource-group $RESOURCE_GROUP \
+                --name "$snapshot_name" \
+                --source "$disk_name" \
+                --location $LOCATION &>/dev/null; then
+                print_success "Created snapshot: $snapshot_name"
+            else
+                print_warning "Failed to create snapshot for $service disk"
+            fi
+        else
+            print_warning "No disk found for $service - skipping backup"
+        fi
+    done
+    
+    print_success "💾 Backup snapshots created with prefix: $backup_prefix"
+    print_info "You can restore from these snapshots if needed"
+}
+
 # Quick fix function for AGIC permission issues
 fix_agic_permissions() {
     print_step "Fixing AGIC Permission Issues"
@@ -81,10 +127,10 @@ fix_agic_permissions() {
     fi
 }
 
-# Function to recover from failed upgrades - can be called manually
-recover_from_upgrade_failure() {
-    print_step "🔄 Recovering from Upgrade Failure"
-    print_info "This function helps recover from failed version upgrades"
+# Safe recovery function that preserves data - USE THIS ONE
+safe_recover_from_failure() {
+    print_step "🔄 Safe Recovery from Failure (Data Preserving)"
+    print_warning "⚠️  This function preserves your data and only fixes stuck pods/migrations"
     
     # Load environment variables if .env.azure exists
     if [ -f ".env.azure" ]; then
@@ -94,17 +140,16 @@ recover_from_upgrade_failure() {
         return 1
     fi
     
-    print_info "Cleaning up failed upgrade state..."
+    print_info "Starting safe recovery operations..."
     
-    # Remove failed backend pods
-    print_info "Removing failed backend pods..."
+    # Step 1: Remove stuck pods only (not data)
+    print_info "Removing stuck backend pods (preserving data)..."
     kubectl delete pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
     kubectl delete pods -l app.kubernetes.io/name=opik-python-backend -n $NAMESPACE --force --grace-period=0 2>/dev/null || true
     
-    # Clean up stuck replica sets
+    # Step 2: Clean up old replica sets
     print_info "Cleaning up old replica sets..."
     for deployment in opik-backend opik-frontend opik-python-backend; do
-        # Get old replica sets (with 0 replicas)
         OLD_RS=$(kubectl get rs -n $NAMESPACE -l app.kubernetes.io/name=$deployment -o jsonpath='{.items[?(@.spec.replicas==0)].metadata.name}' 2>/dev/null || echo "")
         if [ -n "$OLD_RS" ]; then
             print_info "Removing old replica sets for $deployment: $OLD_RS"
@@ -112,26 +157,32 @@ recover_from_upgrade_failure() {
         fi
     done
     
-    # Reset ClickHouse database state
-    print_info "Resetting ClickHouse database state..."
+    # Step 3: ONLY clear migration locks (preserve data and schema)
+    print_info "Clearing migration locks (preserving all data)..."
     if kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "SELECT 1" &>/dev/null; then
-        print_info "Cleaning ClickHouse migration state..."
-        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP DATABASE IF EXISTS opik" 2>/dev/null || true
-        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "CREATE DATABASE IF NOT EXISTS opik" 2>/dev/null || true
-        kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOG" 2>/dev/null || true
+        print_info "Clearing ClickHouse migration locks only..."
         kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query "DROP TABLE IF EXISTS default.DATABASECHANGELOGLOCK" 2>/dev/null || true
-        print_success "ClickHouse database state reset"
+        print_success "ClickHouse migration locks cleared"
     else
-        print_warning "ClickHouse not accessible for cleanup"
+        print_warning "ClickHouse not accessible for lock cleanup"
     fi
     
-    # Restart deployments to recover from stuck state
-    print_info "Restarting deployments to recover from stuck state..."
+    # Step 4: Clear MySQL migration locks too
+    if kubectl exec mysql-0 -n $NAMESPACE -- mysql -u root -proot123 -e "SELECT 1" &>/dev/null; then
+        print_info "Clearing MySQL migration locks only..."
+        kubectl exec mysql-0 -n $NAMESPACE -- mysql -u root -proot123 -e "DELETE FROM opik.DATABASECHANGELOGLOCK WHERE ID = 1" 2>/dev/null || true
+        print_success "MySQL migration locks cleared"
+    else
+        print_warning "MySQL not accessible for lock cleanup"
+    fi
+    
+    # Step 5: Restart deployments
+    print_info "Restarting deployments..."
     for deployment in opik-backend opik-python-backend; do
         kubectl rollout restart deployment $deployment -n $NAMESPACE 2>/dev/null || true
     done
     
-    print_success "Recovery operations completed"
+    print_success "✅ Safe recovery completed - your data is preserved!"
     print_info "Monitor pod status with: kubectl get pods -n $NAMESPACE"
     print_info "Check deployment status with: kubectl rollout status deployment/opik-backend -n $NAMESPACE"
 }
@@ -1971,18 +2022,19 @@ print_info "Uninstall deployment:"
 print_info "  helm uninstall opik -n $NAMESPACE"
 
 print_section "🔧 Troubleshooting Commands"
-print_info "If upgrade fails with backend/ClickHouse issues:"
-print_info "  # Use the built-in recovery function:"
-print_info "  source ./deploy-azure.sh && recover_from_upgrade_failure"
+print_info "If upgrade fails with backend/ClickHouse issues or stuck pods:"
+print_info "  # Use the SAFE built-in recovery function (preserves data):"
+print_info "  source ./deploy-azure.sh && safe_recover_from_failure"
 print_info ""
-print_info "  # Or manually check rollout status:"
+print_info "  # Or create backup first, then recover:"
+print_info "  source ./deploy-azure.sh && create_data_backup && safe_recover_from_failure"
+print_info ""
+print_info "  # Manually check rollout status:"
 print_info "  kubectl rollout status deployment/opik-backend -n $NAMESPACE"
 print_info "  kubectl get pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE"
 print_info ""
-print_info "  # Manually fix ClickHouse state:"
-print_info "  kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query \"DROP DATABASE IF EXISTS opik\""
-print_info "  kubectl exec chi-opik-clickhouse-cluster-0-0-0 -n $NAMESPACE -- clickhouse-client --query \"CREATE DATABASE IF NOT EXISTS opik\""
-print_info "  kubectl delete pods -l app.kubernetes.io/name=opik-backend -n $NAMESPACE"
+print_info "  ⚠️  NEVER manually drop databases - use safe_recover_from_failure instead!"
+print_info "  # The safe function only clears migration locks, preserving the data"
 print_info ""
 print_info "If authentication fails with AADSTS650056 error:"
 print_info "  az ad app permission list --id $APP_ID"
