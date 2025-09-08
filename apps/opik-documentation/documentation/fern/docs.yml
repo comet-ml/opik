@@ -497,6 +497,9 @@ navigation:
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture
+      - page: Advanced clickhouse backup
+        path: docs/self-host/backup.mdx
+        slug: backup
       - section: Configuration
         slug: /configure
         contents:

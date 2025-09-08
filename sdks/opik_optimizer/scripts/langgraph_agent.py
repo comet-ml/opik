@@ -4,6 +4,7 @@ from typing_extensions import TypedDict
 from opik.integrations.langchain import OpikTracer
 from opik import track
 
+from opik_optimizer.utils import search_wikipedia
 from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
@@ -14,20 +15,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
-# Tools:
-import dspy
-
-
-@track(type="tool")
-def search_wikipedia(query: str) -> list[str]:
-    """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
-    """
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=3
-    )
-    return [item["text"] for item in results]
+search_wikipedia = track(type="tool")(search_wikipedia)
 
 
 class InputState(TypedDict):

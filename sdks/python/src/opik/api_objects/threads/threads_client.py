@@ -54,8 +54,39 @@ class ThreadsClient:
                 The name of the project to search the threads for. If None, the search
                 will include threads from all projects.
             filter_string:
-                A string used to filter threads based on specific conditions. The
-                format and details of the filter depend on the implementation.
+                A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `status = "inactive"` - Filter by thread status
+                - `id = "thread_123"` - Filter by specific thread ID
+                - `duration > 300` - Filter by thread duration (seconds)
+                - `number_of_messages >= 5` - Filter by message count
+                - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `tags contains "important"` - Filter by tag
+
+                If not provided, all threads in the project will be returned up to the limit.
             max_results:
                 The maximum number of threads to retrieve. The default value is 1000
                 if not specified.
