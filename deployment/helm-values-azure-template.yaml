@@ -1,0 +1,184 @@
+# Custom values for Azure deployment
+# This file uses environment variables from .env.azure
+# Variables are substituted by the deployment script
+#
+# DO NOT EDIT VERSION NUMBERS HERE - Change OPIK_VERSION in .env.azure instead
+# This is a TEMPLATE file processed by deploy-azure.sh.
+registry: &registry $ACR_LOGIN_SERVER
+
+# OAuth2 Proxy Configuration for Azure Entra ID Authentication
+oauth2-proxy:
+  enabled: true
+
+  config:
+    clientID: "$APP_ID"
+    clientSecret: "$CLIENT_SECRET"
+    cookieSecret: "$OAUTH2_COOKIE_SECRET"
+
+  extraArgs:
+    # =================================================================
+    # Azure Entra ID Provider Configuration
+    # =================================================================
+    provider: "azure"
+    azure-tenant: "$TENANT_ID"
+    oidc-issuer-url: "https://login.microsoftonline.com/$TENANT_ID/v2.0"
+
+    # =================================================================
+    # Basic Authentication Settings
+    # =================================================================
+    email-domain: "*" # Allow any email domain (restrict via groups instead)
+    http-address: "0.0.0.0:4180" # Listen on all interfaces, port 4180
+    redirect-url: "https://$DOMAIN_NAME/oauth2/callback" # OAuth2 callback URL after authentication
+    skip-provider-button: "true" # Skip provider selection page (single provider)
+    
+    # =================================================================
+    # ACME Challenge Support for Let's Encrypt
+    # =================================================================
+    # Allow ACME challenges to bypass OAuth2 authentication
+    # This enables Let's Encrypt certificate validation
+    skip-auth-regex: "^/\\.well-known/acme-challenge/.*$"
+
+    # =================================================================
+    # MINIMAL HEADER FORWARDING (Fixes 431 Errors)
+    # =================================================================
+    # Problem: Azure AD tokens can be very large (50KB+) for users with many group memberships,
+    # causing "431 Request Header Fields Too Large" errors when forwarded to backend services.
+    #
+    # Solution: Implement minimal header forwarding while maintaining security:
+    # - Disable forwarding of large tokens and user headers to backend
+    # - Use group-based access control at OAuth2 proxy level
+    # - Backend services don't receive user identity headers (stateless authentication)
+    # - Authentication happens at the gateway level only
+
+    pass-access-token: "false" # Don't forward Azure AD access token (can be 50KB+)
+    pass-user-headers: "false" # Don't forward X-Forwarded-User and related headers
+    pass-authorization-header: "false" # Don't forward Authorization header with bearer token
+    set-xauthrequest: "true" # Set X-Auth-Request-* headers (minimal user info)
+
+    # =================================================================
+    # Session Management
+    # =================================================================
+    cookie-expire: "24h" # Session expires after 24 hours
+    cookie-refresh: "1h" # Refresh token every hour to maintain session
+    cookie-secure: "true" # Only send cookies over HTTPS
+    cookie-samesite: "lax" # Allow cross-site requests for OAuth flow
+
+    # =================================================================
+    # Upstream Routing
+    # =================================================================
+    upstream: "http://opik-nginx-proxy.$NAMESPACE.svc.cluster.local:80" # Route authenticated requests to nginx proxy
+
+    # =================================================================
+    # OAuth2 Scopes & Claims
+    # =================================================================
+    scope: "openid email profile groups" # Request minimal scopes needed for authentication
+    user-id-claim: "preferred_username" # Use preferred_username as user identifier
+
+    # =================================================================
+    # Group-Based Access Control (Security Layer)
+    # =================================================================
+    # Restrict access to specific Azure AD group members only
+    # This provides security without forwarding large group membership tokens
+    allowed-group: "$OPIK_ACCESS_GROUP_ID" # Only allow members of specified group
+
+  service:
+    type: ClusterIP
+    portNumber: 4180
+
+  ingress:
+    enabled: false
+
+# Overriding component image configuration
+component:
+  backend:
+    image:
+      repository: opik-backend
+      tag: $OPIK_VERSION
+    env:
+      OPIK_VERSION: "$OPIK_VERSION"
+      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
+      OPIK_USAGE_REPORT_ENABLED: "true"
+    ingress:
+      enabled: false
+
+  python-backend:
+    image:
+      repository: opik-python-backend
+      tag: $OPIK_VERSION
+    env:
+      OPIK_VERSION: "$OPIK_VERSION"
+      PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "$OPIK_VERSION"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
+      OPIK_REVERSE_PROXY_URL: ""
+    ingress:
+      enabled: false
+
+  frontend:
+    image:
+      repository: opik-frontend
+      tag: $OPIK_VERSION
+    ingress:
+      enabled: false
+
+# Disable demo data generation for production
+demoDataJob:
+  enabled: false
+
+# Storage class with retain policy for data persistence across cluster deletions
+persistence:
+  storageClass:
+    create: true
+    name: "managed-standard-retain"
+    reclaimPolicy: "Retain"  # Keeps Azure disks when PVCs are deleted
+    skuName: "Standard_LRS"
+    allowVolumeExpansion: true
+    volumeBindingMode: "WaitForFirstConsumer"
+    annotations: {}
+    parameters:
+      # Azure-specific parameters
+      cachingmode: ReadOnly
+      kind: Managed
+      # CRITICAL: Store disks in main resource group, not auto-generated AKS resource group
+      # This ensures disks survive cluster deletion
+      resourceGroup: "$RESOURCE_GROUP"
+
+# Configure resources for Azure with persistent storage
+clickhouse:
+  enabled: true
+  storageClassName: "managed-standard-retain"
+  storage: 32Gi
+
+mysql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: true
+      size: 32Gi
+      storageClass: "managed-standard-retain"
+redis:
+  enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: "managed-standard-retain"
+
+minio:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 128Gi
+    storageClass: "managed-standard-retain"
+
+ssl:
+  # Enable automatic SSL certificate provisioning
+  enabled: $SSL_ENABLED
+  
+  # cert-manager cluster issuer (letsencrypt-prod or letsencrypt-staging)
+  issuer: "$SSL_ISSUER"
+  
+  # Hosts for SSL certificate (set dynamically by deployment script)
+  hosts: []

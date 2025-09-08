@@ -1,0 +1,23 @@
+{{- if and .Values.persistence .Values.persistence.storageClass .Values.persistence.storageClass.create }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.persistence.storageClass.name }}
+  labels:
+    {{- include "opik.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    {{- with .Values.persistence.storageClass.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: {{ .Values.persistence.storageClass.skuName }}
+  {{- with .Values.persistence.storageClass.parameters }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+reclaimPolicy: {{ .Values.persistence.storageClass.reclaimPolicy }}
+allowVolumeExpansion: {{ .Values.persistence.storageClass.allowVolumeExpansion }}
+volumeBindingMode: {{ .Values.persistence.storageClass.volumeBindingMode }}
+{{- end }}

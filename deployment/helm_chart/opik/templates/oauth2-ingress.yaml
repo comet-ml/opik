@@ -1,0 +1,51 @@
+{{- if (index .Values "oauth2-proxy" "enabled") }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "opik.fullname" . }}-oauth2-ingress
+  labels:
+    {{- include "opik.labels" . | nindent 4 }}
+  annotations:
+    appgw.ingress.kubernetes.io/ssl-redirect: "false"
+    appgw.ingress.kubernetes.io/use-private-ip: "false"
+    appgw.ingress.kubernetes.io/backend-protocol: "http"
+    {{- if and .Values.ssl.enabled .Values.ssl.issuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ssl.issuer | quote }}
+    cert-manager.io/acme-challenge-type: "http01"
+    {{- end }}
+spec:
+  ingressClassName: azure-application-gateway
+  tls:
+    - secretName: opik-tls-secret
+      {{- if .Values.ssl.hosts }}
+      hosts:
+        {{- range .Values.ssl.hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+  rules:
+    {{- if .Values.ssl.hosts }}
+    {{- range .Values.ssl.hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opik.fullname" $ }}-oauth2-proxy
+                port:
+                  number: {{ (index $.Values "oauth2-proxy" "service" "portNumber") }}
+    {{- end }}
+    {{- else }}
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opik.fullname" . }}-oauth2-proxy
+                port:
+                  number: {{ (index .Values "oauth2-proxy" "service" "portNumber") }}
+    {{- end }}
+{{- end }}
