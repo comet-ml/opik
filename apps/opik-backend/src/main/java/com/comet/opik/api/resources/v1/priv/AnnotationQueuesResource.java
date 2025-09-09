@@ -214,6 +214,7 @@ public class AnnotationQueuesResource {
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
+
         var itemType = AnnotationQueueItemType.fromScope(queue.scope());
 
         annotationQueueService.addItems(queueId, request.ids(), itemType)

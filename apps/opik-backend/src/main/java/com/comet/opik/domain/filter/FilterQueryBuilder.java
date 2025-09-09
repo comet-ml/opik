@@ -207,6 +207,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_ID, ANNOTATION_QUEUE_ID_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_NAME, ANNOTATION_QUEUE_NAME_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -370,6 +372,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
+                    .add(TraceThreadField.ANNOTATION_QUEUE_ID)
+                    .add(TraceThreadField.ANNOTATION_QUEUE_NAME)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(

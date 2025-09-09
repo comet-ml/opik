@@ -16,7 +16,6 @@ import { Separator } from "@/components/ui/separator";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -28,7 +27,6 @@ import {
 } from "@/components/shared/DataTable/utils";
 import {
   COLUMN_NAME_ID,
-  COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
@@ -275,16 +273,32 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
         value: queue.name,
       };
 
-      navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
-        params: {
-          workspaceName,
-          projectId: queue.project_id,
-        },
-        search: {
-          traces_filters: [annotationQueueFilter],
-        },
-      });
+      if (queue.scope === AnnotationQueueScope.THREAD) {
+        // Navigate to threads tab with annotation queue filter
+        navigate({
+          to: "/$workspaceName/projects/$projectId/traces",
+          params: {
+            workspaceName,
+            projectId: queue.project_id,
+          },
+          search: {
+            type: "threads",
+            threads_filters: [annotationQueueFilter],
+          },
+        });
+      } else {
+        // Navigate to traces tab with annotation queue filter (existing behavior)
+        navigate({
+          to: "/$workspaceName/projects/$projectId/traces",
+          params: {
+            workspaceName,
+            projectId: queue.project_id,
+          },
+          search: {
+            traces_filters: [annotationQueueFilter],
+          },
+        });
+      }
     },
     [navigate, workspaceName],
   );

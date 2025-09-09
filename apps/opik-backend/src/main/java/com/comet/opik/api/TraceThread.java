@@ -38,7 +38,9 @@ public record TraceThread(
         Instant lastUpdatedAt,
         String lastUpdatedBy,
         String createdBy,
-        Instant createdAt) {
+        Instant createdAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String annotationQueueId,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) String annotationQueueName) {
 
     @Builder(toBuilder = true)
     public record TraceThreadPage(

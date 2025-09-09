@@ -12,6 +12,7 @@ import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
@@ -1787,6 +1788,18 @@ class TraceDAOImpl implements TraceDAO {
                 AND aqi.item_id IN (SELECT DISTINCT id FROM traces_final)
                 ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
                 LIMIT 1 BY aqi.item_id
+            ), thread_annotation_queue_agg AS (
+                SELECT
+                    tt.thread_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                INNER JOIN trace_threads_final tt ON tt.thread_model_id = aqi.item_id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'thread'
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1856,13 +1869,33 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
             LEFT JOIN (
                 SELECT
-                    tf.thread_id,
-                    any(aqa.queue_id) as queue_id,
-                    any(aqa.queue_name) as queue_name
-                FROM traces_final tf
-                LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = tf.id
-                WHERE aqa.queue_id IS NOT NULL
-                GROUP BY tf.thread_id
+                    thread_id,
+                    queue_id,
+                    queue_name
+                FROM (
+                    -- Direct thread annotations (priority)
+                    SELECT
+                        taqa.thread_id,
+                        taqa.queue_id,
+                        taqa.queue_name,
+                        1 as priority
+                    FROM thread_annotation_queue_agg taqa
+
+                    UNION ALL
+
+                    -- Trace-level annotations grouped by thread
+                    SELECT
+                        tf.thread_id,
+                        any(aqa.queue_id) as queue_id,
+                        any(aqa.queue_name) as queue_name,
+                        2 as priority
+                    FROM traces_final tf
+                    LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = tf.id
+                    WHERE aqa.queue_id IS NOT NULL
+                    GROUP BY tf.thread_id
+                )
+                ORDER BY thread_id, priority ASC
+                LIMIT 1 BY thread_id
             ) aqa ON aqa.thread_id = t.id
             WHERE workspace_id = :workspace_id
             <if(feedback_scores_filters)>
@@ -2508,9 +2541,20 @@ class TraceDAOImpl implements TraceDAO {
         if (traceSearchCriteria.filters() == null || traceSearchCriteria.filters().isEmpty()) {
             return false;
         }
-        return traceSearchCriteria.filters().stream()
+        boolean hasAnnotationFilters = traceSearchCriteria.filters().stream()
                 .anyMatch(filter -> filter.field() == TraceField.ANNOTATION_QUEUE_ID
-                        || filter.field() == TraceField.ANNOTATION_QUEUE_NAME);
+                        || filter.field() == TraceField.ANNOTATION_QUEUE_NAME
+                        || filter.field() == TraceThreadField.ANNOTATION_QUEUE_ID
+                        || filter.field() == TraceThreadField.ANNOTATION_QUEUE_NAME);
+
+        // Debug logging
+        System.out.println("DEBUG: hasAnnotationQueueFilters called");
+        System.out.println("DEBUG: filters count: " + traceSearchCriteria.filters().size());
+        traceSearchCriteria.filters().forEach(filter -> System.out
+                .println("DEBUG: filter field: " + filter.field() + ", type: " + filter.field().getClass()));
+        System.out.println("DEBUG: hasAnnotationFilters result: " + hasAnnotationFilters);
+
+        return hasAnnotationFilters;
     }
 
     private Mono<? extends Result> getTracesByProjectId(
@@ -3055,6 +3099,8 @@ class TraceDAOImpl implements TraceDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
+                .annotationQueueId(row.get("annotation_queue_id", String.class))
+                .annotationQueueName(row.get("annotation_queue_name", String.class))
                 .build());
     }
 
