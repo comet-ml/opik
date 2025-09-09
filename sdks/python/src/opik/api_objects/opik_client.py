@@ -1279,14 +1279,11 @@ class Opik:
         )
         return self.get_prompt_history(name)
 
-    def search_prompts(
-        self, name: Optional[str] = None, filter_string: Optional[str] = None
-    ) -> List[Prompt]:
+    def search_prompts(self, filter_string: Optional[str] = None) -> List[Prompt]:
         """
         Retrieve the latest prompt versions for the given search parameters.
 
         Parameters:
-            name: The substring of the prompt name to search for. If you have an exact name, consider using the `get_prompt` method instead since the name is a unique identifier.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
