@@ -7,6 +7,7 @@ import opik.opik_context as opik_context
 from opik.api_objects import opik_client
 from opik.decorator import tracing_runtime_config
 import opik.context_storage as context_storage
+import opik.datetime_helpers as datetime_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +62,6 @@ def track_claude_code(
         name="claude_code_query",
         project_name=project_name,
         tags=["claude_code", "conversation"],
-        generations_aggregator=_process_generator_items,
     )
     async def wrapper(*args: Any, **kwargs: Any) -> AsyncGenerator[Any, None]:
         # Get the current span (created by @track decorator)
@@ -86,30 +86,69 @@ def track_claude_code(
         system_message_count = 0
         user_message_count = 0
         other_message_count = 0
+        messages = []  # Store messages to look for tool use/result pairs
 
         try:
             # Iterate through the original async generator
             async for message in query_func(*args, **kwargs):
-                # Create child spans for different message types
+                messages.append(message)
+                message_type = type(message).__name__
+                
+                # Look for tool use + tool result pairs in the last two messages
+                if len(messages) >= 2:
+                    prev_message = messages[-2]
+                    curr_message = messages[-1]
+                    
+                    # Check if we have a tool use followed by a tool result
+                    if (_is_assistant_message(prev_message) and 
+                        _is_user_message(curr_message)):
+                        
+                        # Check if prev contains tool use and curr contains tool result
+                        tool_use_blocks = _extract_tool_use_blocks(prev_message)
+                        tool_result_blocks = _extract_tool_result_blocks(curr_message)
+                        
+                        if tool_use_blocks and tool_result_blocks:
+                            # Match tool use with tool result by ID
+                            for tool_block in tool_use_blocks:
+                                for tool_result_block in tool_result_blocks:
+                                    if tool_block.id == tool_result_block.tool_use_id:
+                                        assistant_message_count += 1
+                                        _create_single_tool_span(
+                                            current_span, prev_message, curr_message, 
+                                            tool_block, tool_result_block, assistant_message_count
+                                        )
+                                        break
+                            
+                            # Yield both messages after processing
+                            yield message
+                            continue
+                
+                # Handle non-tool messages
                 if _is_assistant_message(message):
-                    assistant_message_count += 1
-                    _create_and_log_assistant_span(
-                        current_span, message, assistant_message_count
-                    )
-
+                    # Check if it's a tool use message (will be handled above if paired)
+                    tool_use_blocks = _extract_tool_use_blocks(message)
+                    if not tool_use_blocks:  # Only create span for non-tool assistant messages
+                        assistant_message_count += 1
+                        _create_and_log_assistant_span(
+                            current_span, message, assistant_message_count
+                        )
+                
                 elif _is_system_message(message):
                     system_message_count += 1
                     _create_and_log_system_span(
                         current_span, message, system_message_count
                     )
-
+                
                 elif _is_user_message(message):
-                    user_message_count += 1
-                    _create_and_log_user_span(current_span, message, user_message_count)
-
+                    # Check if it contains tool results (will be handled above if paired)
+                    tool_result_blocks = _extract_tool_result_blocks(message)
+                    if not tool_result_blocks:  # Only create span for non-tool user messages
+                        user_message_count += 1
+                        _create_and_log_user_span(current_span, message, user_message_count)
+                
                 elif _is_result_message(message):
                     _create_and_log_result_span(current_span, message)
-
+                
                 else:
                     other_message_count += 1
                     _create_and_log_other_span(
@@ -243,6 +282,142 @@ def _is_user_message(message: Any) -> bool:
 def _is_result_message(message: Any) -> bool:
     """Check if message is a ResultMessage."""
     return hasattr(message, "total_cost_usd")
+
+
+def _extract_tool_use_blocks(message: Any) -> list:
+    """Extract tool use blocks from an assistant message."""
+    tool_use_blocks = []
+    if hasattr(message, "content") and hasattr(message.content, "__iter__"):
+        for block in message.content:
+            if hasattr(block, "id") and hasattr(block, "name") and hasattr(block, "input"):
+                # This is a tool use block
+                tool_use_blocks.append(block)
+    return tool_use_blocks
+
+
+def _extract_tool_result_blocks(message: Any) -> list:
+    """Extract tool result blocks from a user message."""
+    tool_result_blocks = []
+    if hasattr(message, "content") and hasattr(message.content, "__iter__"):
+        for block in message.content:
+            if hasattr(block, "tool_use_id") and hasattr(block, "content"):
+                # This is a tool result block
+                tool_result_blocks.append(block)
+    return tool_result_blocks
+
+
+def _create_single_tool_span(
+    parent_span_data: Any, 
+    tool_use_message: Any, 
+    tool_result_message: Any,
+    tool_block: Any,
+    tool_result_block: Any,
+    count: int
+) -> None:
+    """Create a single span that contains both tool input and output."""
+    
+    # Convert messages to dict for proper serialization
+    tool_use_dict = _dataclass_to_dict(tool_use_message)
+    tool_result_dict = _dataclass_to_dict(tool_result_message)
+    
+    # Create input data structure
+    input_data = {
+        "message_data": tool_use_dict,
+        "text_content": None,
+    }
+    
+    # Create output data structure  
+    output_data = {
+        "message_data": tool_result_dict,
+        "text_content": None,
+    }
+    
+    # Create the span
+    tool_span_data = parent_span_data.create_child_span_data(
+        name=f"assistant_response_{count}",
+        type="tool", 
+        input=input_data,
+        output=output_data,
+        metadata={
+            "provider": LLMProvider.ANTHROPIC,
+            "tool_id": tool_block.id,
+            "tool_name": tool_block.name,
+            "message_type": "ToolUse",
+            "response_number": count,
+            "is_error": getattr(tool_result_block, "is_error", False),
+        },
+        tags=["claude_code", "tool_use", tool_block.name],
+    )
+    
+    # Set end time and log the span immediately
+    tool_span_data.end_time = datetime_helpers.local_timestamp()
+    context_storage.add_span_data(tool_span_data)
+    
+    if tracing_runtime_config.is_tracing_active():
+        client = opik_client.get_client_cached()
+        client.span(**tool_span_data.as_parameters)
+
+
+def _create_tool_use_span(parent_span_data: Any, tool_block: Any, message: Any, count: int) -> Any:
+    """Create a tool use span but don't log it yet - wait for the result."""
+    # Convert full message to dict for proper serialization
+    message_dict: dict = _dataclass_to_dict(message)
+    
+    # Create child span data for the tool use with complete message data as input
+    tool_span_data = parent_span_data.create_child_span_data(
+        name=f"assistant_response_{count}",
+        type="tool", 
+        input={
+            "message_data": message_dict,
+            "text_content": None,
+        },
+        output={},  # Will be filled when we get the tool result
+        metadata={
+            "provider": LLMProvider.ANTHROPIC,
+            "tool_id": tool_block.id,
+            "tool_name": tool_block.name,
+            "message_type": "ToolUse",
+            "response_number": count,
+        },
+        tags=["claude_code", "tool_use", tool_block.name],
+    )
+    
+    # Add some debugging
+    print(f"DEBUG: _create_tool_use_span - Created span assistant_response_{count} for tool {tool_block.name} with ID {tool_block.id}")
+    
+    return tool_span_data
+
+
+def _complete_tool_span(tool_span_data: Any, tool_result_block: Any) -> None:
+    """Complete the tool span with the tool result and log it."""
+    # Create a tool result message structure similar to what we'd see in the user message
+    tool_result_message_data = {
+        "content": [
+            {
+                "tool_use_id": tool_result_block.tool_use_id,
+                "content": tool_result_block.content,
+                "is_error": getattr(tool_result_block, "is_error", False),
+            }
+        ]
+    }
+    
+    # Update the span with the tool result output
+    tool_span_data.output = {
+        "message_data": tool_result_message_data,
+        "text_content": None,
+    }
+    
+    # Update metadata
+    if hasattr(tool_result_block, "is_error") and tool_result_block.is_error:
+        tool_span_data.metadata["is_error"] = True
+        tool_span_data.metadata["error_message"] = str(tool_result_block.content)
+    
+    # Add debugging
+    print(f"DEBUG: _complete_tool_span - Completing tool span with tool_use_id {tool_result_block.tool_use_id}")
+    
+    # Log the complete tool span
+    _log_child_span(tool_span_data)
+    print(f"DEBUG: _complete_tool_span - Tool span logged successfully")
 
 
 def _create_and_log_assistant_span(
