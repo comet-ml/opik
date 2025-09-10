@@ -139,6 +139,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             versions={versions || []}
             activeVersionId={activeVersionId || ""}
             onVersionClick={(version) => setActiveVersionId(version.id)}
+            promptId={prompt?.id || ""}
           />
         </div>
       </div>

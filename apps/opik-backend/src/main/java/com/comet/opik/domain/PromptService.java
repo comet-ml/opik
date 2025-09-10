@@ -64,6 +64,8 @@ public interface PromptService {
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
+    PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
+
     Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 }
 
@@ -517,6 +519,51 @@ class PromptServiceImpl implements PromptService {
                     .variables(getVariables(promptVersion.template(), promptVersion.type()))
                     .build();
         });
+    }
+
+    @Override
+    public PromptVersion restorePromptVersion(@NonNull UUID promptId, @NonNull UUID versionId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Restoring prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        // Get the version to restore
+        PromptVersion versionToRestore = getVersionById(versionId);
+
+        // Verify the version belongs to the specified prompt
+        if (!versionToRestore.promptId().equals(promptId)) {
+            throw new NotFoundException("Prompt version not found for the specified prompt");
+        }
+
+        // Get the prompt to get its name
+        Prompt prompt = getById(promptId);
+
+        // Create a new version with the content from the old version
+        UUID newVersionId = idGenerator.generateId();
+        String newCommit = CommitUtils.getCommit(newVersionId);
+
+        PromptVersion newVersion = versionToRestore.toBuilder()
+                .id(newVersionId)
+                .commit(newCommit)
+                .createdBy(userName)
+                .changeDescription("Restored from version " + versionToRestore.commit())
+                .build();
+
+        PromptVersion restoredVersion = EntityConstraintHandler
+                .handle(() -> savePromptVersion(workspaceId, newVersion))
+                .onErrorDo(() -> retryableCreateVersion(workspaceId,
+                        CreatePromptVersion.builder()
+                                .name(prompt.name())
+                                .version(newVersion)
+                                .build(),
+                        prompt, userName));
+
+        log.info("Successfully restored prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        return restoredVersion;
     }
 
     @Override
