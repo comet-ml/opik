@@ -386,7 +386,7 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
-from .experiments import ExperimentWriteType
+from .experiments import ExperimentUpdateStatus, ExperimentUpdateType, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
@@ -548,6 +548,8 @@ __all__ = [
     "ExperimentPublic",
     "ExperimentPublicType",
     "ExperimentType",
+    "ExperimentUpdateStatus",
+    "ExperimentUpdateType",
     "ExperimentWriteType",
     "ExportTraceServiceRequest",
     "Feedback",

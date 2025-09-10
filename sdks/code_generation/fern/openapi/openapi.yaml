@@ -1330,6 +1330,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Experiments
+      summary: Update experiment by id
+      description: Update experiment by id
+      operationId: updateExperiment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentUpdate"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/items/{id}:
     get:
       tags:
@@ -7261,6 +7294,27 @@ components:
         last_retrieved_id:
           type: string
           format: uuid
+    ExperimentUpdate:
+      type: object
+      properties:
+        name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        status:
+          type: string
+          description: The status of the experiment
+          enum:
+          - running
+          - completed
+          - cancelled
     CategoricalFeedbackDefinition:
       required:
       - details
@@ -7310,6 +7364,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7405,6 +7465,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         type:
           type: string
           enum:
@@ -7502,6 +7568,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7575,6 +7647,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7634,6 +7712,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         type:
           type: string
           enum:
@@ -8928,6 +9012,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - humanAnnotationEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -8940,6 +9025,8 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
+          type: boolean
+        humanAnnotationEnabled:
           type: boolean
     ErrorInfo_Write:
       required:

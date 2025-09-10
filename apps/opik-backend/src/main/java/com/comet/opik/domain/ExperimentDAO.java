@@ -9,6 +9,7 @@ import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
@@ -1150,5 +1151,35 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row))
                     .build();
         });
+    }
+
+    private static final String UPDATE = """
+            ALTER TABLE experiments UPDATE
+                name = CASE WHEN :name IS NOT NULL THEN :name ELSE name END,
+                metadata = CASE WHEN :metadata IS NOT NULL THEN :metadata ELSE metadata END,
+                type = CASE WHEN :type IS NOT NULL THEN :type ELSE type END,
+                status = CASE WHEN :status IS NOT NULL THEN :status ELSE status END,
+                last_updated_at = now()
+            WHERE workspace_id = :workspaceId AND id = :id
+            """;
+
+    @WithSpan
+    Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
+        log.info("Updating experiment with id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> update(id, experimentUpdate, connection))
+                .then();
+    }
+
+    private Publisher<? extends Result> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
+            Connection connection) {
+        var statement = connection.createStatement(UPDATE)
+                .bind("id", id)
+                .bind("name", experimentUpdate.name())
+                .bind("metadata", experimentUpdate.metadata() != null ? experimentUpdate.metadata().toString() : null)
+                .bind("type", experimentUpdate.type() != null ? experimentUpdate.type().toString() : null)
+                .bind("status", experimentUpdate.status() != null ? experimentUpdate.status().toString() : null);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 }
