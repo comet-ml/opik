@@ -50,7 +50,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const generateFileName = useCallback(
     (extension = "csv") => {
-      return `${slugify(datasetName, { lower: true })}-dataset-items.${extension}`;
+      return `${slugify(datasetName, {
+        lower: true,
+      })}-dataset-items.${extension}`;
     },
     [datasetName],
   );
