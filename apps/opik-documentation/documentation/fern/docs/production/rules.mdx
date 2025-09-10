@@ -60,7 +60,7 @@ When writing your own LLM as a Judge metric you will need to specify the prompt 
 `{{ variable_name }}`. You can then map these variables to your trace data using the `variable_mapping` parameter. When the
 rule is executed, Opik will replace the variables with the values from the trace data.
 
-You can control the format of the output using the `Scoring definition` parameter. This is were you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the the LLM as a Judge metric always returns trace scores.
+You can control the format of the output using the `Scoring definition` parameter. This is where you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
 
 ## Reviewing online evaluation scores
 
