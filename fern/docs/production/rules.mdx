@@ -1,0 +1,125 @@
+---
+subtitle: Describes how to define scoring rules for production traces
+---
+
+<Tip>
+  If you would like us to add more LLM as a Judge metrics to the platform, do raise an issue on
+  [GitHub](https://github.com/comet-ml/opik/issues) and we will do our best to add them !
+</Tip>
+
+When working with LLMs in production, the sheer number of traces means that it isn't possible to manually review each trace. Opik allows you to define LLM as a Judge metrics that will automatically score the LLM calls logged to the platform.
+
+![Opik LLM as a Judge](file:fb87d263-d6fd-4b2f-892f-92f5e90631db)
+
+By defining LLM as a Judge metrics that run on all your production traces, you will be able to
+automate the monitoring of your LLM calls for hallucinations, answer relevance or any other task
+specific metric.
+
+## Defining scoring rules
+
+Scoring rules can be defined through both the UI and the [REST API](/reference/rest-api/overview).
+
+To create a new scoring metric in the UI, first navigate to the project you would like to monitor. Once you have navigated to the `rules` tab, you will be able to create a new rule.
+
+<Frame>
+  <img src="file:2e907cdc-2204-47c0-85a3-9b92b0a4c4e9" />
+</Frame>
+
+When creating a new rule, you will be presented with the following options:
+
+1. **Name:** The name of the rule
+2. **Sampling rate:** The percentage of traces to score. When set to `1`, all traces will be scored.
+3. **Model:** The model to use to run the LLM as a Judge metric.
+4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
+5. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace.
+6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
+
+### Opik's built-in LLM as a Judge metrics
+
+Opik comes pre-configured with 3 different LLM as a Judge metrics:
+
+1. Hallucination: This metric checks if the LLM output contains any hallucinated information.
+2. Moderation: This metric checks if the LLM output contains any offensive content.
+3. Answer Relevance: This metric checks if the LLM output is relevant to the given context.
+
+<Tip>
+  If you would like us to add more LLM as a Judge metrics to the platform, do raise an issue on
+  [GitHub](https://github.com/comet-ml/opik/issues) and we will do our best to add them !
+</Tip>
+
+### Writing your own LLM as a Judge metric
+
+Opik's built-in LLM as a Judge metrics are very easy to use and are great for getting started. However, as you start working on more complex tasks, you may need to write your own LLM as a Judge metrics.
+
+We typically recommend that you experiment with LLM as a Judge metrics during development using [Opik's evaluation platform](/evaluation/overview). Once you have a metric that works well for your use case, you can then use it in production.
+
+<Frame>
+  <img src="file:2e907cdc-2204-47c0-85a3-9b92b0a4c4e9" />
+</Frame>
+
+When writing your own LLM as a Judge metric you will need to specify the prompt variables using the mustache syntax, ie.
+`{{ variable_name }}`. You can then map these variables to your trace data using the `variable_mapping` parameter. When the
+rule is executed, Opik will replace the variables with the values from the trace data.
+
+You can control the format of the output using the `Scoring definition` parameter. This is were you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the the LLM as a Judge metric always returns trace scores.
+
+## Reviewing online evaluation scores
+
+The scores returned by the online evaluation rules will be stored as feedback scores for each trace. This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
+
+![Opik dashboard](file:e9f216e6-821b-484c-9a5c-1962bfad0c65)
+
+You can also view the average feedback scores for all the traces in your project from the traces table.
+
+## Online thread evaluation rules
+
+It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+
+<Frame>
+  <img src="file:2e907cdc-2204-47c0-85a3-9b92b0a4c4e9" />
+</Frame>
+
+We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
+
+1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
+2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
+3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric.
+
+For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
+
+```json
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
+
+```python
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+The sampled threads are scored only after the threads are marked as inactive. This is to ensure that the scoring is done on the full context of the conversation.
+
+<Note>
+  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
+  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
+
+  You can only evaluate/score threads that are inactive.
+</Note>
