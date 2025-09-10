@@ -35,11 +35,11 @@ def build_metadata_and_prompt_versions(
 
     if prompts is not None and len(prompts) > 0:
         prompt_versions = []
-        experiment_config["prompts"] = []
+        experiment_config["prompts"] = {}
 
         for prompt in prompts:
             prompt_versions.append({"id": prompt.__internal_api__version_id__})
-            experiment_config["prompts"].append(prompt.prompt)
+            experiment_config["prompts"][prompt.name] = prompt.prompt
 
     if experiment_config == {}:
         return None, None

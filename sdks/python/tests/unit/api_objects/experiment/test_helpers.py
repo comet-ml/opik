@@ -35,14 +35,14 @@ def fake_prompt(with_postfix: bool = False):
         (
             {"experiment_config": None, "prompts": [fake_prompt()]},
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),
         (
             {"experiment_config": {}, "prompts": [fake_prompt()]},
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),
@@ -56,7 +56,7 @@ def fake_prompt(with_postfix: bool = False):
                 "prompts": [fake_prompt()],
             },
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),
