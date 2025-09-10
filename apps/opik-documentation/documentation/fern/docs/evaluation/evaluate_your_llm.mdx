@@ -295,6 +295,59 @@ evaluation = evaluate(
 )
 ```
 
+### Sampling the dataset for evaluation
+
+You can use the `dataset_sampler` parameter to specify the instance of dataset sampler to use for sampling the dataset.
+This is useful if you want to sample the dataset differently than the default sampling strategy (accept all items).
+
+For example, you can use the `RandomDatasetSampler` to sample the dataset randomly:
+
+```python
+from opik.evaluation import samplers
+
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    dataset_sampler=samplers.RandomDatasetSampler(max_samples=10),
+)
+```
+In the example above, the evaluation will sample 10 random items from the dataset.
+
+Also, you can implement your own dataset sampler by extending the `BaseDatasetSampler` and overriding the `sample` method.
+
+```python
+import re
+from typing import List
+
+from opik.api_objects.dataset import dataset_item
+from opik.evaluation import samplers
+
+class MyDatasetSampler(samplers.BaseDatasetSampler):
+
+    def __init__(self, filter_string: str, field_name: str) -> None:
+        self.filter_regex = re.compile(filter_string)
+        self.field_name = field_name
+
+    def sample(self, dataset: List[dataset_item.DatasetItem]) -> List[dataset_item.DatasetItem]:
+        # Sample items from the dataset that match the filter string in the 'field_name' field
+        return [item for item in filter(lambda x: self.filter_regex.search(x[self.field_name]), dataset)]
+
+# Example usage
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    dataset_sampler=MyDatasetSampler(filter_string="\\.*SUCCESS\\.*", field_name="output"),
+)
+
+```
+
+Implementing your own dataset sampler is useful if you want to implement a custom sampling strategy. For instance,
+you can implement a dataset sampler that samples the dataset using some filtering criteria as in the example above.
+
 ### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
