@@ -19,6 +19,7 @@ from .metrics import base_metric
 from .models import base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -164,10 +165,8 @@ def _evaluate_task(
         url_override=client.config.url_override,
     )
 
-    report.display_experiment_link(
-        experiment_url=experiment_url
-    )
-    
+    report.display_experiment_link(experiment_url=experiment_url)
+
     client.flush()
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -261,16 +260,14 @@ def evaluate_experiment(
         url_override=client.config.url_override,
     )
 
-    report.display_experiment_link(
-        experiment_url=experiment_url
-    )
+    report.display_experiment_link(experiment_url=experiment_url)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
-        experiment_url=experiment_url
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_
@@ -409,9 +406,7 @@ def evaluate_prompt(
         url_override=client.config.url_override,
     )
 
-    report.display_experiment_link(
-        experiment_url=experiment_url
-    )
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -420,7 +415,7 @@ def evaluate_prompt(
         dataset_id=dataset.id,
         experiment_name=experiment.name,
         test_results=test_results,
-        experiment_url=experiment_url
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_

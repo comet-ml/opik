@@ -4,7 +4,6 @@ from typing import Dict, List, Tuple
 from rich import align, console, panel, table, text
 
 
-from .. import url_helpers
 from . import test_result
 
 
@@ -87,9 +86,7 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
-def display_experiment_link(
-    experiment_url: str
-) -> None:
+def display_experiment_link(experiment_url: str) -> None:
     console_container = console.Console()
 
     console_container.print(
