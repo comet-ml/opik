@@ -58,7 +58,7 @@ def add_httpx_client_hook(hook: HttpxClientHook) -> None:
         hook (HttpxClientHook): A callable to be added as an HTTPX client hook.
 
     """
-    global _httpx_client_hook
+    global _httpx_client_hooks
     _httpx_client_hooks.append(hook)
 
 
@@ -84,12 +84,10 @@ def build_init_arguments(default_kwargs: Dict[str, Any]) -> Dict[str, Any]:
 
 def apply_httpx_client_hooks(client: httpx.Client) -> None:
     """Applies registered httpx client hooks."""
-    global _httpx_client_hooks
     for hook in _httpx_client_hooks:
         hook(client)
 
     # apply deprecated hooks if any
-    global _deprecated_httpx_client_hooks
     for deprecated_hook in _deprecated_httpx_client_hooks:
         deprecated_hook(client)
 
