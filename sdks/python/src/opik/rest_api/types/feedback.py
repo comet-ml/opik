@@ -16,6 +16,11 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    description: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional description for the feedback definition
+    """
+
     created_at: typing_extensions.Annotated[typing.Optional[dt.datetime], FieldMetadata(alias="createdAt")] = None
     created_by: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="createdBy")] = None
     last_updated_at: typing_extensions.Annotated[typing.Optional[dt.datetime], FieldMetadata(alias="lastUpdatedAt")] = (

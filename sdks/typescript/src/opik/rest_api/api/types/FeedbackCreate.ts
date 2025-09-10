@@ -18,5 +18,7 @@ export namespace FeedbackCreate {
     export interface _Base {
         id?: string;
         name: string;
+        /** Optional description for the feedback definition */
+        description?: string;
     }
 }

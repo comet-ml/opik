@@ -11,6 +11,7 @@ import { CategoricalFeedbackDefinition } from "./CategoricalFeedbackDefinition";
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
     name: core.serialization.string(),
+    description: core.serialization.string().optional(),
     createdAt: core.serialization.date().optional(),
     createdBy: core.serialization.string().optional(),
     lastUpdatedAt: core.serialization.date().optional(),
@@ -40,6 +41,7 @@ export declare namespace Feedback {
     export interface _Base {
         id?: string | null;
         name: string;
+        description?: string | null;
         createdAt?: string | null;
         createdBy?: string | null;
         lastUpdatedAt?: string | null;
