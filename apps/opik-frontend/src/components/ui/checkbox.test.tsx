@@ -10,5 +10,3 @@ describe("Checkbox", () => {
     expect(checkbox.className).toContain("border-[hsl(var(--slate-300))]");
   });
 });
-
-
