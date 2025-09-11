@@ -7310,6 +7310,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7405,6 +7411,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         type:
           type: string
           enum:
@@ -7502,6 +7514,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7575,6 +7593,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         createdAt:
           type: string
           format: date-time
@@ -7634,6 +7658,12 @@ components:
         name:
           minLength: 1
           type: string
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional description for the feedback definition
+          example: This feedback definition is used to rate response quality
         type:
           type: string
           enum:
@@ -8928,6 +8958,7 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
+      - humanAnnotationEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -8940,6 +8971,8 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
+          type: boolean
+        humanAnnotationEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
