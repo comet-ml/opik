@@ -121,3 +121,17 @@ export interface ExperimentsGroupNodeWithAggregations {
   aggregations?: ExperimentsAggregations;
   groups?: Record<string, ExperimentsGroupNodeWithAggregations>;
 }
+
+export interface DatasetExpansionRequest {
+  model: string;
+  sample_count: number;
+  preserve_fields?: string[];
+  variation_instructions?: string;
+}
+
+export interface DatasetExpansionResponse {
+  generated_samples: DatasetItem[];
+  model: string;
+  total_generated: number;
+  generation_time: string;
+}
