@@ -1,12 +1,8 @@
-import logging
 from typing import List, Optional
 
 from opik.api_objects.dataset import dataset_item
 
 from . import base_dataset_sampler
-
-
-LOGGER = logging.getLogger(__name__)
 
 
 class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
@@ -39,8 +35,9 @@ class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
         try:
             import numpy as np
         except ImportError:
-            LOGGER.warning("To use RandomDatasetSampler, please install numpy.")
-            return data_items
+            raise ImportError(
+                "numpy is required for RandomDatasetSampler. Please install numpy to use this sampler."
+            )
 
         generator = np.random.default_rng(self.seed)
         return generator.choice(
