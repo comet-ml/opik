@@ -617,6 +617,43 @@ class ExperimentDAO {
             AND workspace_id = :workspace_id
             ;
             """;
+    
+    private static final String UPDATE = """
+            INSERT into experiments(
+                workspace_id,
+                dataset_id,
+                id,
+                name,
+                created_at,
+                last_updated_by,
+                created_by,
+                metadata,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                optimization_id,
+                type
+            )
+            SELECT
+                workspace_id,
+                dataset_id,
+                id,
+                <if(name)> :name <else> name <endif> as name,
+                created_at,
+                :last_updated_by as last_updated_by,
+                created_by,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                optimization_id,
+                type
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1
+            """;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -1169,7 +1206,7 @@ class ExperimentDAO {
         log.info("Updating experiment '{}' with name='{}' metadata={}", id, name, metadata);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(conn -> {
-                    Statement stmt = conn.createStatement(UPDATE_BY_ID) // you'll define UPDATE_BY_ID SQL
+                    Statement stmt = conn.createStatement(UPDATE) // you'll define UPDATE_BY_ID SQL
                             .bind("id", id)
                             .bind("name", name)
                             .bind("metadata", metadata)
