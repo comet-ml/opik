@@ -1506,8 +1506,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     entity_id,
                     mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
+                        groupArray(name),
+                        groupArray(value)
                     ) AS feedback_scores,
                     groupArray(tuple(
                         name,
@@ -1523,6 +1523,30 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS feedback_scores_list
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
+            ), annotation_queue_agg AS (
+                SELECT
+                    aqi.item_id as trace_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'trace'
+                AND aqi.item_id IN (SELECT DISTINCT id FROM traces_final)
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
+            ), thread_annotation_queue_agg AS (
+                SELECT
+                    tt.thread_id,
+                    aq.id as queue_id,
+                    aq.name as queue_name
+                FROM annotation_queue_items aqi
+                INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
+                INNER JOIN trace_threads_final tt ON tt.thread_model_id = aqi.item_id
+                WHERE aqi.workspace_id = :workspace_id
+                AND aqi.item_type = 'thread'
+                ORDER BY (aqi.workspace_id, aqi.queue_id, aqi.item_id) DESC, aqi.last_updated_at DESC
+                LIMIT 1 BY aqi.item_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1589,6 +1613,35 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                <if(has_annotation_queue_filters)>
+                LEFT JOIN (
+                    SELECT
+                        thread_id,
+                        queue_id,
+                        queue_name
+                    FROM (
+                        SELECT
+                            thread_id,
+                            queue_id,
+                            queue_name,
+                            ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY queue_id) as rn
+                        FROM (
+                            SELECT
+                                aagg.trace_id as thread_id,
+                                aagg.queue_id,
+                                aagg.queue_name
+                            FROM annotation_queue_agg aagg
+                            UNION ALL
+                            SELECT
+                                tagg.thread_id,
+                                tagg.queue_id,
+                                tagg.queue_name
+                            FROM thread_annotation_queue_agg tagg
+                        )
+                    )
+                    WHERE rn = 1
+                ) AS aqa ON aqa.thread_id = t.id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
                 AND thread_model_id IN (

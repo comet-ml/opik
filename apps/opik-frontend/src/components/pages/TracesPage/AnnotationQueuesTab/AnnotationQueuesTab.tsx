@@ -32,6 +32,8 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
+import { Filter } from "@/types/filters";
+import { v7 as uuidv7 } from "uuid";
 
 import {
   AnnotationQueue,
@@ -290,15 +292,43 @@ const AnnotationQueuesTab: React.FunctionComponent<
 
   const handleRowClick = useCallback(
     (queue: AnnotationQueue) => {
-      navigate({
-        to: "/$workspaceName/annotation-queues/$annotationQueueId",
-        params: {
-          workspaceName,
-          annotationQueueId: queue.id,
-        },
-      });
+      // Create filter for annotation queue name
+      const annotationQueueFilter: Filter = {
+        id: uuidv7(),
+        field: "annotation_queue_name",
+        type: COLUMN_TYPE.string,
+        operator: "=",
+        value: queue.name,
+      };
+
+      if (queue.scope === AnnotationQueueScope.THREAD) {
+        // Navigate to threads tab with annotation queue filter
+        navigate({
+          to: "/$workspaceName/projects/$projectId/traces",
+          params: {
+            workspaceName,
+            projectId,
+          },
+          search: {
+            type: "threads",
+            threads_filters: [annotationQueueFilter],
+          },
+        });
+      } else {
+        // Navigate to traces tab with annotation queue filter
+        navigate({
+          to: "/$workspaceName/projects/$projectId/traces",
+          params: {
+            workspaceName,
+            projectId,
+          },
+          search: {
+            traces_filters: [annotationQueueFilter],
+          },
+        });
+      }
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, projectId],
   );
 
   const handleNewQueueClick = useCallback(() => {
