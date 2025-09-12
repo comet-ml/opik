@@ -297,7 +297,7 @@ const DatasetItemsPage = () => {
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
-          <DatasetItemsActionsPanel 
+          <DatasetItemsActionsPanel
             datasetItems={selectedRows}
             datasetId={datasetId}
             datasetName={dataset?.name ?? ""}

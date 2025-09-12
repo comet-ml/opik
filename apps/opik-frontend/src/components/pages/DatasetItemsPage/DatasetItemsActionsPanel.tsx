@@ -20,8 +20,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 > = ({ datasetItems, datasetId, datasetName }) => {
   const resetKeyRef = useRef(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
-  const [expansionDialogOpen, setExpansionDialogOpen] = useState<boolean>(false);
-  const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] = useState<boolean>(false);
+  const [expansionDialogOpen, setExpansionDialogOpen] =
+    useState<boolean>(false);
+  const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
+    useState<boolean>(false);
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
   const disabled = !datasetItems?.length;
 
@@ -50,14 +52,14 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         confirmText="Delete dataset items"
         confirmButtonVariant="destructive"
       />
-      
+
       <DatasetExpansionDialog
         datasetId={datasetId}
         open={expansionDialogOpen}
         setOpen={setExpansionDialogOpen}
         onSamplesGenerated={handleSamplesGenerated}
       />
-      
+
       <GeneratedSamplesDialog
         datasetId={datasetId}
         datasetName={datasetName}
@@ -71,12 +73,12 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           variant="default"
           size="icon-sm"
           onClick={() => setExpansionDialogOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          className="bg-blue-600 text-white hover:bg-blue-700"
         >
           <Bot />
         </Button>
       </TooltipWrapper>
-      
+
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
