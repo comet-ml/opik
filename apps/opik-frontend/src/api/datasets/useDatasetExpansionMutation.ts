@@ -39,9 +39,10 @@ const useDatasetExpansionMutation = () => {
         message?: string;
         detail?: string;
       };
-      
-      let message = errorData?.message || errorData?.detail || "Failed to expand dataset";
-      
+
+      let message =
+        errorData?.message || errorData?.detail || "Failed to expand dataset";
+
       // Handle specific model not supported error
       if (message.includes("model not supported")) {
         const modelMatch = message.match(/model not supported (.+)/);

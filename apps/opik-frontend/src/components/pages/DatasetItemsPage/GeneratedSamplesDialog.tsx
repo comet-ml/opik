@@ -227,7 +227,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[85vh] max-w-3xl flex flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col">
         <DialogHeader>
           <DialogTitle className="comet-title-s">
             Generated samples ({samples.length})

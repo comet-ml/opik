@@ -30,7 +30,6 @@ import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/P
 import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { Tag } from "@/components/ui/tag";
-import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DatasetExpansionDialogProps = {
@@ -62,7 +61,8 @@ const DatasetExpansionDialog: React.FunctionComponent<
     useState<string>("");
   const [preserveFields, setPreserveFields] = useState<string[]>([]);
   const [customPrompt, setCustomPrompt] = useState<string>("");
-  const [hasUserEditedPrompt, setHasUserEditedPrompt] = useState<boolean>(false);
+  const [hasUserEditedPrompt, setHasUserEditedPrompt] =
+    useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>("");
@@ -173,7 +173,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
     }
   }, [datasetAnalysis?.commonFields, preserveFields.length]);
 
-
   const handleSubmit = useCallback(() => {
     if (!selectedModel || !initialDatasetId) return;
 
@@ -181,8 +180,13 @@ const DatasetExpansionDialog: React.FunctionComponent<
     setValidationError(null);
 
     // Client-side validation
-    const sampleCountNumber = typeof sampleCount === "string" ? parseInt(sampleCount, 10) : sampleCount;
-    if (isNaN(sampleCountNumber) || sampleCountNumber < 1 || sampleCountNumber > 200) {
+    const sampleCountNumber =
+      typeof sampleCount === "string" ? parseInt(sampleCount, 10) : sampleCount;
+    if (
+      isNaN(sampleCountNumber) ||
+      sampleCountNumber < 1 ||
+      sampleCountNumber > 200
+    ) {
       setValidationError("Sample count must be between 1 and 200.");
       return;
     }
@@ -265,11 +269,11 @@ const DatasetExpansionDialog: React.FunctionComponent<
     preserveFields,
     variationInstructions,
     customPrompt,
-    defaultPrompt,
     mutate,
     onSamplesGenerated,
     setOpen,
     sampleData?.content?.length,
+    hasUserEditedPrompt,
   ]);
 
   const handleModelChange = useCallback(
@@ -352,123 +356,140 @@ const DatasetExpansionDialog: React.FunctionComponent<
               </Alert>
             )}
 
-          {datasetAnalysis?.allFields && datasetAnalysis.allFields.length > 0 && (
-            <div className="space-y-4">
-              <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-md bg-blue-100 p-1.5 dark:bg-blue-900/20">
-                      <svg
-                        className="size-4 text-blue-600 dark:text-blue-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M9 12l2 2 4-4" />
-                        <path d="M21 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
-                        <path d="M3 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
-                        <path d="M12 21c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
-                        <path d="M12 3c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="fields" className="text-sm font-medium">
-                          Detected dataset structure
-                        </Label>
-                        <TooltipWrapper
-                          content="Choose which fields to maintain consistency for"
-                          side="top"
+          {datasetAnalysis?.allFields &&
+            datasetAnalysis.allFields.length > 0 && (
+              <div className="space-y-4">
+                <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-md bg-blue-100 p-1.5 dark:bg-blue-900/20">
+                        <svg
+                          className="size-4 text-blue-600 dark:text-blue-400"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
                         >
-                          <Info className="size-3.5 text-muted-foreground cursor-help" />
-                        </TooltipWrapper>
+                          <path d="M9 12l2 2 4-4" />
+                          <path d="M21 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
+                          <path d="M3 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
+                          <path d="M12 21c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
+                          <path d="M12 3c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z" />
+                        </svg>
                       </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">
-                      Analyzed samples
-                    </div>
-                    <div className="text-sm font-medium">
-                      {datasetAnalysis?.sampleCount}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {datasetAnalysis.allFields
-                      .slice(0, showAllFields ? undefined : 20)
-                      .map((field) => {
-                        const isSelected = preserveFields.includes(field);
-                        const frequency = datasetAnalysis.fieldFrequency[field];
-                        const totalSamples = datasetAnalysis.sampleCount;
-                        const percentage = Math.round((frequency / totalSamples) * 100);
-                        
-                        return (
-                          <Tag
-                            key={field}
-                            variant={isSelected ? "primary" : "gray"}
-                            className="cursor-pointer transition-colors hover:bg-primary-hover/10"
-                            onClick={() => {
-                              setPreserveFields(prev => 
-                                isSelected 
-                                  ? prev.filter(f => f !== field)
-                                  : [...prev, field]
-                              );
-                            }}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Label
+                            htmlFor="fields"
+                            className="text-sm font-medium"
                           >
-                            <span className="font-medium">{field}</span>
-                            <span className="ml-1 text-xs opacity-70">({percentage}%)</span>
-                          </Tag>
-                        );
-                      })}
-                  </div>
-                  
-                  {datasetAnalysis.allFields.length > 20 && (
-                    <div className="flex items-center justify-between pt-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowAllFields(!showAllFields)}
-                        className="text-xs"
-                      >
-                        {showAllFields ? (
-                          <>Show less ({datasetAnalysis.allFields.length - 20} hidden)</>
-                        ) : (
-                          <>Show all ({datasetAnalysis.allFields.length - 20} more)</>
-                        )}
-                      </Button>
-                      <div className="text-xs text-muted-foreground">
-                        {preserveFields.length} of {datasetAnalysis.allFields.length} fields selected
+                            Detected dataset structure
+                          </Label>
+                          <TooltipWrapper
+                            content="Choose which fields to maintain consistency for"
+                            side="top"
+                          >
+                            <Info className="size-3.5 cursor-help text-muted-foreground" />
+                          </TooltipWrapper>
+                        </div>
                       </div>
                     </div>
-                  )}
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">
+                        Analyzed samples
+                      </div>
+                      <div className="text-sm font-medium">
+                        {datasetAnalysis?.sampleCount}
+                      </div>
+                    </div>
+                  </div>
 
-                  <div className="rounded-md bg-amber-50 p-3 text-xs dark:bg-amber-900/20">
-                    <div className="flex items-start gap-2">
-                      <svg
-                        className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                      </svg>
-                      <div className="text-amber-800 dark:text-amber-200">
-                        <div className="font-medium">
-                          Field preservation tips:
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {datasetAnalysis.allFields
+                        .slice(0, showAllFields ? undefined : 20)
+                        .map((field) => {
+                          const isSelected = preserveFields.includes(field);
+                          const frequency =
+                            datasetAnalysis.fieldFrequency[field];
+                          const totalSamples = datasetAnalysis.sampleCount;
+                          const percentage = Math.round(
+                            (frequency / totalSamples) * 100,
+                          );
+
+                          return (
+                            <Tag
+                              key={field}
+                              variant={isSelected ? "primary" : "gray"}
+                              className="cursor-pointer transition-colors hover:bg-primary-hover/10"
+                              onClick={() => {
+                                setPreserveFields((prev) =>
+                                  isSelected
+                                    ? prev.filter((f) => f !== field)
+                                    : [...prev, field],
+                                );
+                              }}
+                            >
+                              <span className="font-medium">{field}</span>
+                              <span className="ml-1 text-xs opacity-70">
+                                ({percentage}%)
+                              </span>
+                            </Tag>
+                          );
+                        })}
+                    </div>
+
+                    {datasetAnalysis.allFields.length > 20 && (
+                      <div className="flex items-center justify-between pt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowAllFields(!showAllFields)}
+                          className="text-xs"
+                        >
+                          {showAllFields ? (
+                            <>
+                              Show less ({datasetAnalysis.allFields.length - 20}{" "}
+                              hidden)
+                            </>
+                          ) : (
+                            <>
+                              Show all ({datasetAnalysis.allFields.length - 20}{" "}
+                              more)
+                            </>
+                          )}
+                        </Button>
+                        <div className="text-xs text-muted-foreground">
+                          {preserveFields.length} of{" "}
+                          {datasetAnalysis.allFields.length} fields selected
                         </div>
-                        <div className="mt-1 space-y-1">
-                          <div>
-                            • Fields appearing in ≥80% of samples are
-                            auto-selected
+                      </div>
+                    )}
+
+                    <div className="rounded-md bg-amber-50 p-3 text-xs dark:bg-amber-900/20">
+                      <div className="flex items-start gap-2">
+                        <svg
+                          className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        <div className="text-amber-800 dark:text-amber-200">
+                          <div className="font-medium">
+                            Field preservation tips:
                           </div>
-                          <div>
-                            • Selected fields will maintain similar patterns in
-                            generated data
+                          <div className="mt-1 space-y-1">
+                            <div>
+                              • Fields appearing in ≥80% of samples are
+                              auto-selected
+                            </div>
+                            <div>
+                              • Selected fields will maintain similar patterns
+                              in generated data
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -476,8 +497,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div className="mt-6 space-y-2">
             <Label htmlFor="model">Model</Label>
@@ -504,7 +524,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
 
                 // Allow empty input for editing - store empty string temporarily
                 if (value === "") {
-                  setSampleCount("" as any); // Temporarily allow empty string
+                  setSampleCount("" as unknown as number); // Temporarily allow empty string
                   return;
                 }
 
