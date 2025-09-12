@@ -28,6 +28,8 @@ export const WORKSPACES_REST_ENDPOINT = "/v1/private/workspaces/";
 export const WORKSPACE_CONFIG_REST_ENDPOINT =
   "/v1/private/workspaces/configurations/";
 export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
+export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
+  "/v1/private/playground/evaluations/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
