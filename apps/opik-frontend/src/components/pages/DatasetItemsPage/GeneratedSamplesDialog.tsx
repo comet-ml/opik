@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo } from "react";
-import { CheckCircle, Circle, Bot, ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
 
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAppStore from "@/store/AppStore";
@@ -30,13 +30,15 @@ type GeneratedSamplesDialogProps = {
 
 const GeneratedSamplesDialog: React.FunctionComponent<
   GeneratedSamplesDialogProps
-> = ({ datasetId, datasetName, samples, open, setOpen, onSamplesAdded }) => {
+> = ({ datasetId, samples, open, setOpen, onSamplesAdded }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [selectedSamples, setSelectedSamples] = useState<Set<string>>(
-    new Set(samples.map((sample) => sample.id))
+    new Set(samples.map((sample) => sample.id)),
   );
   const [showAllSamples, setShowAllSamples] = useState(false);
-  const [expandedSamples, setExpandedSamples] = useState<Set<string>>(new Set());
+  const [expandedSamples, setExpandedSamples] = useState<Set<string>>(
+    new Set(),
+  );
 
   const { mutate, isPending } = useDatasetItemBatchMutation();
 
@@ -46,27 +48,27 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
     const fields = new Set<string>();
     const fieldValues: Record<string, Set<string>> = {};
-    let generationModel = null;
-    
-    samples.forEach(sample => {
+    let generationModel: string | null = null;
+
+    samples.forEach((sample) => {
       Object.entries(sample.data).forEach(([key, value]) => {
         // Skip metadata fields from diversity calculation
-        if (key.startsWith('_')) {
-          if (key === '_generation_model' && !generationModel) {
+        if (key.startsWith("_")) {
+          if (key === "_generation_model" && !generationModel) {
             generationModel = String(value);
           }
           return;
         }
-        
+
         fields.add(key);
         if (!fieldValues[key]) fieldValues[key] = new Set();
-        
+
         // Better value normalization for diversity
         let normalizedValue = String(value);
-        if (typeof value === 'string' && value.length > 50) {
+        if (typeof value === "string" && value.length > 50) {
           // For long strings, use first 50 chars to detect patterns
           normalizedValue = value.substring(0, 50);
-        } else if (typeof value === 'number') {
+        } else if (typeof value === "number") {
           // For numbers, round to 2 decimals to group similar values
           normalizedValue = Number(value).toFixed(2);
         }
@@ -78,37 +80,43 @@ const GeneratedSamplesDialog: React.FunctionComponent<
     const fieldDiversity = Object.fromEntries(
       Object.entries(fieldValues).map(([field, values]) => {
         const uniqueRatio = values.size / samples.length;
-        let diversityScore = 'Low';
-        
-        if (uniqueRatio > 0.8) diversityScore = 'High';
-        else if (uniqueRatio > 0.5) diversityScore = 'Medium';
-        
-        return [field, { 
-          unique: values.size, 
-          total: samples.length,
-          score: diversityScore,
-          ratio: uniqueRatio
-        }];
-      })
+        let diversityScore = "Low";
+
+        if (uniqueRatio > 0.8) diversityScore = "High";
+        else if (uniqueRatio > 0.5) diversityScore = "Medium";
+
+        return [
+          field,
+          {
+            unique: values.size,
+            total: samples.length,
+            score: diversityScore,
+            ratio: uniqueRatio,
+          },
+        ];
+      }),
     );
 
     // Overall diversity score
-    const avgDiversity = Object.values(fieldDiversity)
-      .reduce((sum, field) => sum + field.ratio, 0) / Object.keys(fieldDiversity).length;
+    const avgDiversity =
+      Object.values(fieldDiversity).reduce(
+        (sum, field) => sum + field.ratio,
+        0,
+      ) / Object.keys(fieldDiversity).length;
 
     return {
       totalSamples: samples.length,
       totalFields: fields.size,
       fieldDiversity,
       overallDiversity: Math.round(avgDiversity * 100),
-      generationModel: generationModel || 'Unknown'
+      generationModel: generationModel || "Unknown",
     };
   }, [samples]);
 
   // Smart sampling - show representative samples
   const displaySamples = useMemo(() => {
     if (showAllSamples) return samples;
-    
+
     // For large sets, show first 15 samples as representative
     if (samples.length <= 20) return samples;
     return samples.slice(0, 15);
@@ -116,18 +124,21 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   // Get preview text for a sample
   const getSamplePreview = useCallback((sample: DatasetItem) => {
-    const data = sample.data;
+    const data = sample.data as Record<string, unknown>;
     const keys = Object.keys(data);
     const previewFields = keys.slice(0, 3);
-    
-    const preview = previewFields.map(key => {
-      const value = data[key];
-      const displayValue = typeof value === 'string' ? 
-        `"${value.length > 30 ? value.substring(0, 30) + '...' : value}"` :
-        String(value);
-      return `${key}: ${displayValue}`;
-    }).join(', ');
-    
+
+    const preview = previewFields
+      .map((key) => {
+        const value = data[key];
+        const displayValue =
+          typeof value === "string"
+            ? `"${value.length > 30 ? value.substring(0, 30) + "..." : value}"`
+            : String(value);
+        return `${key}: ${displayValue}`;
+      })
+      .join(", ");
+
     const remaining = keys.length - previewFields.length;
     return remaining > 0 ? `${preview}, +${remaining} more` : preview;
   }, []);
@@ -153,7 +164,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
   }, []);
 
   const toggleSampleExpansion = useCallback((sampleId: string) => {
-    setExpandedSamples(prev => {
+    setExpandedSamples((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(sampleId)) {
         newSet.delete(sampleId);
@@ -166,7 +177,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   const handleAddToDataset = useCallback(() => {
     const selectedItems = samples.filter((sample) =>
-      selectedSamples.has(sample.id)
+      selectedSamples.has(sample.id),
     );
 
     if (selectedItems.length === 0) return;
@@ -182,9 +193,17 @@ const GeneratedSamplesDialog: React.FunctionComponent<
           onSamplesAdded?.();
           setOpen(false);
         },
-      }
+      },
     );
-  }, [datasetId, datasetName, samples, selectedSamples, mutate, onSamplesAdded, setOpen]);
+  }, [
+    datasetId,
+    samples,
+    selectedSamples,
+    mutate,
+    onSamplesAdded,
+    setOpen,
+    workspaceName,
+  ]);
 
   const allSelected = selectedSamples.size === samples.length;
   const noneSelected = selectedSamples.size === 0;
@@ -208,30 +227,44 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                     <BarChart3 className="size-4" />
                     <h4 className="text-sm font-medium">Generation Summary</h4>
                   </div>
-                  <Tag variant="blue" size="sm">Generated by {sampleStats.generationModel}</Tag>
+                  <Tag variant="blue" size="sm">
+                    Generated by {sampleStats.generationModel}
+                  </Tag>
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <div className="text-muted-foreground">Total Samples</div>
-                    <div className="font-medium">{sampleStats.totalSamples}</div>
+                    <div className="font-medium">
+                      {sampleStats.totalSamples}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground">Fields per Sample</div>
+                    <div className="text-muted-foreground">
+                      Fields per Sample
+                    </div>
                     <div className="font-medium">{sampleStats.totalFields}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Data Diversity</div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{sampleStats.overallDiversity}%</span>
-                      <Tag 
+                      <span className="font-medium">
+                        {sampleStats.overallDiversity}%
+                      </span>
+                      <Tag
                         variant={
-                          sampleStats.overallDiversity > 80 ? "green" : 
-                          sampleStats.overallDiversity > 50 ? "yellow" : "gray"
-                        } 
+                          sampleStats.overallDiversity > 80
+                            ? "green"
+                            : sampleStats.overallDiversity > 50
+                              ? "yellow"
+                              : "gray"
+                        }
                         size="sm"
                       >
-                        {sampleStats.overallDiversity > 80 ? "High" : 
-                         sampleStats.overallDiversity > 50 ? "Medium" : "Low"}
+                        {sampleStats.overallDiversity > 80
+                          ? "High"
+                          : sampleStats.overallDiversity > 50
+                            ? "Medium"
+                            : "Low"}
                       </Tag>
                     </div>
                   </div>
@@ -257,7 +290,9 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                     className="ml-4"
                   >
                     <Eye className="size-4 mr-1" />
-                    {showAllSamples ? `Show sample (${displaySamples.length})` : `Show all (${samples.length})`}
+                    {showAllSamples
+                      ? `Show sample (${displaySamples.length})`
+                      : `Show all (${samples.length})`}
                   </Button>
                 )}
               </div>
@@ -271,8 +306,10 @@ const GeneratedSamplesDialog: React.FunctionComponent<
               {displaySamples.map((sample, index) => {
                 const isSelected = selectedSamples.has(sample.id);
                 const isExpanded = expandedSamples.has(sample.id);
-                const sampleNumber = showAllSamples ? samples.indexOf(sample) + 1 : index + 1;
-                
+                const sampleNumber = showAllSamples
+                  ? samples.indexOf(sample) + 1
+                  : index + 1;
+
                 return (
                   <div
                     key={sample.id}
@@ -291,7 +328,9 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Sample {sampleNumber}</span>
+                          <span className="text-sm font-medium">
+                            Sample {sampleNumber}
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -310,7 +349,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Expanded Content */}
                     {isExpanded && (
                       <div className="border-t bg-muted/10 p-3">
@@ -320,7 +359,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                   </div>
                 );
               })}
-              
+
               {!showAllSamples && samples.length > displaySamples.length && (
                 <div className="text-center py-2">
                   <Button
@@ -343,7 +382,8 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             disabled={isPending || noneSelected}
           >
             {isPending && <Loader className="mr-2 size-4" />}
-            Add {selectedSamples.size} Sample{selectedSamples.size !== 1 ? "s" : ""} to Dataset
+            Add {selectedSamples.size} Sample
+            {selectedSamples.size !== 1 ? "s" : ""} to Dataset
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -43,7 +43,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [selectedModel, setSelectedModel] = useState<PROVIDER_MODEL_TYPE | "">(
-    "gpt-4o",
+    PROVIDER_MODEL_TYPE.GPT_4O,
   );
   const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
     PROVIDER_TYPE.OPEN_AI,
@@ -187,7 +187,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
           onSamplesGenerated?.(response.generated_samples);
           setOpen(false);
           // Reset form
-          setSelectedModel("gpt-4o");
+          setSelectedModel(PROVIDER_MODEL_TYPE.GPT_4O);
           setSampleCount(5);
           setVariationInstructions("");
           setPreserveFields([]);
