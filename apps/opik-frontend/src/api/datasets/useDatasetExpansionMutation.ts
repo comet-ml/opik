@@ -23,7 +23,7 @@ const useDatasetExpansionMutation = () => {
   >({
     mutationFn: async ({ datasetId, ...data }) => {
       const { data: response } = await api.post(
-        `${DATASETS_REST_ENDPOINT}/${datasetId}/expand`,
+        `${DATASETS_REST_ENDPOINT}${datasetId}/expand`,
         data,
       );
       return response;
@@ -39,8 +39,15 @@ const useDatasetExpansionMutation = () => {
         message?: string;
         detail?: string;
       };
-      const message =
-        errorData?.message || errorData?.detail || "Failed to expand dataset";
+      
+      let message = errorData?.message || errorData?.detail || "Failed to expand dataset";
+      
+      // Handle specific model not supported error
+      if (message.includes("model not supported")) {
+        const modelMatch = message.match(/model not supported (.+)/);
+        const modelName = modelMatch ? modelMatch[1] : "selected model";
+        message = `The ${modelName} is not supported by the backend. Please select a different model from the dropdown.`;
+      }
 
       toast({
         title: "Dataset expansion failed",

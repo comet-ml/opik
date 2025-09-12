@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useMemo } from "react";
-import { Bot, ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
+import { ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
 
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAppStore from "@/store/AppStore";
@@ -15,9 +15,12 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tag } from "@/components/ui/tag";
-import Loader from "@/components/shared/Loader/Loader";
 import { DatasetItem } from "@/types/datasets";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
+import { useToast } from "@/components/ui/use-toast";
+import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 type GeneratedSamplesDialogProps = {
   datasetId: string;
@@ -30,7 +33,7 @@ type GeneratedSamplesDialogProps = {
 
 const GeneratedSamplesDialog: React.FunctionComponent<
   GeneratedSamplesDialogProps
-> = ({ datasetId, samples, open, setOpen, onSamplesAdded }) => {
+> = ({ datasetId, datasetName, samples, open, setOpen, onSamplesAdded }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [selectedSamples, setSelectedSamples] = useState<Set<string>>(
     new Set(samples.map((sample) => sample.id)),
@@ -40,7 +43,13 @@ const GeneratedSamplesDialog: React.FunctionComponent<
     new Set(),
   );
 
-  const { mutate, isPending } = useDatasetItemBatchMutation();
+  const { mutate, isPending, error, isError } = useDatasetItemBatchMutation();
+  const { toast } = useToast();
+
+  // Update selectedSamples when samples prop changes (ensure all samples are selected by default)
+  useEffect(() => {
+    setSelectedSamples(new Set(samples.map((sample) => sample.id)));
+  }, [samples]);
 
   // Analyze generated samples for statistics
   const sampleStats = useMemo(() => {
@@ -190,6 +199,12 @@ const GeneratedSamplesDialog: React.FunctionComponent<
       },
       {
         onSuccess: () => {
+          toast({
+            title: "Samples added successfully",
+            description: `${selectedItems.length} sample${
+              selectedItems.length !== 1 ? "s" : ""
+            } added to ${datasetName}`,
+          });
           onSamplesAdded?.();
           setOpen(false);
         },
@@ -197,11 +212,13 @@ const GeneratedSamplesDialog: React.FunctionComponent<
     );
   }, [
     datasetId,
+    datasetName,
     samples,
     selectedSamples,
     mutate,
     onSamplesAdded,
     setOpen,
+    toast,
     workspaceName,
   ]);
 
@@ -210,17 +227,39 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[85vh] max-w-3xl">
+      <DialogContent className="max-h-[85vh] max-w-3xl flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bot className="size-4" />
-            Generated Samples ({samples.length})
+          <DialogTitle className="comet-title-s">
+            Generated samples ({samples.length})
           </DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody>
+        <DialogAutoScrollBody className="flex-1">
           <div className="space-y-4">
+            {/* Error Display */}
+            {isError && (
+              <Alert variant="destructive" size="sm">
+                <AlertTriangle className="size-4" />
+                <AlertTitle>Failed to add samples</AlertTitle>
+                <AlertDescription>
+                  {(error as Error)?.message ||
+                    "An error occurred while adding samples to the dataset. Please try again."}
+                </AlertDescription>
+              </Alert>
+            )}
+            {/* Empty Samples State */}
+            {!samples.length && (
+              <Alert variant="callout" size="sm">
+                <AlertTriangle className="size-4" />
+                <AlertTitle>No samples to display</AlertTitle>
+                <AlertDescription>
+                  No samples were generated. This might indicate an issue with
+                  the generation process. Please try generating samples again.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Statistics Summary */}
-            {sampleStats && (
+            {sampleStats && samples.length > 0 && (
               <div className="rounded-lg border bg-muted/20 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -373,7 +412,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             </div>
           </div>
         </DialogAutoScrollBody>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 sm:space-x-0">
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
@@ -381,9 +420,20 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             onClick={handleAddToDataset}
             disabled={isPending || noneSelected}
           >
-            {isPending && <Loader className="mr-2 size-4" />}
-            Add {selectedSamples.size} Sample
-            {selectedSamples.size !== 1 ? "s" : ""} to Dataset
+            {isPending && <Spinner size="small" className="mr-2" />}
+            {isPending ? (
+              <span className="flex items-center gap-1">
+                Adding samples to dataset
+                <span className="text-xs opacity-75">
+                  ({selectedSamples.size} of {samples.length})
+                </span>
+              </span>
+            ) : (
+              <>
+                Add {selectedSamples.size} Sample
+                {selectedSamples.size !== 1 ? "s" : ""} to Dataset
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

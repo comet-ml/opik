@@ -40,7 +40,8 @@ public class DatasetExpansionService {
     public DatasetExpansionResponse expandDataset(@NonNull UUID datasetId, @NonNull DatasetExpansionRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Starting dataset expansion for datasetId '{}', workspaceId '{}'", datasetId, workspaceId);
+        log.info("Starting dataset expansion for datasetId '{}', workspaceId '{}', sampleCount: {}", datasetId,
+                workspaceId, request.sampleCount());
 
         // Validate request
         Preconditions.checkArgument(request.sampleCount() > 0 && request.sampleCount() <= 200,
@@ -194,7 +195,8 @@ public class DatasetExpansionService {
                     generatedContent.length() > 200 ? generatedContent.substring(0, 200) + "..." : generatedContent);
 
             // Parse the JSON response
-            List<DatasetItem> parsedSamples = parseGeneratedSamples(generatedContent, datasetId, request.model());
+            List<DatasetItem> parsedSamples = parseGeneratedSamples(generatedContent, datasetId, request.model(),
+                    request.sampleCount());
             log.info("Parsed {} samples from LLM response", parsedSamples.size());
 
             // Log the actual sample data to debug empty samples
@@ -211,7 +213,8 @@ public class DatasetExpansionService {
         }
     }
 
-    private List<DatasetItem> parseGeneratedSamples(String generatedContent, UUID datasetId, String model) {
+    private List<DatasetItem> parseGeneratedSamples(String generatedContent, UUID datasetId, String model,
+            int requestedSampleCount) {
         try {
             // Clean the response - sometimes LLMs add markdown formatting
             String cleanedContent = generatedContent.trim();
@@ -222,6 +225,11 @@ public class DatasetExpansionService {
                 cleanedContent = cleanedContent.substring(0, cleanedContent.length() - 3);
             }
             cleanedContent = cleanedContent.trim();
+
+            // Log the actual content we're trying to parse for debugging
+            log.info("Attempting to parse LLM response. Content length: {}", cleanedContent.length());
+            log.info("Content to parse: {}",
+                    cleanedContent.length() > 500 ? cleanedContent.substring(0, 500) + "..." : cleanedContent);
 
             JsonNode rootNode = objectMapper.readTree(cleanedContent);
             List<DatasetItem> samples = new ArrayList<>();
@@ -252,10 +260,25 @@ public class DatasetExpansionService {
                 }
             }
 
+            // Limit to the requested number of samples even if LLM provided more
+            if (samples.size() > requestedSampleCount) {
+                log.info("LLM generated {} samples but only {} were requested. Limiting to requested count.",
+                        samples.size(), requestedSampleCount);
+                samples = samples.subList(0, requestedSampleCount);
+            }
+
             return samples;
 
         } catch (Exception e) {
             log.error("Failed to parse generated samples", e);
+
+            // Check if it's a JSON parsing error and provide more specific error message
+            if (e instanceof com.fasterxml.jackson.core.JsonParseException ||
+                    e instanceof com.fasterxml.jackson.core.io.JsonEOFException) {
+                throw new RuntimeException(
+                        "The AI model returned malformed or incomplete JSON. This may happen if the response was too long and got truncated. Try generating fewer samples or using a custom prompt with simpler JSON structure.");
+            }
+
             throw new RuntimeException("Failed to parse generated samples: " + e.getMessage());
         }
     }
