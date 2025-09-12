@@ -32,13 +32,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -262,30 +259,42 @@ public class OnlineScoringEngine {
             log.error("parsing LLM response into a JSON: {}", content, e);
             return Collections.emptyList();
         }
-        var spliterator = Spliterators.spliteratorUnknownSize(
-                structuredResponse.fields(), Spliterator.ORDERED | Spliterator.NONNULL);
-        return StreamSupport.stream(spliterator, false)
-                .map(scoreMetric -> {
-                    var scoreName = scoreMetric.getKey();
-                    var scoreNested = scoreMetric.getValue();
-                    if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
-                        log.info("No score found for '{}' score in {}", scoreName, scoreNested);
-                        return null;
-                    }
-                    var resultBuilder = FeedbackScoreBatchItem.builder()
-                            .name(scoreName)
-                            .reason(scoreNested.path(REASON_FIELD_NAME).asText())
-                            .source(ScoreSource.ONLINE_SCORING);
-                    var actualScore = scoreNested.path(SCORE_FIELD_NAME);
-                    if (actualScore.isBoolean()) {
-                        resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
-                    } else {
-                        resultBuilder.value(actualScore.decimalValue());
-                    }
-                    return resultBuilder.build();
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        var results = new java.util.ArrayList<FeedbackScoreBatchItem>();
+        var topLevelKeys = new java.util.ArrayList<String>();
+        var names = structuredResponse.fieldNames();
+        while (names.hasNext()) {
+            topLevelKeys.add(names.next());
+        }
+        var fields = structuredResponse.fields();
+        while (fields.hasNext()) {
+            var scoreMetric = fields.next();
+            var scoreName = scoreMetric.getKey();
+            var scoreNested = scoreMetric.getValue();
+            if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
+                log.info("No score found for '{}' score in {}", scoreName, scoreNested);
+                continue;
+            }
+            var resultBuilder = FeedbackScoreBatchItem.builder()
+                    .name(scoreName)
+                    .reason(scoreNested.path(REASON_FIELD_NAME).asText())
+                    .source(ScoreSource.ONLINE_SCORING);
+            var actualScore = scoreNested.path(SCORE_FIELD_NAME);
+            if (actualScore.isBoolean()) {
+                resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
+            } else {
+                resultBuilder.value(actualScore.decimalValue());
+            }
+            results.add(resultBuilder.build());
+        }
+
+        if (results.isEmpty()) {
+            var truncated = content.length() > 500 ? content.substring(0, 500) + "..." : content;
+            log.error(
+                    "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }. Top-level keys: '{}'. Raw response (truncated): '{}'",
+                    topLevelKeys, truncated);
+        }
+
+        return results;
     }
 
     private static String extractJson(String response) {
