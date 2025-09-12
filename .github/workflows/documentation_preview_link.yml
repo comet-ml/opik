@@ -44,6 +44,7 @@ jobs:
                   --skip "https://github.com" \
                   --skip "http://localhost" \
                   --skip "http://localhost:5173" \
+                  --skip "insights/script.js" \
                   --format csv | awk -F',' '
                     BEGIN { found_broken = 0 }
                     NR==1 {next}
