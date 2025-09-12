@@ -43,8 +43,8 @@ public class DatasetExpansionService {
         log.info("Starting dataset expansion for datasetId '{}', workspaceId '{}'", datasetId, workspaceId);
 
         // Validate request
-        Preconditions.checkArgument(request.sampleCount() > 0 && request.sampleCount() <= 50,
-                "Sample count must be between 1 and 50");
+        Preconditions.checkArgument(request.sampleCount() > 0 && request.sampleCount() <= 200,
+                "Sample count must be between 1 and 200");
         Preconditions.checkArgument(request.model() != null && !request.model().trim().isEmpty(),
                 "Model must be specified");
 
@@ -58,11 +58,14 @@ public class DatasetExpansionService {
             throw new IllegalArgumentException("Cannot expand empty dataset. Add at least one sample first.");
         }
 
-        // Analyze schema and generate prompt
-        String generationPrompt = buildGenerationPrompt(existingItems.content(), request);
+        // Use custom prompt if provided, otherwise build default prompt
+        String generationPrompt = request.customPrompt() != null && !request.customPrompt().trim().isEmpty()
+                ? request.customPrompt().trim()
+                : buildGenerationPrompt(existingItems.content(), request);
 
-        // Generate samples using LLM
-        List<DatasetItem> generatedSamples = generateSamples(generationPrompt, request, datasetId, workspaceId);
+        // Generate samples using LLM with batch processing for large requests
+        List<DatasetItem> generatedSamples = generateSamplesInBatches(generationPrompt, request, datasetId,
+                workspaceId);
 
         log.info("Generated {} samples for datasetId '{}', workspaceId '{}'",
                 generatedSamples.size(), datasetId, workspaceId);
@@ -120,6 +123,57 @@ public class DatasetExpansionService {
         return prompt.toString();
     }
 
+    private List<DatasetItem> generateSamplesInBatches(String basePrompt, DatasetExpansionRequest request,
+            UUID datasetId, String workspaceId) {
+        List<DatasetItem> allSamples = new ArrayList<>();
+        int totalSamples = request.sampleCount();
+        int batchSize = Math.min(20, totalSamples); // Process in batches of up to 20
+        int remainingSamples = totalSamples;
+        int batchNumber = 1;
+
+        while (remainingSamples > 0) {
+            int currentBatchSize = Math.min(batchSize, remainingSamples);
+
+            // Create batch-specific prompt
+            String batchPrompt;
+            if (request.customPrompt() != null && !request.customPrompt().trim().isEmpty()) {
+                // For custom prompts, we need to be more flexible with batching
+                // Look for number patterns and replace them, or append batch instructions
+                batchPrompt = basePrompt.replaceAll("\\b" + totalSamples + "\\b", String.valueOf(currentBatchSize));
+                if (!batchPrompt.contains(String.valueOf(currentBatchSize))) {
+                    // If no number replacement worked, append batch instruction
+                    batchPrompt = batchPrompt + "\n\nGenerate exactly " + currentBatchSize + " samples for this batch.";
+                }
+            } else {
+                // For default prompts, use the existing replacement logic
+                batchPrompt = basePrompt.replace(
+                        "Generate " + totalSamples + " new dataset samples",
+                        "Generate " + currentBatchSize + " new dataset samples").replace(
+                                "Generate exactly " + totalSamples + " samples",
+                                "Generate exactly " + currentBatchSize + " samples");
+            }
+
+            log.info("Processing batch {}/{} - generating {} samples",
+                    batchNumber, (int) Math.ceil((double) totalSamples / batchSize), currentBatchSize);
+
+            // Generate samples for this batch
+            List<DatasetItem> batchSamples = generateSamples(batchPrompt,
+                    DatasetExpansionRequest.builder()
+                            .model(request.model())
+                            .sampleCount(currentBatchSize)
+                            .preserveFields(request.preserveFields())
+                            .variationInstructions(request.variationInstructions())
+                            .build(),
+                    datasetId, workspaceId);
+
+            allSamples.addAll(batchSamples);
+            remainingSamples -= currentBatchSize;
+            batchNumber++;
+        }
+
+        return allSamples;
+    }
+
     private List<DatasetItem> generateSamples(String prompt, DatasetExpansionRequest request,
             UUID datasetId, String workspaceId) {
         try {
@@ -140,7 +194,7 @@ public class DatasetExpansionService {
                     generatedContent.length() > 200 ? generatedContent.substring(0, 200) + "..." : generatedContent);
 
             // Parse the JSON response
-            List<DatasetItem> parsedSamples = parseGeneratedSamples(generatedContent, datasetId);
+            List<DatasetItem> parsedSamples = parseGeneratedSamples(generatedContent, datasetId, request.model());
             log.info("Parsed {} samples from LLM response", parsedSamples.size());
 
             // Log the actual sample data to debug empty samples
@@ -157,7 +211,7 @@ public class DatasetExpansionService {
         }
     }
 
-    private List<DatasetItem> parseGeneratedSamples(String generatedContent, UUID datasetId) {
+    private List<DatasetItem> parseGeneratedSamples(String generatedContent, UUID datasetId, String model) {
         try {
             // Clean the response - sometimes LLMs add markdown formatting
             String cleanedContent = generatedContent.trim();
@@ -179,7 +233,7 @@ public class DatasetExpansionService {
 
                         // Add metadata to indicate this is synthetic
                         dataNode.put("_generated", true);
-                        dataNode.put("_generation_model", "synthetic");
+                        dataNode.put("_generation_model", model);
 
                         // Convert to Map for DatasetItem
                         Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,

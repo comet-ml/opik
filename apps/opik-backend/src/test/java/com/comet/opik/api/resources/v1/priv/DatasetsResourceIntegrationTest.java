@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.Streamer;
@@ -43,13 +44,15 @@ class DatasetsResourceIntegrationTest {
 
     private static final DatasetService service = Mockito.mock(DatasetService.class);
     private static final DatasetItemService itemService = Mockito.mock(DatasetItemService.class);
+    private static final DatasetExpansionService expansionService = Mockito.mock(DatasetExpansionService.class);
     private static final RequestContext requestContext = Mockito.mock(RequestContext.class);
     private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
-                    service, itemService, () -> requestContext, new FiltersFactory(new FilterQueryBuilder()),
+                    service, itemService, expansionService, () -> requestContext,
+                    new FiltersFactory(new FilterQueryBuilder()),
                     new IdGeneratorImpl(), new Streamer(), sortingFactory))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())

@@ -127,6 +127,7 @@ export interface DatasetExpansionRequest {
   sample_count: number;
   preserve_fields?: string[];
   variation_instructions?: string;
+  custom_prompt?: string;
 }
 
 export interface DatasetExpansionResponse {

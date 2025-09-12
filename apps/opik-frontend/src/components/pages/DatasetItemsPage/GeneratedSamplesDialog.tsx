@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { CheckCircle, Circle, Bot } from "lucide-react";
+import React, { useCallback, useState, useMemo } from "react";
+import { CheckCircle, Circle, Bot, ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
 
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAppStore from "@/store/AppStore";
@@ -35,8 +35,102 @@ const GeneratedSamplesDialog: React.FunctionComponent<
   const [selectedSamples, setSelectedSamples] = useState<Set<string>>(
     new Set(samples.map((sample) => sample.id))
   );
+  const [showAllSamples, setShowAllSamples] = useState(false);
+  const [expandedSamples, setExpandedSamples] = useState<Set<string>>(new Set());
 
   const { mutate, isPending } = useDatasetItemBatchMutation();
+
+  // Analyze generated samples for statistics
+  const sampleStats = useMemo(() => {
+    if (!samples.length) return null;
+
+    const fields = new Set<string>();
+    const fieldValues: Record<string, Set<string>> = {};
+    let generationModel = null;
+    
+    samples.forEach(sample => {
+      Object.entries(sample.data).forEach(([key, value]) => {
+        // Skip metadata fields from diversity calculation
+        if (key.startsWith('_')) {
+          if (key === '_generation_model' && !generationModel) {
+            generationModel = String(value);
+          }
+          return;
+        }
+        
+        fields.add(key);
+        if (!fieldValues[key]) fieldValues[key] = new Set();
+        
+        // Better value normalization for diversity
+        let normalizedValue = String(value);
+        if (typeof value === 'string' && value.length > 50) {
+          // For long strings, use first 50 chars to detect patterns
+          normalizedValue = value.substring(0, 50);
+        } else if (typeof value === 'number') {
+          // For numbers, round to 2 decimals to group similar values
+          normalizedValue = Number(value).toFixed(2);
+        }
+        fieldValues[key].add(normalizedValue);
+      });
+    });
+
+    // Calculate better diversity metrics
+    const fieldDiversity = Object.fromEntries(
+      Object.entries(fieldValues).map(([field, values]) => {
+        const uniqueRatio = values.size / samples.length;
+        let diversityScore = 'Low';
+        
+        if (uniqueRatio > 0.8) diversityScore = 'High';
+        else if (uniqueRatio > 0.5) diversityScore = 'Medium';
+        
+        return [field, { 
+          unique: values.size, 
+          total: samples.length,
+          score: diversityScore,
+          ratio: uniqueRatio
+        }];
+      })
+    );
+
+    // Overall diversity score
+    const avgDiversity = Object.values(fieldDiversity)
+      .reduce((sum, field) => sum + field.ratio, 0) / Object.keys(fieldDiversity).length;
+
+    return {
+      totalSamples: samples.length,
+      totalFields: fields.size,
+      fieldDiversity,
+      overallDiversity: Math.round(avgDiversity * 100),
+      generationModel: generationModel || 'Unknown'
+    };
+  }, [samples]);
+
+  // Smart sampling - show representative samples
+  const displaySamples = useMemo(() => {
+    if (showAllSamples) return samples;
+    
+    // For large sets, show first 15 samples as representative
+    if (samples.length <= 20) return samples;
+    return samples.slice(0, 15);
+  }, [samples, showAllSamples]);
+
+  // Get preview text for a sample
+  const getSamplePreview = useCallback((sample: DatasetItem) => {
+    const data = sample.data;
+    const keys = Object.keys(data);
+    const previewFields = keys.slice(0, 3);
+    
+    const preview = previewFields.map(key => {
+      const value = data[key];
+      const displayValue = typeof value === 'string' ? 
+        `"${value.length > 30 ? value.substring(0, 30) + '...' : value}"` :
+        String(value);
+      return `${key}: ${displayValue}`;
+    }).join(', ');
+    
+    const remaining = keys.length - previewFields.length;
+    return remaining > 0 ? `${preview}, +${remaining} more` : preview;
+  }, []);
 
   const handleSelectAll = useCallback(() => {
     if (selectedSamples.size === samples.length) {
@@ -48,6 +142,18 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   const handleSelectSample = useCallback((sampleId: string) => {
     setSelectedSamples((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sampleId)) {
+        newSet.delete(sampleId);
+      } else {
+        newSet.add(sampleId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleSampleExpansion = useCallback((sampleId: string) => {
+    setExpandedSamples(prev => {
       const newSet = new Set(prev);
       if (newSet.has(sampleId)) {
         newSet.delete(sampleId);
@@ -85,7 +191,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
+      <DialogContent className="max-w-3xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bot className="size-4" />
@@ -94,6 +200,46 @@ const GeneratedSamplesDialog: React.FunctionComponent<
         </DialogHeader>
         <DialogAutoScrollBody>
           <div className="space-y-4">
+            {/* Statistics Summary */}
+            {sampleStats && (
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="size-4" />
+                    <h4 className="text-sm font-medium">Generation Summary</h4>
+                  </div>
+                  <Tag variant="blue" size="sm">Generated by {sampleStats.generationModel}</Tag>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Total Samples</div>
+                    <div className="font-medium">{sampleStats.totalSamples}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Fields per Sample</div>
+                    <div className="font-medium">{sampleStats.totalFields}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Data Diversity</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{sampleStats.overallDiversity}%</span>
+                      <Tag 
+                        variant={
+                          sampleStats.overallDiversity > 80 ? "green" : 
+                          sampleStats.overallDiversity > 50 ? "yellow" : "gray"
+                        } 
+                        size="sm"
+                      >
+                        {sampleStats.overallDiversity > 80 ? "High" : 
+                         sampleStats.overallDiversity > 50 ? "Medium" : "Low"}
+                      </Tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Selection Controls */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -103,45 +249,88 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                 <span className="text-sm">
                   {allSelected ? "Deselect all" : "Select all"}
                 </span>
+                {samples.length > 20 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllSamples(!showAllSamples)}
+                    className="ml-4"
+                  >
+                    <Eye className="size-4 mr-1" />
+                    {showAllSamples ? `Show sample (${displaySamples.length})` : `Show all (${samples.length})`}
+                  </Button>
+                )}
               </div>
               <Tag variant="gray">
                 {selectedSamples.size} of {samples.length} selected
               </Tag>
             </div>
 
-            <div className="space-y-3">
-              {samples.map((sample) => {
+            {/* Compact Sample List */}
+            <div className="space-y-2">
+              {displaySamples.map((sample, index) => {
                 const isSelected = selectedSamples.has(sample.id);
+                const isExpanded = expandedSamples.has(sample.id);
+                const sampleNumber = showAllSamples ? samples.indexOf(sample) + 1 : index + 1;
+                
                 return (
                   <div
                     key={sample.id}
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                    className={`border rounded-lg transition-colors ${
                       isSelected
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/50"
                     }`}
-                    onClick={() => handleSelectSample(sample.id)}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1">
-                        {isSelected ? (
-                          <CheckCircle className="size-4 text-primary" />
-                        ) : (
-                          <Circle className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
+                    {/* Compact Header */}
+                    <div className="flex items-center gap-3 p-3">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => handleSelectSample(sample.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium mb-2">
-                          Sample {samples.indexOf(sample) + 1}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">Sample {sampleNumber}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleSampleExpansion(sample.id)}
+                            className="h-6 px-2"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="size-3" />
+                            ) : (
+                              <ChevronRight className="size-3" />
+                            )}
+                          </Button>
                         </div>
-                        <SyntaxHighlighter
-                          data={sample.data}
-                        />
+                        <div className="text-xs text-muted-foreground truncate">
+                          {getSamplePreview(sample)}
+                        </div>
                       </div>
                     </div>
+                    
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <div className="border-t bg-muted/10 p-3">
+                        <SyntaxHighlighter data={sample.data} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
+              
+              {!showAllSamples && samples.length > displaySamples.length && (
+                <div className="text-center py-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAllSamples(true)}
+                  >
+                    Show {samples.length - displaySamples.length} more samples
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </DialogAutoScrollBody>

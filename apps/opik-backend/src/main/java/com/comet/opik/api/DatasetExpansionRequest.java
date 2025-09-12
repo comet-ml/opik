@@ -20,13 +20,16 @@ public record DatasetExpansionRequest(
                 DatasetExpansionRequest.View.Write.class}) @NotBlank @Schema(description = "The model to use for synthetic data generation", example = "gpt-4") String model,
 
         @JsonView({
-                DatasetExpansionRequest.View.Write.class}) @Min(1) @Max(50) @Schema(description = "Number of synthetic samples to generate", example = "10") int sampleCount,
+                DatasetExpansionRequest.View.Write.class}) @Min(1) @Max(200) @Schema(description = "Number of synthetic samples to generate", example = "10") int sampleCount,
 
         @JsonView({
                 DatasetExpansionRequest.View.Write.class}) @Schema(description = "Fields to preserve patterns from original data", example = "[\"input\", \"expected_output\"]") List<String> preserveFields,
 
         @JsonView({
-                DatasetExpansionRequest.View.Write.class}) @Schema(description = "Additional instructions for data variation", example = "Create variations that test edge cases") String variationInstructions){
+                DatasetExpansionRequest.View.Write.class}) @Schema(description = "Additional instructions for data variation", example = "Create variations that test edge cases") String variationInstructions,
+
+        @JsonView({
+                DatasetExpansionRequest.View.Write.class}) @Schema(description = "Custom prompt to use for generation instead of auto-generated one") String customPrompt){
     public static class View {
         public static class Write {
         }

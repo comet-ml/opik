@@ -68,9 +68,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <TooltipWrapper content="Expand dataset with AI">
         <Button
-          variant="outline"
+          variant="default"
           size="icon-sm"
           onClick={() => setExpansionDialogOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           <Bot />
         </Button>
