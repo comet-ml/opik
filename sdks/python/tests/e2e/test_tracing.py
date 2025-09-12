@@ -490,7 +490,7 @@ def test_search_spans__happyflow(opik_client: opik.Opik):
     )
     matching_span = trace.span(
         name="span-name",
-        input=f"Some random input - {unique_identifier}",
+        input={"input": f"Some random input - {unique_identifier}"},
         output={"output": "span-output"},
     )
     trace.span(
