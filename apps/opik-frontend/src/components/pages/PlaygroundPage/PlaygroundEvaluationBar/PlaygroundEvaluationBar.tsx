@@ -117,7 +117,7 @@ const PlaygroundEvaluationBar: React.FC<PlaygroundEvaluationBarProps> = ({
                 <Tag
                   key={evalId}
                   variant="gray"
-                  className="cursor-pointer transition-colors hover:bg-destructive hover:text-destructive-foreground"
+                  className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
                   onClick={() => handleRemoveEvaluator(evalId)}
                 >
                   {evaluator?.label} ×
@@ -129,9 +129,9 @@ const PlaygroundEvaluationBar: React.FC<PlaygroundEvaluationBarProps> = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <Plus className="mr-1 size-4" />
+                <Plus className="h-4 w-4 mr-1" />
                 Evaluator
-                <ChevronDown className="ml-1 size-4" />
+                <ChevronDown className="h-4 w-4 ml-1" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
@@ -161,7 +161,7 @@ const PlaygroundEvaluationBar: React.FC<PlaygroundEvaluationBarProps> = ({
             disabled={!canStartExperiment || isRunning}
             className="min-w-[100px]"
           >
-            <Play className="mr-2 size-4" />
+            <Play className="h-4 w-4 mr-2" />
             {isRunning ? "Running..." : "Start"}
           </Button>
         </div>
