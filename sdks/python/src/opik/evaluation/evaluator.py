@@ -174,7 +174,7 @@ def _evaluate_task(
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
-        experiment_url=client.config.url_override,
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_
