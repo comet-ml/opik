@@ -1,0 +1,274 @@
+---
+description: "Log traces for all Claude Code Python SDK LLM calls"
+---
+
+# Claude Code
+
+[Claude Code](https://docs.anthropic.com/claude/docs/claude-code) is Anthropic's coding assistant that provides programmatic access to Claude's code generation and analysis capabilities through a Python SDK.
+
+![Claude Code Integration](/img/tracing/claude_code_integration.png)
+
+## Getting Started
+
+### Account Setup
+
+To use Claude Code with Opik, you'll need:
+
+1. Create a free [Comet account](https://comet.com/signup?utm_source=opik&utm_medium=docs&utm_campaign=claude-code)
+2. Get your [Claude Code API key](https://console.anthropic.com/) from Anthropic
+
+### Installation
+
+```bash
+pip install opik claude-code-sdk
+```
+
+### Configuration
+
+Configure Opik to track your Claude Code calls:
+
+```python
+import opik
+
+opik.configure()
+```
+
+### Environment Setup
+
+Configure your API keys:
+
+```bash
+export ANTHROPIC_API_KEY="your-claude-api-key"
+```
+
+## Basic Usage
+
+Use `track_claude_code` to track your Claude Code query calls:
+
+```python
+import asyncio
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query, ClaudeCodeOptions
+
+# Track the Claude Code query function
+tracked_query = track_claude_code(query, project_name="claude-code-project")
+
+async def main():
+    # Use the tracked query function
+    async for message in tracked_query("What is 2 + 2?"):
+        print(message)
+
+asyncio.run(main())
+```
+
+## Advanced Usage
+
+### Using with `@track` decorator
+
+Combine Claude Code tracking with Opik's `@track` decorator for more detailed tracing:
+
+```python
+import asyncio
+from opik import track
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query, ClaudeCodeOptions
+
+# Track the Claude Code query function
+tracked_query = track_claude_code(query)
+
+@track
+async def generate_code(requirements: str):
+    """Generate code based on requirements."""
+    options = ClaudeCodeOptions(
+        allowed_tools=["Read", "Write"],
+        system_prompt="You are an expert Python developer.",
+        max_turns=3
+    )
+    
+    responses = []
+    async for message in tracked_query(
+        f"Create a Python function that {requirements}",
+        options=options
+    ):
+        responses.append(message)
+    
+    return responses
+
+# This will create a trace with nested spans
+result = asyncio.run(generate_code("calculates fibonacci numbers"))
+```
+
+### Tool Usage Tracking
+
+Claude Code supports various tools. The integration automatically tracks tool usage:
+
+```python
+import asyncio
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query, ClaudeCodeOptions
+
+tracked_query = track_claude_code(query)
+
+async def main():
+    options = ClaudeCodeOptions(
+        allowed_tools=["Read", "Write", "Bash"],
+        system_prompt="You are a helpful file assistant."
+    )
+    
+    async for message in tracked_query(
+        "Create a file called hello.txt with 'Hello, World!' and then read it back",
+        options=options
+    ):
+        print(f"Message type: {type(message).__name__}")
+        print(f"Content: {message}")
+
+asyncio.run(main())
+```
+
+### Custom Span Configuration
+
+Use the advanced tracking function for more control:
+
+```python
+from opik.integrations.claude_code import track_claude_code_with_options
+from claude_code_sdk import query
+
+tracked_query = track_claude_code_with_options(
+    query,
+    project_name="advanced-project",
+    span_name="code_generation",
+    tags=["code", "assistant"],
+    metadata={"version": "1.0", "model": "claude-3"}
+)
+```
+
+### Cost Tracking
+
+The integration automatically captures cost information from Claude Code's `ResultMessage`:
+
+```python
+import asyncio
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query
+
+tracked_query = track_claude_code(query)
+
+async def main():
+    total_cost = 0.0
+    
+    async for message in tracked_query("Generate a complex algorithm"):
+        # Cost information is automatically tracked in Opik
+        if hasattr(message, 'total_cost_usd') and message.total_cost_usd:
+            total_cost += message.total_cost_usd
+            print(f"Current cost: ${total_cost:.4f}")
+
+asyncio.run(main())
+```
+
+## What's Captured
+
+The Claude Code integration captures:
+
+- **Prompts**: Input prompts sent to Claude
+- **Options**: System prompts, allowed tools, and configuration
+- **Responses**: All assistant messages and content
+- **Cost**: Token usage and cost information
+- **Tool Usage**: Which tools were allowed and used
+- **Conversation Flow**: Complete async message streams
+- **Errors**: Any exceptions during code generation
+
+## Advanced Features
+
+### Async Generator Handling
+
+Claude Code uses async generators for streaming responses. The integration handles this automatically:
+
+```python
+import asyncio
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query
+
+tracked_query = track_claude_code(query)
+
+async def stream_code_generation():
+    async for message in tracked_query("Create a web scraper in Python"):
+        # Each message is tracked as part of the overall span
+        yield message
+
+# The entire generator execution is captured as one span
+async def main():
+    async for chunk in stream_code_generation():
+        print(chunk)
+
+asyncio.run(main())
+```
+
+### System Prompt Tracking
+
+System prompts and configuration are automatically captured:
+
+```python
+import asyncio
+from opik.integrations.claude_code import track_claude_code
+from claude_code_sdk import query, ClaudeCodeOptions
+
+tracked_query = track_claude_code(query)
+
+async def main():
+    options = ClaudeCodeOptions(
+        system_prompt="You are a security-focused developer. Always include error handling.",
+        allowed_tools=["Read", "Write"],
+        max_turns=5
+    )
+    
+    async for message in tracked_query(
+        "Create a secure file upload function",
+        options=options
+    ):
+        print(message)
+        # System prompt and tools are captured in span metadata
+
+asyncio.run(main())
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import Error**: Ensure you have `claude-code-sdk` installed:
+   ```bash
+   pip install claude-code-sdk
+   ```
+
+2. **API Key Issues**: Verify your Anthropic API key is set:
+   ```bash
+   echo $ANTHROPIC_API_KEY
+   ```
+
+3. **Async Context Required**: Claude Code requires async/await:
+   ```python
+   # ❌ Wrong - missing async/await
+   for message in tracked_query("prompt"):
+       print(message)
+   
+   # ✅ Correct - using async/await
+   async for message in tracked_query("prompt"):
+       print(message)
+   ```
+
+4. **Double Wrapping Warning**: If you see warnings about already tracked functions, ensure you're not wrapping the same function twice:
+   ```python
+   # ❌ Wrong - double wrapping
+   tracked_query = track_claude_code(query)
+   double_tracked = track_claude_code(tracked_query)  # Warning!
+   
+   # ✅ Correct - single wrapping
+   tracked_query = track_claude_code(query)
+   ```
+
+### Performance Considerations
+
+- The integration is designed to be non-blocking and doesn't interfere with Claude Code's async generator performance
+- Cost tracking happens automatically without additional API calls
+- All tracking is done in the background using Opik's efficient batching system
+
