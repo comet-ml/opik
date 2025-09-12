@@ -6,7 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .feedback_score_average import FeedbackScoreAverage
-from .json_node import JsonNode
+from .json_list_string import JsonListString
 from .optimization_status import OptimizationStatus
 
 
@@ -16,7 +16,7 @@ class Optimization(UniversalBaseModel):
     dataset_name: str
     objective_name: str
     status: OptimizationStatus
-    metadata: typing.Optional[JsonNode] = None
+    metadata: typing.Optional[JsonListString] = None
     dataset_id: typing.Optional[str] = None
     num_trials: typing.Optional[int] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None

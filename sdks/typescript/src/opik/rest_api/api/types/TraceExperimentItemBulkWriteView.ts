@@ -16,7 +16,7 @@ export interface TraceExperimentItemBulkWriteView {
     endTime?: Date;
     input?: OpikApi.JsonListStringExperimentItemBulkWriteView;
     output?: OpikApi.JsonListStringExperimentItemBulkWriteView;
-    metadata?: OpikApi.JsonNodeExperimentItemBulkWriteView;
+    metadata?: OpikApi.JsonListStringExperimentItemBulkWriteView;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoExperimentItemBulkWriteView;
     lastUpdatedAt?: Date;

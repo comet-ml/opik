@@ -9,7 +9,6 @@ from .comment import Comment
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
-from .json_node import JsonNode
 from .span_type import SpanType
 
 
@@ -29,7 +28,7 @@ class Span(UniversalBaseModel):
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
-    metadata: typing.Optional[JsonNode] = None
+    metadata: typing.Optional[JsonListString] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None

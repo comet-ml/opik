@@ -6,7 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { OptimizationPublicStatus } from "./OptimizationPublicStatus";
-import { JsonNodePublic } from "./JsonNodePublic";
+import { JsonListStringPublic } from "./JsonListStringPublic";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
 
 export const OptimizationPublic: core.serialization.ObjectSchema<
@@ -18,7 +18,7 @@ export const OptimizationPublic: core.serialization.ObjectSchema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     objectiveName: core.serialization.property("objective_name", core.serialization.string()),
     status: OptimizationPublicStatus,
-    metadata: JsonNodePublic.optional(),
+    metadata: JsonListStringPublic.optional(),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     numTrials: core.serialization.property("num_trials", core.serialization.number().optional()),
     feedbackScores: core.serialization.property(
@@ -38,7 +38,7 @@ export declare namespace OptimizationPublic {
         dataset_name: string;
         objective_name: string;
         status: OptimizationPublicStatus.Raw;
-        metadata?: JsonNodePublic.Raw | null;
+        metadata?: JsonListStringPublic.Raw | null;
         dataset_id?: string | null;
         num_trials?: number | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
