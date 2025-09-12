@@ -3,6 +3,7 @@ import { IntegrationExplorerProvider } from "./IntegrationExplorerContext";
 
 import IntegrationSearch from "./IntegrationSearch";
 import IntegrationQuickInstall from "./IntegrationQuickInstall";
+import IntegrationTypeScriptSDK from "./IntegrationTypeScriptSDK";
 import IntegrationGetHelp from "./IntegrationGetHelp";
 import IntegrationCopyApiKey from "./IntegrationCopyApiKey";
 import IntegrationTabs from "./IntegrationTabs";
@@ -15,6 +16,7 @@ export type IntegrationExplorerProps = {
 const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
   Search: typeof IntegrationSearch;
   QuickInstall: typeof IntegrationQuickInstall;
+  TypeScriptSDK: typeof IntegrationTypeScriptSDK;
   GetHelp: typeof IntegrationGetHelp;
   CopyApiKey: typeof IntegrationCopyApiKey;
   Tabs: typeof IntegrationTabs;
@@ -25,6 +27,7 @@ const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
 
 IntegrationExplorer.Search = IntegrationSearch;
 IntegrationExplorer.QuickInstall = IntegrationQuickInstall;
+IntegrationExplorer.TypeScriptSDK = IntegrationTypeScriptSDK;
 IntegrationExplorer.GetHelp = IntegrationGetHelp;
 IntegrationExplorer.CopyApiKey = IntegrationCopyApiKey;
 IntegrationExplorer.Tabs = IntegrationTabs;

@@ -39,6 +39,7 @@ const IntegrationQuickInstall: React.FC = () => {
       <IntegrationCard
         title="Quick install with AI assistants"
         description="Set up Opik fast with Cursor, Copilot, Windsurf, or your favorite AI assistant."
+        size="lg"
         icon={
           <div className="flex items-center gap-1 pr-2">
             <img
@@ -58,8 +59,6 @@ const IntegrationQuickInstall: React.FC = () => {
             />
           </div>
         }
-        tag="New"
-        className="mb-4"
         onClick={handleQuickInstallClick}
       />
 

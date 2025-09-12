@@ -10,6 +10,7 @@ type IntegrationCardProps = {
   className?: string;
   iconClassName?: string;
   onClick?: () => void;
+  size?: "sm" | "lg";
 };
 
 const IntegrationCard: React.FC<IntegrationCardProps> = ({
@@ -20,11 +21,13 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
   className,
   iconClassName,
   onClick,
+  size = "sm",
 }) => {
   return (
     <div
       className={cn(
         "relative flex gap-2 items-center rounded-lg border bg-background p-4 transition-all duration-200 hover:bg-primary-foreground cursor-pointer",
+        size === "lg" && "min-h-[86px]",
         className,
       )}
       onClick={onClick}
