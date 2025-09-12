@@ -1,9 +1,8 @@
 import React, { useCallback, useState, useMemo } from "react";
-import { Bot, Info, Sparkles, Play, ChevronDown, ChevronRight } from "lucide-react";
+import { Bot, Info } from "lucide-react";
 
 import useDatasetExpansionMutation from "@/api/datasets/useDatasetExpansionMutation";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,13 +17,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -49,97 +41,104 @@ const DatasetExpansionDialog: React.FunctionComponent<
   DatasetExpansionDialogProps
 > = ({ datasetId: initialDatasetId, open, setOpen, onSamplesGenerated }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  
-  const [selectedModel, setSelectedModel] = useState<PROVIDER_MODEL_TYPE | "">("gpt-4o");
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(PROVIDER_TYPE.OPEN_AI);
+
+  const [selectedModel, setSelectedModel] = useState<PROVIDER_MODEL_TYPE | "">(
+    "gpt-4o",
+  );
+  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
+    PROVIDER_TYPE.OPEN_AI,
+  );
   const [sampleCount, setSampleCount] = useState<number>(5);
-  const [variationInstructions, setVariationInstructions] = useState<string>("");
+  const [variationInstructions, setVariationInstructions] =
+    useState<string>("");
   const [preserveFields, setPreserveFields] = useState<string[]>([]);
-  const [showPromptPreview, setShowPromptPreview] = useState<boolean>(false);
   const [customPrompt, setCustomPrompt] = useState<string>("");
   const [isEditingPrompt, setIsEditingPrompt] = useState<boolean>(false);
-  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { mutate, isPending } = useDatasetExpansionMutation();
-  
-  
+
   // Fetch dataset items to analyze structure automatically
-  const { data: sampleData, isLoading: isAnalyzing } = useDatasetItemsList({
-    datasetId: initialDatasetId || "",
-    page: 1,
-    size: 50, // Analyze up to 50 items for better pattern detection
-  }, {
-    enabled: !!initialDatasetId && open,
-  });
+  const { data: sampleData, isLoading: isAnalyzing } = useDatasetItemsList(
+    {
+      datasetId: initialDatasetId || "",
+      page: 1,
+      size: 50, // Analyze up to 50 items for better pattern detection
+    },
+    {
+      enabled: !!initialDatasetId && open,
+    },
+  );
 
   // Analyze dataset structure from sample data
   const datasetAnalysis = useMemo(() => {
     if (!sampleData?.content?.length) return null;
-    
+
     const fields = new Set<string>();
     const fieldTypes: Record<string, Set<string>> = {};
     const fieldFrequency: Record<string, number> = {};
-    
-    sampleData.content.forEach(item => {
-      Object.keys(item.data).forEach(key => {
+
+    sampleData.content.forEach((item) => {
+      Object.keys(item.data).forEach((key) => {
         fields.add(key);
         fieldFrequency[key] = (fieldFrequency[key] || 0) + 1;
         if (!fieldTypes[key]) fieldTypes[key] = new Set();
-        
-        const value = (item.data as any)[key];
-        if (typeof value === 'object' && value !== null) {
-          fieldTypes[key].add('object');
+
+        const value = (item.data as Record<string, unknown>)[key];
+        if (typeof value === "object" && value !== null) {
+          fieldTypes[key].add("object");
         } else {
           fieldTypes[key].add(typeof value);
         }
       });
     });
-    
+
     // Only include fields that appear in at least 80% of samples
     const totalSamples = sampleData.content.length;
     const commonFields = Array.from(fields).filter(
-      field => fieldFrequency[field] >= totalSamples * 0.8
+      (field) => fieldFrequency[field] >= totalSamples * 0.8,
     );
-    
+
     return {
       totalFields: fields.size,
       commonFields,
       allFields: Array.from(fields),
       fieldTypes: Object.fromEntries(
         Object.entries(fieldTypes).map(([field, types]) => [
-          field, 
-          Array.from(types)
-        ])
+          field,
+          Array.from(types),
+        ]),
       ),
       fieldFrequency,
-      sampleCount: sampleData.content.length
+      sampleCount: sampleData.content.length,
     };
   }, [sampleData?.content]);
 
   // Generate default prompt
   const defaultPrompt = useMemo(() => {
     if (!sampleData?.content?.length) return "";
-    
-    const exampleJsons = sampleData.content.slice(0, 3).map(item => 
-      JSON.stringify(item.data, null, 2)
-    );
-    
+
+    const exampleJsons = sampleData.content
+      .slice(0, 3)
+      .map((item) => JSON.stringify(item.data, null, 2));
+
     let prompt = `You are a synthetic data generator for machine learning datasets. Generate ${sampleCount} new dataset samples that follow the same JSON structure and patterns as the examples provided.\n\nEXAMPLES:\n`;
-    
+
     exampleJsons.forEach((example, i) => {
       prompt += `Example ${i + 1}:\n${example}\n\n`;
     });
-    
+
     prompt += `REQUIREMENTS:\n- Generate exactly ${sampleCount} samples\n- Maintain the exact same JSON structure as the examples\n- Create realistic and diverse variations of the data\n- Return ONLY a JSON array of the generated samples, no additional text\n`;
-    
+
     if (preserveFields.length > 0) {
-      prompt += `- Keep these fields consistent with patterns from examples: ${preserveFields.join(", ")}\n`;
+      prompt += `- Keep these fields consistent with patterns from examples: ${preserveFields.join(
+        ", ",
+      )}\n`;
     }
-    
+
     if (variationInstructions?.trim()) {
       prompt += `- Additional instructions: ${variationInstructions}\n`;
     }
-    
+
     prompt += "\nGenerate the samples now:";
     return prompt;
   }, [sampleData?.content, sampleCount, preserveFields, variationInstructions]);
@@ -160,12 +159,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
       setPreserveFields(datasetAnalysis.commonFields);
     }
   }, [datasetAnalysis?.commonFields, preserveFields.length]);
-  
+
   const handleFieldToggle = useCallback((field: string) => {
-    setPreserveFields(prev => 
-      prev.includes(field) 
-        ? prev.filter(f => f !== field)
-        : [...prev, field]
+    setPreserveFields((prev) =>
+      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
     );
   }, []);
 
@@ -177,7 +174,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
       sample_count: sampleCount,
       preserve_fields: preserveFields.length > 0 ? preserveFields : undefined,
       variation_instructions: variationInstructions?.trim() || undefined,
-      custom_prompt: isEditingPrompt || customPrompt !== defaultPrompt ? activePrompt : undefined,
+      custom_prompt:
+        isEditingPrompt || customPrompt !== defaultPrompt
+          ? activePrompt
+          : undefined,
     };
 
     mutate(
@@ -194,87 +194,122 @@ const DatasetExpansionDialog: React.FunctionComponent<
         },
       },
     );
-  }, [initialDatasetId, selectedModel, sampleCount, datasetAnalysis?.commonFields, variationInstructions, mutate, onSamplesGenerated, setOpen]);
+  }, [
+    initialDatasetId,
+    selectedModel,
+    sampleCount,
+    preserveFields,
+    variationInstructions,
+    activePrompt,
+    defaultPrompt,
+    isEditingPrompt,
+    customPrompt,
+    mutate,
+    onSamplesGenerated,
+    setOpen,
+  ]);
 
-  const handleModelChange = useCallback((model: PROVIDER_MODEL_TYPE, provider: PROVIDER_TYPE) => {
-    setSelectedModel(model);
-    setSelectedProvider(provider);
-  }, []);
-
+  const handleModelChange = useCallback(
+    (model: PROVIDER_MODEL_TYPE, provider: PROVIDER_TYPE) => {
+      setSelectedModel(model);
+      setSelectedProvider(provider);
+    },
+    [],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bot className="size-4" />
-              Expand Dataset with AI
-              <TooltipWrapper
-                content="This will generate synthetic samples based on your existing data patterns. The generated samples will be available for review before adding to your dataset."
-                side="bottom"
-              >
-                <Info className="size-4 text-muted-foreground cursor-help" />
-              </TooltipWrapper>
-            </DialogTitle>
-          </DialogHeader>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bot className="size-4" />
+            Expand Dataset with AI
+            <TooltipWrapper
+              content="This will generate synthetic samples based on your existing data patterns. The generated samples will be available for review before adding to your dataset."
+              side="bottom"
+            >
+              <Info className="size-4 text-muted-foreground cursor-help" />
+            </TooltipWrapper>
+          </DialogTitle>
+        </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col gap-4">
-
           {/* Dataset Structure Analysis */}
           {isAnalyzing && (
             <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/30">
               <Loader className="size-4" />
-              <span className="text-sm text-muted-foreground">Analyzing dataset structure...</span>
+              <span className="text-sm text-muted-foreground">
+                Analyzing dataset structure...
+              </span>
             </div>
           )}
-          
+
           {datasetAnalysis && (
             <div className="rounded-md border bg-muted/20 p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Detected Structure</h4>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>Analyzed {datasetAnalysis.sampleCount} samples</span>
-                  <Tag variant="gray" size="sm">{datasetAnalysis.totalFields} fields</Tag>
+                  <Tag variant="gray" size="sm">
+                    {datasetAnalysis.totalFields} fields
+                  </Tag>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Fields to preserve:</Label>
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Fields to preserve:
+                </Label>
                 <div className="flex flex-wrap gap-1">
                   {datasetAnalysis.allFields.map((field) => {
-                    const isCommon = datasetAnalysis.commonFields.includes(field);
+                    const isCommon =
+                      datasetAnalysis.commonFields.includes(field);
                     const isSelected = preserveFields.includes(field);
-                    const frequency = Math.round((datasetAnalysis.fieldFrequency[field] / datasetAnalysis.sampleCount) * 100);
-                    
+                    const frequency = Math.round(
+                      (datasetAnalysis.fieldFrequency[field] /
+                        datasetAnalysis.sampleCount) *
+                        100,
+                    );
+
                     return (
-                      <TooltipWrapper 
+                      <TooltipWrapper
                         key={field}
                         content={
                           <div className="text-xs space-y-1">
                             <div>Appears in {frequency}% of samples</div>
-                            <div>Type: {datasetAnalysis.fieldTypes[field]?.join(" | ")}</div>
+                            <div>
+                              Type:{" "}
+                              {datasetAnalysis.fieldTypes[field]?.join(" | ")}
+                            </div>
                             <div className="text-muted-foreground">
-                              {isCommon ? "Auto-selected (common field)" : "Click to toggle"}
+                              {isCommon
+                                ? "Auto-selected (common field)"
+                                : "Click to toggle"}
                             </div>
                           </div>
                         }
                       >
-                        <Tag 
-                          variant={isSelected ? "blue" : "gray"} 
-                          size="sm" 
+                        <Tag
+                          variant={isSelected ? "blue" : "gray"}
+                          size="sm"
                           className={`cursor-pointer transition-colors text-xs ${
-                            isSelected ? "bg-primary text-primary-foreground" : "hover:bg-muted-foreground/10"
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted-foreground/10"
                           }`}
                           onClick={() => handleFieldToggle(field)}
                         >
                           {field}
-                          {isCommon && <span className="ml-1 opacity-70">✓</span>}
+                          {isCommon && (
+                            <span className="ml-1 opacity-70">✓</span>
+                          )}
                         </Tag>
                       </TooltipWrapper>
                     );
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Selected fields will be preserved. Common fields (≥80%) are auto-selected.
+                  Selected fields will be preserved. Common fields (≥80%) are
+                  auto-selected.
                 </p>
               </div>
             </div>
@@ -333,13 +368,16 @@ const DatasetExpansionDialog: React.FunctionComponent<
           {/* Prompt Preview */}
           {defaultPrompt && (
             <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="prompt-preview" className="border rounded-md">
+              <AccordionItem
+                value="prompt-preview"
+                className="border rounded-md"
+              >
                 <AccordionTrigger className="text-sm px-3 py-2 hover:no-underline">
                   <div className="flex items-center justify-between w-full pr-2">
-                    <span className="text-sm font-medium">Preview generation prompt</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <span className="text-sm font-medium">
+                      Preview generation prompt
+                    </span>
+                    <span
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isEditingPrompt) {
@@ -349,10 +387,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
                           setIsEditingPrompt(true);
                         }
                       }}
-                      className="h-6 px-2 text-xs"
+                      className="h-6 px-2 text-xs bg-secondary hover:bg-secondary/80 rounded cursor-pointer flex items-center"
                     >
                       {isEditingPrompt ? "Save" : "Edit"}
-                    </Button>
+                    </span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="px-3 pb-3">
@@ -397,7 +435,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
               </AccordionItem>
             </Accordion>
           )}
-          
         </DialogAutoScrollBody>
         <DialogFooter className="gap-2">
           <DialogClose asChild>
@@ -405,9 +442,11 @@ const DatasetExpansionDialog: React.FunctionComponent<
               Cancel
             </Button>
           </DialogClose>
-          <Button 
-            onClick={handleSubmit} 
-            disabled={!selectedModel || !initialDatasetId || isAnalyzing || isPending}
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              !selectedModel || !initialDatasetId || isAnalyzing || isPending
+            }
             size="sm"
           >
             {isPending && <Loader className="size-4 mr-2" />}

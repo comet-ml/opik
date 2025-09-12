@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
-import { DatasetExpansionRequest, DatasetExpansionResponse } from "@/types/datasets";
+import {
+  DatasetExpansionRequest,
+  DatasetExpansionResponse,
+} from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseDatasetExpansionMutationParams = {
@@ -32,10 +35,12 @@ const useDatasetExpansionMutation = () => {
       });
     },
     onError: (error) => {
+      const errorData = error?.response?.data as {
+        message?: string;
+        detail?: string;
+      };
       const message =
-        (error?.response?.data as any)?.message ||
-        (error?.response?.data as any)?.detail ||
-        "Failed to expand dataset";
+        errorData?.message || errorData?.detail || "Failed to expand dataset";
 
       toast({
         title: "Dataset expansion failed",
