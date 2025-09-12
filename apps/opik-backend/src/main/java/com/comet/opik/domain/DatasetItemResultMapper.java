@@ -95,7 +95,7 @@ class DatasetItemResultMapper {
         if (null == field || StringUtils.isBlank(field.toString())) {
             return null;
         }
-        return JsonUtils.getJsonNodeFromString(field.toString());
+        return JsonUtils.getJsonNodeFromStringWithFallback(field.toString());
     }
 
     static Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
@@ -137,7 +137,9 @@ class DatasetItemResultMapper {
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .data(data)
-                    .source(DatasetItemSource.fromString(row.get("source", String.class)))
+                    .source(Optional.ofNullable(row.get("source", String.class))
+                            .map(DatasetItemSource::fromString)
+                            .orElse(null))
                     .traceId(Optional.ofNullable(row.get("trace_id", String.class))
                             .filter(s -> !s.isBlank())
                             .map(UUID::fromString)
@@ -160,13 +162,20 @@ class DatasetItemResultMapper {
     }
 
     private static Map<String, JsonNode> getData(Row row) {
-        return Optional.ofNullable(row.get("data", Map.class))
+
+        Optional<Map> data = Optional.ofNullable(row.get("data", Map.class));
+
+        if (row.getMetadata().contains("data_final")) {
+            data = Optional.ofNullable(row.get("data_final", Map.class));
+        }
+
+        return data
                 .filter(s -> !s.isEmpty())
                 .map(value -> (Map<String, String>) value)
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromString(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 

@@ -77,75 +77,71 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }
 
   return (
-    <>
-      <div>
-        <div className="flex w-full items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setOpenUseThisPrompt(true)}
-          >
-            <Info className="mr-2 size-3.5" />
-            Use this prompt
-          </Button>
-          <TryInPlaygroundButton prompt={prompt} />
-          <Button
-            className="ml-auto"
-            variant="secondary"
-            size="sm"
-            onClick={() => handleOpenEditPrompt(true)}
-          >
-            <Pencil className="mr-2 size-3.5" />
-            Edit prompt
-          </Button>
-        </div>
-
-        <div className="mt-4 flex gap-6 rounded-md border bg-white p-6">
-          <div className="flex grow flex-col gap-2">
-            <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-              {activeVersion?.template}
-            </code>
-            {activeVersion?.metadata && (
-              <>
-                <p className="comet-body-s-accented mt-4 text-foreground">
-                  Metadata
-                </p>
-                <CodeHighlighter
-                  data={JSON.stringify(activeVersion.metadata, null, 2)}
-                  language={SUPPORTED_LANGUAGE.json}
-                />
-              </>
-            )}
-
-            {activeVersion?.change_description && (
-              <>
-                <p className="comet-body-s-accented mt-4 text-foreground">
-                  Commit message
-                </p>
-                <div className="comet-body-s flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-                  {activeVersion.change_description}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="min-w-[320px]">
-            <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
-              Commit history
-              <ExplainerIcon
-                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_commit_history]}
-              />
-            </div>
-
-            <CommitHistory
-              versions={versions || []}
-              activeVersionId={activeVersionId || ""}
-              onVersionClick={(version) => setActiveVersionId(version.id)}
-            />
-          </div>
-        </div>
+    <div className="px-6">
+      <div className="flex w-full items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setOpenUseThisPrompt(true)}
+        >
+          <Info className="mr-1.5 size-3.5" />
+          Use this prompt
+        </Button>
+        <TryInPlaygroundButton prompt={prompt} />
+        <Button
+          className="ml-auto"
+          size="sm"
+          onClick={() => handleOpenEditPrompt(true)}
+        >
+          <Pencil className="mr-1.5 size-3.5" />
+          Edit prompt
+        </Button>
       </div>
 
+      <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
+        <div className="flex grow flex-col gap-2">
+          <p className="comet-body-s-accented text-foreground">Prompt</p>
+          <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+            {activeVersion?.template}
+          </code>
+          {activeVersion?.metadata && (
+            <>
+              <p className="comet-body-s-accented mt-4 text-foreground">
+                Metadata
+              </p>
+              <CodeHighlighter
+                data={JSON.stringify(activeVersion.metadata, null, 2)}
+                language={SUPPORTED_LANGUAGE.json}
+              />
+            </>
+          )}
+
+          {activeVersion?.change_description && (
+            <>
+              <p className="comet-body-s-accented mt-4 text-foreground">
+                Commit message
+              </p>
+              <div className="comet-body-s flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+                {activeVersion.change_description}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="min-w-[320px]">
+          <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
+            Commit history
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_commit_history]}
+            />
+          </div>
+
+          <CommitHistory
+            versions={versions || []}
+            activeVersionId={activeVersionId || ""}
+            onVersionClick={(version) => setActiveVersionId(version.id)}
+          />
+        </div>
+      </div>
       <UseThisPromptDialog
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
@@ -161,7 +157,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         metadata={activeVersion?.metadata}
         onSetActiveVersionId={setActiveVersionId}
       />
-    </>
+    </div>
   );
 };
 

@@ -12,6 +12,8 @@ public interface Field {
     String END_TIME_QUERY_PARAM = "end_time";
     String INPUT_QUERY_PARAM = "input";
     String OUTPUT_QUERY_PARAM = "output";
+    String INPUT_JSON_QUERY_PARAM = "input_json";
+    String OUTPUT_JSON_QUERY_PARAM = "output_json";
     String METADATA_QUERY_PARAM = "metadata";
     String MODEL_QUERY_PARAM = "model";
     String PROVIDER_QUERY_PARAM = "provider";
@@ -23,6 +25,8 @@ public interface Field {
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
+    String DATASET_ID_QUERY_PARAM = "dataset_id";
+    String PROMPT_IDS_QUERY_PARAM = "prompt_ids";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
     String FIRST_MESSAGE_QUERY_PARAM = "first_message";
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
@@ -39,6 +43,7 @@ public interface Field {
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
+    String CUSTOM_QUERY_PARAM = "custom";
 
     @JsonValue
     String getQueryParamField();

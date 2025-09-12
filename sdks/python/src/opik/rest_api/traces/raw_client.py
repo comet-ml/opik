@@ -33,6 +33,7 @@ from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
+from ..types.value_entry import ValueEntry
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -181,6 +182,7 @@ class RawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -208,6 +210,8 @@ class RawTracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -228,6 +232,9 @@ class RawTracesClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -702,6 +709,7 @@ class RawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -714,6 +722,8 @@ class RawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -729,6 +739,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -782,7 +793,12 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete trace feedback score
@@ -792,6 +808,8 @@ class RawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -805,6 +823,7 @@ class RawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -1961,6 +1980,7 @@ class AsyncRawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1988,6 +2008,8 @@ class AsyncRawTracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2008,6 +2030,9 @@ class AsyncRawTracesClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -2482,6 +2507,7 @@ class AsyncRawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2494,6 +2520,8 @@ class AsyncRawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2509,6 +2537,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -2562,7 +2591,12 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete trace feedback score
@@ -2572,6 +2606,8 @@ class AsyncRawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2585,6 +2621,7 @@ class AsyncRawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",

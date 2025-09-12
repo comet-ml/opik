@@ -20,6 +20,8 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.DisallowConcurrentExecution;
+import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -29,15 +31,17 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.TRACER_NAME;
 
 @Singleton
 @Slf4j
+@DisallowConcurrentExecution
 @On(value = "0 0 0 * * ?", timeZone = "UTC") // every day at midnight
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class DailyUsageReportJob extends Job {
+public class DailyUsageReportJob extends Job implements InterruptableJob {
 
     public static final String STATISTICS_BE = "opik_os_statistics_be";
 
@@ -48,6 +52,8 @@ public class DailyUsageReportJob extends Job {
     private final @NonNull TraceService traceService;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetService datasetService;
+
+    private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
@@ -60,19 +66,32 @@ public class DailyUsageReportJob extends Job {
                 return;
             }
 
+            // Check for interruption before starting
+            if (interrupted.get()) {
+                log.info("Job interrupted before execution, skipping daily usage report");
+                return;
+            }
+
             var lock = new LockService.Lock("daily_usage_report");
 
             try {
                 lockService.executeWithLockCustomExpire(
                         lock,
-                        Mono.defer(this::generateReportInternal),
-                        Duration.ofSeconds(5)).block();
+                        Mono.defer(this::generateReportInternal)
+                                .timeout(Duration.ofSeconds(config.getJobTimeout().getDailyUsageReportJobTimeout()))
+                                .doOnSubscribe(__ -> {
+                                    if (interrupted.get()) {
+                                        log.info(
+                                                "Daily usage report job completed but was interrupted during execution");
+                                    }
+                                }),
+                        Duration.ofSeconds(5))
+                        .block(Duration.ofSeconds(6 + config.getJobTimeout().getDailyUsageReportJobTimeout())); // Total timeout
                 log.info("Daily usage report processed");
             } catch (Exception e) {
                 log.error("Failed to generate daily usage report", e);
             }
         }
-
     }
 
     @WithSpan
@@ -172,4 +191,9 @@ public class DailyUsageReportJob extends Job {
         });
     }
 
+    @Override
+    public void interrupt() {
+        interrupted.set(true);
+        log.info("Daily usage report job successfully called interruption");
+    }
 }

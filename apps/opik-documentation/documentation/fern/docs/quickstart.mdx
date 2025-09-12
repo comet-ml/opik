@@ -4,6 +4,124 @@ This guide helps you integrate the Opik platform with your existing LLM applicat
   <img src="/img/home/traces_page_for_quickstart.png" />
 </Frame>
 
+## ⚡ Quick Start with AI Assistants
+
+Get Opik integrated instantly by copying this prompt to Cursor, Claude, or any AI coding assistant:
+
+```text
+# OPIK Agentic Onboarding
+
+## Goals
+
+You must help me:
+
+1. Integrate the Opik client with my existing LLM application
+2. Set up tracing for my LLM calls and chains
+
+## Rules
+
+Before you begin, you must understand and strictly adhere to these core principles:
+
+1. Code Preservation & Integration Guidelines:
+
+   - Existing business logic must remain untouched and unmodified
+   - Only add Opik-specific code (decorators, imports, handlers, env vars)
+   - Integration must be non-invasive and backwards compatible
+
+2. Process Requirements:
+
+   - Follow the workflow steps sequentially without deviation
+   - Validate completion of each step before proceeding
+   - Request explicit approval for any workflow modifications
+
+3. Documentation & Resources:
+
+   - Reference official Opik documentation at https://www.comet.com/docs/opik/quickstart.md
+   - Follow Opik best practices and recommended patterns
+   - Maintain detailed integration notes and configuration details
+
+4. Testing & Validation:
+   - Verify Opik integration without impacting existing functionality
+   - Validate tracing works correctly for all LLM interactions
+   - Ensure proper error handling and logging
+
+## Integration Workflow
+
+### Step 1: Language and Compatibility Check
+
+First, analyze the codebase to identify:
+
+1. Primary programming language and frameworks
+2. Existing LLM integrations and patterns
+
+Compatibility Requirements:
+
+- Supported Languages: Python, JavaScript/TypeScript
+
+If the codebase uses unsupported languages:
+
+- Stop immediately
+- Inform me that the codebase is unsupported for AI integration
+
+Only proceed to Step 2 if:
+
+- Language is Python or JavaScript/TypeScript
+
+### Step 2: Codebase Discovery & Entrypoint Confirmation
+
+After verifying language compatibility, perform a full codebase scan with the following objectives:
+
+- LLM Touchpoints: Locate all files and functions that invoke or interface with LLMs or can be a candidates for tracing.
+- Entrypoint Detection: Identify the primary application entry point(s) (e.g., main script, API route, CLI handler). If ambiguous, pause and request clarification on which component(s) are most important to trace before proceeding.
+  ⚠️ Do not proceed to Step 3 without explicit confirmation if the entrypoint is unclear.
+- Return the LLM Touchpoints to me
+
+### Step 3: Discover Available Integrations
+
+After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/tracing/integrations/overview.md
+
+### Step 4: Deep Analysis Confirmed files for LLM Frameworks & SDKs
+
+Using the files confirmed in Step 2, perform targeted inspection to detect specific LLM-related technologies in use, such as:
+SDKs: openai, anthropic, huggingface, etc.
+Frameworks: LangChain, LlamaIndex, Haystack, etc.
+
+### Step 5: Pre-Implementation Development Plan (Approval Required)
+
+Do not write or modify code yet. You must propose me a step-by-step plan including:
+
+- Opik packages to install
+- Files to be modified
+- Code snippets for insertion, clearly scoped and annotated
+- Where to place Opik API keys, with placeholder comments (Visit https://comet.com/opik/your-workspace-name/get-started to copy your API key)
+  Wait for approval before proceeding!
+
+### Step 6: Execute the Integration Plan
+
+After approval:
+
+- Run the package installation command via terminal (pip install opik, npm install opik, etc.).
+- Apply code modifications exactly as described in Step 5.
+- Keep all additions minimal and non-invasive.
+  Upon completion, review the changes made and confirm installation success.
+
+### Step 7: Request User Review and Wait
+
+Notify me that all integration steps are complete.
+"Please run the application and verify if Opik is capturing traces as expected. Let me know if you need adjustments."
+
+### Step 8: Debugging Loop (If Needed)
+
+If issues are reported:
+
+1. Parse the error or unexpected behavior from feedback.
+2. Re-query the Opik docs using https://www.comet.com/docs/opik/quickstart.md if needed.
+3. Propose a minimal fix and await approval.
+4. Apply and revalidate.
+```
+
+---
+
 ## Set up
 
 Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/overview).
@@ -34,7 +152,7 @@ and configuring the SDK with:
 <Tab value="Python" title="Python">
 
 If you are using the Python SDK, we recommend running the `opik configure` command
-from the command line which will prompt you for all the necessary information:
+from the command line. This will prompt you to set up your API key and Opik instance URL (if applicable) to ensure proper routing and authentication.
 
 ```bash
 opik configure
@@ -63,22 +181,6 @@ const client = new Opik({
 </Tab>
 
 </Tabs>
-
-## How can I diagnose issues with Opik?
-
-If you are experiencing any problems using Opik, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, we recommend running the following command in your terminal:
-
-```bash
-opik healthcheck
-```
-
-This command will analyze your configuration and backend connectivity, providing useful insights into potential issues.
-
-<Frame>
-  <img src="../img/healthcheck.png" />
-</Frame>
-
-Reviewing these sections can help pinpoint the source of the problem and suggest possible resolutions.
 
 ## Adding Opik observability to your codebase
 
@@ -219,7 +321,7 @@ It is common for LLM applications to use chains rather than just calling the LLM
 like [LangChain](/tracing/integrations/langchain), [LangGraph](/tracing/integrations/langgraph) or [LLamaIndex](/tracing/integrations/llama_index),
 or by writing custom python code.
 
-Opik makes it easy for your to log your chains no matter how you implement them:
+Opik makes it easy for you to log your chains no matter how you implement them:
 
 <Tabs>
     <Tab value="Custom Python Code" title="Custom Python Code">
@@ -276,8 +378,9 @@ llm_chain("Hello, how are you?")
 While this code sample assumes that you are using OpenAI, the same principle applies if you are using any other LLM provider.
 
 <Info>
-  Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the
-  logged data, see the [Log Traces](/tracing/log_traces) guide.
+  Your chains will now be logged to Opik and can be viewed in the Opik UI. To
+  learn more about how you can customize the logged data, see the [Log
+  Traces](/tracing/log_traces) guide.
 </Info>
 
 </Tab>
@@ -310,8 +413,9 @@ llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 ```
 
 <Info>
-  Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the
-  logged data, see the [Log Traces](/tracing/log_traces) guide.
+  Your chains will now be logged to Opik and can be viewed in the Opik UI. To
+  learn more about how you can customize the logged data, see the [Log
+  Traces](/tracing/log_traces) guide.
 </Info>
 
 </Tab>
@@ -327,11 +431,12 @@ set_global_handler("opik")
 opik_callback_handler = global_handler
 ```
 
-You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index).
+Your LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index).
 
 <Info>
-  Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the
-  logged data, see the [Log Traces](/tracing/log_traces) guide.
+  Your chains will now be logged to Opik and can be viewed in the Opik UI. To
+  learn more about how you can customize the logged data, see the [Log
+  Traces](/tracing/log_traces) guide.
 </Info>
 
 </Tab>
@@ -352,3 +457,19 @@ Now that you have logged your first LLM calls and chains to Opik, why not check 
 
 1. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your LLM responses.
 2. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of your LLM application so that you no longer need to manually review every LLM response.
+
+## How can I diagnose issues with Opik?
+
+If you are experiencing any problems using Opik, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, we recommend running the following command in your terminal:
+
+```bash
+opik healthcheck
+```
+
+This command will analyze your configuration and backend connectivity, providing useful insights into potential issues.
+
+<Frame>
+  <img src="../img/healthcheck.png" />
+</Frame>
+
+Reviewing these sections can help pinpoint the source of the problem and suggest possible resolutions.

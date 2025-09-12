@@ -12,8 +12,11 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
+from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
+from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
     ExperimentItemBulkRecordExperimentItemBulkWriteView,
@@ -318,6 +321,7 @@ class RawExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -330,6 +334,9 @@ class RawExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -344,6 +351,7 @@ class RawExperimentsClient:
             json={
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
+                "experiment_id": experiment_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
@@ -361,6 +369,17 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -422,6 +441,140 @@ class RawExperimentsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_experiment_groups(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExperimentGroupResponse]:
+        """
+        Find experiments grouped by specified fields
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExperimentGroupResponse]
+            Experiment groups
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExperimentGroupAggregationsResponse]:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExperimentGroupAggregationsResponse]
+            Experiment groups with aggregations
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups/aggregations",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupAggregationsResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupAggregationsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -940,6 +1093,7 @@ class AsyncRawExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -952,6 +1106,9 @@ class AsyncRawExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -966,6 +1123,7 @@ class AsyncRawExperimentsClient:
             json={
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
+                "experiment_id": experiment_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
@@ -983,6 +1141,17 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -1044,6 +1213,140 @@ class AsyncRawExperimentsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_experiment_groups(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExperimentGroupResponse]:
+        """
+        Find experiments grouped by specified fields
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExperimentGroupResponse]
+            Experiment groups
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExperimentGroupAggregationsResponse]:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExperimentGroupAggregationsResponse]
+            Experiment groups with aggregations
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups/aggregations",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupAggregationsResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupAggregationsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

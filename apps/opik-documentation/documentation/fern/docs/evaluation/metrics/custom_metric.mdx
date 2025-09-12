@@ -38,15 +38,16 @@ To define a custom metric, you need to subclass the `BaseMetric` class and imple
 
 ```python
 from typing import Any
+
 from opik.evaluation.metrics import base_metric, score_result
-import json
+
 
 class MyCustomMetric(base_metric.BaseMetric):
     def __init__(self, name: str):
-        self.name = name
+        super().__init__(name)
 
-    def score(self, input: str, output: str, **ignored_kwargs: Any):
-        # Add you logic here
+    def score(self, input: str, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        # Add your logic here
 
         return score_result.ScoreResult(
             value=0,
@@ -62,29 +63,40 @@ The `score` method should return a `ScoreResult` object. The `ascore` method is 
   return multiple scores for a given input and output pair.
 </Tip>
 
-This metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).
+Now you can use the custom metric to score LLM outputs:
+
+```python {pytest_codeblocks_skip=true}
+metric = MyCustomMetric()
+
+metric.score(input="What is the capital of France?", output="Paris")
+```
+
+Also, this metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).
 
 #### Example: Creating a metric with OpenAI model
 
 You can implement your own custom metric by creating a class that subclasses the `BaseMetric` class and implements the `score` method.
 
 ```python
-from opik.evaluation.metrics import base_metric, score_result
-from openai import OpenAI
+import json
 from typing import Any
+
+from openai import OpenAI
+from opik.evaluation.metrics import base_metric, score_result
+
 
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
-        self.name = name
+        super().__init__(name)
         self.llm_client = OpenAI()
         self.model_name = model_name
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy.
         Analyze it carefully and respond with a number between 0 and 1: 1 if completely
-        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of the your response
+        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of your response
         should be a single number with no other text.
 
-        The format of the your response should be a JSON object with no additional text or backticks that follows the format:
+        The format of your response should be a JSON object with no additional text or backticks that follows the format:
         {{
             "score": <score between 0 and 1>
         }}
@@ -93,7 +105,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         Response:
         """
-    def score(self, output: str, **ignored_kwargs: Any):
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
 
@@ -128,21 +140,23 @@ metric.score(output="Paris is the capital of France")
 
 In this example, we used the OpenAI Python client to call the LLM. You don't have to use the OpenAI Python client, you can update the code example above to use any LLM client you have access to.
 
-#### Example: Adding support for many all LLM providers
+#### Example: Adding support for many LLM providers
 
 In order to support a wide range of LLM providers, we recommend using the `litellm` library to call your LLM. This allows you to support hundreds of models without having to maintain a custom LLM client.
 
 Opik providers a `LitellmChatModel` class that wraps the `litellm` library and can be used in your custom metric:
 
 ```python
-from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation import models
 import json
 from typing import Any
 
+from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation import models
+
+
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
-        self.name = name
+        super().__init__(name)
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
@@ -159,7 +173,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         Response:
         """
-    def score(self, output: str, **ignored_kwargs: Any):
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
 
@@ -190,6 +204,35 @@ metric = LLMJudgeMetric()
 metric.score(output="Paris is the capital of France")
 ```
 
+#### Example: Creating a metric with multiple scores
+You can implement a metric that returns multiple scores, which will display as separate columns in the UI when using it in an evaluation.
+
+To do so, setup your `score` method to return a list of `ScoreResult` objects.
+
+```python
+from typing import Any, List
+
+from opik.evaluation.metrics import base_metric, score_result
+
+class MultiScoreCustomMetric(base_metric.BaseMetric):
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def score(self, input: str, output: str, **ignored_kwargs: Any) -> List[score_result.ScoreResult]:
+        # Add your logic here
+
+        return [score_result.ScoreResult(
+            value=0,
+            name=self.name,
+            reason="Optional reason for the score"
+        ),
+        score_result.ScoreResult(
+            value=1,
+            name=f"{self.name}-2",
+            reason="Optional reason for the score"
+        )]
+```
+
 #### Example: Enforcing structured outputs
 
 In the examples above, we ask the LLM to respond with a JSON object. However as this is not enforced, it is possible that the LLM returns a non-structured response. In order to avoid this, you can use the `litellm` library to enforce a structured output. This will make our custom metric more robust and less prone to failure.
@@ -197,11 +240,12 @@ In the examples above, we ask the LLM to respond with a JSON object. However as 
 For this we define the format of the response we expect from the LLM in the `LLMJudgeResult` class and pass it to the LiteLLM client:
 
 ```python
+import json
+from pydantic import BaseModel
+from typing import Any
+
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
-from pydantic import BaseModel
-import json
-from typing import Any
 
 class LLMJudgeResult(BaseModel):
     score: int
@@ -209,7 +253,7 @@ class LLMJudgeResult(BaseModel):
 
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
-        self.name = name
+        super().__init__(name)
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling.
@@ -226,7 +270,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         Response:
         """
 
-    def score(self, output: str, **ignored_kwargs: Any):
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
 

@@ -13,7 +13,7 @@ from typing import (
     Union,
 )
 
-from .. import config, context_storage, logging_messages
+from .. import context_storage, logging_messages
 from ..api_objects import opik_client, span, trace
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
@@ -22,6 +22,7 @@ from . import (
     generator_wrappers,
     inspect_helpers,
     span_creation_handler,
+    tracing_runtime_config,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -47,11 +48,6 @@ class BaseTrackDecorator(abc.ABC):
     def __init__(self) -> None:
         self.provider: Optional[str] = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
-
-    @functools.cached_property
-    def disabled(self) -> bool:
-        config_ = config.OpikConfig()
-        return config_.track_disable
 
     def track(
         self,
@@ -94,6 +90,10 @@ class BaseTrackDecorator(abc.ABC):
             This decorator can be used to track both synchronous and asynchronous functions,
             and also synchronous and asynchronous generators.
             It automatically detects the function type and applies the appropriate tracking logic.
+
+            Tracing is checked only once at the start of the call; a call that
+            began while tracing was enabled will still be logged even if
+            tracing is disabled before it returns.
         """
         track_options = arguments_helpers.TrackOptions(
             name=None,
@@ -177,6 +177,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not tracing_runtime_config.is_tracing_active():
+                return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
@@ -191,7 +193,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.error(
                     logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -209,7 +211,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -225,6 +227,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not tracing_runtime_config.is_tracing_active():
+                return func(*args, **kwargs)
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
@@ -239,7 +243,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.error(
                     logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -257,7 +261,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -273,6 +277,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not tracing_runtime_config.is_tracing_active():
+                return func(*args, **kwargs)
             self._before_call(
                 func=func,
                 track_options=track_options,
@@ -288,7 +294,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -326,6 +332,8 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            if not tracing_runtime_config.is_tracing_active():
+                return await func(*args, **kwargs)
             self._before_call(
                 func=func,
                 track_options=track_options,
@@ -340,7 +348,7 @@ class BaseTrackDecorator(abc.ABC):
             except Exception as exception:
                 LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
-                    func.__name__,
+                    inspect_helpers.get_function_name(func),
                     (args, kwargs),
                     str(exception),
                     exc_info=True,
@@ -387,7 +395,7 @@ class BaseTrackDecorator(abc.ABC):
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                func.__name__,
+                inspect_helpers.get_function_name(func),
                 (args, kwargs),
                 str(exception),
                 exc_info=True,
@@ -416,14 +424,14 @@ class BaseTrackDecorator(abc.ABC):
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                func.__name__,
+                inspect_helpers.get_function_name(func),
                 (args, kwargs),
                 str(exception),
                 exc_info=True,
             )
 
             start_span_arguments = arguments_helpers.StartSpanParameters(
-                name=func.__name__,
+                name=inspect_helpers.get_function_name(func),
                 type=track_options.type,
                 tags=track_options.tags,
                 metadata=track_options.metadata,
@@ -438,14 +446,20 @@ class BaseTrackDecorator(abc.ABC):
         )
         client = opik_client.get_client_cached()
 
-        if client.config.log_start_trace_span:
+        if (
+            client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        ):
             client.span(**created_span_data.as_start_parameters)
 
         if created_trace_data is not None:
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
 
-            if client.config.log_start_trace_span:
+            if (
+                client.config.log_start_trace_span
+                and tracing_runtime_config.is_tracing_active()
+            ):
                 client.trace(**created_trace_data.as_start_parameters)
 
         context_storage.add_span_data(created_span_data)
@@ -485,9 +499,6 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        if self.disabled:
-            return
-
         if generators_span_to_end is None:
             span_data_to_end, trace_data_to_end = pop_end_candidates()
         else:

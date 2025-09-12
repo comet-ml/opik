@@ -64,39 +64,41 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
       activeSection={activeSection}
       explainer={EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
     >
-      {hasFeedbackScores && (
-        <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {feedbackScores.map((score) => {
-            return isMultiValueFeedbackScore(score) ? (
-              <MultiValueFeedbackScoreTag
-                key={score.name}
-                label={score.name}
-                value={score.value}
-                valueByAuthor={score.value_by_author}
-                category={score.category_name}
-              />
-            ) : (
-              <FeedbackScoreTag
-                key={score.name}
-                label={score.name}
-                value={score.value}
-                reason={score.reason}
-                lastUpdatedAt={score.last_updated_at}
-                lastUpdatedBy={score.last_updated_by}
-              />
-            );
-          })}
-        </div>
-      )}
-      <FeedbackScoresEditor
-        key={threadId}
-        feedbackScores={feedbackScores}
-        onUpdateFeedbackScore={onUpdateFeedbackScore}
-        onDeleteFeedbackScore={onDeleteFeedbackScore}
-        className="mt-4"
-        header={<FeedbackScoresEditor.Header />}
-        footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
-      />
+      <div className="size-full overflow-y-auto">
+        {hasFeedbackScores && (
+          <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
+            {feedbackScores.map((score) => {
+              return isMultiValueFeedbackScore(score) ? (
+                <MultiValueFeedbackScoreTag
+                  key={score.name}
+                  label={score.name}
+                  value={score.value}
+                  valueByAuthor={score.value_by_author}
+                  category={score.category_name}
+                />
+              ) : (
+                <FeedbackScoreTag
+                  key={score.name}
+                  label={score.name}
+                  value={score.value}
+                  reason={score.reason}
+                  lastUpdatedAt={score.last_updated_at}
+                  lastUpdatedBy={score.last_updated_by}
+                />
+              );
+            })}
+          </div>
+        )}
+        <FeedbackScoresEditor
+          key={threadId}
+          feedbackScores={feedbackScores}
+          onUpdateFeedbackScore={onUpdateFeedbackScore}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          className="mt-4"
+          header={<FeedbackScoresEditor.Header />}
+          footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
+        />
+      </div>
     </DetailsActionSectionLayout>
   );
 };

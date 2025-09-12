@@ -17,6 +17,7 @@ import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
@@ -293,6 +294,11 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     private String decodeBaseUrl(String baseUrlEncoded) {
-        return new String(Base64.getUrlDecoder().decode(baseUrlEncoded), StandardCharsets.UTF_8);
+        try {
+            return new String(Base64.getUrlDecoder().decode(baseUrlEncoded), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to decode base URL: {}", baseUrlEncoded, e);
+            throw new BadRequestException("Invalid base URL format");
+        }
     }
 }

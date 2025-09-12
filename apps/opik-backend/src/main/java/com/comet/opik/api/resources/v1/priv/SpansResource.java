@@ -30,7 +30,7 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -181,7 +181,8 @@ public class SpansResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class)))})
-    @RateLimited
+    @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
+            + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
@@ -220,7 +221,8 @@ public class SpansResource {
     @Operation(operationId = "updateSpan", summary = "Update span by id", description = "Update span by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
-    @RateLimited
+    @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
+            + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 
@@ -273,11 +275,13 @@ public class SpansResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-        feedbackScoreService.deleteSpanScore(id, score.name())
+        log.info("Delete span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
+        feedbackScoreService.deleteSpanScore(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Deleted span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -294,7 +298,7 @@ public class SpansResource {
         log.info("Feedback scores batch for spans, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
         feedbackScoreService.scoreBatchOfSpans(batch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
         return Response.noContent().build();

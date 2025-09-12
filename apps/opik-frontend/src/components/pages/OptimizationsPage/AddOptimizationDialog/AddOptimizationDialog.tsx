@@ -15,27 +15,8 @@ import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/Conf
 export enum OPTIMIZATION_ALGORITHMS {
   fewShotOptimizer = "FewShotBayesianOptimizer",
   metaPromptOptimizer = "MetaPromptOptimizer",
-  miproOptimizer = "MiproOptimizer",
+  evolutionaryOptimizer = "EvolutionaryOptimizer",
 }
-
-export interface ModelData {
-  class: string;
-  initParameters?: string;
-  scoreParameters?: string[];
-}
-
-const OPTIMIZATION_ALGORITHMS_MAP: Record<OPTIMIZATION_ALGORITHMS, ModelData> =
-  {
-    [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: {
-      class: "MetaPromptOptimizer",
-    },
-    [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: {
-      class: "FewShotBayesianOptimizer",
-    },
-    [OPTIMIZATION_ALGORITHMS.miproOptimizer]: {
-      class: "MiproOptimizer",
-    },
-  };
 
 const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] =
   [
@@ -51,11 +32,161 @@ const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[]
         "Optimizes prompts using few-shot learning and Bayesian optimization.",
     },
     {
-      value: OPTIMIZATION_ALGORITHMS.miproOptimizer,
-      label: "Mipro optimizer",
-      description: "Optimizes prompts using Mipro.",
+      value: OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer,
+      label: "Evolutionary optimizer",
+      description: "Optimizes prompts using evolution.",
     },
   ];
+
+// Hardcoded code templates for each optimization algorithm
+const OPTIMIZATION_CODE_TEMPLATES: Record<OPTIMIZATION_ALGORITHMS, string> = {
+  [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: `# Configure the SDK
+import os
+# INJECT_OPIK_CONFIGURATION
+
+import opik
+from opik_optimizer import (
+    ChatPrompt,
+    MetaPromptOptimizer,
+)
+from opik.evaluation.metrics import LevenshteinRatio
+
+# Define the prompt to optimize
+prompt = ChatPrompt(
+    system="Answer the question.",
+    user="{question}", # This must match dataset field
+)
+
+# Get the dataset to evaluate the prompt on
+client = opik.Opik()
+dataset = client.get_dataset(name="DATASET_NAME_PLACEHOLDER")
+
+# Define the metric to evaluate the prompt on
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio()
+    return metric.score(
+        reference=dataset_item["answer"], # This must match dataset field
+        output=llm_output,
+    )
+
+# Run the optimization
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o",  # LiteLLM name
+    max_rounds=3,  # Number of optimization rounds
+    num_prompts_per_round=4,  # Number of prompts to generate per round
+    improvement_threshold=0.01,  # Minimum improvement required to continue
+    temperature=0.1,  # Lower temperature for more focused responses
+    max_completion_tokens=5000,  # Maximum tokens for model completion
+    n_threads=1,  # Number of threads for parallel evaluation
+    subsample_size=10,  # Fixed subsample size of 10 items
+)
+
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_samples=10,
+)
+
+result.display()`,
+
+  [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
+import os
+# INJECT_OPIK_CONFIGURATION
+
+import opik
+from opik_optimizer import (
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+)
+from opik.evaluation.metrics import LevenshteinRatio
+
+# Define the prompt to optimize
+prompt = ChatPrompt(
+    system="Answer the question.",
+    user="{question}", # This must match dataset field
+)
+
+# Get the dataset to evaluate the prompt on
+client = opik.Opik()
+dataset = client.get_dataset(name="DATASET_NAME_PLACEHOLDER")
+
+# Define the metric to evaluate the prompt on
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio()
+    return metric.score(
+        reference=dataset_item["answer"], # This must match dataset field
+        output=llm_output,
+    )
+
+# Run the optimization
+optimizer = FewShotBayesianOptimizer(
+    model="openai/gpt-4o",  # LiteLLM name
+    min_examples=3,
+    max_examples=8,
+    n_threads=4,
+    seed=42,
+)
+
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_trials=10,
+    n_samples=50,
+)
+
+result.display()`,
+
+  [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
+import os
+# INJECT_OPIK_CONFIGURATION
+
+import opik
+from opik_optimizer import (
+    ChatPrompt,
+    EvolutionaryOptimizer,
+)
+from opik.evaluation.metrics import LevenshteinRatio
+
+# Define the prompt to optimize
+prompt = ChatPrompt(
+    system="Answer the question.",
+    user="{question}", # This must match dataset field
+)
+
+# Get the dataset to evaluate the prompt on
+client = opik.Opik()
+dataset = client.get_dataset(name="DATASET_NAME_PLACEHOLDER")
+
+# Define the metric to evaluate the prompt on
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio()
+    return metric.score(
+        reference=dataset_item["answer"], # This must match dataset field
+        output=llm_output,
+    )
+
+# Run the optimization
+optimizer = EvolutionaryOptimizer(
+    model="openai/gpt-4o",  # LiteLLM name
+    population_size=10,
+    num_generations=3,
+    enable_moo=False,
+    enable_llm_crossover=True,
+    infer_output_style=True,
+    verbose=1,
+)
+
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_samples=10,
+)
+
+result.display()`,
+};
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
@@ -74,69 +205,14 @@ const AddOptimizationDialog: React.FunctionComponent<
   const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(
     OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
   );
+
   const section1 = "pip install opik-optimizer";
 
-  let optional_parameters = "";
-  if (
-    selectedModel === OPTIMIZATION_ALGORITHMS.fewShotOptimizer ||
-    selectedModel === OPTIMIZATION_ALGORITHMS.miproOptimizer
-  ) {
-    optional_parameters = "\n        use_chat_prompt=True,";
-  }
-  const importString = `from opik_optimizer import ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}
-
-import os
-import opik
-from opik.evaluation.metrics import Equals
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)`;
-
-  const section3 =
-    "" +
-    `${importString}
-
-# Configure the SDK
-# INJECT_OPIK_CONFIGURATION
-
-# Define the prompt to optimize
-prompt = "Answer the question."
-
-# Get the dataset to evaluate the prompt on
-client = opik.Opik()
-dataset = client.get_dataset(name="${
-      datasetName || "dataset name placeholder"
-    }")
-
-# Define the metric to evaluate the prompt on
-metric_config = MetricConfig(
-    metric=Equals(),
-    inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="expected_output"),
-    },
-)
-
-# Run the optimization
-optimizer = ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}(
-    model="gpt-4o",
-)
-
-result = optimizer.optimize_prompt(
-    dataset=dataset,
-    metric_config=metric_config,
-    task_config=TaskConfig(
-        instruction_prompt=prompt,
-        input_dataset_fields=["input"],
-        output_dataset_field="expected_output",${optional_parameters}
-    )
-)
-
-print(result)
-`;
+  // Get the hardcoded code template for the selected algorithm and inject dynamic values
+  const section3 = OPTIMIZATION_CODE_TEMPLATES[selectedModel].replace(
+    "DATASET_NAME_PLACEHOLDER",
+    datasetName || "your-dataset-name",
+  );
 
   const { data, isLoading } = useDatasetsList(
     {
@@ -214,7 +290,7 @@ print(result)
             <div className="comet-title-s">Optimization algorithms</div>
             {generateList(OPTIMIZATION_ALGORITHMS_OPTIONS)}
           </div>
-          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
+          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
               1. Select dataset
             </div>

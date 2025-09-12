@@ -9,10 +9,13 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ public interface ExperimentItemBulkIngestionService {
     /**
      * Ingests a batch of experiment items.
      *
+     * @param experiment the experiment to add items to
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
@@ -56,6 +60,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     /**
      * Ingests a batch of experiment items.
      *
+     * @param experiment the experiment to add items to
      * @param items the list of experiment items to ingest
      * @return a list of feedback score batch items
      */
@@ -66,11 +71,11 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return experimentService.create(experiment)
-                    .retryWhen(AsyncUtils.handleConnectionError())
+            return validateExperimentConsistency(experiment, workspaceId)
+                    .then(experimentService.create(experiment))
+                    .retryWhen(RetryUtils.handleConnectionError())
                     .flatMap(experimentId -> {
-
-                        log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                        log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                                 experimentId, experiment.name(), experiment.datasetName(), workspaceId);
 
                         Set<ExperimentItem> experimentItems = new HashSet<>();
@@ -101,6 +106,28 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
+    private Mono<Void> validateExperimentConsistency(Experiment experiment, String workspaceId) {
+        if (experiment.id() == null) {
+            return Mono.empty(); // New experiment, no validation needed
+        }
+
+        return experimentService.getById(experiment.id())
+                .flatMap(existingExperiment -> {
+                    // Validate dataset consistency
+                    if (!experiment.datasetName().equals(existingExperiment.datasetName())) {
+                        String errorMessage = "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
+                                .formatted(experiment.id(), existingExperiment.datasetName(), experiment.datasetName());
+                        return Mono.error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
+                    }
+
+                    return Mono.<Void>empty();
+                })
+                .onErrorResume(NotFoundException.class, ex -> {
+                    // Experiment doesn't exist yet, validation passes
+                    return Mono.empty();
+                });
+    }
+
     private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
             List<Span> spans, List<FeedbackScoreBatchItem> feedbackScores) {
         return Mono.defer(() -> Mono.zip(
@@ -111,21 +138,21 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
     private Mono<Long> saveTraces(List<Trace> traces) {
         return traceService.create(new TraceBatch(traces))
-                .retryWhen(AsyncUtils.handleConnectionError());
+                .retryWhen(RetryUtils.handleConnectionError());
     }
 
     private Mono<? extends Number> saveSpans(List<Span> spans) {
         return spans.isEmpty()
                 ? Mono.just(0)
                 : spanService.create(new SpanBatch(spans))
-                        .retryWhen(AsyncUtils.handleConnectionError());
+                        .retryWhen(RetryUtils.handleConnectionError());
     }
 
     private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
         return feedbackScores.isEmpty()
                 ? Mono.just(0)
                 : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
-                        .retryWhen(AsyncUtils.handleConnectionError())
+                        .retryWhen(RetryUtils.handleConnectionError())
                         .then(Mono.just(feedbackScores.size()));
     }
 

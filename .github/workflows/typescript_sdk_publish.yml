@@ -28,6 +28,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       VERSION: ${{ github.event.inputs.version || inputs.version }}
       IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
@@ -38,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
@@ -52,17 +53,19 @@ jobs:
         run: npm ci
 
       - name: Update version
+        if: ${{ env.IS_RELEASE }}
         run: npm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Build package
         run: npm run build
 
       - name: Commit version changes
+        if: ${{ env.IS_RELEASE }}
         run: |
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
           git add package.json package-lock.json
-          git commit -m "Update TypeScript SDK version to $(node -p "require('./package.json').version")"
+          git commit -m "Update TypeScript SDK version to ${{ env.VERSION }}"
 
       - name: Publish to NPM
         if: ${{ env.IS_RELEASE }}
@@ -71,7 +74,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push changes
-        uses: ad-m/github-push-action@master
+        if: ${{ env.IS_RELEASE }}
+        uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
           branch: ${{ github.ref }}

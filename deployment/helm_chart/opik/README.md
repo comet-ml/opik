@@ -100,6 +100,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.command[1] | string | `"-cx"` |  |
 | clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.extraEnv | object | `{}` |  |
 | clickhouse.backup.schedule | string | `"0 0 * * *"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.backup.serviceAccount.create | bool | `false` |  |
@@ -131,12 +132,16 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
 | clickhouse.enabled | bool | `true` |  |
+| clickhouse.extraPodTemplates | list | `[]` |  |
+| clickhouse.extraServiceTemplates | list | `[]` |  |
+| clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.port | int | `9363` |  |
 | clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
 | clickhouse.monitoring.service.ports[0].port | int | `80` |  |
 | clickhouse.monitoring.service.ports[0].targetPort | int | `9363` |  |
@@ -161,6 +166,10 @@ Call opik api on http://localhost:5173/api
 | clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
+| clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
+| clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
@@ -240,6 +249,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
@@ -304,7 +314,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
-| demoDataJob | bool | `true` |  |
+| demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
@@ -359,6 +369,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
+| zookeeper.image.repository | string | `"bitnamilegacy/zookeeper"` |  |
+| zookeeper.image.tag | string | `"3.9.3-debian-12-r16"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |

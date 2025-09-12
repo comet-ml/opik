@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import threading
 from typing import Dict
 
@@ -1304,6 +1305,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
             total_cost=0.42,
             model="gpt-3.5-turbo",
             provider="openai",
+            error_info={
+                "exception_type": "CustomError",
+                "message": "custom error message",
+                "traceback": "custom traceback",
+            },
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1339,6 +1345,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 spans=[],
                 model="gpt-3.5-turbo",
                 provider="openai",
+                error_info={
+                    "exception_type": "CustomError",
+                    "message": "custom error message",
+                    "traceback": "custom traceback",
+                },
             )
         ],
     )
@@ -1435,6 +1446,62 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
                         id=ANY_BUT_NONE, name="span-score-name", value=0.5
                     )
                 ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__update_current_span_with_error_info_then_exception_raised__exception_error_info_overrides_update_error_info(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            error_info={
+                "exception_type": "ManualError",
+                "message": "manually set error",
+                "traceback": "manual traceback",
+            }
+        )
+        # After setting error_info manually, raise an exception
+        raise ValueError("actual exception message")
+
+    with pytest.raises(ValueError):
+        f("the-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "the-input"},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "ValueError",
+            "message": "actual exception message",
+            "traceback": ANY_STRING,
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "the-input"},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "ValueError",
+                    "message": "actual exception message",
+                    "traceback": ANY_STRING,
+                },
+                spans=[],
             )
         ],
     )
@@ -1810,3 +1877,60 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
 
     trace_tree = fake_backend.trace_trees[0]
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__functools_partial_function__function_name_extracted_correctly(
+    fake_backend,
+):
+    """Test that functools.partial functions are tracked with the correct function name"""
+
+    def base_task(conversation_id, project_name, extra_param="default"):
+        return f"Processing {conversation_id} in {project_name} with {extra_param}"
+
+    # Create a partial function (similar to the user's use case that was crashing)
+    partial_task = functools.partial(base_task, project_name="test-project")
+
+    # Decorate the partial function
+    tracked_partial_task = tracker.track(partial_task)
+
+    # Execute the partial function
+    tracked_partial_task("test-conversation", extra_param="test-extra")
+
+    tracker.flush_tracker()
+
+    # Verify the function name is correctly extracted from the underlying function
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="base_task",  # Should be the name of the underlying function, not "partial"
+        input={
+            "conversation_id": "test-conversation",
+            "project_name": "test-project",  # Partial args are included in the input
+            "extra_param": "test-extra",
+        },
+        output={
+            "output": "Processing test-conversation in test-project with test-extra"
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="base_task",  # Should be the name of the underlying function
+                input={
+                    "conversation_id": "test-conversation",
+                    "project_name": "test-project",  # Partial args are included in the input
+                    "extra_param": "test-extra",
+                },
+                output={
+                    "output": "Processing test-conversation in test-project with test-extra"
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

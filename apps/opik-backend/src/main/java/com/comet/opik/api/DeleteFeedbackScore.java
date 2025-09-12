@@ -9,5 +9,5 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record DeleteFeedbackScore(@NotBlank String name) {
+public record DeleteFeedbackScore(@NotBlank String name, String author) {
 }

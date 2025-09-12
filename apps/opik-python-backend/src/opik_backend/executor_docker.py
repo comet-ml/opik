@@ -11,9 +11,9 @@ from uuid6 import uuid7
 import docker
 import schedule
 from opentelemetry import metrics
+from opentelemetry import trace
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
-from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,27 @@ container_stop_histogram = meter.create_histogram(
     unit="ms",
 )
 
+scoring_executor_histogram = meter.create_histogram(
+    name="scoring_executor_latency",
+    description="Latency of scoring executor operations in milliseconds",
+    unit="ms",
+)
+
 # Create a gauge metric to track the number of available containers in the pool
 container_pool_size_gauge = meter.create_gauge(
     name="container_pool_size",
     description="Number of available containers in the pool queue",
+)
+
+scoring_executor_queue_size_gauge = meter.create_gauge(
+    name="scoring_executor_queue_size",
+    description="Number of tasks in the scoring executor queue",
+)
+
+get_container_histogram = meter.create_histogram(
+    name="get_container_latency",
+    description="Latency of getting a container from the pool in milliseconds",
+    unit="ms",
 )
 
 class DockerExecutor(CodeExecutorBase):
@@ -55,6 +72,8 @@ class DockerExecutor(CodeExecutorBase):
         self.container_pool = Queue()
         self.pool_lock = Lock()
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
+        self.scoring_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
+
         self.stop_event = Event()
 
         # Pre-warm the container pool
@@ -62,6 +81,8 @@ class DockerExecutor(CodeExecutorBase):
 
         # Start the pool monitor
         self._start_pool_monitor()
+
+        self.tracer = trace.get_tracer(__name__)
 
         atexit.register(self.cleanup)
 
@@ -106,8 +127,8 @@ class DockerExecutor(CodeExecutorBase):
         This ensures containers are ready when the service starts.
         """
         logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
+        # Submit container creation tasks in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
-            # Submit container creation tasks in parallel
             futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
             # Wait for all containers to be created
             concurrent.futures.wait(futures)
@@ -141,36 +162,38 @@ class DockerExecutor(CodeExecutorBase):
     def create_container(self):
         # Record the start time for detailed container creation metrics
         start_time = time.time()
+        with self.tracer.start_as_current_span("docker.create_container"):
+            
+            new_container = self.client.containers.run(
+                image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
+                command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
+                mem_limit="256mb",
+                cpu_shares=2,
+                detach=True,
+                network_disabled=self.network_disabled,
+                security_opt=["no-new-privileges"],
+                labels=self.container_labels
+            )
 
-        new_container = self.client.containers.run(
-            image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
-            command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
-            mem_limit="256mb",
-            cpu_shares=2,
-            detach=True,
-            network_disabled=self.network_disabled,
-            security_opt=["no-new-privileges"],
-            labels=self.container_labels
-        )
+            # Add the container to the pool
+            self.container_pool.put(new_container)
 
-        # Add the container to the pool
-        self.container_pool.put(new_container)
+            # Calculate and record the latency for the direct container creation
+            latency = self._calculate_latency_ms(start_time)
+            container_creation_histogram.record(latency, attributes={"method": "create_container"})
 
-        # Calculate and record the latency for the direct container creation
-        latency = self._calculate_latency_ms(start_time)
-        container_creation_histogram.record(latency, attributes={"method": "create_container"})
-
-        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
+            logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
 
     def release_container(self, container):
         self.releaser_executor.submit(self.async_release, container)
 
     def async_release(self, container):
-        # First, ensure we have enough containers in the pool
-        self._create_new_container()
+        with self.tracer.start_as_current_span("async_release"):
+            # First, ensure we have enough containers in the pool
+            self._create_new_container()
 
-        # Now stop and remove the old container
-        self._stopContainer(container)
+            # Now stop and remove the old container
+            self._stopContainer(container)
 
     def _create_new_container(self):
         try:
@@ -180,47 +203,58 @@ class DockerExecutor(CodeExecutorBase):
             logger.error(f"Error replacing container: {e}")
 
     def _stopContainer(self, container):
-        try:
-            logger.info(f"Stopping container {container.id}. Will create a new one.")
+        with self.tracer.start_as_current_span("docker.stop_container"):
+            try:
+                logger.info(f"Stopping container {container.id}. Will create a new one.")
 
-            # Record the start time
-            start_time = time.time()
+                # Record the start time
+                start_time = time.time()
 
-            # Stop and remove the container
-            container.stop(timeout=1)
-            container.remove(force=True)
+                # Remove the container
+                container.remove(force=True)
 
-            # Calculate and record the latency
-            latency = self._calculate_latency_ms(start_time)
-            container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+                # Calculate and record the latency
+                latency = self._calculate_latency_ms(start_time)
+                container_stop_histogram.record(latency, attributes={"method": "stop_container"})
 
-            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
-        except Exception as e:
-            logger.error(f"Failed to stop container: {e}")
+                logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+
+            except docker.errors.APIError as e:
+                logger.error(f"Container {container.id} failed to be removed")
+            except Exception as e:
+                logger.error(f"Failed to stop container {container.id}: {e}")
 
     def get_container(self):
-        if self.stop_event.is_set():
-            raise RuntimeError("Executor is shutting down, no containers available")
-            
-        while not self.stop_event.is_set():
-            try:
-                return self.container_pool.get(timeout=self.exec_timeout)
-            except Exception as e:
-                if self.stop_event.is_set():
-                    raise RuntimeError("Executor is shutting down, no containers available")
-                    
-                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
+        with self.tracer.start_as_current_span("get_container"):
+            if self.stop_event.is_set():
+                raise RuntimeError("Executor is shutting down, no containers available")
+
+            while not self.stop_event.is_set():
+                try:
+                    return self.container_pool.get(timeout=self.exec_timeout)
+                except Exception as e:
+                    if self.stop_event.is_set():
+                        raise RuntimeError("Executor is shutting down, no containers available")
+
+                    logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
     def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
-            
+        
+        start_time = time.time()
         container = self.get_container()
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as command_executor:
-                future = command_executor.submit(
+        latency = self._calculate_latency_ms(start_time)
+        logger.info(f"Get container latency: {latency:.3f} milliseconds")
+        get_container_histogram.record(latency, attributes={"method": "get_container"})
+
+        with self.tracer.start_as_current_span("docker.run_scoring"):
+            try:
+                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, json.dumps(data), payload_type or ""]
+            
+                future = self.scoring_executor.submit(
                     container.exec_run,
-                    cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data), payload_type or ""],
+                    cmd=cmd,
                     detach=False,
                     stdin=False,
                     tty=False
@@ -230,17 +264,25 @@ class DockerExecutor(CodeExecutorBase):
                 exec_result = ExecutionResult(
                     exit_code=result.exit_code,
                     output=result.output
-                )               
+                )
+                latency = self._calculate_latency_ms(start_time)
+                logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
+
+                # Access ThreadPoolExecutor's internal work queue (private attribute)
+                queue_size = self.scoring_executor._work_queue.qsize()
+                scoring_executor_queue_size_gauge.set(queue_size)
+
+                scoring_executor_histogram.record(latency, attributes={"method": "run_scoring"})
                 return self.parse_execution_result(exec_result)
-        except concurrent.futures.TimeoutError:
-            logger.error(f"Execution timed out in container {container.id}")
-            return {"code": 504, "error": "Server processing exceeded timeout limit."}
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            return {"code": 500, "error": "An unexpected error occurred"}
-        finally:
-            # Stop and remove the container, then create a new one asynchronously
-            self.release_container(container)
+            except concurrent.futures.TimeoutError:
+                logger.error(f"Execution timed out in container {container.id}")
+                return {"code": 504, "error": "Server processing exceeded timeout limit."}
+            except Exception as e:
+                logger.error(f"An unexpected error occurred: {e}")
+                return {"code": 500, "error": "An unexpected error occurred"}
+            finally:
+                # Stop and remove the container, then create a new one asynchronously
+                self.release_container(container)
             
     def cleanup(self):
         """Clean up all containers managed by this executor."""
@@ -262,3 +304,4 @@ class DockerExecutor(CodeExecutorBase):
         # Shutdown the executor
         logger.info("Shutting down executor")
         self.releaser_executor.shutdown(wait=False, cancel_futures=True)
+        self.scoring_executor.shutdown(wait=False, cancel_futures=True)

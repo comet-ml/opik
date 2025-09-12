@@ -18,6 +18,7 @@ import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartToolt
 import NoData from "@/components/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import { Filter } from "@/types/filters";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 
@@ -32,12 +33,13 @@ interface MetricContainerChartProps {
   interval: INTERVAL_TYPE;
   intervalStart: string;
   intervalEnd: string;
-  disableLoadingData: boolean;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
   chartId: string;
+  traceFilters?: Filter[];
+  threadFilters?: Filter[];
 }
 
 const predefinedColorMap = {
@@ -65,12 +67,13 @@ const MetricContainerChart = ({
   interval,
   intervalStart,
   intervalEnd,
-  disableLoadingData,
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
   chartId,
   chartType = "line",
+  traceFilters,
+  threadFilters,
 }: MetricContainerChartProps) => {
   const { data: traces, isPending } = useProjectMetric(
     {
@@ -79,9 +82,11 @@ const MetricContainerChart = ({
       interval,
       intervalStart,
       intervalEnd,
+      traceFilters,
+      threadFilters,
     },
     {
-      enabled: !!projectId && !disableLoadingData,
+      enabled: !!projectId,
       refetchInterval: 30000,
     },
   );

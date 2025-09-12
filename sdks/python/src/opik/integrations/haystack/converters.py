@@ -3,9 +3,8 @@ import importlib.metadata
 from typing import Any, Dict
 
 import haystack.dataclasses
-import haystack.version
 
-from opik import semantic_version
+import opik.semantic_version as semantic_version
 
 
 def convert_message_to_openai_format(

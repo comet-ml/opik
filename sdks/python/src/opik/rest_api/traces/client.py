@@ -23,6 +23,7 @@ from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
+from ..types.value_entry import ValueEntry
 from .raw_client import AsyncRawTracesClient, RawTracesClient
 
 # this is used as the default value for optional parameters
@@ -169,6 +170,7 @@ class TracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -196,6 +198,8 @@ class TracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -220,6 +224,7 @@ class TracesClient:
             last_updated_at=last_updated_at,
             created_by=created_by,
             last_updated_by=last_updated_by,
+            value_by_author=value_by_author,
             request_options=request_options,
         )
         return _response.data
@@ -583,6 +588,7 @@ class TracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -595,6 +601,8 @@ class TracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -610,7 +618,7 @@ class TracesClient:
         client.traces.delete_thread_feedback_scores(project_name='project_name', thread_id='thread_id', names=['names'], )
         """
         _response = self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, request_options=request_options
+            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
         )
         return _response.data
 
@@ -641,7 +649,12 @@ class TracesClient:
         return _response.data
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -651,6 +664,8 @@ class TracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -665,7 +680,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_trace_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_trace_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     def delete_trace_threads(
@@ -1490,6 +1507,7 @@ class AsyncTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1516,6 +1534,8 @@ class AsyncTracesClient:
         created_by : typing.Optional[str]
 
         last_updated_by : typing.Optional[str]
+
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1544,6 +1564,7 @@ class AsyncTracesClient:
             last_updated_at=last_updated_at,
             created_by=created_by,
             last_updated_by=last_updated_by,
+            value_by_author=value_by_author,
             request_options=request_options,
         )
         return _response.data
@@ -1931,6 +1952,7 @@ class AsyncTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1943,6 +1965,8 @@ class AsyncTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1961,7 +1985,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, request_options=request_options
+            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
         )
         return _response.data
 
@@ -1995,7 +2019,12 @@ class AsyncTracesClient:
         return _response.data
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -2005,6 +2034,8 @@ class AsyncTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2022,7 +2053,9 @@ class AsyncTracesClient:
             await client.traces.delete_trace_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_trace_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     async def delete_trace_threads(

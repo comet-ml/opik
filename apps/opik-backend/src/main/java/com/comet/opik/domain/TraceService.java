@@ -45,6 +45,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -145,7 +146,9 @@ class TraceServiceImpl implements TraceService {
 
         Preconditions.checkArgument(!batch.traces().isEmpty(), "Batch traces cannot be empty");
 
-        List<String> projectNames = batch.traces()
+        List<Trace> dedupedTraces = dedupTraces(batch.traces());
+
+        List<String> projectNames = dedupedTraces
                 .stream()
                 .map(Trace::projectName)
                 .map(WorkspaceUtils::getProjectName)
@@ -156,7 +159,7 @@ class TraceServiceImpl implements TraceService {
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                     .flatMap(projectService::getOrCreate)
                     .collectList()
-                    .map(projects -> bindTraceToProjectAndId(batch, projects))
+                    .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                     .subscribeOn(Schedulers.boundedElastic());
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -168,7 +171,27 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
+    private List<Trace> dedupTraces(List<Trace> initialTraces) {
+
+        Map<Boolean, List<Trace>> shouldBeDeduped = initialTraces.stream()
+                .collect(Collectors.partitioningBy(trace -> trace.id() != null && trace.lastUpdatedAt() != null));
+
+        List<Trace> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Trace> dedupedTraces = shouldBeDeduped.get(true)
+                .stream()
+                .collect(Collectors.toMap(
+                        Trace::id,
+                        Function.identity(),
+                        (trace1, trace2) -> trace1.lastUpdatedAt().isAfter(trace2.lastUpdatedAt()) ? trace1 : trace2))
+                .values();
+
+        result.addAll(dedupedTraces);
+
+        return result;
+    }
+
+    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         Project::name,
@@ -176,7 +199,7 @@ class TraceServiceImpl implements TraceService {
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
-        return batch.traces()
+        return traces
                 .stream()
                 .map(trace -> {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
@@ -371,12 +394,13 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
 
-        return template.stream(dao::countTracesPerWorkspace)
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(dao::countTracesPerWorkspace)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        TraceCountResponse.builder()
-                                .workspacesTracesCount(items)
-                                .build()))
+                .map(items -> TraceCountResponse.builder()
+                        .workspacesTracesCount(items)
+                        .build())
                 .switchIfEmpty(Mono.just(TraceCountResponse.empty()));
     }
 
@@ -384,12 +408,14 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<BiInformationResponse> getTraceBIInformation() {
         log.info("Getting trace BI events daily data");
-        return template.stream(dao::getTraceBIInformation)
+
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(dao::getTraceBIInformation)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        BiInformationResponse.builder()
-                                .biInformation(items)
-                                .build()))
+                .map(items -> BiInformationResponse.builder()
+                        .biInformation(items)
+                        .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 
@@ -404,14 +430,8 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        Mono<List<UUID>> projects = Mono
-                .fromCallable(() -> projectService.findByNames(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.PROJECTS)
-                        .stream()
-                        .map(Project::id)
-                        .toList())
-                .subscribeOn(Schedulers.boundedElastic());
-
-        return projects.switchIfEmpty(Mono.just(List.of())).flatMap(dao::getDailyTraces);
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
     }
 
     @Override

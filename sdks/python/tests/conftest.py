@@ -12,6 +12,8 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
+
+from .testlib import environment
 from . import testlib
 from .testlib import backend_emulator_message_processor, noop_file_upload_manager
 
@@ -190,14 +192,14 @@ def temp_file_15mb():
         yield f
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
+    if not environment.has_openai_api_key():
         raise Exception("OpenAI not configured!")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def ensure_google_project_and_location_configured():
     if not (
         "GOOGLE_CLOUD_PROJECT" in os.environ and "GOOGLE_CLOUD_LOCATION" in os.environ
@@ -207,7 +209,7 @@ def ensure_google_project_and_location_configured():
         )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_anthropic_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
 
@@ -215,7 +217,7 @@ def ensure_anthropic_configured():
         raise Exception("Anthropic not configured!")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def ensure_vertexai_configured(ensure_google_project_and_location_configured):
     GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"
 
@@ -246,8 +248,30 @@ def ensure_vertexai_configured(ensure_google_project_and_location_configured):
             os.remove(GOOGLE_APPLICATION_CREDENTIALS_PATH)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def ensure_google_api_configured():
     GOOGLE_API_KEY = "GOOGLE_API_KEY"
     if GOOGLE_API_KEY not in os.environ:
         raise Exception(f"{GOOGLE_API_KEY} env var must be set")
+
+
+@pytest.fixture(scope="session")
+def ensure_aws_bedrock_configured():
+    import boto3
+
+    session = boto3.Session()
+
+    bedrock_client = session.client(service_name="bedrock")
+    try:
+        available_models = bedrock_client.list_foundation_models()["modelSummaries"]
+        if not available_models:
+            raise Exception("AWS Bedrock not configured! No models available")
+    except Exception as e:
+        raise Exception(f"AWS Bedrock not configured! {e}")
+
+
+@pytest.fixture(scope="session")
+def ensure_groq_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+    if "GROQ_API_KEY" not in os.environ:
+        raise Exception("Groq is not configured!")

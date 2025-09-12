@@ -21,8 +21,9 @@ export const COLUMN_USAGE_ID = "usage";
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
-export const COLUMN_DATASET_ID = "dataset";
+export const COLUMN_DATASET_ID = "dataset_id";
 export const COLUMN_DURATION_ID = "duration";
+export const COLUMN_CUSTOM_ID = "custom";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 
@@ -74,6 +75,7 @@ export type ColumnData<T> = {
   headerCheckbox?: boolean;
   explainer?: Explainer;
   cell?: Cell<T, unknown>;
+  aggregatedCell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;

@@ -31,7 +31,11 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
             for argument in track_options.ignore_arguments:
                 input.pop(argument, None)
 
-        name = track_options.name if track_options.name is not None else func.__name__
+        name = (
+            track_options.name
+            if track_options.name is not None
+            else inspect_helpers.get_function_name(func)
+        )
 
         result = arguments_helpers.StartSpanParameters(
             name=name,

@@ -1,4 +1,3 @@
-from functools import cached_property
 from typing import Any, Optional, Union
 import pydantic
 
@@ -18,10 +17,11 @@ class GEval(base_metric.BaseMetric):
         self,
         task_introduction: str,
         evaluation_criteria: str,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
         name: str = "g_eval_metric",
         track: bool = True,
         project_name: Optional[str] = None,
+        temperature: float = 0.0,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -37,34 +37,51 @@ class GEval(base_metric.BaseMetric):
             name: The name of the metric.
             track: Whether to track the metric. Defaults to True.
             project_name: Optional project name to track the metric in for the cases when
-                there are no parent span/trace to inherit project name from.
+                there is no parent span/trace to inherit project name from.
+            temperature: The temperature to use for the model. Defaults to 0.0.
         """
         super().__init__(
             name=name,
             track=track,
             project_name=project_name,
         )
-        self._init_model(model)
-
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
-        self._log_probs_supported = False
 
-    @cached_property
+        self._log_probs_supported = False
+        self._chain_of_thought_response: Optional[str] = None
+
+        self._init_model(model, temperature=temperature)
+
     def llm_chain_of_thought(self) -> str:
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
-            task_introduction=self.task_introduction,
-            evaluation_criteria=self.evaluation_criteria,
-        )
-        return self._model.generate_string(input=prompt)
+        if self._chain_of_thought_response is None:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+            self._chain_of_thought_response = self._model.generate_string(input=prompt)
+
+        return self._chain_of_thought_response
+
+    async def allm_chain_of_thought(self) -> str:
+        if self._chain_of_thought_response is None:
+            prompt = template.G_EVAL_COT_TEMPLATE.format(
+                task_introduction=self.task_introduction,
+                evaluation_criteria=self.evaluation_criteria,
+            )
+            self._chain_of_thought_response = await self._model.agenerate_string(
+                input=prompt
+            )
+
+        return self._chain_of_thought_response
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            self._model = models_factory.get(model_name=model, temperature=temperature)
 
         if (
             hasattr(self._model, "supported_params")
@@ -92,7 +109,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=self.llm_chain_of_thought,
+            chain_of_thought=self.llm_chain_of_thought(),
             input=output,
         )
 
@@ -139,7 +156,7 @@ class GEval(base_metric.BaseMetric):
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
-            chain_of_thought=self.llm_chain_of_thought,
+            chain_of_thought=await self.allm_chain_of_thought(),
             input=output,
         )
 

@@ -206,6 +206,8 @@ class LegacyOpikTracer:
             provider, model = litellm_wrappers.parse_provider_and_model(
                 llm_request.model
             )
+            if provider is None:
+                provider = adk_helpers.get_adk_provider()
 
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
@@ -246,35 +248,35 @@ class LegacyOpikTracer:
             return
 
         model = None
-        provider = None
         usage = None
         output = None
-
-        try:
-            output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-            usage_data = llm_response_wrapper.pop_llm_usage_data(output)
-            if usage_data is not None:
-                model = usage_data.model
-                provider = usage_data.provider
-                usage = usage_data.opik_usage
-        except Exception as e:
-            LOGGER.debug(
-                f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
-                exc_info=True,
-            )
-
-        self._last_model_output = output
 
         try:
             span_data = self._context_storage.top_span_data()
             assert span_data is not None
 
+            try:
+                output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                self._last_model_output = output
+
+                usage_data = llm_response_wrapper.pop_llm_usage_data(
+                    output, span_data.provider
+                )
+                if usage_data is not None:
+                    model = usage_data.model
+                    usage = usage_data.opik_usage
+            except Exception as e:
+                LOGGER.debug(
+                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+                    exc_info=True,
+                )
+
             if span_data.id in self._opik_created_spans:
                 span_data.update(
+                    name=model,
                     output=output,
                     usage=usage,
                     model=model,
-                    provider=provider,
                 )
                 self._end_current_span()
                 self._opik_created_spans.discard(span_data.id)

@@ -2,7 +2,7 @@ import abc
 from typing import Any, List, Union, Optional
 
 import opik
-from opik import config as opik_config
+import opik.config as opik_config
 from ..metrics import score_result
 
 

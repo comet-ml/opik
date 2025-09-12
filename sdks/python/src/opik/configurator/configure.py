@@ -13,7 +13,7 @@ from opik.config import (
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
-from opik import url_helpers
+import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
 
 
@@ -47,9 +47,12 @@ class OpikConfigurator:
         # This URL set here might not be the final one.
         # It's possible that the URL will be extracted from the smart api key on the later stage.
         # In that case `self.base_url` field will be updated.
-        self.base_url = (
-            OPIK_BASE_URL_CLOUD if url is None else url_helpers.get_base_url(url)
-        )
+        if url is None:
+            self.base_url = (
+                OPIK_BASE_URL_LOCAL if self.use_local else OPIK_BASE_URL_CLOUD
+            )
+        else:
+            self.base_url = url_helpers.get_base_url(url)
 
     def configure(self) -> None:
         """

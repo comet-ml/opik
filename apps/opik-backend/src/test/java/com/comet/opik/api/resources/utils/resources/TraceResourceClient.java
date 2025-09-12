@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDeleteByProject;
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
@@ -19,6 +20,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.HttpMethod;
@@ -95,6 +97,23 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void deleteTraceFeedbackScore(DeleteFeedbackScore score, UUID traceId, String apiKey, String workspaceName) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("feedback-scores")
+                .path("delete")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(score))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
@@ -212,14 +231,18 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public Response updateTrace(
             UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName, int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        var actualResponse = callUpdateTrace(id, traceUpdate, apiKey, workspaceName);
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return actualResponse;
+    }
+
+    public Response callUpdateTrace(UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .method(HttpMethod.PATCH, Entity.json(traceUpdate));
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-        return actualResponse;
     }
 
     public List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
@@ -277,7 +300,8 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String apiKey,
+    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String author,
+            String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -290,6 +314,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .projectName(projectName)
                         .threadId(threadId)
                         .names(scoreNames)
+                        .author(author)
                         .build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -599,5 +624,15 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
+    }
+
+    public Response callBatchCreateTracesWithCookie(List<Trace> traces, String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new TraceBatch(traces)));
     }
 }

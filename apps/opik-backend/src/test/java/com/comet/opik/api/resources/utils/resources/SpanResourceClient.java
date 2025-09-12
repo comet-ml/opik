@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
@@ -62,12 +63,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Response createSpan(Span span, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(span));
+        var response = callCreateSpan(span, apiKey, workspaceName);
 
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
@@ -88,6 +84,15 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
     }
 
+    public Response callCreateSpan(Span span, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(span));
+    }
+
     public void updateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
         try (var response = updateSpan(spanId, spanUpdate, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT)) {
             assertThat(response.hasEntity()).isFalse();
@@ -96,14 +101,18 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Response updateSpan(
             UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        var response = callUpdateSpan(spanId, spanUpdate, apiKey, workspaceName);
+        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return response;
+    }
+
+    public Response callUpdateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(spanId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .method(HttpMethod.PATCH, Entity.json(spanUpdate));
-        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-        return response;
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
@@ -129,6 +138,23 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(score))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public void deleteSpanFeedbackScore(DeleteFeedbackScore score, UUID spanId, String apiKey, String workspaceName) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .path("feedback-scores")
+                .path("delete")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(score))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }

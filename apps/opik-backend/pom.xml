@@ -19,20 +19,20 @@
         <dropwizard.version>4.0.14</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.3.0</mysql.version>
+        <mysql.version>9.4.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
         <stringtemplate.version>3.49.4</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
-        <google-protobuf.version>4.31.0</google-protobuf.version>
+        <google-protobuf.version>4.32.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>1.21.0</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
-        <redisson.version>3.50.0</redisson.version>
-        <opentelmetry.version>2.18.0</opentelmetry.version>
-        <aws.java.sdk.version>2.32.4</aws.java.sdk.version>
+        <redisson.version>3.51.0</redisson.version>
+        <opentelmetry.version>2.19.0</opentelmetry.version>
+        <aws.java.sdk.version>2.33.0</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.1.0</version>
+                <version>1.4.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -82,7 +82,7 @@
             <dependency>
                 <groupId>net.minidev</groupId>
                 <artifactId>json-smart</artifactId>
-                <version>2.5.2</version>
+                <version>2.6.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -260,12 +260,12 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-http-client-jdk</artifactId>
-            <version>1.1.0</version>
+            <version>1.4.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>1.27.1</version>
+            <version>1.28.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -280,7 +280,7 @@
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
-            <version>1.7.0-alpha</version>
+            <version>1.8.0-alpha</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
