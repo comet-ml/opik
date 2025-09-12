@@ -519,6 +519,93 @@ class PromptResourceTest {
                 }
             }
         }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Restore prompt version: when api key is present, then return proper response")
+        void restorePromptVersion__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .id(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .createdBy(null)
+                    .lastUpdatedBy(null)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            // Create first version to restore from
+            var promptVersion1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(null)
+                    .commit(null)
+                    .createdAt(null)
+                    .createdBy(null)
+                    .variables(null)
+                    .template("Original template content")
+                    .changeDescription("First version")
+                    .build();
+
+            CreatePromptVersion request1 = new CreatePromptVersion(prompt.name(), promptVersion1);
+            promptVersion1 = createPromptVersion(request1, okApikey, workspaceName);
+
+            // Create second version
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(null)
+                    .commit(null)
+                    .createdAt(null)
+                    .createdBy(null)
+                    .variables(null)
+                    .template("Modified template content")
+                    .changeDescription("Second version")
+                    .build();
+
+            CreatePromptVersion request2 = new CreatePromptVersion(prompt.name(), promptVersion2);
+            promptVersion2 = createPromptVersion(request2, okApikey, workspaceName);
+
+            // Now restore the first version
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
+                    .formatted(promptId, promptVersion1.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(""))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                    var restoredVersion = actualResponse.readEntity(PromptVersion.class);
+
+                    // Verify the restored version has the same content as the original
+                    assertThat(restoredVersion).isNotNull();
+                    assertThat(restoredVersion.template()).isEqualTo(promptVersion1.template());
+                    assertThat(restoredVersion.metadata()).isEqualTo(promptVersion1.metadata());
+                    assertThat(restoredVersion.type()).isEqualTo(promptVersion1.type());
+                    assertThat(restoredVersion.promptId()).isEqualTo(promptId);
+                    assertThat(restoredVersion.createdBy()).isEqualTo(USER);
+                    assertThat(restoredVersion.changeDescription()).contains("Restored from version");
+
+                    // Verify it's a new version (different ID and commit)
+                    assertThat(restoredVersion.id()).isNotEqualTo(promptVersion1.id());
+                    assertThat(restoredVersion.id()).isNotEqualTo(promptVersion2.id());
+                    assertThat(restoredVersion.commit()).isNotEqualTo(promptVersion1.commit());
+                    assertThat(restoredVersion.commit()).isNotEqualTo(promptVersion2.commit());
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(errorMessage.getCode());
+
+                    var actualErrorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+                    assertThat(actualErrorMessage).isEqualTo(errorMessage);
+                }
+            }
+        }
     }
 
     @Nested
