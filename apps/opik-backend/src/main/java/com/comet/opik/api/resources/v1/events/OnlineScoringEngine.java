@@ -264,7 +264,7 @@ public class OnlineScoringEngine {
         }
         var spliterator = Spliterators.spliteratorUnknownSize(
                 structuredResponse.fields(), Spliterator.ORDERED | Spliterator.NONNULL);
-        return StreamSupport.stream(spliterator, false)
+        List<FeedbackScoreBatchItem> results = StreamSupport.stream(spliterator, false)
                 .map(scoreMetric -> {
                     var scoreName = scoreMetric.getKey();
                     var scoreNested = scoreMetric.getValue();
@@ -286,6 +286,18 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+        if (results.isEmpty()) {
+            var topLevelKeys = StreamSupport.stream(
+                    Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
+                            Spliterator.ORDERED | Spliterator.NONNULL),
+                    false)
+                    .toList();
+            var truncated = content.length() > 500 ? content.substring(0, 500) + "..." : content;
+            log.warn(
+                    "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }. Top-level keys: '{}'. Raw response (truncated): '{}'",
+                    topLevelKeys, truncated);
+        }
+        return results;
     }
 
     private static String extractJson(String response) {
