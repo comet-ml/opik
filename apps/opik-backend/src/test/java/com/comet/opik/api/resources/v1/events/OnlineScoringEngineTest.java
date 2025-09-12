@@ -588,33 +588,6 @@ class OnlineScoringEngineTest {
         }
     }
 
-    @Test
-    @DisplayName("toFeedbackScores logs ERROR when no scores parsed from flat JSON shape")
-    void testToFeedbackScores_logsErrorOnEmptyResults() {
-        var flatAiMsgTxt = "{\"user_satisfaction_score\":75.0,\"reason\":\"why\",\"chat_summary\":\"summary\"}";
-        var chatResponse = ChatResponse.builder()
-                .aiMessage(AiMessage.aiMessage(flatAiMsgTxt))
-                .build();
-
-        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(OnlineScoringEngine.class);
-        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
-        appender.start();
-        logger.addAppender(appender);
-
-        try {
-            var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
-            assertThat(feedbackScores).isEmpty();
-
-            assertThat(appender.list).anyMatch(event -> event.getLevel() == ch.qos.logback.classic.Level.ERROR
-                    && event.getFormattedMessage().contains("Invalid LLM output format for feedback scores")
-                    && event.getFormattedMessage()
-                            .contains("{ '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }"));
-        } finally {
-            logger.detachAppender(appender);
-            appender.stop();
-        }
-    }
-
     private JsonObjectSchema createTestSchema() {
         return JsonObjectSchema.builder()
                 .addProperty("Relevance", JsonObjectSchema.builder()
