@@ -210,7 +210,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-3xl max-h-[85vh]">
+      <DialogContent className="max-h-[85vh] max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bot className="size-4" />
@@ -222,7 +222,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
             {/* Statistics Summary */}
             {sampleStats && (
               <div className="rounded-lg border bg-muted/20 p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="size-4" />
                     <h4 className="text-sm font-medium">Generation Summary</h4>
@@ -289,7 +289,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                     onClick={() => setShowAllSamples(!showAllSamples)}
                     className="ml-4"
                   >
-                    <Eye className="size-4 mr-1" />
+                    <Eye className="mr-1 size-4" />
                     {showAllSamples
                       ? `Show sample (${displaySamples.length})`
                       : `Show all (${samples.length})`}
@@ -313,7 +313,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                 return (
                   <div
                     key={sample.id}
-                    className={`border rounded-lg transition-colors ${
+                    className={`rounded-lg border transition-colors ${
                       isSelected
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/50"
@@ -326,7 +326,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                         onCheckedChange={() => handleSelectSample(sample.id)}
                         onClick={(e) => e.stopPropagation()}
                       />
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
                             Sample {sampleNumber}
@@ -344,7 +344,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                             )}
                           </Button>
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="truncate text-xs text-muted-foreground">
                           {getSamplePreview(sample)}
                         </div>
                       </div>
@@ -361,7 +361,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
               })}
 
               {!showAllSamples && samples.length > displaySamples.length && (
-                <div className="text-center py-2">
+                <div className="py-2 text-center">
                   <Button
                     variant="outline"
                     onClick={() => setShowAllSamples(true)}

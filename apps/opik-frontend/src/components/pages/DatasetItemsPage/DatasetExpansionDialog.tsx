@@ -228,14 +228,14 @@ const DatasetExpansionDialog: React.FunctionComponent<
               content="This will generate synthetic samples based on your existing data patterns. The generated samples will be available for review before adding to your dataset."
               side="bottom"
             >
-              <Info className="size-4 text-muted-foreground cursor-help" />
+              <Info className="size-4 cursor-help text-muted-foreground" />
             </TooltipWrapper>
           </DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col gap-4">
           {/* Dataset Structure Analysis */}
           {isAnalyzing && (
-            <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/30">
+            <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3">
               <Loader className="size-4" />
               <span className="text-sm text-muted-foreground">
                 Analyzing dataset structure...
@@ -244,7 +244,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
           )}
 
           {datasetAnalysis && (
-            <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Detected Structure</h4>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -274,7 +274,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                       <TooltipWrapper
                         key={field}
                         content={
-                          <div className="text-xs space-y-1">
+                          <div className="space-y-1 text-xs">
                             <div>Appears in {frequency}% of samples</div>
                             <div>
                               Type:{" "}
@@ -291,7 +291,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                         <Tag
                           variant={isSelected ? "blue" : "gray"}
                           size="sm"
-                          className={`cursor-pointer transition-colors text-xs ${
+                          className={`cursor-pointer text-xs transition-colors ${
                             isSelected
                               ? "bg-primary text-primary-foreground"
                               : "hover:bg-muted-foreground/10"
@@ -370,10 +370,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem
                 value="prompt-preview"
-                className="border rounded-md"
+                className="rounded-md border"
               >
-                <AccordionTrigger className="text-sm px-3 py-2 hover:no-underline">
-                  <div className="flex items-center justify-between w-full pr-2">
+                <AccordionTrigger className="px-3 py-2 text-sm hover:no-underline">
+                  <div className="flex w-full items-center justify-between pr-2">
                     <span className="text-sm font-medium">
                       Preview generation prompt
                     </span>
@@ -387,7 +387,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                           setIsEditingPrompt(true);
                         }
                       }}
-                      className="h-6 px-2 text-xs bg-secondary hover:bg-secondary/80 rounded cursor-pointer flex items-center"
+                      className="flex h-6 cursor-pointer items-center rounded bg-secondary px-2 text-xs hover:bg-secondary/80"
                     >
                       {isEditingPrompt ? "Save" : "Edit"}
                     </span>
@@ -400,14 +400,14 @@ const DatasetExpansionDialog: React.FunctionComponent<
                         value={customPrompt}
                         onChange={(e) => setCustomPrompt(e.target.value)}
                         rows={10}
-                        className="font-mono text-xs resize-none"
+                        className="resize-none font-mono text-xs"
                         placeholder="Enter your custom prompt..."
                       />
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           onClick={() => setIsEditingPrompt(false)}
-                          className="text-xs px-2 py-1 h-auto"
+                          className="h-auto px-2 py-1 text-xs"
                         >
                           Apply
                         </Button>
@@ -418,7 +418,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                             setCustomPrompt(defaultPrompt);
                             setIsEditingPrompt(false);
                           }}
-                          className="text-xs px-2 py-1 h-auto"
+                          className="h-auto px-2 py-1 text-xs"
                         >
                           Reset
                         </Button>
@@ -426,7 +426,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                     </div>
                   ) : (
                     <div className="rounded-md border bg-muted/20 p-3">
-                      <pre className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
+                      <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
                         {activePrompt}
                       </pre>
                     </div>
@@ -449,7 +449,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
             }
             size="sm"
           >
-            {isPending && <Loader className="size-4 mr-2" />}
+            {isPending && <Loader className="mr-2 size-4" />}
             {isPending ? "Generating..." : "Generate Samples"}
           </Button>
         </DialogFooter>
