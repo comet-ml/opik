@@ -18,6 +18,7 @@ from . import (
 from .metrics import base_metric
 from .models import base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
+from .. import url_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -158,11 +159,13 @@ def _evaluate_task(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -171,6 +174,7 @@ def _evaluate_task(
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_
@@ -250,17 +254,20 @@ def evaluate_experiment(
             experiment.dataset_name, total_time, test_results
         )
 
-    report.display_experiment_link(
-        dataset_id=experiment.dataset_id,
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_
@@ -393,11 +400,13 @@ def evaluate_prompt(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -406,6 +415,7 @@ def evaluate_prompt(
         dataset_id=dataset.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
     )
 
     return evaluation_result_

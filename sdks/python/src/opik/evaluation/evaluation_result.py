@@ -11,3 +11,4 @@ class EvaluationResult:
     dataset_id: str
     experiment_name: Optional[str]
     test_results: List[test_result.TestResult]
+    experiment_url: Optional[str]
