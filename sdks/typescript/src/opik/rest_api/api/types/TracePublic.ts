@@ -12,7 +12,7 @@ export interface TracePublic {
     endTime?: Date;
     input?: OpikApi.JsonListStringPublic;
     output?: OpikApi.JsonListStringPublic;
-    metadata?: OpikApi.JsonNodePublic;
+    metadata?: OpikApi.JsonListStringPublic;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoPublic;
     usage?: Record<string, number>;
