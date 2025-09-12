@@ -215,7 +215,6 @@ from .json_list_string_public import JsonListStringPublic
 from .json_list_string_write import JsonListStringWrite
 from .json_node import JsonNode
 from .json_node_detail import JsonNodeDetail
-from .json_node_experiment_item_bulk_write_view import JsonNodeExperimentItemBulkWriteView
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_schema import JsonSchema
@@ -562,7 +561,6 @@ __all__ = [
     "JsonListStringWrite",
     "JsonNode",
     "JsonNodeDetail",
-    "JsonNodeExperimentItemBulkWriteView",
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
