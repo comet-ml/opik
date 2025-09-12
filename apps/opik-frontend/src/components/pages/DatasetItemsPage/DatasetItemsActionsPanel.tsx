@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, Bot } from "lucide-react";
+import { Trash, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
@@ -68,16 +68,14 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         setOpen={setGeneratedSamplesDialogOpen}
       />
 
-      <TooltipWrapper content="Expand dataset with AI">
-        <Button
-          variant="default"
-          size="icon-sm"
-          onClick={() => setExpansionDialogOpen(true)}
-          className="bg-blue-600 text-white hover:bg-blue-700"
-        >
-          <Bot />
-        </Button>
-      </TooltipWrapper>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setExpansionDialogOpen(true)}
+      >
+        <Sparkles className="mr-2 size-4" />
+        Expand dataset with AI
+      </Button>
 
       <TooltipWrapper content="Delete">
         <Button
