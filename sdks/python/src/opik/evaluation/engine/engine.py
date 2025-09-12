@@ -13,6 +13,7 @@ from opik.evaluation import (
     rest_operations,
     test_case,
     test_result,
+    samplers,
 )
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 
@@ -160,11 +161,15 @@ class EvaluationEngine:
         task: LLMTask,
         nb_samples: Optional[int],
         dataset_item_ids: Optional[List[str]],
+        dataset_sampler: Optional[samplers.BaseDatasetSampler],
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
         )
+
+        if dataset_sampler is not None:
+            dataset_items = dataset_sampler.sample(dataset_items)
 
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
