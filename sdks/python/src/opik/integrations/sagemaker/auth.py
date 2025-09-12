@@ -45,6 +45,6 @@ def setup_aws_sagemaker_session_hook() -> None:
 
     opik.hooks.add_httpx_client_hook(
         opik.hooks.HttpxClientHook(
-            hook=sagemaker_auth_client_hook, httpx_client_arguments=None
+            client_modifier=sagemaker_auth_client_hook, client_init_arguments=None
         )
     )

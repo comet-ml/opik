@@ -12,7 +12,9 @@ from opik.s3_httpx_client import (
 
 def test_httpx_client_hooks__callable_hook_applied():
     mock_callable = mock.MagicMock()
-    hook = opik.hooks.HttpxClientHook(hook=mock_callable, httpx_client_arguments=None)
+    hook = opik.hooks.HttpxClientHook(
+        client_modifier=mock_callable, client_init_arguments=None
+    )
     opik.hooks.add_httpx_client_hook(hook)
 
     client = s3_httpx_client.get()
@@ -23,7 +25,7 @@ def test_httpx_client_hooks__callable_hook_applied():
 def test_httpx_client_hooks__callable_hook_applied_with_arguments():
     mock_callable = mock.MagicMock()
     hook = opik.hooks.HttpxClientHook(
-        hook=mock_callable, httpx_client_arguments={"trust_env": False}
+        client_modifier=mock_callable, client_init_arguments={"trust_env": False}
     )
     opik.hooks.add_httpx_client_hook(hook)
 
@@ -44,12 +46,14 @@ def test_httpx_client_hooks__callable_hook_applied_with_arguments():
 def test_httpx_client_hooks__callable_hook_applied__with_arguments_hook_applied_afterwards():
     # apply a first hook with callable
     mock_callable = mock.MagicMock()
-    hook = opik.hooks.HttpxClientHook(hook=mock_callable, httpx_client_arguments=None)
+    hook = opik.hooks.HttpxClientHook(
+        client_modifier=mock_callable, client_init_arguments=None
+    )
     opik.hooks.add_httpx_client_hook(hook)
 
     # apply a second hook with custom arguments
     hook2 = opik.hooks.HttpxClientHook(
-        hook=None, httpx_client_arguments={"trust_env": False}
+        client_modifier=None, client_init_arguments={"trust_env": False}
     )
     opik.hooks.add_httpx_client_hook(hook2)
 

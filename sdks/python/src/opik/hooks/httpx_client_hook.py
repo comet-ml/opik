@@ -16,8 +16,8 @@ LOGGER = logging.getLogger(__name__)
 class HttpxClientHook:
     def __init__(
         self,
-        hook: Optional[Callable[[httpx.Client], None]],
-        httpx_client_arguments: Optional[Dict[str, Any]],
+        client_modifier: Optional[Callable[[httpx.Client], None]],
+        client_init_arguments: Optional[Dict[str, Any]],
     ) -> None:
         """Provides a means to customize an `httpx.Client` instance used by Opik.
 
@@ -27,13 +27,13 @@ class HttpxClientHook:
         pre-processing or setup of HTTP clients used in a broader application.
 
         Args:
-            hook: Optional callable that accepts an `httpx.Client` instance and
+            client_modifier: Optional callable that accepts an `httpx.Client` instance and
                 returns a modified httpx.Client instance.
-            httpx_client_arguments: Dictionary containing additional `httpx.Client`
+            client_init_arguments: Dictionary containing additional `httpx.Client`
                 initialization arguments to be passed to the default `httpx.Client`.
         """
-        self._hook = hook
-        self._httpx_client_arguments = httpx_client_arguments
+        self._hook = client_modifier
+        self._httpx_client_arguments = client_init_arguments
 
     def update_init_arguments(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         if self._httpx_client_arguments is not None:

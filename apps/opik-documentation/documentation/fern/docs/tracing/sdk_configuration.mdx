@@ -127,8 +127,8 @@ def custom_auth_client_hook(client: httpx.Client) -> None:
     client.auth = CustomAuth()
 
 hook = opik.hooks.HttpxClientHook(
-    httpx_client_arguments={"trust_env": False},
-    hook=custom_auth_client_hook,
+    client_init_arguments={"trust_env": False},
+    client_modifier=custom_auth_client_hook,
 )
 opik.hooks.add_httpx_client_hook(hook)
 
