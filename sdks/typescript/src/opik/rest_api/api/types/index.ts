@@ -307,3 +307,4 @@ export * from "./WorkspaceMetricResponse";
 export * from "./WorkspaceMetricRequest";
 export * from "./WorkspaceConfiguration";
 export * from "./WorkspaceMetricsSummaryResponse";
+export * from "./UpdateExperimentRequest"

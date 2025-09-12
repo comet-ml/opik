@@ -480,6 +480,28 @@ export class OpikClient {
     }
   };
 
+  /**
+   * Updates an experiment by ID
+   *
+   * @param id The ID of the experiment
+   * @param name The new name
+   * @param metadata The new metadata
+   */
+  public updateExperiment = async (
+    id: string,
+    name: string,
+    metadata: Record<string, unknown>
+  ): Promise<void> => {
+    logger.debug(`Updating experiment with ID "${id}"`);
+
+    try {
+      await this.api.experiments.updateExperimentById(id, {name, metadata });
+    } catch (error) {
+      logger.error(`Failed to update experiment with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
   public flush = async () => {
     logger.debug("Starting flush operation");
     try {
