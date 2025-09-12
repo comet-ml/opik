@@ -94,11 +94,12 @@ def apply_httpx_client_hooks(client: httpx.Client) -> None:
 
 def register_httpx_client_hook(hook: Callable[[httpx.Client], httpx.Client]) -> None:
     """
+    Deprecated: This method is deprecated and will be removed in a future release. Please use `add_httpx_client_hook` instead.
+
     Registers a hook for the customization of `httpx.Client` instances. The provided
     hook function will be invoked with an `httpx.Client` instance and is expected
     to return a customized `httpx.Client`.
 
-    Deprecated: This method is deprecated and will be removed in a future release. Please use `add_httpx_client_hook` instead.
 
     Args:
         hook: A callable that takes an `httpx.Client` instance and returns a
