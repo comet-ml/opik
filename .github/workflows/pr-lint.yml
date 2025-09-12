@@ -95,4 +95,3 @@ jobs:
             } else {
                console.log("✅ PR linting passed!");
             }
-    continue-on-error: true
