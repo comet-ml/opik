@@ -341,7 +341,6 @@ const DataTable = <TData, TValue>({
           </TableCell>
         );
       }
-      return null;
     }
 
     if (cell.getIsPlaceholder()) {

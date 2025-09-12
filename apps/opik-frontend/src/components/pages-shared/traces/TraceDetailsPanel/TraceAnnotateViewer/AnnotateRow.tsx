@@ -28,14 +28,12 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   categoryOptionLabelRenderer,
   hasValuesByAuthor,
-  isMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
 import { UpdateFeedbackScoreData } from "./types";
 import { useLoggedInUserName } from "@/store/AppStore";
-import MultiValueFeedbackScoreName from "@/components/shared/FeedbackScoreTag/MultiValueFeedbackScoreName";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -149,8 +147,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   const toggleEditReasonHandler = useCallback(() => {
     setEditReason(!editReason);
-    setReasonValue(feedbackScore?.reason);
-  }, [editReason, feedbackScore?.reason, setReasonValue]);
+    setReasonValue(feedbackScoreData?.reason);
+  }, [editReason, feedbackScoreData?.reason, setReasonValue]);
 
   const handleCopyReasonClick = async (v: string) => {
     await copy(v);
@@ -293,14 +291,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   return (
     <>
       <div className="flex items-center overflow-hidden border-t border-border p-1 pl-0">
-        {!!feedbackScore && isMultiValueFeedbackScore(feedbackScore) ? (
-          <MultiValueFeedbackScoreName
-            className="max-w-full px-1.5"
-            label={name}
-          />
-        ) : (
-          <ColoredTagNew label={name} />
-        )}
+        <ColoredTagNew label={name} />
       </div>
       <div
         className="flex items-center overflow-hidden border-t border-border p-1"
@@ -311,11 +302,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             {renderOptions(feedbackDefinition)}
           </div>
         ) : (
-          <div>{feedbackScore?.value}</div>
+          <div>{feedbackScoreData?.value}</div>
         )}
       </div>
       <div className="flex items-center justify-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScore?.value) && (
+        {!isUndefined(feedbackScoreData?.value) && (
           <Button
             variant="outline"
             size="icon-sm"
@@ -326,7 +317,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             )}
             onClick={toggleEditReasonHandler}
           >
-            {!!feedbackScore?.reason && (
+            {!!feedbackScoreData?.reason && (
               <div
                 className={cn(
                   "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
@@ -340,7 +331,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScore?.value) && (
+        {!isUndefined(feedbackScoreData?.value) && (
           <Button
             variant="minimal"
             size="icon-sm"
@@ -364,13 +355,15 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                 updateTextAreaHeight(e, 32);
               }}
             />
-            {feedbackScore?.reason && (
+            {feedbackScoreData?.reason && (
               <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
                 <TooltipWrapper content="Copy">
                   <Button
                     size="icon-2xs"
                     variant="outline"
-                    onClick={() => handleCopyReasonClick(feedbackScore.reason!)}
+                    onClick={() =>
+                      handleCopyReasonClick(feedbackScoreData.reason!)
+                    }
                   >
                     <Copy />
                   </Button>

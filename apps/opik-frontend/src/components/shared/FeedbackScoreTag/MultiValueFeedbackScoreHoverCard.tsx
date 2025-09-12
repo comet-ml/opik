@@ -11,6 +11,7 @@ import {
   getCategoricFeedbackScoreValuesMap,
   getIsCategoricFeedbackScore,
 } from "./utils";
+import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
 
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
@@ -133,6 +134,11 @@ const MultiValueFeedbackScoreHoverCard: React.FC<
   onOpenChange,
 }) => {
   const isCategoricFeedbackScore = getIsCategoricFeedbackScore(category);
+  const isMultiValueFeedbackScore = getIsMultiValueFeedbackScore(valueByAuthor);
+
+  if (!isMultiValueFeedbackScore) {
+    return children;
+  }
 
   return (
     <HoverCard open={open} onOpenChange={onOpenChange}>

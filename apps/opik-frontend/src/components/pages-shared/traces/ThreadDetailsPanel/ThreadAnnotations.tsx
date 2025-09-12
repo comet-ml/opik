@@ -10,8 +10,6 @@ import FeedbackScoresEditor from "../FeedbackScoresEditor/FeedbackScoresEditor";
 import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
 import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
-import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
-import MultiValueFeedbackScoreTag from "@/components/shared/FeedbackScoreTag/MultiValueFeedbackScoreTag";
 
 type ThreadAnnotationsProps = {
   threadId: string;
@@ -68,15 +66,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
         {hasFeedbackScores && (
           <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
             {feedbackScores.map((score) => {
-              return isMultiValueFeedbackScore(score) ? (
-                <MultiValueFeedbackScoreTag
-                  key={score.name}
-                  label={score.name}
-                  value={score.value}
-                  valueByAuthor={score.value_by_author}
-                  category={score.category_name}
-                />
-              ) : (
+              return (
                 <FeedbackScoreTag
                   key={score.name}
                   label={score.name}
@@ -84,6 +74,8 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
                   reason={score.reason}
                   lastUpdatedAt={score.last_updated_at}
                   lastUpdatedBy={score.last_updated_by}
+                  valueByAuthor={score.value_by_author}
+                  category={score.category_name}
                 />
               );
             })}

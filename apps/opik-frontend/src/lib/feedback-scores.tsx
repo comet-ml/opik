@@ -22,7 +22,7 @@ export const FEEDBACK_SCORE_SOURCE_MAP = {
   [FEEDBACK_SCORE_TYPE.ui]: "Human Review",
 };
 
-export function isMultiValueFeedbackScore(
+export function getIsMultiValueFeedbackScore(
   score: unknown,
 ): score is TraceFeedbackScore & {
   value_by_author: FeedbackScoreValueByAuthorMap;
