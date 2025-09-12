@@ -48,14 +48,14 @@ def get(
         "follow_redirects": True,
         "proxy": proxy,
     }
-    kwargs = hooks.build_init_arguments(kwargs)
+    kwargs = hooks.httpx_client_hook.build_init_arguments(kwargs)
 
     client = OpikHttpxClient(compress_json_requests=compress_json_requests, **kwargs)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
 
-    hooks.apply_httpx_client_hooks(client)
+    hooks.httpx_client_hook.apply_httpx_client_hooks(client)
 
     return client
 

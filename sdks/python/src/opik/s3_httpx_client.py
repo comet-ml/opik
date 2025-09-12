@@ -34,11 +34,11 @@ def get() -> httpx.Client:
         "limits": limits,
         "timeout": timeout,
     }
-    kwargs = hooks.build_init_arguments(kwargs)
+    kwargs = hooks.httpx_client_hook.build_init_arguments(kwargs)
 
     client = httpx.Client(**kwargs)
 
-    hooks.apply_httpx_client_hooks(client)
+    hooks.httpx_client_hook.apply_httpx_client_hooks(client)
 
     return client
 
