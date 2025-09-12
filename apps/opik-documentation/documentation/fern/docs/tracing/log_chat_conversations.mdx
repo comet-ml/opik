@@ -63,31 +63,93 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     )
     ```
     </Tab>
-    <Tab title="Integration libraries" value="Integration libraries">
+    <Tab title="LangGraph integration" value="LangGraph integration">
     ```python
-    # Using LangChain integration
-    from langchain_openai import ChatOpenAI
+    # LangGraph automatically uses its thread_id as Opik thread_id
+    from langgraph.graph import StateGraph
     from opik.integrations.langchain import OpikTracer
 
-    # Create tracer with thread_id for conversation tracking
-    opik_tracer = OpikTracer(
-        project_name="chatbot-conversations",
-        thread_id="user-session-789"
+    # Create your LangGraph workflow
+    graph = StateGraph(...)
+    compiled_graph = graph.compile()
+
+    # Configure with thread_id for conversation tracking
+    thread_id = "user-conversation-789"
+    config = {
+        "callbacks": [OpikTracer(project_name="langgraph-conversations")],
+        "configurable": {"thread_id": thread_id}
+    }
+
+    # First turn in conversation
+    result1 = compiled_graph.invoke(
+        {"messages": [{"role": "user", "content": "What is machine learning?"}]},
+        config=config
     )
 
-    llm = ChatOpenAI(model="gpt-4o")
+    # Follow-up turn in same conversation thread
+    result2 = compiled_graph.invoke(
+        {"messages": [{"role": "user", "content": "Can you give me an example?"}]},
+        config=config
+    )
+    ```
+    </Tab>
+    <Tab title="ADK integration" value="ADK integration">
+    ```python
+    # ADK automatically maps session_id to thread_id
+    from opik.integrations.adk import OpikTracer
+    from google.adk import sessions as adk_sessions, runners as adk_runners
 
-    # First message in conversation
-    response1 = llm.invoke(
-        "What is machine learning?",
-        config={"callbacks": [opik_tracer]}
+    # Create ADK session for conversation tracking
+    session_service = adk_sessions.InMemorySessionService()
+    session = session_service.create_session_sync(
+        app_name="my_chatbot",
+        user_id="user_123",
+        session_id="conversation_456"  # This becomes the thread_id in Opik
     )
 
-    # Follow-up message in same conversation
-    response2 = llm.invoke(
-        "Can you give me a simple example?",
-        config={"callbacks": [opik_tracer]}
+    opik_tracer = OpikTracer(project_name="adk-conversations")
+    runner = adk_runners.Runner(
+        agent=your_agent,
+        app_name="my_chatbot",
+        session_service=session_service
     )
+
+    # First message - automatically grouped by session_id
+    result1 = runner.run(
+        user_id="user_123",
+        session_id="conversation_456",
+        new_message="What is machine learning?"
+    )
+
+    # Follow-up message - same conversation thread
+    result2 = runner.run(
+        user_id="user_123",
+        session_id="conversation_456",
+        new_message="Can you give me an example?"
+    )
+    ```
+    </Tab>
+    <Tab title="OpenAI Agents" value="OpenAI Agents">
+    ```python
+    # Using trace context manager with group_id for threading
+    import uuid
+    from opik import trace
+
+    thread_id = str(uuid.uuid4())
+
+    # First conversation turn
+    with trace(workflow_name="Agent Conversation", group_id=thread_id):
+        result1 = await Runner.run(agent, "What is machine learning?")
+        print(result1.final_output)
+
+    # Follow-up turn in same conversation
+    with trace(workflow_name="Agent Conversation", group_id=thread_id):
+        # Continue conversation with context
+        new_input = result1.to_input_list() + [
+            {"role": "user", "content": "Can you give me an example?"}
+        ]
+        result2 = await Runner.run(agent, new_input)
+        print(result2.final_output)
     ```
     </Tab>
 
