@@ -6312,7 +6312,7 @@ components:
         name:
           type: string
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         type:
           type: string
           enum:
@@ -6382,8 +6382,6 @@ components:
           type: string
         value:
           type: number
-    JsonNode:
-      type: object
     PercentageValues:
       type: object
       properties:
@@ -6422,7 +6420,7 @@ components:
         name:
           type: string
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         type:
           type: string
           enum:
@@ -6438,8 +6436,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Write"
-    JsonNode_Write:
+    JsonListString_Write:
       type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     PromptVersionLink_Write:
       required:
       - id
@@ -6616,7 +6620,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString"
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         model:
           type: string
         provider:
@@ -6697,7 +6701,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString"
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         tags:
           uniqueItems: true
           type: array
@@ -6882,8 +6886,6 @@ components:
         items:
           type: object
       - type: string
-    JsonNode_ExperimentItemBulkWriteView:
-      type: object
     Span_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -6915,7 +6917,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         metadata:
-          $ref: "#/components/schemas/JsonNode_ExperimentItemBulkWriteView"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         model:
           type: string
         provider:
@@ -6966,7 +6968,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         metadata:
-          $ref: "#/components/schemas/JsonNode_ExperimentItemBulkWriteView"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         tags:
           uniqueItems: true
           type: array
@@ -7065,7 +7067,7 @@ components:
         name:
           type: string
         metadata:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         type:
           type: string
           enum:
@@ -7136,8 +7138,14 @@ components:
         value:
           type: number
       readOnly: true
-    JsonNode_Public:
+    JsonListString_Public:
       type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     PercentageValues_Public:
       type: object
       properties:
@@ -7745,6 +7753,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Guardrail"
+    JsonNode:
+      type: object
     GuardrailBatch_Write:
       required:
       - guardrails
@@ -7790,6 +7800,8 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    JsonNode_Write:
+      type: object
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -7982,7 +7994,7 @@ components:
           - completed
           - cancelled
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         dataset_id:
           type: string
           format: uuid
@@ -8034,7 +8046,7 @@ components:
           - completed
           - cancelled
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         last_updated_at:
           type: string
           format: date-time
@@ -8083,7 +8095,7 @@ components:
           - completed
           - cancelled
         metadata:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         dataset_id:
           type: string
           format: uuid
@@ -8819,6 +8831,8 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
+    JsonNode_Public:
+      type: object
     PromptVersionPage_Public:
       type: object
       properties:
@@ -8988,14 +9002,6 @@ components:
         traceback:
           minLength: 1
           type: string
-    JsonListString_Write:
-      type: object
-      anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
     Span_Write:
       required:
       - start_time
@@ -9034,7 +9040,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_Write"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         model:
           type: string
         provider:
@@ -9152,14 +9158,6 @@ components:
             $ref: "#/components/schemas/ValueEntry_Public"
           readOnly: true
       readOnly: true
-    JsonListString_Public:
-      type: object
-      anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
     Span_Public:
       required:
       - start_time
@@ -9202,7 +9200,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_Public"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         model:
           type: string
         provider:
@@ -9487,7 +9485,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString"
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         model:
           type: string
         provider:
@@ -9546,7 +9544,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_Write"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         tags:
           uniqueItems: true
           type: array
@@ -9689,7 +9687,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString_Public"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         tags:
           uniqueItems: true
           type: array
@@ -10004,7 +10002,7 @@ components:
         output:
           $ref: "#/components/schemas/JsonListString"
         metadata:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         tags:
           uniqueItems: true
           type: array
