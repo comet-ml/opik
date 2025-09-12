@@ -13,6 +13,10 @@ from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    description: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional description for the feedback definition
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

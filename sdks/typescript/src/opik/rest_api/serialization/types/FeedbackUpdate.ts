@@ -11,6 +11,7 @@ import { CategoricalFeedbackDefinitionUpdate } from "./CategoricalFeedbackDefini
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
     name: core.serialization.string(),
+    description: core.serialization.string().optional(),
 });
 export const FeedbackUpdate: core.serialization.Schema<serializers.FeedbackUpdate.Raw, OpikApi.FeedbackUpdate> =
     core.serialization
@@ -37,5 +38,6 @@ export declare namespace FeedbackUpdate {
     export interface _Base {
         id?: string | null;
         name: string;
+        description?: string | null;
     }
 }
