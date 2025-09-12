@@ -83,3 +83,7 @@ export interface EvaluatorRuleLogItem {
   message: string;
   markers?: Record<string, string>;
 }
+
+export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
+  id: string;
+}

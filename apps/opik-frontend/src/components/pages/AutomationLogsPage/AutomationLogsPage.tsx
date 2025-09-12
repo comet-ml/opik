@@ -1,5 +1,8 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
+import { flatMap, get, uniq } from "lodash";
+import md5 from "md5";
+import { FoldVertical, RotateCw, UnfoldVertical } from "lucide-react";
 
 import useRulesLogsList from "@/api/automations/useRulesLogsList";
 import NoData from "@/components/shared/NoData/NoData";
@@ -10,18 +13,41 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import ExpandableTextCell from "@/components/shared/DataTableCells/ExpandableTextCell";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { EvaluatorRuleLogItem } from "@/types/automations";
+import {
+  EvaluatorRuleLogItem,
+  EvaluatorRuleLogItemWithId,
+} from "@/types/automations";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { CellContext } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { formatDate } from "@/lib/date";
 
-// Reusable cell generator with optional expansion (used only for Message column)
-type TextCellOptions = {
-  colId: string;
-  getValue: (row: EvaluatorRuleLogItem) => string | undefined;
-  expandable?: boolean;
+const generateEvaluatorRuleLogItemKey = (
+  item: EvaluatorRuleLogItem,
+): string => {
+  const messageHash = md5(item.message);
+  return `${item.timestamp}-${item.level}-${messageHash}`;
 };
+
+const BASE_COLUMNS: ColumnData<EvaluatorRuleLogItemWithId>[] = [
+  {
+    id: "timestamp",
+    label: "Timestamp",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => formatDate(row.timestamp),
+    size: 180,
+  },
+  {
+    id: "level",
+    label: "Level",
+    type: COLUMN_TYPE.string,
+    size: 80,
+  },
+];
+
+const COLUMNS_WIDTH_KEY = "automation-logs-columns-width";
 
 const AutomationLogsPage = () => {
   const {
@@ -33,59 +59,11 @@ const AutomationLogsPage = () => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >("automation-logs-columns-width", {
+  >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
-  const makeTextCell = useCallback(
-    ({ colId, getValue, expandable = false }: TextCellOptions) => {
-      function TextCell(context: CellContext<EvaluatorRuleLogItem, unknown>) {
-        const key = `${context.row.index}-${colId}`;
-        const isOpen = !!expanded[key];
-        const raw = getValue(context.row.original);
-        const value = raw ?? "-";
-        const firstLine = (value || "").split("\n")[0] || "";
-
-        return (
-          <div
-            className={`flex h-full items-start px-4 ${
-              expandable ? "gap-2" : ""
-            }`}
-          >
-            <span
-              className={
-                (expandable
-                  ? isOpen
-                    ? "comet-code whitespace-pre-wrap"
-                    : "comet-code truncate"
-                  : "comet-code text-foreground-secondary truncate") +
-                " flex-1 min-w-0"
-              }
-            >
-              {expandable ? (isOpen ? value : firstLine) : value}
-            </span>
-            {expandable && (
-              <Button
-                size="2xs"
-                variant="ghost"
-                onClick={() =>
-                  setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-                }
-                className="shrink-0"
-              >
-                {isOpen ? "Collapse" : "Expand"}
-              </Button>
-            )}
-          </div>
-        );
-      }
-      TextCell.displayName = `TextCell_${colId}`;
-      return TextCell;
-    },
-    [expanded, setExpanded],
-  );
-
-  const { data, isPending } = useRulesLogsList(
+  const { data, isPending, refetch } = useRulesLogsList(
     {
       ruleId: rule_id!,
     },
@@ -94,119 +72,80 @@ const AutomationLogsPage = () => {
     },
   );
 
-  const items = useMemo(
-    () => (data?.content as EvaluatorRuleLogItem[]) ?? [],
-    [data?.content],
-  );
+  const { rows, markerKeys } = useMemo(() => {
+    const rawRows =
+      data?.content.sort((a, b) => b.timestamp.localeCompare(a.timestamp)) ??
+      [];
 
-  const sortedItems = useMemo(
-    () =>
-      items.length
-        ? [...items].sort(
-            (a, b) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-          )
-        : [],
-    [items],
-  );
-
-  // Expand/Collapse all control for Message column
-  const allExpanded = useMemo(
-    () =>
-      sortedItems.length > 0 &&
-      sortedItems.every((_, index) => expanded[`${index}-message`]),
-    [sortedItems, expanded],
-  );
-
-  const expandAll = () => {
-    setExpanded((prev) => {
-      const next = { ...prev } as Record<string, boolean>;
-      for (let i = 0; i < sortedItems.length; i += 1) {
-        next[`${i}-message`] = true;
-      }
-      return next;
-    });
-  };
-
-  const collapseAll = () => setExpanded({});
-
-  // Get unique marker keys for dynamic columns - always call this hook
-  const markerKeys = useMemo(() => {
-    const keys = new Set<string>();
-    items.forEach((item) => {
-      if (item.markers) {
-        Object.keys(item.markers).forEach((key) => keys.add(key));
-      }
-    });
-    return Array.from(keys).sort();
-  }, [items]);
-
-  // Create column definitions (initial sizes; users can resize, persisted)
-  const columns = useMemo(() => {
-    // Initial sizes (can be overridden by persisted widths)
-    const fixedSizes = {
-      timestamp: 60,
-      level: 30,
-      marker: 60,
-    };
-
-    const baseColumns: ColumnData<EvaluatorRuleLogItem>[] = [
-      {
-        id: "timestamp",
-        label: "Timestamp",
-        type: COLUMN_TYPE.string,
-        size: fixedSizes.timestamp,
-        cell: makeTextCell({
-          colId: "timestamp",
-          getValue: (row) => row.timestamp,
-        }) as never,
-      },
-      {
-        id: "level",
-        label: "Level",
-        type: COLUMN_TYPE.string,
-        size: fixedSizes.level,
-        cell: makeTextCell({
-          colId: "level",
-          getValue: (row) => row.level,
-        }) as never,
-      },
-    ];
-
-    // Add dynamic marker columns
-    const markerColumns: ColumnData<EvaluatorRuleLogItem>[] = markerKeys.map(
-      (key) => ({
-        id: `marker_${key}`,
-        label: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-        type: COLUMN_TYPE.string,
-        size: fixedSizes.marker,
-        cell: makeTextCell({
-          colId: `marker_${key}`,
-          getValue: (row) => row.markers?.[key],
-        }) as never,
+    const sortedRowsWithId: EvaluatorRuleLogItemWithId[] = rawRows.map(
+      (item) => ({
+        ...item,
+        id: generateEvaluatorRuleLogItemKey(item),
       }),
     );
 
-    // Add message column (no fixed size → flex grows to fill)
-    const messageColumn: ColumnData<EvaluatorRuleLogItem> = {
+    const allMarkerKeys = uniq(
+      flatMap(sortedRowsWithId, (item) =>
+        item.markers ? Object.keys(item.markers) : [],
+      ),
+    ).sort();
+
+    return {
+      rows: sortedRowsWithId,
+      markerKeys: allMarkerKeys,
+    };
+  }, [data?.content]);
+
+  const allExpanded = useMemo(
+    () => rows.length > 0 && rows.every((row) => expanded[row.id]),
+    [rows, expanded],
+  );
+
+  const toggleExpandAll = () => {
+    if (allExpanded) {
+      setExpanded({});
+    } else {
+      setExpanded((prev) => {
+        const next = { ...prev } as Record<string, boolean>;
+        rows.forEach((row) => {
+          next[row.id] = true;
+        });
+        return next;
+      });
+    }
+  };
+
+  const columns = useMemo(() => {
+    const markerColumns: ColumnData<EvaluatorRuleLogItemWithId>[] =
+      markerKeys.map((key) => ({
+        id: `marker_${key}`,
+        label: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+        type: COLUMN_TYPE.string,
+        accessorFn: (row) => get(row, ["markers", key], ""),
+      }));
+
+    const messageColumn: ColumnData<EvaluatorRuleLogItemWithId> = {
       id: "message",
       label: "Message",
       type: COLUMN_TYPE.string,
-      cell: makeTextCell({
-        colId: "message",
-        getValue: (row) => row.message,
-        expandable: true,
-      }) as never,
+      cell: ExpandableTextCell as never,
+      size: 400,
+      customMeta: {
+        expandedState: expanded,
+        setExpandedState: setExpanded,
+        getShortValue: (value: string) => (value || "").split("\n")[0] || "",
+        getIsExpandable: (value: string) =>
+          (value || "").split("\n").length > 1,
+      },
     };
 
-    const allColumns = [...baseColumns, ...markerColumns, messageColumn];
+    const allColumns = [...BASE_COLUMNS, ...markerColumns, messageColumn];
     return convertColumnDataToColumn<
-      EvaluatorRuleLogItem,
-      EvaluatorRuleLogItem
+      EvaluatorRuleLogItemWithId,
+      EvaluatorRuleLogItemWithId
     >(allColumns, {});
-  }, [markerKeys, makeTextCell]);
+  }, [markerKeys, expanded, setExpanded]);
 
-  // Enable column resizing and persist widths (as in OnlineEvaluationPage)
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
@@ -224,35 +163,50 @@ const AutomationLogsPage = () => {
     return <Loader />;
   }
 
-  if (sortedItems.length === 0) {
+  if (rows.length === 0) {
     return <NoData message="There are no logs for this rule."></NoData>;
   }
 
   return (
     <div className="mx-6 flex h-full flex-col bg-soft-background">
-      <PageBodyScrollContainer className="overflow-x-hidden [scrollbar-gutter:stable]">
+      <PageBodyScrollContainer>
         <PageBodyStickyContainer
-          className="mb-4 mt-6 flex items-center justify-between"
-          direction="horizontal"
+          className="flex items-center justify-between pb-4 pt-6"
+          direction="bidirectional"
         >
           <h1 className="comet-title-l truncate break-words">Logs</h1>
           <div className="flex items-center gap-2">
-            {allExpanded ? (
-              <Button variant="secondary" size="sm" onClick={collapseAll}>
-                Collapse all
+            <TooltipWrapper content="Refresh logs list">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="shrink-0"
+                onClick={() => {
+                  refetch();
+                }}
+              >
+                <RotateCw />
               </Button>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={expandAll}>
-                Expand all
+            </TooltipWrapper>
+            <TooltipWrapper
+              content={allExpanded ? "Collapse all" : "Expand all"}
+            >
+              <Button
+                onClick={toggleExpandAll}
+                variant="outline"
+                size="icon-sm"
+              >
+                {allExpanded ? <FoldVertical /> : <UnfoldVertical />}
               </Button>
-            )}
+            </TooltipWrapper>
           </div>
         </PageBodyStickyContainer>
         <DataTable
           columns={columns}
-          data={sortedItems}
+          data={rows}
           noData={<DataTableNoData title="There are no logs for this rule." />}
           TableWrapper={PageBodyStickyTableWrapper}
+          getRowId={(row) => row.id}
           stickyHeader
           resizeConfig={resizeConfig}
         />
