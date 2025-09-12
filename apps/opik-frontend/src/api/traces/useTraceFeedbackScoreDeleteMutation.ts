@@ -10,6 +10,7 @@ import api, {
 } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
+import { useLoggedInUserName } from "@/store/AppStore";
 import {
   generateDeleteMutation,
   setExperimentsCompareCache,
@@ -28,6 +29,7 @@ type UseTraceFeedbackScoreDeleteMutationParams = {
 const useTraceFeedbackScoreDeleteMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const currentUserName = useLoggedInUserName();
 
   return useMutation({
     mutationFn: async ({
@@ -40,7 +42,10 @@ const useTraceFeedbackScoreDeleteMutation = () => {
         ? `${SPANS_REST_ENDPOINT}${spanId}/feedback-scores/delete`
         : `${TRACES_REST_ENDPOINT}${traceId}/feedback-scores/delete`;
 
-      const { data } = await api.post(endpoint, { name, author });
+      const { data } = await api.post(endpoint, {
+        name,
+        author: author ?? currentUserName,
+      });
 
       return data;
     },
@@ -62,7 +67,8 @@ const useTraceFeedbackScoreDeleteMutation = () => {
         traceId: params.traceId,
       };
 
-      const deleteMutation = generateDeleteMutation(params.name, params.author);
+      const authorToUse = params.author ?? currentUserName;
+      const deleteMutation = generateDeleteMutation(params.name, authorToUse);
 
       if (params.spanId) {
         // make optimistic update for spans

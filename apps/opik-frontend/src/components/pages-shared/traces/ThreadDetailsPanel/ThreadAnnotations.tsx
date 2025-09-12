@@ -46,12 +46,13 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
     });
   };
 
-  const onDeleteFeedbackScore = (name: string) => {
+  const onDeleteFeedbackScore = (name: string, author?: string) => {
     threadFeedbackScoreDelete({
       names: [name],
       threadId,
       projectName,
       projectId,
+      author,
     });
   };
 

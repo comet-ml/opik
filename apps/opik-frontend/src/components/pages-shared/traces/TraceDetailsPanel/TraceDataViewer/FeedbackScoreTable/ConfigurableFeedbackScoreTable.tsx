@@ -2,10 +2,9 @@ import React from "react";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
 import {
-  COLUMNS_ORDER_KEY,
   CONFIGURABLE_COLUMNS,
   DEFAULT_SELECTED_COLUMNS,
-  SELECTED_COLUMNS_KEY,
+  ENTITY_TYPE_TO_STORAGE_KEYS,
 } from "./constants";
 import FeedbackScoreTable, {
   FeedbackScoreTableProps,
@@ -18,15 +17,17 @@ const ConfigurableFeedbackScoreTable: React.FunctionComponent<
 > = (tableProps) => {
   const { entityType } = tableProps;
 
+  const storageKeys = ENTITY_TYPE_TO_STORAGE_KEYS[entityType];
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${entityType}-${SELECTED_COLUMNS_KEY}`,
+    storageKeys.selectedColumns,
     {
       defaultValue: DEFAULT_SELECTED_COLUMNS,
     },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    `${entityType}-${COLUMNS_ORDER_KEY}`,
+    storageKeys.columnsOrder,
     {
       defaultValue: [],
     },

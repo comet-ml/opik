@@ -17,7 +17,7 @@ type FeedbackScoresEditorProps = {
   feedbackScores: TraceFeedbackScore[];
   className?: string;
   onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
-  onDeleteFeedbackScore: (name: string) => void;
+  onDeleteFeedbackScore: (name: string, author?: string) => void;
   header?: React.ReactNode;
   footer?: React.ReactNode;
 };

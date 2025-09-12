@@ -38,8 +38,8 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
     });
   };
 
-  const onDeleteFeedbackScore = (name: string) => {
-    feedbackScoreDelete({ name, traceId, spanId });
+  const onDeleteFeedbackScore = (name: string, author?: string) => {
+    feedbackScoreDelete({ name, traceId, spanId, author });
   };
 
   return (

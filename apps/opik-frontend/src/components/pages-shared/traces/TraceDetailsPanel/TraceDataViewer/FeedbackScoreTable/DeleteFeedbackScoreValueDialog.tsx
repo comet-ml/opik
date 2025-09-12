@@ -17,13 +17,15 @@ type SetInactiveConfirmDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onDeleteFeedbackScore: (name: string, author?: string) => void;
-  entityType: string;
+  entityType: "trace" | "thread" | "span" | "experiment";
   row: ExpandingFeedbackScoreRow;
 };
 
 const entityTypeMap: Record<string, string> = {
   trace: "a trace",
   thread: "a thread",
+  span: "a span",
+  experiment: "an experiment",
 };
 
 const DeleteFeedbackScoreValueDialog: React.FunctionComponent<
