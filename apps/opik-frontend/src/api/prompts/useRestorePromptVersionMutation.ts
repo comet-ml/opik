@@ -4,12 +4,10 @@ import get from "lodash/get";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
-import { PromptVersion } from "@/types/prompts";
 
 type UseRestorePromptVersionMutationParams = {
   promptId: string;
   versionId: string;
-  onSuccess: (promptVersion: PromptVersion) => void;
 };
 
 const useRestorePromptVersionMutation = () => {
@@ -40,17 +38,16 @@ const useRestorePromptVersionMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: async (data: PromptVersion, { onSuccess }) => {
+    onSuccess: async ({ versionId }: UseRestorePromptVersionMutationParams) => {
       toast({
-        title: "Version restored",
-        description: "The prompt version has been successfully restored.",
+        description: `Version ${versionId} has been restored successfully`,
       });
-
-      onSuccess(data);
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
-      queryClient.invalidateQueries({ queryKey: ["prompt"] });
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["prompt", { promptId: variables.promptId }],
+      });
+      return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });
 };

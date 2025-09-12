@@ -6,37 +6,24 @@ import { formatDate } from "@/lib/date";
 import React, { useState } from "react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { PromptVersion } from "@/types/prompts";
-import useRestorePromptVersionMutation from "@/api/prompts/useRestorePromptVersionMutation";
 
 interface CommitHistoryProps {
   versions: PromptVersion[];
   onVersionClick: (version: PromptVersion) => void;
   activeVersionId: string;
-  promptId: string;
+  onRestoreVersionClick: (version: PromptVersion) => void;
 }
 
 const CommitHistory = ({
   versions,
   onVersionClick,
   activeVersionId,
-  promptId,
+  onRestoreVersionClick,
 }: CommitHistoryProps) => {
   const { toast } = useToast();
   const [hoveredVersionId, setHoveredVersionId] = useState<string | null>(null);
-  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
-  const [versionToRestore, setVersionToRestore] = useState<PromptVersion | null>(null);
-  
-  const restorePromptVersionMutation = useRestorePromptVersionMutation();
 
   const handleCopyClick = async (versionId: string) => {
     await copy(versionId);
@@ -44,33 +31,6 @@ const CommitHistory = ({
     toast({
       description: "Commit successfully copied to clipboard",
     });
-  };
-
-  const handleRestoreClick = (version: PromptVersion) => {
-    setVersionToRestore(version);
-    setRestoreDialogOpen(true);
-  };
-
-  const handleRestoreConfirm = () => {
-    if (versionToRestore) {
-      restorePromptVersionMutation.mutate({
-        promptId,
-        versionId: versionToRestore.id,
-        onSuccess: (restoredVersion: PromptVersion) => {
-          toast({
-            description: `Version ${versionToRestore.commit} has been restored successfully`,
-          });
-          onVersionClick(restoredVersion);
-        },
-      });
-    }
-    setRestoreDialogOpen(false);
-    setVersionToRestore(null);
-  };
-
-  const handleRestoreCancel = () => {
-    setRestoreDialogOpen(false);
-    setVersionToRestore(null);
   };
 
   return (
@@ -120,7 +80,7 @@ const CommitHistory = ({
                         variant="minimal"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRestoreClick(version);
+                          onRestoreVersionClick(version);
                         }}
                       >
                         <Undo2 />
@@ -136,28 +96,6 @@ const CommitHistory = ({
           );
         })}
       </ul>
-      
-      <Dialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Restore Version</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to restore version {versionToRestore?.commit}? This will create a new version with the content from {versionToRestore?.commit}.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleRestoreCancel}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleRestoreConfirm}
-              disabled={restorePromptVersionMutation.isPending}
-            >
-              {restorePromptVersionMutation.isPending ? "Restoring..." : "Restore"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 };
