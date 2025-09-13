@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,9 @@ import { Tag } from "@/components/ui/tag";
 import { CheckCircle, FileText, MessageSquare, Star } from "lucide-react";
 
 import { SMEAnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues";
+import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
+import useAppStore from "@/store/AppStore";
+import imageLogoUrl from "/images/opik-logo.png";
 
 type SMEInstructionsPageProps = {
   queue: SMEAnnotationQueue;
@@ -18,6 +21,28 @@ const SMEInstructionsPage: React.FunctionComponent<SMEInstructionsPageProps> = (
   shareToken,
 }) => {
   const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  // Fetch feedback definitions to get names and descriptions
+  const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
+    workspaceName,
+    page: 1,
+    size: 1000, // Get all feedback definitions
+  });
+
+  const feedbackDefinitions = useMemo(
+    () => feedbackDefinitionsData?.content ?? [],
+    [feedbackDefinitionsData?.content],
+  );
+
+  // Map feedback definition IDs to their actual data
+  const feedbackDefinitionsMap = useMemo(() => {
+    const map = new Map();
+    feedbackDefinitions.forEach(def => {
+      map.set(def.id, def);
+    });
+    return map;
+  }, [feedbackDefinitions]);
 
   const handleStartAnnotating = () => {
     navigate({
@@ -32,14 +57,12 @@ const SMEInstructionsPage: React.FunctionComponent<SMEInstructionsPageProps> = (
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center">
           {/* Opik Logo */}
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 relative">
-              {/* Opik logo circles */}
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-red-500 rounded-full opacity-80"></div>
-              <div className="absolute top-1 left-1 w-1 h-1 bg-gradient-to-br from-orange-400 to-red-500 rounded-full"></div>
-              <div className="absolute top-0.5 right-1 w-1.5 h-1.5 bg-gradient-to-br from-orange-400 to-red-500 rounded-full"></div>
-            </div>
-            <span className="text-lg font-medium text-gray-900">opik</span>
+          <div className="flex items-center">
+            <img
+              className="h-8 object-cover object-left"
+              src={imageLogoUrl}
+              alt="opik logo"
+            />
           </div>
         </div>
       </header>
@@ -99,35 +122,70 @@ const SMEInstructionsPage: React.FunctionComponent<SMEInstructionsPageProps> = (
 
                 {/* Table Rows */}
                 <div className="bg-white">
-                  {queue.feedback_definitions.map((definition, index) => (
-                    <div key={definition} className="grid grid-cols-3 py-3 px-2 border-b border-gray-200 last:border-b-0">
-                      <div className="px-3 flex items-center space-x-2">
-                        <div 
-                          className="w-2 h-2 rounded-sm"
-                          style={{ 
-                            backgroundColor: index === 0 ? '#19A979' : index === 1 ? '#5899DA' : index === 2 ? '#BF399E' : '#F4B400'
-                          }}
-                        />
-                        <span className="text-sm font-medium text-gray-600">{definition}</span>
+                  {queue.feedback_definitions.map((definitionId, index) => {
+                    const definition = feedbackDefinitionsMap.get(definitionId);
+                    const colors = ['#19A979', '#5899DA', '#BF399E', '#F4B400'];
+                    
+                    if (!definition) {
+                      return (
+                        <div key={definitionId} className="grid grid-cols-3 py-3 px-2 border-b border-gray-200 last:border-b-0">
+                          <div className="px-3 flex items-center space-x-2">
+                            <div 
+                              className="w-2 h-2 rounded-sm"
+                              style={{ backgroundColor: colors[index % colors.length] }}
+                            />
+                            <span className="text-sm font-medium text-gray-600">Loading...</span>
+                          </div>
+                          <div className="px-3">
+                            <p className="text-sm text-gray-700">Loading definition...</p>
+                          </div>
+                          <div className="px-3">
+                            <span className="text-sm text-gray-700">Loading...</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const getAvailableValues = (def: any) => {
+                      if (def.type === 'categorical') {
+                        const categories = def.details?.categories || {};
+                        const categoryEntries = Object.entries(categories);
+                        if (categoryEntries.length === 0) {
+                          return 'No values defined';
+                        }
+                        return categoryEntries
+                          .map(([label, value]) => `${label} (${value})`)
+                          .join(', ');
+                      } else if (def.type === 'numerical') {
+                        const min = def.details?.min || 0;
+                        const max = def.details?.max || 5;
+                        return `Min: ${min}, Max: ${max}`;
+                      }
+                      return 'No values defined';
+                    };
+
+                    return (
+                      <div key={definitionId} className="grid grid-cols-3 py-3 px-2 border-b border-gray-200 last:border-b-0">
+                        <div className="px-3 flex items-center space-x-2">
+                          <div 
+                            className="w-2 h-2 rounded-sm"
+                            style={{ backgroundColor: colors[index % colors.length] }}
+                          />
+                          <span className="text-sm font-medium text-gray-600">{definition.name}</span>
+                        </div>
+                        <div className="px-3">
+                          <p className="text-sm text-gray-700">
+                            {definition.description || `Evaluate the ${definition.name} of the response.`}
+                          </p>
+                        </div>
+                        <div className="px-3">
+                          <span className="text-sm text-gray-700">
+                            {getAvailableValues(definition)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="px-3">
-                        <p className="text-sm text-gray-700">
-                          {definition === 'accuracy' && 'Measures whether the model\'s output is factually correct and matches the expected answer.'}
-                          {definition === 'has_errors' && 'Use this score if the AI\'s response contains factual mistakes, incorrect calculations, or misleading information.'}
-                          {definition === 'relevance' && 'Measures how well the response stays on topic and addresses the input.'}
-                          {definition === 'simplicity' && 'Evaluates if the output is easy to read and understand.'}
-                          {!['accuracy', 'has_errors', 'relevance', 'simplicity'].includes(definition) && `Evaluate the ${definition} of the response.`}
-                        </p>
-                      </div>
-                      <div className="px-3">
-                        <span className="text-sm text-gray-700">
-                          {definition === 'has_errors' ? 'No errors (0), Has errors (1)' : 
-                           definition === 'relevance' ? 'Not relevant (0), Relevant (1)' : 
-                           'Min: 0, Max: 5'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

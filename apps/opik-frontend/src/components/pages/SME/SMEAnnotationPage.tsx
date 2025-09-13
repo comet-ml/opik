@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Info, Table } from "lucide-react";
 
@@ -12,7 +12,10 @@ import { SMEAnnotationQueue, AnnotationQueueScope } from "@/types/annotation-que
 import useSMEQueueItems from "@/api/annotation-queues/useSMEQueueItems";
 import useSMEProgress from "@/api/annotation-queues/useSMEProgress";
 import useSMEAnnotationMutation from "@/api/annotation-queues/useSMEAnnotationMutation";
+import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
+import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import imageLogoUrl from "/images/opik-logo.png";
 
 type SMEAnnotationPageProps = {
   queue: SMEAnnotationQueue;
@@ -25,6 +28,7 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const mutation = useSMEAnnotationMutation();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [inputExpanded, setInputExpanded] = useState(true);
   const [outputExpanded, setOutputExpanded] = useState(true);
@@ -41,6 +45,27 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   const { data: progress } = useSMEProgress({
     shareToken,
   });
+
+  // Fetch feedback definitions to get names and descriptions
+  const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
+    workspaceName,
+    page: 1,
+    size: 1000, // Get all feedback definitions
+  });
+
+  const feedbackDefinitions = useMemo(
+    () => feedbackDefinitionsData?.content ?? [],
+    [feedbackDefinitionsData?.content],
+  );
+
+  // Map feedback definition IDs to their actual data
+  const feedbackDefinitionsMap = useMemo(() => {
+    const map = new Map();
+    feedbackDefinitions.forEach(def => {
+      map.set(def.id, def);
+    });
+    return map;
+  }, [feedbackDefinitions]);
 
   const items = itemsData?.content || [];
   const currentItem = items[currentItemIndex];
@@ -152,14 +177,12 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
       {/* Header with Opik Logo */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 relative">
-              {/* Opik logo circles */}
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-red-500 rounded-full opacity-80"></div>
-              <div className="absolute top-1 left-1 w-1 h-1 bg-gradient-to-br from-orange-400 to-red-500 rounded-full"></div>
-              <div className="absolute top-0.5 right-1 w-1.5 h-1.5 bg-gradient-to-br from-orange-400 to-red-500 rounded-full"></div>
-            </div>
-            <span className="text-lg font-medium text-gray-900">opik</span>
+          <div className="flex items-center">
+            <img
+              className="h-8 object-cover object-left"
+              src={imageLogoUrl}
+              alt="opik logo"
+            />
           </div>
         </div>
       </header>
@@ -187,9 +210,9 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Progress</span>
-                <div className="bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-600">
+                <span className="text-sm text-gray-500">
                   {progressData.current}/{progressData.total} completed
-                </div>
+                </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-1.5">
                 <div 
@@ -200,87 +223,96 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
             </div>
           </div>
 
-          {/* Content and Feedback */}
-          <div className="flex gap-4">
-            {/* Left Side - Content */}
-            <div className="flex-1 bg-white border border-gray-200 rounded-md">
-              {/* Input Section */}
-              <div className="border-b border-gray-200">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start p-4 text-left font-normal"
-                  onClick={() => setInputExpanded(!inputExpanded)}
-                >
-                  <span className="text-sm font-medium">Input</span>
-                </Button>
-                {inputExpanded && (
-                  <div className="border-t border-gray-200">
-                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-                      <Button variant="outline" size="sm" className="text-xs">
-                        Pretty ✨
-                        <ChevronDown className="ml-1 h-3 w-3" />
-                      </Button>
-                      <Button variant="outline" size="icon-sm">
-                        <Copy className="h-3 w-3" />
-                      </Button>
+          {/* Content and Feedback - Single Unified Card */}
+          <div className="bg-white border border-gray-200 rounded-md p-6">
+            <div className="flex gap-6">
+              {/* Left Side - Content */}
+              <div className="flex-1">
+                {/* Input Section */}
+                <div className="pb-4 border-b border-gray-200">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start p-2 text-left font-normal hover:bg-gray-50 -ml-2"
+                    onClick={() => setInputExpanded(!inputExpanded)}
+                  >
+                    <span className="text-sm font-medium">Input</span>
+                  </Button>
+                  {inputExpanded && (
+                    <div className="mt-2">
+                      <div className="bg-slate-50 border border-gray-200 rounded-md">
+                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                          <Button variant="outline" size="sm" className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                            Pretty ✨
+                            <ChevronDown className="ml-1 h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="icon-sm" className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <div className="p-4">
+                          {renderValue(currentItem.input)}
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-4 bg-gray-50">
-                      {renderValue(currentItem.input)}
+                  )}
+                </div>
+
+                {/* Output Section */}
+                <div className="py-4 border-b border-gray-200">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start p-2 text-left font-normal hover:bg-gray-50 -ml-2"
+                    onClick={() => setOutputExpanded(!outputExpanded)}
+                  >
+                    <span className="text-sm font-medium">Output</span>
+                  </Button>
+                  {outputExpanded && (
+                    <div className="mt-2">
+                      <div className="bg-slate-50 border border-gray-200 rounded-md">
+                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                          <Button variant="outline" size="sm" className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                            Pretty ✨
+                            <ChevronDown className="ml-1 h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="icon-sm" className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <div className="p-4">
+                          {renderValue(currentItem.output)}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* Metadata Section */}
+                <div className="pt-4">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between p-2 text-left font-normal hover:bg-gray-50 -ml-2"
+                    onClick={() => setMetadataExpanded(!metadataExpanded)}
+                  >
+                    <span className="text-sm font-medium">Metadata</span>
+                    {metadataExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                  {metadataExpanded && (
+                    <div className="mt-2">
+                      <div className="bg-slate-50 border border-gray-200 rounded-md p-4">
+                        {renderValue(currentItem.metadata)}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Output Section */}
-              <div className="border-b border-gray-200">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start p-4 text-left font-normal"
-                  onClick={() => setOutputExpanded(!outputExpanded)}
-                >
-                  <span className="text-sm font-medium">Output</span>
-                </Button>
-                {outputExpanded && (
-                  <div className="border-t border-gray-200">
-                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-                      <Button variant="outline" size="sm" className="text-xs">
-                        Pretty ✨
-                        <ChevronDown className="ml-1 h-3 w-3" />
-                      </Button>
-                      <Button variant="outline" size="icon-sm">
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    <div className="p-4 bg-gray-50">
-                      {renderValue(currentItem.output)}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Vertical Separator */}
+              <div className="border-l border-gray-200"></div>
 
-              {/* Metadata Section */}
-              <div>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-4 text-left font-normal"
-                  onClick={() => setMetadataExpanded(!metadataExpanded)}
-                >
-                  <span className="text-sm font-medium">Metadata</span>
-                  {metadataExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-                {metadataExpanded && (
-                  <div className="border-t border-gray-200 p-4 bg-gray-50">
-                    {renderValue(currentItem.metadata)}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right Side - Feedback */}
-            <div className="w-96">
-              <div className="bg-white border border-gray-200 rounded-md p-6 space-y-4">
+              {/* Right Side - Feedback */}
+              <div className="w-96">
                 {/* Comments Section */}
-                <div>
+                <div className="pb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">Comments</h3>
                   <Textarea
                     placeholder="Add a comment..."
@@ -290,68 +322,84 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                   />
                 </div>
 
-                <div className="border-t border-gray-200 pt-4">
+                {/* Horizontal Separator */}
+                <div className="border-t border-gray-200 my-4"></div>
+
+                {/* Feedback Scores Section */}
+                <div className="pt-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-4">Feedback scores</h3>
                   
                   {/* Feedback Score Rows */}
-                  <div className="space-y-1 border-t border-gray-200">
-                    {queue.feedback_definitions.map((definition, index) => {
+                  <div className="border-t border-gray-200">
+                    {queue.feedback_definitions.map((definitionId, index) => {
+                      const definition = feedbackDefinitionsMap.get(definitionId);
                       const colors = ['#19A979', '#5899DA', '#BF399E', '#F4B400'];
-                      const color = colors[index % colors.length];
-                      const currentScore = feedbackScores[definition];
+                      const currentScore = feedbackScores[definitionId];
                       
+                      if (!definition) {
+                        return (
+                          <div key={definitionId} className="border-b border-gray-200 last:border-b-0">
+                            <div className="flex items-center p-2">
+                              <div className="flex-1">
+                                <div className="text-sm text-gray-500">Loading...</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isCategorical = definition.type === 'categorical';
+                      const categories = definition.details?.categories || {};
+                      const categoryEntries = Object.entries(categories) as [string, number][];
+                      const isBinary = isCategorical && categoryEntries.length === 2;
+
                       return (
-                        <div key={definition} className="border-b border-gray-200 last:border-b-0">
-                          <div className="flex items-center py-2">
+                        <div key={definitionId} className="border-b border-gray-200 last:border-b-0">
+                          <div className="flex items-center p-2">
                             {/* Score Tag */}
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <FeedbackScoreTag
-                                label={definition}
+                                label={definition.name}
                                 value={currentScore || 0}
                               />
                             </div>
 
                             {/* Input/Buttons */}
                             <div className="flex items-center space-x-2 ml-4">
-                              {definition === 'has_errors' || definition === 'relevance' ? (
+                              {isBinary ? (
                                 // Button options for binary scores
                                 <div className="flex space-x-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className={`h-7 px-2 text-xs ${currentScore === 0 ? 'bg-blue-50 border-blue-300' : ''}`}
-                                    onClick={() => setFeedbackScores(prev => ({ ...prev, [definition]: 0 }))}
-                                  >
-                                    {definition === 'has_errors' ? 'No errors (0)' : 'Not relevant (0)'}
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className={`h-7 px-2 text-xs ${currentScore === 1 ? 'bg-blue-50 border-blue-300' : ''}`}
-                                    onClick={() => setFeedbackScores(prev => ({ ...prev, [definition]: 1 }))}
-                                  >
-                                    {definition === 'has_errors' ? 'Has errors (1)' : 'Relevant (1)'}
-                                  </Button>
+                                  {categoryEntries.map(([label, value]) => (
+                                    <Button
+                                      key={value}
+                                      variant="outline"
+                                      size="sm"
+                                      className={`h-7 px-2 text-xs ${currentScore === value ? 'bg-blue-50 border-blue-300' : ''}`}
+                                      onClick={() => setFeedbackScores(prev => ({ ...prev, [definitionId]: value }))}
+                                    >
+                                      {label} ({value})
+                                    </Button>
+                                  ))}
                                 </div>
                               ) : (
                                 // Input field for range scores
                                 <Input
                                   type="number"
-                                  min="0"
-                                  max="5"
+                                  min={definition.details?.min || 0}
+                                  max={definition.details?.max || 5}
                                   step="0.1"
-                                  placeholder="Min: 0, Max: 5"
+                                  placeholder={`Min: ${definition.details?.min || 0}, Max: ${definition.details?.max || 5}`}
                                   value={currentScore || ''}
                                   onChange={(e) => setFeedbackScores(prev => ({ 
                                     ...prev, 
-                                    [definition]: parseFloat(e.target.value) || 0 
+                                    [definitionId]: parseFloat(e.target.value) || 0 
                                   }))}
                                   className="w-32 h-7 text-xs"
                                 />
                               )}
                               
                               {/* Info button */}
-                              <Button variant="outline" size="icon-sm" className="h-7 w-7">
+                              <Button variant="outline" size="icon-sm" className="h-7 w-7" title={definition.description}>
                                 <Info className="h-3 w-3" />
                               </Button>
                             </div>

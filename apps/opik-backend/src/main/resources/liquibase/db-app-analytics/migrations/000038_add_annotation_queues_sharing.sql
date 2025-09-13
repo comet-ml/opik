@@ -13,3 +13,4 @@
 
     --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues DROP COLUMN share_token;
     --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues DROP COLUMN is_public;
+
