@@ -24,6 +24,8 @@ public record AnnotationQueue(
         @JsonView( {
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
 
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String workspaceId,
+
         @JsonView({View.Public.class, View.Create.class, View.Update.class}) @NotNull UUID projectId,
 
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String projectName,
@@ -60,7 +62,11 @@ public record AnnotationQueue(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String lastUpdatedBy,
 
         @JsonView({
-                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastScoredAt){
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastScoredAt,
+
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable UUID shareToken,
+
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Boolean isPublic){
 
     public static class View {
         public static class Public {

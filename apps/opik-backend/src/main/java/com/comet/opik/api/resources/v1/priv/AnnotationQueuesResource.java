@@ -290,4 +290,28 @@ public class AnnotationQueuesResource {
 
         return Response.noContent().build();
     }
+
+    @POST
+    @Path("/{id}/share")
+    @Operation(operationId = "generateAnnotationQueueShareToken", summary = "Generate share token for annotation queue", description = "Generate a share token that allows SMEs to access the queue", responses = {
+            @ApiResponse(responseCode = "200", description = "Share token generated successfully", content = @Content(schema = @Schema(implementation = AnnotationQueue.class)))
+    })
+    @JsonView(AnnotationQueue.View.Public.class)
+    public Response generateShareToken(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Generating share token for annotation queue with id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var annotationQueue = annotationQueueService.generateShareToken(id)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        log.info("Successfully generated share token for annotation queue with id '{}' on workspaceId '{}'", id,
+                workspaceId);
+
+        return Response.ok().entity(annotationQueue).build();
+    }
 }

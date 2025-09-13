@@ -59,6 +59,14 @@ public interface AnnotationQueueDAO {
     Mono<Long> getItemsCount(UUID queueId);
 
     Mono<List<Map<String, Object>>> getItems(UUID queueId, int page, int size);
+
+    Mono<AnnotationQueue> generateShareToken(UUID id);
+
+    Mono<AnnotationQueue> findByShareToken(UUID shareToken);
+
+    Mono<Long> getItemsCountByQueueId(UUID queueId, String workspaceId);
+
+    Mono<List<Map<String, Object>>> getItemsByQueueId(UUID queueId, String workspaceId, int page, int size);
 }
 
 @Singleton
@@ -89,6 +97,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 comments_enabled,
                 feedback_definitions,
                 scope,
+                share_token,
+                is_public,
                 created_at,
                 created_by,
                 last_updated_at,
@@ -96,6 +106,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id = :id
+            ORDER BY last_updated_at DESC
+            LIMIT 1
             """;
 
     private static final String DELETE_ANNOTATION_QUEUES = """
@@ -112,6 +124,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     @WithSpan
@@ -145,11 +158,16 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map(this::mapAnnotationQueue))
-                    .singleOrEmpty()
-                    .flatMap(queue -> {
+                    .collectList()
+                    .flatMap(queues -> {
+                        if (queues.isEmpty()) {
+                            return Mono.empty();
+                        }
+                        // Get the latest version (first in the list due to ORDER BY last_updated_at DESC)
+                        var latestQueue = queues.get(0);
                         // Get items count for this specific queue
-                        return getItemsCount(queue.id())
-                                .map(itemsCount -> queue.toBuilder()
+                        return getItemsCount(latestQueue.id())
+                                .map(itemsCount -> latestQueue.toBuilder()
                                         .itemsCount(itemsCount)
                                         .build());
                     });
@@ -306,6 +324,25 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     @Override
     @WithSpan
+    public Mono<Long> getItemsCountByQueueId(UUID queueId, String workspaceId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement("""
+                    SELECT COUNT(*) as count
+                    FROM annotation_queue_items
+                    WHERE queue_id = :queue_id
+                    AND workspace_id = :workspace_id
+                    """)
+                    .bind("queue_id", queueId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("count", Long.class))))
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    @WithSpan
     public Mono<List<Map<String, Object>>> getItems(UUID queueId, int page, int size) {
         log.debug("Getting items for annotation queue with id '{}', page '{}', size '{}'", queueId, page, size);
 
@@ -337,6 +374,41 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         });
     }
 
+    @Override
+    @WithSpan
+    public Mono<List<Map<String, Object>>> getItemsByQueueId(UUID queueId, String workspaceId, int page, int size) {
+        log.debug("Getting items for annotation queue with id '{}', page '{}', size '{}' (public access)", queueId,
+                page, size);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var offset = (page - 1) * size;
+            var sql = String.format("""
+                    SELECT
+                        item_id,
+                        item_type,
+                        created_at,
+                        created_by
+                    FROM annotation_queue_items
+                    WHERE queue_id = :queue_id
+                    AND workspace_id = :workspace_id
+                    ORDER BY created_at DESC
+                    LIMIT %d OFFSET %d
+                    """, size, offset);
+
+            var statement = connection.createStatement(sql)
+                    .bind("queue_id", queueId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> Map.<String, Object>of(
+                            "id", row.get("item_id", String.class),
+                            "type", row.get("item_type", String.class),
+                            "created_at", row.get("created_at", String.class),
+                            "created_by", row.get("created_by", String.class))))
+                    .collectList();
+        });
+    }
+
     private Mono<Long> getCount() {
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement("""
@@ -354,26 +426,31 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     private Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, long total) {
         return asyncTemplate.nonTransaction(connection -> {
             var offset = (page - 1) * size;
-            var sql = String.format("""
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        id,
-                        name,
-                        description,
-                        instructions,
-                        comments_enabled,
-                        feedback_definitions,
-                        scope,
-                        created_at,
-                        created_by,
-                        last_updated_at,
-                        last_updated_by
-                    FROM annotation_queues
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY created_at DESC
-                    LIMIT %d OFFSET %d
-                    """, size, offset);
+            var sql = String.format(
+                    """
+                            SELECT
+                                workspace_id,
+                                project_id,
+                                id,
+                                name,
+                                description,
+                                instructions,
+                                comments_enabled,
+                                feedback_definitions,
+                                scope,
+                                share_token,
+                                is_public,
+                                created_at,
+                                created_by,
+                                last_updated_at,
+                                last_updated_by
+                            FROM annotation_queues
+                            WHERE workspace_id = :workspace_id
+                            GROUP BY workspace_id, project_id, id, name, description, instructions, comments_enabled, feedback_definitions, scope, share_token, is_public, created_at, created_by, last_updated_at, last_updated_by
+                            ORDER BY created_at DESC
+                            LIMIT %d OFFSET %d
+                            """,
+                    size, offset);
 
             var statement = connection.createStatement(sql);
 
@@ -398,6 +475,63 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         });
     }
 
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> generateShareToken(UUID id) {
+        var shareToken = idGenerator.generateId();
+
+        return findById(id)
+                .flatMap(existingQueue -> asyncTemplate.nonTransaction(connection -> {
+                    // Insert a new version of the record with share_token and is_public updated
+                    var statement = connection.createStatement("""
+                            INSERT INTO annotation_queues (
+                                workspace_id, project_id, id, name, description, instructions,
+                                comments_enabled, feedback_definitions, scope,
+                                share_token, is_public,
+                                created_by, last_updated_by
+                            ) VALUES (
+                                :workspace_id, :project_id, :id, :name, :description, :instructions,
+                                :comments_enabled, :feedback_definitions, :scope,
+                                :share_token, 1,
+                                :created_by, :user_name
+                            )
+                            """)
+                            .bind("project_id", existingQueue.projectId())
+                            .bind("id", existingQueue.id())
+                            .bind("name", existingQueue.name())
+                            .bind("description", existingQueue.description())
+                            .bind("instructions", existingQueue.instructions())
+                            .bind("comments_enabled", existingQueue.commentsEnabled() ? 1 : 0)
+                            .bind("feedback_definitions", existingQueue.feedbackDefinitions().toArray(new UUID[0]))
+                            .bind("scope", existingQueue.scope().getValue())
+                            .bind("share_token", shareToken)
+                            .bind("created_by", existingQueue.createdBy());
+
+                    return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                            .thenReturn(existingQueue.toBuilder()
+                                    .shareToken(shareToken)
+                                    .isPublic(true)
+                                    .build());
+                }));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> findByShareToken(UUID shareToken) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement("""
+                    SELECT *
+                    FROM annotation_queues
+                    WHERE share_token = :share_token AND is_public = 1
+                    """)
+                    .bind("share_token", shareToken);
+
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map(this::mapAnnotationQueue)));
+        });
+    }
+
     private AnnotationQueue mapAnnotationQueue(Row row, io.r2dbc.spi.RowMetadata metadata) {
         var feedbackDefinitionsArray = row.get("feedback_definitions", String[].class);
         var feedbackDefinitions = feedbackDefinitionsArray != null
@@ -408,6 +542,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         return AnnotationQueue.builder()
                 .id(row.get("id", UUID.class))
+                .workspaceId(row.get("workspace_id", String.class))
                 .projectId(row.get("project_id", UUID.class))
                 .name(row.get("name", String.class))
                 .description(row.get("description", String.class))
@@ -415,6 +550,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
                 .feedbackDefinitions(feedbackDefinitions)
                 .scope(AnnotationQueueScope.fromValue(row.get("scope", String.class)))
+                .shareToken(row.get("share_token", UUID.class))
+                .isPublic(row.get("is_public", Integer.class) == 1)
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))

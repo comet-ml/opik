@@ -47,6 +47,15 @@ public interface AnnotationQueueService {
     Mono<List<java.util.Map<String, Object>>> getItems(@NonNull UUID queueId, int page, int size);
 
     Mono<Long> getItemsCount(@NonNull UUID queueId);
+
+    Mono<AnnotationQueue> generateShareToken(@NonNull UUID id);
+
+    Mono<AnnotationQueue> findByShareToken(@NonNull UUID shareToken);
+
+    Mono<Long> getItemsCountForPublicAccess(@NonNull UUID queueId, @NonNull String workspaceId);
+
+    Mono<List<java.util.Map<String, Object>>> getItemsForPublicAccess(@NonNull UUID queueId,
+            @NonNull String workspaceId, int page, int size);
 }
 
 @Singleton
@@ -203,6 +212,58 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                 count, queueId))
                 .doOnError(error -> log.error("Failed to get items count for annotation queue with id '{}'", queueId,
                         error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> generateShareToken(@NonNull UUID id) {
+        log.info("Generating share token for annotation queue with id '{}'", id);
+
+        return annotationQueueDAO.findById(id)
+                .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                .flatMap(queue -> annotationQueueDAO.generateShareToken(id))
+                .doOnSuccess(
+                        queue -> log.info("Successfully generated share token for annotation queue with id '{}'", id))
+                .doOnError(error -> log.error("Failed to generate share token for annotation queue with id '{}'", id,
+                        error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> findByShareToken(@NonNull UUID shareToken) {
+        log.info("Finding annotation queue by share token");
+
+        return annotationQueueDAO.findByShareToken(shareToken)
+                .switchIfEmpty(Mono.error(new NotFoundException("Annotation queue not found or not public")))
+                .doOnSuccess(queue -> log.info("Found annotation queue with share token"))
+                .doOnError(error -> log.debug("Annotation queue not found with share token"));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> getItemsCountForPublicAccess(@NonNull UUID queueId, @NonNull String workspaceId) {
+        log.info("Getting items count for annotation queue with id '{}' (public access)", queueId);
+
+        return annotationQueueDAO.getItemsCountByQueueId(queueId, workspaceId)
+                .doOnSuccess(count -> log.info(
+                        "Successfully retrieved items count '{}' for annotation queue with id '{}' (public access)",
+                        count, queueId))
+                .doOnError(error -> log.error(
+                        "Failed to get items count for annotation queue with id '{}' (public access)", queueId, error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<java.util.Map<String, Object>>> getItemsForPublicAccess(@NonNull UUID queueId,
+            @NonNull String workspaceId, int page, int size) {
+        log.info("Getting items for annotation queue with id '{}' (public access)", queueId);
+
+        return annotationQueueDAO.getItemsByQueueId(queueId, workspaceId, page, size)
+                .doOnSuccess(items -> log.info(
+                        "Successfully retrieved '{}' items for annotation queue with id '{}' (public access)",
+                        items.size(), queueId))
+                .doOnError(error -> log.error("Failed to get items for annotation queue with id '{}' (public access)",
+                        queueId, error));
     }
 
     private NotFoundException createNotFoundError(UUID id) {

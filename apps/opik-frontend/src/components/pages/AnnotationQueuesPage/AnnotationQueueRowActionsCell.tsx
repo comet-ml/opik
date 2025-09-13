@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { MoreHorizontal, Copy, Trash, Edit } from "lucide-react";
+import { MoreHorizontal, Copy, Trash, Edit, Share2 } from "lucide-react";
 import { CellContext } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 import { AnnotationQueue } from "@/types/annotation-queues";
 import useAnnotationQueueDeleteMutation from "@/api/annotation-queues/useAnnotationQueueDeleteMutation";
+import ShareQueueDialog from "./ShareQueueDialog";
 
 export const AnnotationQueueRowActionsCell: React.FunctionComponent<
   CellContext<AnnotationQueue, unknown>
@@ -22,6 +23,7 @@ export const AnnotationQueueRowActionsCell: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const queue = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const { toast } = useToast();
   const deleteMutation = useAnnotationQueueDeleteMutation();
 
@@ -47,6 +49,10 @@ export const AnnotationQueueRowActionsCell: React.FunctionComponent<
     });
   }, [toast]);
 
+  const handleShare = useCallback(() => {
+    setShareDialogOpen(true);
+  }, []);
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -64,6 +70,11 @@ export const AnnotationQueueRowActionsCell: React.FunctionComponent<
         confirmText="Delete"
         confirmButtonVariant="destructive"
       />
+      <ShareQueueDialog
+        queue={queue}
+        open={shareDialogOpen}
+        setOpen={setShareDialogOpen}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="minimal" size="icon" className="-mr-2.5">
@@ -79,6 +90,10 @@ export const AnnotationQueueRowActionsCell: React.FunctionComponent<
           <DropdownMenuItem onClick={handleEdit}>
             <Edit className="mr-2 size-4" />
             Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleShare}>
+            <Share2 className="mr-2 size-4" />
+            Share Queue
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {

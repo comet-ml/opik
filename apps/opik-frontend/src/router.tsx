@@ -38,6 +38,7 @@ import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPa
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
+import SMEQueuePage from "@/components/pages/SME/SMEQueuePage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -385,8 +386,16 @@ const automationLogsRoute = createRoute({
   component: AutomationLogsPage,
 });
 
+// --------- SME annotation queue
+
+const smeQueueRoute = createRoute({
+  path: "/sme/queue/$shareToken",
+  getParentRoute: () => workspaceGuardEmptyLayoutRoute,
+  component: SMEQueuePage,
+});
+
 const routeTree = rootRoute.addChildren([
-  workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
+  workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute, smeQueueRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
     getStartedRoute,

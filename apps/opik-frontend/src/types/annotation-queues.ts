@@ -26,6 +26,8 @@ export interface AnnotationQueue {
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
   items_count?: number;
+  share_token?: string;
+  is_public?: boolean;
   created_at: string;
   created_by: string;
   last_updated_at: string;
@@ -58,3 +60,30 @@ export type AnnotationQueuesResponse = {
   sortable_by: string[];
   total: number;
 };
+
+// SME-specific types
+export interface SMEAnnotationQueue {
+  id: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  comments_enabled: boolean;
+  feedback_definitions: string[];
+  scope: AnnotationQueueScope;
+  items_count?: number;
+}
+
+export interface SMEQueueProgress {
+  total_items: number;
+  completed_items: number;
+  progress_percentage: number;
+}
+
+export interface SMEAnnotationSubmission {
+  feedback_scores: Array<{
+    name: string;
+    value: number;
+    reason?: string;
+  }>;
+  comment?: string;
+}
