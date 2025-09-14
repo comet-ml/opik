@@ -12,6 +12,8 @@ import { SMEAnnotationQueue, AnnotationQueueScope } from "@/types/annotation-que
 import useSMEQueueItems from "@/api/annotation-queues/useSMEQueueItems";
 import useSMEProgress from "@/api/annotation-queues/useSMEProgress";
 import useSMEAnnotationMutation from "@/api/annotation-queues/useSMEAnnotationMutation";
+import useSMEQueueItemData from "@/api/annotation-queues/useSMEQueueItemData";
+import useSMEIndividualProgress from "@/api/annotation-queues/useSMEIndividualProgress";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
@@ -36,6 +38,16 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   const [comment, setComment] = useState("");
   const [feedbackScores, setFeedbackScores] = useState<Record<string, number>>({});
 
+  // Generate or retrieve SME identifier for progress tracking
+  const smeId = useMemo(() => {
+    const stored = localStorage.getItem(`sme-id-${shareToken}`);
+    if (stored) return stored;
+    
+    const newId = `sme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem(`sme-id-${shareToken}`, newId);
+    return newId;
+  }, [shareToken]);
+
   const { data: itemsData, isPending: isItemsLoading } = useSMEQueueItems({
     shareToken,
     page: 1,
@@ -44,6 +56,23 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 
   const { data: progress } = useSMEProgress({
     shareToken,
+  });
+
+  // Get individual SME progress
+  const { data: individualProgress } = useSMEIndividualProgress({
+    shareToken,
+    smeId,
+  });
+
+  const items = itemsData?.content || [];
+  const currentItem = items[currentItemIndex];
+
+  // Fetch current item data for annotation
+  const { data: currentItemData, isPending: isItemDataLoading } = useSMEQueueItemData({
+    shareToken,
+    itemId: currentItem?.id as string,
+  }, {
+    enabled: !!currentItem?.id,
   });
 
   // Fetch feedback definitions to get names and descriptions
@@ -66,9 +95,6 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
     });
     return map;
   }, [feedbackDefinitions]);
-
-  const items = itemsData?.content || [];
-  const currentItem = items[currentItemIndex];
 
 
   const handlePrevious = useCallback(() => {
@@ -93,27 +119,44 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 
   const handleSubmitAndNext = useCallback(() => {
     const submission = {
-      feedback_scores: Object.entries(feedbackScores).map(([name, value]) => ({
-        name,
-        value,
-      })),
+      feedback_scores: Object.entries(feedbackScores).map(([definitionId, value]) => {
+        const definition = feedbackDefinitionsMap.get(definitionId);
+        return {
+          name: definition?.name || definitionId,
+          value,
+        };
+      }),
       comment,
     };
 
     mutation.mutate(
-      { shareToken, itemId: currentItem.id as string, annotation: submission },
+      { shareToken, itemId: currentItem.id as string, smeId, annotation: submission },
       {
         onSuccess: () => {
           // Reset form and advance
           setComment("");
           setFeedbackScores({});
-          handleNext();
+          
+          // Check if this was the last item
+          if (currentItemIndex >= items.length - 1) {
+            // This was the last item - wait a moment for progress to update, then check completion
+            setTimeout(() => {
+              // The progress APIs will be invalidated and refetched
+              // If all items are completed, the component will show completion state
+            }, 1000);
+          } else {
+            // Advance to next item
+            handleNext();
+          }
         },
       }
     );
-  }, [feedbackScores, comment, currentItem, shareToken, mutation, handleNext]);
+  }, [feedbackScores, comment, currentItem, shareToken, smeId, mutation, handleNext, feedbackDefinitionsMap]);
 
-  const progressData = progress ? {
+  const progressData = individualProgress ? {
+    current: individualProgress.completed_items,
+    total: individualProgress.total_items,
+  } : progress ? {
     current: progress.completed_items,
     total: progress.total_items,
   } : {
@@ -132,7 +175,14 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
     );
   }
 
-  if (!currentItem) {
+  // Check if queue is completed based on progress
+  const isQueueCompleted = individualProgress 
+    ? individualProgress.completed_items >= individualProgress.total_items
+    : progress 
+    ? progress.completed_items >= progress.total_items
+    : false;
+
+  if (!currentItem || isQueueCompleted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -249,9 +299,16 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                             <Copy className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="p-4">
-                          {renderValue(currentItem.input)}
-                        </div>
+                      <div className="p-4">
+                        {isItemDataLoading ? (
+                          <div className="text-center py-4">
+                            <Loader />
+                            <p className="text-gray-500 mt-2">Loading item data...</p>
+                          </div>
+                        ) : (
+                          renderValue(currentItemData?.input || currentItem.input)
+                        )}
+                      </div>
                       </div>
                     </div>
                   )}
@@ -278,9 +335,16 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                             <Copy className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="p-4">
-                          {renderValue(currentItem.output)}
-                        </div>
+                      <div className="p-4">
+                        {isItemDataLoading ? (
+                          <div className="text-center py-4">
+                            <Loader />
+                            <p className="text-gray-500 mt-2">Loading item data...</p>
+                          </div>
+                        ) : (
+                          renderValue(currentItemData?.output || currentItem.output)
+                        )}
+                      </div>
                       </div>
                     </div>
                   )}
@@ -297,11 +361,18 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                     {metadataExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
                   {metadataExpanded && (
-                    <div className="mt-2">
-                      <div className="bg-slate-50 border border-gray-200 rounded-md p-4">
-                        {renderValue(currentItem.metadata)}
-                      </div>
+                  <div className="mt-2">
+                    <div className="bg-slate-50 border border-gray-200 rounded-md p-4">
+                      {isItemDataLoading ? (
+                        <div className="text-center py-4">
+                          <Loader />
+                          <p className="text-gray-500 mt-2">Loading item data...</p>
+                        </div>
+                      ) : (
+                        renderValue(currentItemData?.metadata || currentItem.metadata)
+                      )}
                     </div>
+                  </div>
                   )}
                 </div>
               </div>

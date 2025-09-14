@@ -79,6 +79,16 @@ export interface SMEQueueProgress {
   progress_percentage: number;
 }
 
+export interface SMEIndividualProgress {
+  total_items: number;
+  completed_items: number;
+  skipped_items: number;
+  pending_items: number;
+  next_item_id: string | null;
+  next_item_type: string | null;
+  completion_percentage: number;
+}
+
 export interface SMEAnnotationSubmission {
   feedback_scores: Array<{
     name: string;

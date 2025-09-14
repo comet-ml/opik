@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -23,11 +24,13 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -104,7 +107,8 @@ public class AnnotationQueuesPublicResource {
             @ApiResponse(responseCode = "200", description = "Progress information")
     })
     @RateLimited
-    public Response getAnnotationQueueProgress(@PathParam("shareToken") UUID shareToken) {
+    public Response getAnnotationQueueProgress(@PathParam("shareToken") UUID shareToken,
+            @QueryParam("sme_id") String smeId) {
 
         log.info("Getting progress for annotation queue with share token");
 
@@ -112,19 +116,106 @@ public class AnnotationQueuesPublicResource {
         var queue = annotationQueueService.findByShareToken(shareToken)
                 .block();
 
-        var totalItems = annotationQueueService.getItemsCountForPublicAccess(queue.id(), queue.workspaceId())
-                .block();
-
-        // TODO: Implement actual progress calculation based on submitted feedback scores
-        // For now, return basic structure
-        var response = Map.of(
-                "total_items", totalItems,
-                "completed_items", 0L,
-                "progress_percentage", 0.0);
+        Map<String, Object> response;
+        if (smeId != null && !smeId.trim().isEmpty()) {
+            // Get SME-specific progress
+            var smeProgress = annotationQueueService.getSMEProgress(queue.id(), queue.workspaceId(), smeId)
+                    .block();
+            response = Map.of(
+                    "total_items", smeProgress.totalItems(),
+                    "completed_items", smeProgress.completedItems(),
+                    "progress_percentage", smeProgress.completionPercentage());
+        } else {
+            // Get general queue progress
+            response = annotationQueueService.getQueueProgress(queue.id(), queue.workspaceId())
+                    .block();
+        }
 
         log.info("Retrieved progress for annotation queue with share token");
 
         return Response.ok(response).build();
+    }
+
+    @GET
+    @Path("/{shareToken}/items/{itemId}/data")
+    @Operation(operationId = "getAnnotationQueueItemData", summary = "Get annotation queue item data", description = "Get full trace or thread data for annotation", responses = {
+            @ApiResponse(responseCode = "200", description = "Item data retrieved successfully")
+    })
+    @RateLimited
+    public Response getAnnotationQueueItemData(
+            @PathParam("shareToken") UUID shareToken,
+            @PathParam("itemId") UUID itemId) {
+
+        log.info("Getting data for item '{}' in queue with share token", itemId);
+
+        // First verify the queue exists and is public
+        var queue = annotationQueueService.findByShareToken(shareToken)
+                .block();
+
+        // Get item data based on queue scope
+        var itemData = annotationQueueService
+                .getItemDataForAnnotation(queue.id(), queue.workspaceId(), itemId, queue.scope())
+                .block();
+
+        log.info("Successfully retrieved data for item '{}' in queue with share token", itemId);
+
+        return Response.ok(itemData).build();
+    }
+
+    @GET
+    @Path("/{shareToken}/progress/{smeId}")
+    @Operation(operationId = "getSMEProgress", summary = "Get SME individual progress", description = "Get individual SME progress and next item", responses = {
+            @ApiResponse(responseCode = "200", description = "SME progress retrieved successfully")
+    })
+    @RateLimited
+    public Response getSMEProgress(
+            @PathParam("shareToken") UUID shareToken,
+            @PathParam("smeId") String smeId) {
+
+        log.info("Getting progress for SME '{}' in queue with share token", smeId);
+
+        // First verify the queue exists and is public
+        var queue = annotationQueueService.findByShareToken(shareToken)
+                .block();
+
+        // Get SME-specific progress
+        var progress = annotationQueueService.getSMEProgress(queue.id(), queue.workspaceId(), smeId)
+                .block();
+
+        log.info("Successfully retrieved progress for SME '{}' in queue with share token", smeId);
+
+        return Response.ok(progress).build();
+    }
+
+    @GET
+    @Path("/{shareToken}/next-item/{smeId}")
+    @Operation(operationId = "getNextItemForSME", summary = "Get next item for SME", description = "Get next unprocessed item for specific SME", responses = {
+            @ApiResponse(responseCode = "200", description = "Next item retrieved successfully"),
+            @ApiResponse(responseCode = "204", description = "No more items available")
+    })
+    @RateLimited
+    public Response getNextItemForSME(
+            @PathParam("shareToken") UUID shareToken,
+            @PathParam("smeId") String smeId) {
+
+        log.info("Getting next item for SME '{}' in queue with share token", smeId);
+
+        // First verify the queue exists and is public
+        var queue = annotationQueueService.findByShareToken(shareToken)
+                .block();
+
+        // Get next item for SME
+        var nextItem = annotationQueueService.getNextItemForSME(queue.id(), smeId)
+                .block();
+
+        if (nextItem == null) {
+            log.info("No more items available for SME '{}' in queue with share token", smeId);
+            return Response.noContent().build();
+        }
+
+        log.info("Successfully retrieved next item for SME '{}' in queue with share token", smeId);
+
+        return Response.ok(nextItem).build();
     }
 
     @POST
@@ -139,24 +230,37 @@ public class AnnotationQueuesPublicResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationSubmission.class))) @Valid AnnotationSubmission request) {
 
         log.info("Submitting annotation for item '{}' in queue with share token", itemId);
+        log.info("Received request: smeId='{}', feedbackScores={}, comment='{}'",
+                request.smeId(), request.feedbackScores(), request.comment());
 
-        // First verify the queue exists and is public
-        annotationQueueService.findByShareToken(shareToken)
-                .block();
+        try {
+            // First verify the queue exists and is public, then submit annotation
+            var result = annotationQueueService.findByShareToken(shareToken)
+                    .switchIfEmpty(
+                            Mono.error(new WebApplicationException("Annotation queue not found or inaccessible", 404)))
+                    .flatMap(queue -> {
+                        log.info("Found queue '{}' for share token, submitting annotation", queue.id());
+                        return annotationQueueService.submitAnnotationWithQueue(queue, itemId, request.smeId(),
+                                request.feedbackScores(), request.comment());
+                    })
+                    .doOnSuccess(
+                            v -> log.info("Successfully submitted annotation for item '{}' in queue with share token",
+                                    itemId))
+                    .doOnError(error -> log.error(
+                            "Failed to submit annotation for item '{}' in queue with share token: {}",
+                            itemId, error.getMessage(), error))
+                    .block(); // Temporarily use block to test
 
-        // TODO: Implement annotation submission logic
-        // This will involve:
-        // 1. Validating feedback scores against queue's feedback definitions
-        // 2. Storing feedback scores and comments
-        // 3. Updating progress tracking
-
-        log.info("Successfully submitted annotation for item '{}' in queue with share token", itemId);
-
-        return Response.noContent().build();
+            return Response.noContent().build();
+        } catch (Exception e) {
+            log.error("Error submitting annotation: {}", e.getMessage(), e);
+            throw new WebApplicationException("Failed to submit annotation", 500);
+        }
     }
 
     // DTO for annotation submission
     public record AnnotationSubmission(
+            @NotBlank String smeId,
             @Valid List<FeedbackScore> feedbackScores,
             String comment) {
     }

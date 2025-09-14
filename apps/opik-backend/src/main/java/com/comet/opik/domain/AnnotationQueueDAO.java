@@ -4,6 +4,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueItemType;
 import com.comet.opik.api.AnnotationQueueScope;
 import com.comet.opik.api.AnnotationQueueUpdate;
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
@@ -67,6 +68,14 @@ public interface AnnotationQueueDAO {
     Mono<Long> getItemsCountByQueueId(UUID queueId, String workspaceId);
 
     Mono<List<Map<String, Object>>> getItemsByQueueId(UUID queueId, String workspaceId, int page, int size);
+
+    Mono<Void> storeSMEAnnotation(UUID queueId, String workspaceId, UUID itemId, String smeId,
+            List<FeedbackScore> feedbackScores, String comment, AnnotationQueueScope scope);
+
+    Mono<Long> countCompletedAnnotationsBySME(UUID queueId, String workspaceId, String smeId);
+
+    Mono<Long> countCompletedAnnotationsForQueue(UUID queueId, String workspaceId);
+
 }
 
 @Singleton
@@ -444,9 +453,13 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                                 created_by,
                                 last_updated_at,
                                 last_updated_by
-                            FROM annotation_queues
-                            WHERE workspace_id = :workspace_id
-                            GROUP BY workspace_id, project_id, id, name, description, instructions, comments_enabled, feedback_definitions, scope, share_token, is_public, created_at, created_by, last_updated_at, last_updated_by
+                            FROM (
+                                SELECT *,
+                                       ROW_NUMBER() OVER (PARTITION BY id ORDER BY last_updated_at DESC) as rn
+                                FROM annotation_queues
+                                WHERE workspace_id = :workspace_id
+                            ) ranked_queues
+                            WHERE rn = 1
                             ORDER BY created_at DESC
                             LIMIT %d OFFSET %d
                             """,
@@ -481,44 +494,54 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         var shareToken = idGenerator.generateId();
 
         return findById(id)
-                .flatMap(existingQueue -> asyncTemplate.nonTransaction(connection -> {
-                    // Insert a new version of the record with share_token and is_public updated
-                    var statement = connection.createStatement("""
-                            INSERT INTO annotation_queues (
-                                workspace_id, project_id, id, name, description, instructions,
-                                comments_enabled, feedback_definitions, scope,
-                                share_token, is_public,
-                                created_by, last_updated_by
-                            ) VALUES (
-                                :workspace_id, :project_id, :id, :name, :description, :instructions,
-                                :comments_enabled, :feedback_definitions, :scope,
-                                :share_token, 1,
-                                :created_by, :user_name
-                            )
-                            """)
-                            .bind("project_id", existingQueue.projectId())
-                            .bind("id", existingQueue.id())
-                            .bind("name", existingQueue.name())
-                            .bind("description", existingQueue.description())
-                            .bind("instructions", existingQueue.instructions())
-                            .bind("comments_enabled", existingQueue.commentsEnabled() ? 1 : 0)
-                            .bind("feedback_definitions", existingQueue.feedbackDefinitions().toArray(new UUID[0]))
-                            .bind("scope", existingQueue.scope().getValue())
-                            .bind("share_token", shareToken)
-                            .bind("created_by", existingQueue.createdBy());
+                .flatMap(existingQueue -> {
+                    // Check if share token already exists
+                    if (existingQueue.shareToken() != null && !existingQueue.shareToken().toString().isEmpty()) {
+                        log.info("Share token already exists for annotation queue with id '{}'", existingQueue.id());
+                        return Mono.just(existingQueue);
+                    }
 
-                    return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
-                            .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                            .thenReturn(existingQueue.toBuilder()
-                                    .shareToken(shareToken)
-                                    .isPublic(true)
-                                    .build());
-                }));
+                    return asyncTemplate.nonTransaction(connection -> {
+                        // Insert a new version of the record with share_token and is_public updated
+                        // This is the correct approach for ClickHouse ReplacingMergeTree
+                        var statement = connection.createStatement("""
+                                INSERT INTO annotation_queues (
+                                    workspace_id, project_id, id, name, description, instructions,
+                                    comments_enabled, feedback_definitions, scope,
+                                    share_token, is_public,
+                                    created_by, last_updated_by
+                                ) VALUES (
+                                    :workspace_id, :project_id, :id, :name, :description, :instructions,
+                                    :comments_enabled, :feedback_definitions, :scope,
+                                    :share_token, 1,
+                                    :created_by, :user_name
+                                )
+                                """)
+                                .bind("project_id", existingQueue.projectId())
+                                .bind("id", existingQueue.id())
+                                .bind("name", existingQueue.name())
+                                .bind("description", existingQueue.description())
+                                .bind("instructions", existingQueue.instructions())
+                                .bind("comments_enabled", existingQueue.commentsEnabled() ? 1 : 0)
+                                .bind("feedback_definitions", existingQueue.feedbackDefinitions().toArray(new UUID[0]))
+                                .bind("scope", existingQueue.scope().getValue())
+                                .bind("share_token", shareToken)
+                                .bind("created_by", existingQueue.createdBy());
+
+                        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                                .thenReturn(existingQueue.toBuilder()
+                                        .shareToken(shareToken)
+                                        .isPublic(true)
+                                        .build());
+                    });
+                });
     }
 
     @Override
     @WithSpan
     public Mono<AnnotationQueue> findByShareToken(UUID shareToken) {
+        log.info("DAO: Finding annotation queue by share token: '{}'", shareToken);
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement("""
                     SELECT *
@@ -528,7 +551,15 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("share_token", shareToken);
 
             return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map(this::mapAnnotationQueue)));
+                    .doOnNext(result -> log.info("DAO: Query executed, checking results"))
+                    .flatMap(result -> {
+                        log.info("DAO: Processing result set");
+                        return Mono.from(result.map(this::mapAnnotationQueue))
+                                .doOnNext(queue -> log.info("DAO: Mapped annotation queue: '{}'", queue.id()))
+                                .doOnError(error -> log.error("DAO: Error mapping annotation queue", error));
+                    })
+                    .doOnError(
+                            error -> log.error("DAO: Error executing query for share token: '{}'", shareToken, error));
         });
     }
 
@@ -557,5 +588,105 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> storeSMEAnnotation(UUID queueId, String workspaceId, UUID itemId, String smeId,
+            List<FeedbackScore> feedbackScores, String comment, AnnotationQueueScope scope) {
+        log.info("Storing SME annotation: queue '{}', item '{}', SME '{}'", queueId, itemId, smeId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            // Store annotation in sme_annotation_progress table
+            var sql = """
+                    INSERT INTO opik.sme_annotation_progress
+                    (workspace_id, queue_id, sme_identifier, item_id, item_type, status, feedback_scores, comment, created_at, last_updated_at)
+                    VALUES (:workspace_id, :queue_id, :sme_identifier, :item_id, :item_type, :status, :feedback_scores, :comment, :created_at, :last_updated_at)
+                    """;
+
+            // Convert feedback scores to JSON string (simpler approach)
+            var feedbackScoresJson = feedbackScores.stream()
+                    .map(score -> String.format("{\"name\":\"%s\",\"value\":%s}", score.name(), score.value()))
+                    .reduce("[", (acc, item) -> acc.equals("[") ? acc + item : acc + "," + item) + "]";
+
+            var itemType = switch (scope) {
+                case TRACE -> "trace";
+                case THREAD -> "thread";
+            };
+
+            var statement = connection.createStatement(sql);
+            statement.bind("workspace_id", workspaceId);
+            statement.bind("queue_id", queueId.toString());
+            statement.bind("sme_identifier", smeId);
+            statement.bind("item_id", itemId.toString());
+            statement.bind("item_type", itemType);
+            statement.bind("status", "completed");
+            statement.bind("feedback_scores", feedbackScoresJson);
+            statement.bind("comment", comment != null ? comment : "");
+            statement.bind("created_at", Instant.now().toString().replace("Z", "")); // Remove Z for ClickHouse compatibility
+            statement.bind("last_updated_at", Instant.now().toString().replace("Z", "")); // Remove Z for ClickHouse compatibility
+
+            return Mono.from(statement.execute())
+                    .then()
+                    .doOnSuccess(v -> log.info("Successfully stored SME annotation: queue '{}', item '{}', SME '{}'",
+                            queueId, itemId, smeId))
+                    .doOnError(error -> log.error("Failed to store SME annotation: queue '{}', item '{}', SME '{}'",
+                            queueId, itemId, smeId, error));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countCompletedAnnotationsBySME(UUID queueId, String workspaceId, String smeId) {
+        log.debug("Counting completed annotations: queue '{}', SME '{}'", queueId, smeId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var sql = """
+                    SELECT COUNT(*) as count
+                    FROM opik.sme_annotation_progress
+                    WHERE workspace_id = :workspace_id AND queue_id = :queue_id AND sme_identifier = :sme_identifier AND status = 'completed'
+                    """;
+
+            var statement = connection.createStatement(sql);
+            statement.bind("workspace_id", workspaceId);
+            statement.bind("queue_id", queueId.toString());
+            statement.bind("sme_identifier", smeId);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug("Found '{}' completed annotations for SME '{}' in queue '{}'",
+                            count, smeId, queueId))
+                    .doOnError(error -> log.error("Failed to count completed annotations: queue '{}', SME '{}'",
+                            queueId, smeId, error));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countCompletedAnnotationsForQueue(UUID queueId, String workspaceId) {
+        log.debug("Counting completed annotations for queue: '{}'", queueId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var sql = """
+                    SELECT COUNT(*) as count
+                    FROM opik.sme_annotation_progress
+                    WHERE workspace_id = :workspace_id AND queue_id = :queue_id AND status = 'completed'
+                    """;
+
+            var statement = connection.createStatement(sql);
+            statement.bind("workspace_id", workspaceId);
+            statement.bind("queue_id", queueId.toString());
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug("Found '{}' completed annotations for queue '{}'",
+                            count, queueId))
+                    .doOnError(error -> log.error("Failed to count completed annotations for queue: '{}'",
+                            queueId, error));
+        });
     }
 }
