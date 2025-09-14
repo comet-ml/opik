@@ -162,3 +162,4 @@ const FeedbackDefinitionListAggregationCell = <TData,>(
 FeedbackDefinitionListCell.Aggregation = FeedbackDefinitionListAggregationCell;
 
 export default FeedbackDefinitionListCell;
+

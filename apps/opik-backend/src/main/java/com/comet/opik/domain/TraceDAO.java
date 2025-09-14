@@ -410,10 +410,8 @@ class TraceDAOImpl implements TraceDAO {
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations,
-                any(aqa.queue_ids) as annotation_queue_ids,
-                any(aqa.queue_names) as annotation_queue_names,
-                any(aqa.annotation_queue_names) as annotation_queue_name,
-                any(arrayElement(aqa.queue_ids, 1)) as annotation_queue_id
+                any(aqa.queue_id) as annotation_queue_id,
+                any(aqa.annotation_queue_name) as annotation_queue_name
             FROM (
                 SELECT
                     *,
@@ -510,8 +508,8 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     aqi.item_id as trace_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -691,8 +689,8 @@ class TraceDAOImpl implements TraceDAO {
             ), annotation_queue_agg AS (
                 SELECT
                     aqi.item_id as trace_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -782,10 +780,8 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
-                  , aqa.queue_ids as annotation_queue_ids
-                  , aqa.queue_names as annotation_queue_names
-                  , aqa.annotation_queue_names as annotation_queue_name
-                  , arrayElement(aqa.queue_ids, 1) as annotation_queue_id
+                  , aqa.queue_id as annotation_queue_id
+                  , aqa.queue_name as annotation_queue_name
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -878,8 +874,8 @@ class TraceDAOImpl implements TraceDAO {
             ), annotation_queue_agg AS (
                 SELECT
                     aqi.item_id as trace_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -1244,8 +1240,8 @@ class TraceDAOImpl implements TraceDAO {
             ), annotation_queue_agg AS (
                 SELECT
                     aqi.item_id as trace_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -1542,8 +1538,8 @@ class TraceDAOImpl implements TraceDAO {
             ), thread_annotation_queue_agg AS (
                 SELECT
                     tt.thread_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -1621,30 +1617,30 @@ class TraceDAOImpl implements TraceDAO {
                 LEFT JOIN (
                     SELECT
                         thread_id,
-                        queue_ids,
-                        queue_names,
-                        annotation_queue_names,
-                        arrayElement(queue_ids, 1) as queue_id
+                        queue_id,
+                        queue_name,
+                        annotation_queue_name,
+                        arrayElement(queue_id, 1) as queue_id
                     FROM (
                         SELECT
                             thread_id,
-                            queue_ids,
-                            queue_names,
-                            annotation_queue_names,
+                            queue_id,
+                            queue_name,
+                            annotation_queue_name,
                             ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY thread_id) as rn
                         FROM (
                             SELECT
                                 aagg.trace_id as thread_id,
-                                aagg.queue_ids,
-                                aagg.queue_names,
-                                aagg.annotation_queue_names
+                                aagg.queue_id,
+                                aagg.queue_name,
+                                aagg.queue_name
                             FROM annotation_queue_agg aagg
                             UNION ALL
                             SELECT
                                 tagg.thread_id,
-                                tagg.queue_ids,
-                                tagg.queue_names,
-                                tagg.annotation_queue_names
+                                tagg.queue_id,
+                                tagg.queue_name,
+                                tagg.queue_name
                             FROM thread_annotation_queue_agg tagg
                         )
                     )
@@ -1853,8 +1849,8 @@ class TraceDAOImpl implements TraceDAO {
             ), thread_annotation_queue_agg AS (
                 SELECT
                     tt.thread_id,
-                    groupArray(aq.id) as queue_ids,
-                    groupArray(aq.name) as queue_names,
+                    groupArray(aq.id) as queue_id,
+                    groupArray(aq.name) as queue_name,
                     arrayStringConcat(groupArray(aq.name), ', ') as annotation_queue_names
                 FROM annotation_queue_items aqi
                 INNER JOIN annotation_queues aq ON aqi.queue_id = aq.id
@@ -1897,10 +1893,8 @@ class TraceDAOImpl implements TraceDAO {
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments,
-                aqa.queue_ids as annotation_queue_ids,
-                aqa.queue_names as annotation_queue_names,
-                aqa.annotation_queue_names as annotation_queue_name,
-                arrayElement(aqa.queue_ids, 1) as annotation_queue_id
+                aqa.queue_id as annotation_queue_id,
+                aqa.annotation_queue_name as annotation_queue_name
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -1934,17 +1928,16 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     thread_id,
-                    queue_ids,
-                    queue_names,
-                    annotation_queue_names,
-                    arrayElement(queue_ids, 1) as queue_id
+                    queue_name,
+                    annotation_queue_name,
+                    arrayElement(queue_id, 1) as queue_id
                 FROM (
                     -- Direct thread annotations (priority)
                     SELECT
                         taqa.thread_id,
-                        taqa.queue_ids,
-                        taqa.queue_names,
-                        taqa.annotation_queue_names,
+                        taqa.queue_id,
+                        taqa.queue_name,
+                        taqa.queue_name as annotation_queue_name,
                         1 as priority
                     FROM thread_annotation_queue_agg taqa
 
@@ -1953,13 +1946,13 @@ class TraceDAOImpl implements TraceDAO {
                     -- Trace-level annotations grouped by thread
                     SELECT
                         tf.thread_id,
-                        any(aqa.queue_ids) as queue_ids,
-                        any(aqa.queue_names) as queue_names,
-                        any(aqa.annotation_queue_names) as annotation_queue_names,
+                        groupArray(aqa.queue_id) as queue_id,
+                        groupArray(aqa.queue_name) as queue_name,
+                        groupArray(aqa.queue_name) as annotation_queue_name,
                         2 as priority
                     FROM traces_final tf
                     LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = tf.id
-                    WHERE aqa.queue_ids IS NOT NULL
+                    WHERE aqa.queue_id IS NOT NULL
                     GROUP BY tf.thread_id
                 )
                 ORDER BY thread_id, priority ASC
