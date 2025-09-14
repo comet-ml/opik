@@ -12,19 +12,25 @@ const SMEQueuePage: React.FunctionComponent = () => {
   const search = useSearch({ strict: false });
   const shareToken = params.shareToken as string;
   const view = (search as any)?.view as "instructions" | "annotate" | undefined;
-  
+
   const currentView = view || "instructions";
 
-
-  const { data: queue, isPending: isQueueLoading, error: queueError } = useSMEQueue({
+  const {
+    data: queue,
+    isPending: isQueueLoading,
+    error: queueError,
+  } = useSMEQueue({
     shareToken,
   });
 
-  const { data: progress, isPending: isProgressLoading } = useSMEProgress({
-    shareToken,
-  }, {
-    enabled: !!queue,
-  });
+  const { data: progress, isPending: isProgressLoading } = useSMEProgress(
+    {
+      shareToken,
+    },
+    {
+      enabled: !!queue,
+    },
+  );
 
   if (isQueueLoading || isProgressLoading) {
     return (
@@ -50,7 +56,8 @@ const SMEQueuePage: React.FunctionComponent = () => {
             Queue Not Found
           </h2>
           <p className="text-gray-600">
-            The annotation queue you're looking for doesn't exist or is no longer available.
+            The annotation queue you're looking for doesn't exist or is no
+            longer available.
           </p>
         </div>
       </div>

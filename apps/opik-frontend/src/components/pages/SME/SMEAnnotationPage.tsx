@@ -1,6 +1,14 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Copy, Info, Table } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Info,
+  Table,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import Loader from "@/components/shared/Loader/Loader";
 
-import { SMEAnnotationQueue, AnnotationQueueScope } from "@/types/annotation-queues";
+import {
+  SMEAnnotationQueue,
+  AnnotationQueueScope,
+} from "@/types/annotation-queues";
 import useSMEQueueItems from "@/api/annotation-queues/useSMEQueueItems";
 import useSMEProgress from "@/api/annotation-queues/useSMEProgress";
 import useSMEAnnotationMutation from "@/api/annotation-queues/useSMEAnnotationMutation";
@@ -36,14 +47,18 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   const [outputExpanded, setOutputExpanded] = useState(true);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
   const [comment, setComment] = useState("");
-  const [feedbackScores, setFeedbackScores] = useState<Record<string, number>>({});
+  const [feedbackScores, setFeedbackScores] = useState<Record<string, number>>(
+    {},
+  );
 
   // Generate or retrieve SME identifier for progress tracking
   const smeId = useMemo(() => {
     const stored = localStorage.getItem(`sme-id-${shareToken}`);
     if (stored) return stored;
-    
-    const newId = `sme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const newId = `sme-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
     localStorage.setItem(`sme-id-${shareToken}`, newId);
     return newId;
   }, [shareToken]);
@@ -68,12 +83,16 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   const currentItem = items[currentItemIndex];
 
   // Fetch current item data for annotation
-  const { data: currentItemData, isPending: isItemDataLoading } = useSMEQueueItemData({
-    shareToken,
-    itemId: currentItem?.id as string,
-  }, {
-    enabled: !!currentItem?.id,
-  });
+  const { data: currentItemData, isPending: isItemDataLoading } =
+    useSMEQueueItemData(
+      {
+        shareToken,
+        itemId: currentItem?.id as string,
+      },
+      {
+        enabled: !!currentItem?.id,
+      },
+    );
 
   // Fetch feedback definitions to get names and descriptions
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -90,12 +109,11 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   // Map feedback definition IDs to their actual data
   const feedbackDefinitionsMap = useMemo(() => {
     const map = new Map();
-    feedbackDefinitions.forEach(def => {
+    feedbackDefinitions.forEach((def) => {
       map.set(def.id, def);
     });
     return map;
   }, [feedbackDefinitions]);
-
 
   const handlePrevious = useCallback(() => {
     if (currentItemIndex > 0) {
@@ -119,24 +137,31 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 
   const handleSubmitAndNext = useCallback(() => {
     const submission = {
-      feedback_scores: Object.entries(feedbackScores).map(([definitionId, value]) => {
-        const definition = feedbackDefinitionsMap.get(definitionId);
-        return {
-          name: definition?.name || definitionId,
-          value,
-        };
-      }),
+      feedback_scores: Object.entries(feedbackScores).map(
+        ([definitionId, value]) => {
+          const definition = feedbackDefinitionsMap.get(definitionId);
+          return {
+            name: definition?.name || definitionId,
+            value,
+          };
+        },
+      ),
       comment,
     };
 
     mutation.mutate(
-      { shareToken, itemId: currentItem.id as string, smeId, annotation: submission },
+      {
+        shareToken,
+        itemId: currentItem.id as string,
+        smeId,
+        annotation: submission,
+      },
       {
         onSuccess: () => {
           // Reset form and advance
           setComment("");
           setFeedbackScores({});
-          
+
           // Check if this was the last item
           if (currentItemIndex >= items.length - 1) {
             // This was the last item - wait a moment for progress to update, then check completion
@@ -149,20 +174,33 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
             handleNext();
           }
         },
-      }
+      },
     );
-  }, [feedbackScores, comment, currentItem, shareToken, smeId, mutation, handleNext, feedbackDefinitionsMap]);
+  }, [
+    feedbackScores,
+    comment,
+    currentItem,
+    shareToken,
+    smeId,
+    mutation,
+    handleNext,
+    feedbackDefinitionsMap,
+  ]);
 
-  const progressData = individualProgress ? {
-    current: individualProgress.completed_items,
-    total: individualProgress.total_items,
-  } : progress ? {
-    current: progress.completed_items,
-    total: progress.total_items,
-  } : {
-    current: currentItemIndex + 1,
-    total: items.length,
-  };
+  const progressData = individualProgress
+    ? {
+        current: individualProgress.completed_items,
+        total: individualProgress.total_items,
+      }
+    : progress
+      ? {
+          current: progress.completed_items,
+          total: progress.total_items,
+        }
+      : {
+          current: currentItemIndex + 1,
+          total: items.length,
+        };
 
   if (isItemsLoading) {
     return (
@@ -176,11 +214,11 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
   }
 
   // Check if queue is completed based on progress
-  const isQueueCompleted = individualProgress 
+  const isQueueCompleted = individualProgress
     ? individualProgress.completed_items >= individualProgress.total_items
-    : progress 
-    ? progress.completed_items >= progress.total_items
-    : false;
+    : progress
+      ? progress.completed_items >= progress.total_items
+      : false;
 
   if (!currentItem || isQueueCompleted) {
     return (
@@ -243,7 +281,9 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
           {/* Header Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-medium text-gray-900">{queue.name}</h1>
+              <h1 className="text-2xl font-medium text-gray-900">
+                {queue.name}
+              </h1>
               <div className="flex items-center space-x-2">
                 <Button variant="outline" size="sm">
                   <Table className="mr-2 h-4 w-4" />
@@ -259,15 +299,21 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
             {/* Progress Section */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Progress</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Progress
+                </span>
                 <span className="text-sm text-gray-500">
                   {progressData.current}/{progressData.total} completed
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div 
+                <div
                   className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${(progressData.current / progressData.total) * 100}%` }}
+                  style={{
+                    width: `${
+                      (progressData.current / progressData.total) * 100
+                    }%`,
+                  }}
                 />
               </div>
             </div>
@@ -291,24 +337,36 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                     <div className="mt-2">
                       <div className="bg-slate-50 border border-gray-200 rounded-md">
                         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                          <Button variant="outline" size="sm" className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          >
                             Pretty ✨
                             <ChevronDown className="ml-1 h-3 w-3" />
                           </Button>
-                          <Button variant="outline" size="icon-sm" className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          >
                             <Copy className="h-3 w-3" />
                           </Button>
                         </div>
-                      <div className="p-4">
-                        {isItemDataLoading ? (
-                          <div className="text-center py-4">
-                            <Loader />
-                            <p className="text-gray-500 mt-2">Loading item data...</p>
-                          </div>
-                        ) : (
-                          renderValue(currentItemData?.input || currentItem.input)
-                        )}
-                      </div>
+                        <div className="p-4">
+                          {isItemDataLoading ? (
+                            <div className="text-center py-4">
+                              <Loader />
+                              <p className="text-gray-500 mt-2">
+                                Loading item data...
+                              </p>
+                            </div>
+                          ) : (
+                            renderValue(
+                              currentItemData?.input || currentItem.input,
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -327,24 +385,36 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                     <div className="mt-2">
                       <div className="bg-slate-50 border border-gray-200 rounded-md">
                         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                          <Button variant="outline" size="sm" className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-6 px-2 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          >
                             Pretty ✨
                             <ChevronDown className="ml-1 h-3 w-3" />
                           </Button>
-                          <Button variant="outline" size="icon-sm" className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100">
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            className="h-6 w-6 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          >
                             <Copy className="h-3 w-3" />
                           </Button>
                         </div>
-                      <div className="p-4">
-                        {isItemDataLoading ? (
-                          <div className="text-center py-4">
-                            <Loader />
-                            <p className="text-gray-500 mt-2">Loading item data...</p>
-                          </div>
-                        ) : (
-                          renderValue(currentItemData?.output || currentItem.output)
-                        )}
-                      </div>
+                        <div className="p-4">
+                          {isItemDataLoading ? (
+                            <div className="text-center py-4">
+                              <Loader />
+                              <p className="text-gray-500 mt-2">
+                                Loading item data...
+                              </p>
+                            </div>
+                          ) : (
+                            renderValue(
+                              currentItemData?.output || currentItem.output,
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -358,21 +428,29 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                     onClick={() => setMetadataExpanded(!metadataExpanded)}
                   >
                     <span className="text-sm font-medium">Metadata</span>
-                    {metadataExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    {metadataExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
                   </Button>
                   {metadataExpanded && (
-                  <div className="mt-2">
-                    <div className="bg-slate-50 border border-gray-200 rounded-md p-4">
-                      {isItemDataLoading ? (
-                        <div className="text-center py-4">
-                          <Loader />
-                          <p className="text-gray-500 mt-2">Loading item data...</p>
-                        </div>
-                      ) : (
-                        renderValue(currentItemData?.metadata || currentItem.metadata)
-                      )}
+                    <div className="mt-2">
+                      <div className="bg-slate-50 border border-gray-200 rounded-md p-4">
+                        {isItemDataLoading ? (
+                          <div className="text-center py-4">
+                            <Loader />
+                            <p className="text-gray-500 mt-2">
+                              Loading item data...
+                            </p>
+                          </div>
+                        ) : (
+                          renderValue(
+                            currentItemData?.metadata || currentItem.metadata,
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
                   )}
                 </div>
               </div>
@@ -384,7 +462,9 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
               <div className="w-96">
                 {/* Comments Section */}
                 <div className="pb-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Comments</h3>
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">
+                    Comments
+                  </h3>
                   <Textarea
                     placeholder="Add a comment..."
                     value={comment}
@@ -398,34 +478,54 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 
                 {/* Feedback Scores Section */}
                 <div className="pt-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-4">Feedback scores</h3>
-                  
+                  <h3 className="text-sm font-medium text-gray-900 mb-4">
+                    Feedback scores
+                  </h3>
+
                   {/* Feedback Score Rows */}
                   <div className="border-t border-gray-200">
                     {queue.feedback_definitions.map((definitionId, index) => {
-                      const definition = feedbackDefinitionsMap.get(definitionId);
-                      const colors = ['#19A979', '#5899DA', '#BF399E', '#F4B400'];
+                      const definition =
+                        feedbackDefinitionsMap.get(definitionId);
+                      const colors = [
+                        "#19A979",
+                        "#5899DA",
+                        "#BF399E",
+                        "#F4B400",
+                      ];
                       const currentScore = feedbackScores[definitionId];
-                      
+
                       if (!definition) {
                         return (
-                          <div key={definitionId} className="border-b border-gray-200 last:border-b-0">
+                          <div
+                            key={definitionId}
+                            className="border-b border-gray-200 last:border-b-0"
+                          >
                             <div className="flex items-center p-2">
                               <div className="flex-1">
-                                <div className="text-sm text-gray-500">Loading...</div>
+                                <div className="text-sm text-gray-500">
+                                  Loading...
+                                </div>
                               </div>
                             </div>
                           </div>
                         );
                       }
 
-                      const isCategorical = definition.type === 'categorical';
+                      const isCategorical = definition.type === "categorical";
                       const categories = definition.details?.categories || {};
-                      const categoryEntries = Object.entries(categories) as [string, number][];
-                      const isBinary = isCategorical && categoryEntries.length === 2;
+                      const categoryEntries = Object.entries(categories) as [
+                        string,
+                        number,
+                      ][];
+                      const isBinary =
+                        isCategorical && categoryEntries.length === 2;
 
                       return (
-                        <div key={definitionId} className="border-b border-gray-200 last:border-b-0">
+                        <div
+                          key={definitionId}
+                          className="border-b border-gray-200 last:border-b-0"
+                        >
                           <div className="flex items-center p-2">
                             {/* Score Tag */}
                             <div className="flex-1 min-w-0">
@@ -445,8 +545,17 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                                       key={value}
                                       variant="outline"
                                       size="sm"
-                                      className={`h-7 px-2 text-xs ${currentScore === value ? 'bg-blue-50 border-blue-300' : ''}`}
-                                      onClick={() => setFeedbackScores(prev => ({ ...prev, [definitionId]: value }))}
+                                      className={`h-7 px-2 text-xs ${
+                                        currentScore === value
+                                          ? "bg-blue-50 border-blue-300"
+                                          : ""
+                                      }`}
+                                      onClick={() =>
+                                        setFeedbackScores((prev) => ({
+                                          ...prev,
+                                          [definitionId]: value,
+                                        }))
+                                      }
                                     >
                                       {label} ({value})
                                     </Button>
@@ -459,18 +568,28 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
                                   min={definition.details?.min || 0}
                                   max={definition.details?.max || 5}
                                   step="0.1"
-                                  placeholder={`Min: ${definition.details?.min || 0}, Max: ${definition.details?.max || 5}`}
-                                  value={currentScore || ''}
-                                  onChange={(e) => setFeedbackScores(prev => ({ 
-                                    ...prev, 
-                                    [definitionId]: parseFloat(e.target.value) || 0 
-                                  }))}
+                                  placeholder={`Min: ${
+                                    definition.details?.min || 0
+                                  }, Max: ${definition.details?.max || 5}`}
+                                  value={currentScore || ""}
+                                  onChange={(e) =>
+                                    setFeedbackScores((prev) => ({
+                                      ...prev,
+                                      [definitionId]:
+                                        parseFloat(e.target.value) || 0,
+                                    }))
+                                  }
                                   className="w-32 h-7 text-xs"
                                 />
                               )}
-                              
+
                               {/* Info button */}
-                              <Button variant="outline" size="icon-sm" className="h-7 w-7" title={definition.description}>
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                className="h-7 w-7"
+                                title={definition.description}
+                              >
                                 <Info className="h-3 w-3" />
                               </Button>
                             </div>
@@ -486,25 +605,27 @@ const SMEAnnotationPage: React.FunctionComponent<SMEAnnotationPageProps> = ({
 
           {/* Bottom Navigation */}
           <div className="flex justify-end items-center space-x-2 pt-4 border-t border-gray-200">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handlePrevious}
               disabled={currentItemIndex === 0}
             >
               <ChevronLeft className="mr-2 h-4 w-4" />
               Previous
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleSkip}
               disabled={currentItemIndex === items.length - 1}
             >
               Skip
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
-            <Button 
+            <Button
               onClick={handleSubmitAndNext}
-              disabled={mutation.isPending || Object.keys(feedbackScores).length === 0}
+              disabled={
+                mutation.isPending || Object.keys(feedbackScores).length === 0
+              }
               className="bg-blue-600 hover:bg-blue-700"
             >
               {mutation.isPending ? "Saving..." : "Submit + Next"}

@@ -395,7 +395,10 @@ const smeQueueRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute, smeQueueRoute]),
+  workspaceGuardEmptyLayoutRoute.addChildren([
+    automationLogsRoute,
+    smeQueueRoute,
+  ]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
     getStartedRoute,
@@ -435,9 +438,7 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
-      annotationQueuesRoute.addChildren([
-        annotationQueuesListRoute,
-      ]),
+      annotationQueuesRoute.addChildren([annotationQueuesListRoute]),
     ]),
   ]),
 ]);

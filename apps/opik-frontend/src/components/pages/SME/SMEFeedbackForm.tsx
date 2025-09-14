@@ -4,14 +4,25 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Save } from "lucide-react";
 
-import { SMEAnnotationQueue, SMEAnnotationSubmission, AnnotationQueueScope } from "@/types/annotation-queues";
+import {
+  SMEAnnotationQueue,
+  SMEAnnotationSubmission,
+  AnnotationQueueScope,
+} from "@/types/annotation-queues";
 import useSMEAnnotationMutation from "@/api/annotation-queues/useSMEAnnotationMutation";
 
 type SMEFeedbackFormProps = {
@@ -21,11 +32,17 @@ type SMEFeedbackFormProps = {
   onSubmitSuccess?: () => void;
 };
 
-const createFormSchema = (feedbackDefinitions: string[], commentsEnabled: boolean) => {
-  const feedbackScores = feedbackDefinitions.reduce((acc, definition) => {
-    acc[definition] = z.number().min(0).max(1);
-    return acc;
-  }, {} as Record<string, z.ZodNumber>);
+const createFormSchema = (
+  feedbackDefinitions: string[],
+  commentsEnabled: boolean,
+) => {
+  const feedbackScores = feedbackDefinitions.reduce(
+    (acc, definition) => {
+      acc[definition] = z.number().min(0).max(1);
+      return acc;
+    },
+    {} as Record<string, z.ZodNumber>,
+  );
 
   return z.object({
     feedbackScores: z.object(feedbackScores),
@@ -41,38 +58,46 @@ const SMEFeedbackForm: React.FunctionComponent<SMEFeedbackFormProps> = ({
 }) => {
   const mutation = useSMEAnnotationMutation();
 
-  const formSchema = createFormSchema(queue.feedback_definitions, queue.comments_enabled);
+  const formSchema = createFormSchema(
+    queue.feedback_definitions,
+    queue.comments_enabled,
+  );
   type FormData = z.infer<typeof formSchema>;
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      feedbackScores: queue.feedback_definitions.reduce((acc, definition) => {
-        acc[definition] = 0.5; // Default to middle value
-        return acc;
-      }, {} as Record<string, number>),
+      feedbackScores: queue.feedback_definitions.reduce(
+        (acc, definition) => {
+          acc[definition] = 0.5; // Default to middle value
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
       comment: "",
     },
   });
 
   const onSubmit = (data: FormData) => {
     const submission: SMEAnnotationSubmission = {
-      feedback_scores: Object.entries(data.feedbackScores).map(([name, value]) => ({
-        name,
-        value,
-      })),
+      feedback_scores: Object.entries(data.feedbackScores).map(
+        ([name, value]) => ({
+          name,
+          value,
+        }),
+      ),
       comment: data.comment,
     };
 
     mutation.mutate(
-      { shareToken, itemId, annotation: submission },
+      { shareToken, itemId, smeId: "sme", annotation: submission },
       {
         onSuccess: () => {
           // Reset form for next item
           form.reset();
           onSubmitSuccess?.();
         },
-      }
+      },
     );
   };
 
@@ -83,7 +108,12 @@ const SMEFeedbackForm: React.FunctionComponent<SMEFeedbackFormProps> = ({
           {/* Feedback Scores Section */}
           <div className="space-y-5">
             <div className="space-y-1">
-              <h3 className="text-base font-medium text-gray-900">Rate this {queue.scope === AnnotationQueueScope.TRACE ? "trace" : "conversation"}</h3>
+              <h3 className="text-base font-medium text-gray-900">
+                Rate this{" "}
+                {queue.scope === AnnotationQueueScope.TRACE
+                  ? "trace"
+                  : "conversation"}
+              </h3>
               <p className="text-sm text-gray-500">
                 Score each criteria from 0 (poor) to 1 (excellent)
               </p>
@@ -109,7 +139,9 @@ const SMEFeedbackForm: React.FunctionComponent<SMEFeedbackFormProps> = ({
                         <div className="px-1">
                           <Slider
                             value={[field.value]}
-                            onValueChange={(values) => field.onChange(values[0])}
+                            onValueChange={(values) =>
+                              field.onChange(values[0])
+                            }
                             max={1}
                             min={0}
                             step={0.1}
@@ -159,9 +191,9 @@ const SMEFeedbackForm: React.FunctionComponent<SMEFeedbackFormProps> = ({
 
           {/* Submit Button */}
           <div className="pt-4 border-t border-gray-200">
-            <Button 
-              type="submit" 
-              className="w-full h-12 text-base font-medium" 
+            <Button
+              type="submit"
+              className="w-full h-12 text-base font-medium"
               disabled={mutation.isPending}
             >
               {mutation.isPending ? (

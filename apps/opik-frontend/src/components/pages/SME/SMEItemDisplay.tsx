@@ -17,13 +17,15 @@ const SMEItemDisplay: React.FunctionComponent<SMEItemDisplayProps> = ({
   scope,
 }) => {
   const [showMetadata, setShowMetadata] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+  const [expandedSections, setExpandedSections] = useState<
+    Record<string, boolean>
+  >({
     input: true,
     output: true,
   });
 
   const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
       [section]: !prev[section],
     }));
@@ -53,15 +55,19 @@ const SMEItemDisplay: React.FunctionComponent<SMEItemDisplayProps> = ({
     return <span className="font-mono text-sm">{String(value)}</span>;
   };
 
-  const renderSection = (title: string, content: unknown, sectionKey: string) => {
+  const renderSection = (
+    title: string,
+    content: unknown,
+    sectionKey: string,
+  ) => {
     if (!content) return null;
 
     const isExpanded = expandedSections[sectionKey];
 
     return (
       <div className="border rounded-md">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="w-full justify-between p-2"
           onClick={() => toggleSection(sectionKey)}
         >
@@ -73,9 +79,7 @@ const SMEItemDisplay: React.FunctionComponent<SMEItemDisplayProps> = ({
           )}
         </Button>
         {isExpanded && (
-          <div className="px-2 pb-2 border-t">
-            {renderValue(content)}
-          </div>
+          <div className="px-2 pb-2 border-t">{renderValue(content)}</div>
         )}
       </div>
     );
@@ -164,25 +168,35 @@ const SMEItemDisplay: React.FunctionComponent<SMEItemDisplayProps> = ({
 
             {item.error_info ? (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700">Error Info</h4>
+                <h4 className="text-sm font-medium text-gray-700">
+                  Error Info
+                </h4>
                 <div className="bg-red-50 rounded-lg p-4 border border-red-200 text-xs">
                   {renderValue(item.error_info)}
                 </div>
               </div>
             ) : null}
 
-            {(item.start_time || item.created_at) ? (
+            {item.start_time || item.created_at ? (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700">Timestamps</h4>
+                <h4 className="text-sm font-medium text-gray-700">
+                  Timestamps
+                </h4>
                 <div className="bg-gray-50 rounded-lg p-4 border text-xs space-y-1">
                   {typeof item.start_time === "string" && item.start_time && (
-                    <div><strong>Started:</strong> {formatDate(item.start_time)}</div>
+                    <div>
+                      <strong>Started:</strong> {formatDate(item.start_time)}
+                    </div>
                   )}
                   {typeof item.end_time === "string" && item.end_time && (
-                    <div><strong>Ended:</strong> {formatDate(item.end_time)}</div>
+                    <div>
+                      <strong>Ended:</strong> {formatDate(item.end_time)}
+                    </div>
                   )}
                   {typeof item.created_at === "string" && item.created_at && (
-                    <div><strong>Created:</strong> {formatDate(item.created_at)}</div>
+                    <div>
+                      <strong>Created:</strong> {formatDate(item.created_at)}
+                    </div>
                   )}
                 </div>
               </div>

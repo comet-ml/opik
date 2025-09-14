@@ -6,7 +6,6 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -22,7 +21,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import FeedbackDefinitionSelector from "./FeedbackDefinitionSelector";
 
@@ -35,7 +33,6 @@ import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotat
 import useProjectsList from "@/api/projects/useProjectsList";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 
 const SCOPE_OPTIONS = [
   {
@@ -362,7 +359,7 @@ const CreateAnnotationQueueDialog: React.FunctionComponent<
                   >
                     invite annotators to your workspace
                   </a>{" "}
-                  for them to review the items. After creating the queue, you'll
+                  for them to review the items. After creating the queue, you&apos;ll
                   get a direct link to share with them.
                 </p>
               </div>

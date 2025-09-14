@@ -153,7 +153,18 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.string,
     accessorFn: (row) => {
       const thread = row as Thread;
-      return thread.annotation_queue_name || "-";
+      // Use the comma-separated string from backend if available, otherwise fall back to single name
+      if (thread.annotation_queue_name) {
+        return thread.annotation_queue_name;
+      }
+      // Fallback to joining array if available
+      if (
+        thread.annotation_queue_names &&
+        thread.annotation_queue_names.length > 0
+      ) {
+        return thread.annotation_queue_names.join(", ");
+      }
+      return "-";
     },
     size: 200,
   },
@@ -413,24 +424,25 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  const handleRowClick = useCallback(
-    (row?: Thread) => {
-      if (!row) return;
-      
-      // Create filter for thread_id
-      const threadFilter: Filter = {
-        id: uuidv7(),
-        field: "thread_id",
-        type: COLUMN_TYPE.string,
-        operator: "=",
-        value: row.id,
-      };
+  const handleRowClick = useCallback((row?: Thread) => {
+    if (!row) return;
 
-      // Navigate to traces tab with thread filter
-      window.location.href = `${window.location.pathname}?type=traces&traces_filters=${encodeURIComponent(JSON.stringify([threadFilter]))}`;
-    },
-    [],
-  );
+    // Create filter for thread_id
+    const threadFilter: Filter = {
+      id: uuidv7(),
+      field: "thread_id",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      value: row.id,
+    };
+
+    // Navigate to traces tab with thread filter
+    window.location.href = `${
+      window.location.pathname
+    }?type=traces&traces_filters=${encodeURIComponent(
+      JSON.stringify([threadFilter]),
+    )}`;
+  }, []);
 
   const columns = useMemo(() => {
     return [

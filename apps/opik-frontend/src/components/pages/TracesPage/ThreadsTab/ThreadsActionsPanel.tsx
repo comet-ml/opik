@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, ChevronDown, Users, MoreHorizontal } from "lucide-react";
+import { Trash, ChevronDown, Users } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 
@@ -104,11 +104,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         <DropdownMenu>
           <TooltipWrapper content="Add to annotation queue">
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={disabled}
-              >
+              <Button variant="outline" size="sm" disabled={disabled}>
                 Add to
                 <ChevronDown className="ml-2 size-4" />
               </Button>

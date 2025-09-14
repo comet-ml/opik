@@ -16,22 +16,17 @@ import { Separator } from "@/components/ui/separator";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FeedbackDefinitionListCell from "@/components/shared/DataTableCells/FeedbackDefinitionListCell";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import {
-  COLUMN_NAME_ID,
-  COLUMN_SELECT_ID,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { v7 as uuidv7 } from "uuid";
 
@@ -75,7 +70,7 @@ type AnnotationQueuesTabProps = {
 
 const AnnotationQueuesTab: React.FunctionComponent<
   AnnotationQueuesTabProps
-> = ({ projectId, projectName }) => {
+> = ({ projectId, projectName: _projectName }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -200,15 +195,20 @@ const AnnotationQueuesTab: React.FunctionComponent<
       },
       {
         id: COLUMN_FEEDBACK_SCORES,
-        label: "Feedback scores (avg.)",
+        label: "Feedback definitions",
         type: COLUMN_TYPE.string,
         accessorFn: (row) => {
-          if (!row.feedback_scores || row.feedback_scores.length === 0)
-            return "-";
-          const avgScore =
-            row.feedback_scores.reduce((sum, score) => sum + score.value, 0) /
-            row.feedback_scores.length;
-          return avgScore.toFixed(2);
+          if (
+            row.feedback_definition_names &&
+            row.feedback_definition_names.length > 0
+          ) {
+            return row.feedback_definition_names;
+          }
+          return [];
+        },
+        cell: FeedbackDefinitionListCell as never,
+        customMeta: {
+          getHoverCardName: (row: AnnotationQueue) => row.name,
         },
       },
       {

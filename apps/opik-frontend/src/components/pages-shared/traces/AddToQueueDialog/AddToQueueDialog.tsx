@@ -70,7 +70,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const handleQueueSelect = useCallback(
     async (queue: AnnotationQueue) => {
       try {
-        // Use thread_model_id for threads, or id for other types  
+        // Use thread_model_id for threads, or id for other types
         const itemIds = rows
           .map((row) => {
             // For threads, use thread_model_id (the actual UUID)
@@ -80,31 +80,34 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
             }
             return row.id;
           })
-          .filter(id => {
+          .filter((id) => {
             // Basic validation - ensure it's a proper UUID-like string
-            return id && 
-                   typeof id === "string" &&
-                   id.length >= 32 && // UUID-like length 
-                   !id.includes("opik_"); // Avoid any opik_ prefixed placeholders
+            return (
+              id &&
+              typeof id === "string" &&
+              id.length >= 32 && // UUID-like length
+              !id.includes("opik_")
+            ); // Avoid any opik_ prefixed placeholders
           });
-        
+
         if (itemIds.length === 0) {
           toast({
             title: "Error",
-            description: "No valid items selected. Please refresh the page and try again.",
+            description:
+              "No valid items selected. Please refresh the page and try again.",
             variant: "destructive",
           });
           return;
         }
-        
+
         if (itemIds.length !== rows.length) {
           console.warn("Some items were filtered out due to invalid IDs:", {
             originalCount: rows.length,
             validCount: itemIds.length,
-            filteredIds: itemIds
+            filteredIds: itemIds,
           });
         }
-        
+
         await addItemsMutation.mutateAsync({
           annotationQueueId: queue.id,
           itemIds,
@@ -165,7 +168,6 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
     },
     [addItemsMutation, rows, toast, setOpen, type],
   );
-
 
   const handleQueueCreated = useCallback(
     (newQueue: AnnotationQueue) => {
@@ -229,7 +231,8 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Add to annotation queue</DialogTitle>
           <DialogDescription>
-            Select an annotation queue to add the selected items for human review and feedback.
+            Select an annotation queue to add the selected items for human
+            review and feedback.
           </DialogDescription>
         </DialogHeader>
         <div className="w-full overflow-hidden">

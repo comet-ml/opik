@@ -42,6 +42,9 @@ public record AnnotationQueue(
 
         @JsonView({View.Public.class, View.Create.class, View.Update.class}) @NotNull List<UUID> feedbackDefinitions,
 
+        @JsonView({
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<String> feedbackDefinitionNames,
+
         @JsonView({View.Public.class, View.Create.class}) @NotNull AnnotationQueueScope scope,
 
         @JsonView({

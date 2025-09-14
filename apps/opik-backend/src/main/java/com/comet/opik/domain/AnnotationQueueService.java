@@ -90,6 +90,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     private final @NonNull TraceService traceService;
     private final @NonNull TraceThreadService traceThreadService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull FeedbackDefinitionService feedbackDefinitionService;
 
     @Override
     @WithSpan
@@ -138,6 +139,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 page, size, search, scope);
 
         return annotationQueueDAO.find(page, size, search, scope, sortingFields)
+                .map(this::resolveFeedbackDefinitionNames)
                 .doOnSuccess(result -> log.debug("Found '{}' annotation queues", result.content().size()))
                 .doOnError(error -> log.error("Failed to find annotation queues", error));
     }
@@ -501,5 +503,51 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         var message = "Annotation queue not found: '%s'".formatted(id);
         log.info(message);
         return new NotFoundException(message);
+    }
+
+    @WithSpan
+    private AnnotationQueue.AnnotationQueuePage resolveFeedbackDefinitionNames(
+            AnnotationQueue.AnnotationQueuePage page) {
+        // Collect all unique feedback definition IDs from all queues
+        var allFeedbackDefinitionIds = page.content().stream()
+                .flatMap(queue -> queue.feedbackDefinitions().stream())
+                .distinct()
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (allFeedbackDefinitionIds.isEmpty()) {
+            return page;
+        }
+
+        // Resolve all feedback definition IDs to names
+        java.util.Map<UUID, String> feedbackDefinitionNames = new java.util.HashMap<>();
+        for (UUID id : allFeedbackDefinitionIds) {
+            try {
+                var feedbackDefinition = feedbackDefinitionService.get(id);
+                feedbackDefinitionNames.put(id, feedbackDefinition.getName());
+            } catch (Exception e) {
+                log.warn("Failed to resolve feedback definition name for id '{}': {}", id, e.getMessage());
+                feedbackDefinitionNames.put(id, "Unknown");
+            }
+        }
+
+        // Update each queue with resolved feedback definition names
+        java.util.List<AnnotationQueue> updatedQueues = page.content().stream()
+                .map(queue -> {
+                    java.util.List<String> feedbackDefinitionNamesList = queue.feedbackDefinitions().stream()
+                            .map(feedbackDefinitionNames::get)
+                            .collect(java.util.stream.Collectors.toList());
+
+                    return queue.toBuilder()
+                            .feedbackDefinitionNames(feedbackDefinitionNamesList)
+                            .build();
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        return new AnnotationQueue.AnnotationQueuePage(
+                page.page(),
+                page.size(),
+                page.total(),
+                updatedQueues,
+                page.sortableBy());
     }
 }

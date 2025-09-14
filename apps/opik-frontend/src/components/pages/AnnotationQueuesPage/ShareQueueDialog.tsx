@@ -45,7 +45,7 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
             setShareUrl(url);
           }
         },
-      }
+      },
     );
   };
 
@@ -73,7 +73,9 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
     }
   };
 
-  const currentShareUrl = shareUrl || (queue.share_token ? generateShareUrl(queue.share_token) : null);
+  const currentShareUrl =
+    shareUrl ||
+    (queue.share_token ? generateShareUrl(queue.share_token) : null);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -89,22 +91,26 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
           <div>
             <h4 className="font-medium mb-2">{queue.name}</h4>
             <p className="text-sm text-muted-foreground">
-              Generate a shareable link that allows Subject Matter Experts to review and annotate items in this queue.
+              Generate a shareable link that allows Subject Matter Experts to
+              review and annotate items in this queue.
             </p>
           </div>
 
           {!currentShareUrl ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                This queue hasn't been shared yet. Generate a share link to allow SMEs to access it.
+                This queue hasn't been shared yet. Generate a share link to
+                allow SMEs to access it.
               </p>
-              <Button 
+              <Button
                 onClick={handleGenerateShare}
                 disabled={shareMutation.isPending}
                 className="w-full"
               >
                 <Share2 className="mr-2 h-4 w-4" />
-                {shareMutation.isPending ? "Generating..." : "Generate Share Link"}
+                {shareMutation.isPending
+                  ? "Generating..."
+                  : "Generate Share Link"}
               </Button>
             </div>
           ) : (
@@ -118,16 +124,16 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
                     readOnly
                     className="font-mono text-xs"
                   />
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
                     onClick={handleCopyToClipboard}
                     title="Copy to clipboard"
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
                     onClick={handleOpenInNewTab}
                     title="Open in new tab"
@@ -138,8 +144,14 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
               </div>
 
               <div className="text-xs text-muted-foreground">
-                <p>• Share this link with SMEs to allow them to review and annotate items</p>
-                <p>• SMEs will see a focused interface without access to your main workspace</p>
+                <p>
+                  • Share this link with SMEs to allow them to review and
+                  annotate items
+                </p>
+                <p>
+                  • SMEs will see a focused interface without access to your
+                  main workspace
+                </p>
                 <p>• You can monitor progress from the queue details page</p>
               </div>
             </div>
@@ -151,4 +163,3 @@ const ShareQueueDialog: React.FunctionComponent<ShareQueueDialogProps> = ({
 };
 
 export default ShareQueueDialog;
-

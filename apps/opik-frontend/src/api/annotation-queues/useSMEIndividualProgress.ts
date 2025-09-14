@@ -47,6 +47,3 @@ export default function useSMEIndividualProgress(
     staleTime: 10 * 1000, // 10 seconds
   });
 }
-
-
-

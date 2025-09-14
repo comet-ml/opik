@@ -17,12 +17,17 @@ const useSMEAnnotationMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ shareToken, itemId, smeId, annotation }: UseSMEAnnotationMutationParams) => {
+    mutationFn: async ({
+      shareToken,
+      itemId,
+      smeId,
+      annotation,
+    }: UseSMEAnnotationMutationParams) => {
       const { data } = await api.post(
         `/v1/public/annotation-queues/${shareToken}/items/${itemId}/annotate`,
         {
           sme_id: smeId,
-          feedback_scores: annotation.feedback_scores.map(score => ({
+          feedback_scores: annotation.feedback_scores.map((score) => ({
             name: score.name,
             value: score.value,
             source: "ui", // ScoreSource.UI
@@ -39,17 +44,17 @@ const useSMEAnnotationMutation = () => {
         title: "Annotation submitted",
         description: "Your feedback has been saved successfully",
       });
-      
+
       // Invalidate progress to refresh completion status
       queryClient.invalidateQueries({
         queryKey: ["sme-queue-progress", shareToken],
       });
-      
+
       // Invalidate individual progress to refresh SME-specific completion status
       queryClient.invalidateQueries({
         queryKey: ["sme-individual-progress", shareToken, smeId],
       });
-      
+
       // Invalidate queue items to refresh completion status
       queryClient.invalidateQueries({
         queryKey: ["sme-queue-items", shareToken],
@@ -67,4 +72,3 @@ const useSMEAnnotationMutation = () => {
 };
 
 export default useSMEAnnotationMutation;
-

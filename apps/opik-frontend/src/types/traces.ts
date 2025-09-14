@@ -64,6 +64,8 @@ export interface Trace extends BaseTraceData {
   visibility_mode?: TRACE_VISIBILITY_MODE;
   annotation_queue_id?: string;
   annotation_queue_name?: string;
+  annotation_queue_ids?: string[];
+  annotation_queue_names?: string[];
 }
 
 export enum SPAN_TYPE {
@@ -111,4 +113,6 @@ export interface Thread {
   tags?: string[];
   annotation_queue_id?: string;
   annotation_queue_name?: string;
+  annotation_queue_ids?: string[];
+  annotation_queue_names?: string[];
 }

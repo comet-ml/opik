@@ -202,7 +202,18 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
     accessorFn: (row) => {
       const trace = row as Trace;
-      return trace.annotation_queue_name || "-";
+      // Use the comma-separated string from backend if available, otherwise fall back to single name
+      if (trace.annotation_queue_name) {
+        return trace.annotation_queue_name;
+      }
+      // Fallback to joining array if available
+      if (
+        trace.annotation_queue_names &&
+        trace.annotation_queue_names.length > 0
+      ) {
+        return trace.annotation_queue_names.join(", ");
+      }
+      return "-";
     },
     size: 200,
   },

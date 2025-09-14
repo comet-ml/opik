@@ -20,12 +20,12 @@ const useAnnotationQueueShareMutation = () => {
       );
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({
         title: "Share token generated",
         description: "Queue can now be shared with SMEs",
       });
-      
+
       // Invalidate and refetch annotation queues list
       queryClient.invalidateQueries({
         queryKey: ["annotation-queues"],
@@ -43,4 +43,3 @@ const useAnnotationQueueShareMutation = () => {
 };
 
 export default useAnnotationQueueShareMutation;
-
