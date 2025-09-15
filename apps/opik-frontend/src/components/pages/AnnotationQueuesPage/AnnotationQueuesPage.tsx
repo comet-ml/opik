@@ -271,7 +271,7 @@ const AnnotationQueuesPage: React.FunctionComponent = () => {
         id: uuidv7(),
         field: "annotation_queue_name",
         type: COLUMN_TYPE.string,
-        operator: "=",
+        operator: "contains",
         value: queue.name,
       };
 
