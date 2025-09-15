@@ -5331,9 +5331,11 @@ class ExperimentsResourceTest {
             experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
-            // then - Note: Since status is a new field, we verify the update was successful by checking the response
-            // The actual status verification would require updating the Experiment model to include status
-            // For now, we verify that the update completed successfully
+            // then
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.name()).isEqualTo("Original Name"); // name unchanged
+            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.REGULAR); // type unchanged
+            assertThat(updatedExperiment.status()).isEqualTo(ExperimentStatus.COMPLETED);
         }
 
         @Test

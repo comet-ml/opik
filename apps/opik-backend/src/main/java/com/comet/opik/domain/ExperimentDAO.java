@@ -1203,7 +1203,7 @@ class ExperimentDAO {
                 optimization_id,
                 <if(status)> :status <else> status <endif> as status,
                 created_at,
-                now() as last_updated_at
+                now64(9) as last_updated_at
             FROM experiments
             WHERE id = :id
             AND workspace_id = :workspace_id

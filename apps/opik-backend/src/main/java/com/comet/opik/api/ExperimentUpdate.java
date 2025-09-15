@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
@@ -18,5 +17,5 @@ public record ExperimentUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         JsonNode metadata,
         ExperimentType type,
-        @NotNull @Schema(description = "The status of the experiment") ExperimentStatus status) {
+        @Schema(description = "The status of the experiment") ExperimentStatus status) {
 }
