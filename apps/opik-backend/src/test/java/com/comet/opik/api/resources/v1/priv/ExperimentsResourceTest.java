@@ -5224,7 +5224,7 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getAndAssert(experimentId, null, TEST_WORKSPACE, API_KEY);
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
             assertThat(updatedExperiment.name()).isEqualTo("Updated Experiment");
             assertThat(updatedExperiment.metadata().toString()).contains("\"version\":\"2.0\"");
             assertThat(updatedExperiment.metadata().toString()).contains("\"model\":\"gpt-4\"");

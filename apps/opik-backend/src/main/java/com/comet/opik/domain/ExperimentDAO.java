@@ -1170,7 +1170,7 @@ class ExperimentDAO {
         });
     }
 
-    private static final String UPDATE_INSERT = """
+    private static final String UPDATE = """
             INSERT INTO experiments (
                 id,
                 dataset_id,
@@ -1187,23 +1187,26 @@ class ExperimentDAO {
                 status,
                 created_at,
                 last_updated_at
-            ) VALUES (
-                :id,
-                :dataset_id,
-                :name,
-                :workspace_id,
-                :metadata,
-                :created_by,
-                :last_updated_by,
-                :prompt_version_id,
-                :prompt_id,
-                :prompt_versions,
-                :type,
-                :optimization_id,
-                :status,
-                fromUnixTimestamp64Milli(:created_at_epoch * 1000),
-                now()
             )
+            SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                created_at,
+                now() as last_updated_at
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
             """;
 
     @WithSpan
@@ -1219,92 +1222,57 @@ class ExperimentDAO {
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
             @NonNull Experiment existingExperiment, Connection connection) {
 
-        // Merge update fields with existing data, only updating non-null fields
-        var mergedName = experimentUpdate.name() != null ? experimentUpdate.name() : existingExperiment.name();
-        var mergedMetadata = experimentUpdate.metadata() != null
-                ? experimentUpdate.metadata().toString()
-                : (existingExperiment.metadata() != null ? existingExperiment.metadata().toString() : null);
-        var mergedType = experimentUpdate.type() != null
-                ? experimentUpdate.type().getValue()
-                : (existingExperiment.type() != null ? existingExperiment.type().getValue() : "regular");
-        var mergedStatus = experimentUpdate.status() != null
-                ? experimentUpdate.status().getValue()
-                : (existingExperiment.status() != null ? existingExperiment.status().getValue() : "running");
+        ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
+        String sql = template.render();
 
-        var statement = connection.createStatement(UPDATE_INSERT)
-                .bind("id", id)
-                .bind("dataset_id", existingExperiment.datasetId())
-                .bind("name", mergedName)
-                .bind("metadata", mergedMetadata)
-                .bind("created_by", existingExperiment.createdBy())
-                .bind("last_updated_by", existingExperiment.lastUpdatedBy())
-                .bind("prompt_version_id", extractPromptVersionId(existingExperiment))
-                .bind("prompt_id", extractPromptId(existingExperiment))
-                .bind("prompt_versions", extractPromptVersionsMap(existingExperiment))
-                .bind("type", mergedType)
-                .bind("optimization_id",
-                        existingExperiment.optimizationId() != null
-                                ? existingExperiment.optimizationId().toString()
-                                : "")
-                .bind("status", mergedStatus)
-                .bind("created_at_epoch", existingExperiment.createdAt().getEpochSecond());
+        Statement statement = connection.createStatement(sql);
+        bindUpdateParams(experimentUpdate, statement);
+        statement.bind("id", id);
 
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
-            return Flux.from(statement.bind("workspace_id", workspaceId).execute());
+            return Flux.from(statement.bind("workspace_id", workspaceId).bind("user_name", userName).execute());
         });
     }
 
-    private String extractPromptVersionId(Experiment experiment) {
-        return experiment.promptVersion() != null ? experiment.promptVersion().id().toString() : "";
-    }
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {
+        ST template = new ST(update);
 
-    private String extractPromptId(Experiment experiment) {
-        return experiment.promptVersion() != null ? experiment.promptVersion().promptId().toString() : "";
-    }
-
-    private List<String> extractPromptIds(Experiment experiment) {
-        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
-            return experiment.promptVersions().stream()
-                    .map(pv -> pv.promptId().toString())
-                    .collect(Collectors.toList());
-        } else if (experiment.promptVersion() != null) {
-            return List.of(experiment.promptVersion().promptId().toString());
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            template.add("name", experimentUpdate.name());
         }
-        return List.of();
+
+        if (experimentUpdate.metadata() != null) {
+            template.add("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.type() != null) {
+            template.add("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            template.add("status", experimentUpdate.status().getValue());
+        }
+
+        return template;
     }
 
-    private List<String> extractPromptVersionIds(Experiment experiment) {
-        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
-            return experiment.promptVersions().stream()
-                    .map(pv -> pv.id().toString())
-                    .collect(Collectors.toList());
-        } else if (experiment.promptVersion() != null) {
-            return List.of(experiment.promptVersion().id().toString());
+    private void bindUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            statement.bind("name", experimentUpdate.name());
         }
-        return List.of();
-    }
 
-    private UUID[] extractPromptIdsAsUuidArray(Experiment experiment) {
-        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
-            return experiment.promptVersions().stream()
-                    .map(pv -> pv.promptId())
-                    .toArray(UUID[]::new);
-        } else if (experiment.promptVersion() != null) {
-            return new UUID[]{experiment.promptVersion().promptId()};
+        if (experimentUpdate.metadata() != null) {
+            statement.bind("metadata", experimentUpdate.metadata().toString());
         }
-        return new UUID[0];
-    }
 
-    private UUID[][] extractPromptVersionIdsAsUuidArray(Experiment experiment) {
-        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
-            return experiment.promptVersions().stream()
-                    .map(pv -> new UUID[]{pv.id()})
-                    .toArray(UUID[][]::new);
-        } else if (experiment.promptVersion() != null) {
-            return new UUID[][]{new UUID[]{experiment.promptVersion().id()}};
+        if (experimentUpdate.type() != null) {
+            statement.bind("type", experimentUpdate.type().getValue());
         }
-        return new UUID[0][];
+
+        if (experimentUpdate.status() != null) {
+            statement.bind("status", experimentUpdate.status().getValue());
+        }
     }
 
     private Map<String, String> extractPromptVersionsMap(Experiment experiment) {
