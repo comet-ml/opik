@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  UserPen,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -33,6 +34,7 @@ import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 import SidebarMenuItem, {
@@ -40,6 +42,9 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useFeatureToggle from "@/api/feature-toggle/useFeatureToggle";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -97,6 +102,15 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Database,
         label: "Datasets",
         count: "datasets",
+      },
+      {
+        id: "annotation_queues",
+        path: "/$workspaceName/annotation-queues",
+        type: MENU_ITEM_TYPE.router,
+        icon: UserPen,
+        label: "Annotation queues",
+        count: "annotation_queues",
+        featureFlag: FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
       },
     ],
   },
@@ -171,6 +185,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     (state) => state.SidebarInviteDevButton,
   );
 
+  const isAnnotationQueuesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
+  );
+
   const { data: projectData } = useProjectsList(
     {
       workspaceName,
@@ -243,6 +261,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: annotationQueuesData } = useAnnotationQueuesList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded && isAnnotationQueuesEnabled,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -250,6 +280,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     prompts: promptsData?.total,
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
+    annotation_queues: annotationQueuesData?.total,
   };
 
   const logo = LogoComponent ? (

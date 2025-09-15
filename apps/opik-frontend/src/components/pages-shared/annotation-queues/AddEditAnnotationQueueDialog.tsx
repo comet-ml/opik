@@ -1,0 +1,340 @@
+import React, { useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import get from "lodash/get";
+import { SquareArrowOutUpRight } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogAutoScrollBody,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import FeedbackDefinitionsSelectBox from "@/components/pages-shared/annotation-queues/FeedbackDefinitionsSelectBox";
+
+import {
+  ANNOTATION_QUEUE_SCOPE,
+  AnnotationQueue,
+} from "@/types/annotation-queues";
+import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
+import { useToast } from "@/components/ui/use-toast";
+import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
+import { ToastAction } from "@/components/ui/toast";
+import { Separator } from "@/components/ui/separator";
+import { Description } from "@/components/ui/description";
+
+const SCOPE_OPTIONS = [
+  {
+    value: ANNOTATION_QUEUE_SCOPE.TRACE,
+    label: "Traces",
+  },
+  {
+    value: ANNOTATION_QUEUE_SCOPE.THREAD,
+    label: "Threads",
+  },
+];
+
+const formSchema = z.object({
+  project_id: z.string().min(1, "Project is required"),
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(255, "Name cannot exceed 255 characters"),
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
+  comments_enabled: z.boolean(),
+  feedback_definition_names: z
+    .array(z.string())
+    .min(1, "At least one feedback definition is required"),
+});
+
+type FormData = z.infer<typeof formSchema>;
+
+type AddEditAnnotationQueueDialogProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  projectId?: string;
+  scope?: ANNOTATION_QUEUE_SCOPE;
+  queue?: AnnotationQueue;
+};
+
+const AddEditAnnotationQueueDialog: React.FunctionComponent<
+  AddEditAnnotationQueueDialogProps
+> = ({ open, setOpen, projectId, scope, queue: defaultQueue }) => {
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: defaultQueue?.name || "",
+      instructions: defaultQueue?.instructions || "",
+      project_id: defaultQueue?.project_id || projectId || "",
+      scope: defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE,
+      feedback_definition_names: defaultQueue?.feedback_definition_names || [],
+      comments_enabled: defaultQueue?.comments_enabled || true,
+    },
+  });
+
+  const { mutate: createMutate } = useAnnotationQueueCreateMutation();
+  const { mutate: updateMutate } = useAnnotationQueueUpdateMutation();
+
+  const { toast } = useToast();
+
+  const isEdit = Boolean(defaultQueue);
+  const title = isEdit
+    ? "Edit annotation queue"
+    : "Create a new annotation queue";
+  const submitText = isEdit ? "Update rule" : "Create rule";
+
+  const getQueue = useCallback(() => {
+    const formData = form.getValues();
+    return {
+      ...formData,
+      project_id: formData.project_id,
+    };
+  }, [form]);
+
+  const onQueueCreatedEdited = useCallback(() => {
+    // TODO Lala: Remove this
+    toast({
+      title: "Annotation queue created",
+      description: "SOME DESCRIPTION",
+      actions: [
+        <ToastAction
+          variant="link"
+          size="sm"
+          className="px-0"
+          altText="Go to project"
+          key="Go to project"
+          onClick={() => {
+            console.log("some acction");
+          }}
+        >
+          Go to project
+        </ToastAction>,
+      ],
+    });
+  }, [toast]);
+
+  const createQueue = useCallback(() => {
+    createMutate(
+      {
+        annotationQueue: getQueue(),
+      },
+      { onSuccess: onQueueCreatedEdited },
+    );
+    setOpen(false);
+  }, [createMutate, getQueue, onQueueCreatedEdited, setOpen]);
+
+  const editQueue = useCallback(() => {
+    updateMutate(
+      {
+        annotationQueue: {
+          id: defaultQueue?.id || "",
+          ...getQueue(),
+        },
+      },
+      { onSuccess: onQueueCreatedEdited },
+    );
+    setOpen(false);
+  }, [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen]);
+
+  const onSubmit = useCallback(
+    () => (isEdit ? editQueue() : createQueue()),
+    [isEdit, editQueue, createQueue],
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-lg sm:max-w-[790px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <DialogAutoScrollBody>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, ["name"]);
+                  return (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          className={cn({
+                            "border-destructive": Boolean(
+                              validationErrors?.message,
+                            ),
+                          })}
+                          placeholder="Annotation queue name"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+              <div className="flex gap-4">
+                <FormField
+                  control={form.control}
+                  name="project_id"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, [
+                      "project_id",
+                    ]);
+
+                    return (
+                      <FormItem className="flex-1">
+                        <FormLabel>Project</FormLabel>
+                        <FormControl>
+                          <ProjectsSelectBox
+                            value={field.value}
+                            onChange={field.onChange}
+                            className={cn({
+                              "border-destructive": Boolean(
+                                validationErrors?.message,
+                              ),
+                            })}
+                            disabled={Boolean(projectId)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="scope"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Scope</FormLabel>
+                      <FormControl>
+                        <SelectBox
+                          placeholder="Trace"
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={SCOPE_OPTIONS}
+                          disabled={isEdit}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Separator orientation="horizontal" className="my-4" />
+              <div className="space-y-4">
+                <div className="comet-body-s text-muted-slate">
+                  Annotation guidelines
+                </div>
+                <Description>
+                  Set how items are scored and labeled, and provide instructions
+                  so annotators give consistent feedback.
+                </Description>
+              </div>
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="instructions"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Instructions</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Instructions for annotators"
+                          rows={4}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="feedback_definition_names"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, [
+                      "feedback_definition_names",
+                    ]);
+
+                    return (
+                      <FormItem>
+                        <FormLabel>Available feedback scores</FormLabel>
+                        <FormControl>
+                          <FeedbackDefinitionsSelectBox
+                            value={field.value}
+                            onChange={field.onChange}
+                            valueField="name"
+                            multiselect
+                            className={cn({
+                              "border-destructive": Boolean(
+                                validationErrors?.message,
+                              ),
+                            })}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
+              <div className="space-y-4">
+                <div className="comet-body-s text-muted-slate">
+                  Share annotation queue
+                </div>
+                <Description>
+                  You must{" "}
+                  <Button variant="link" size="3xs" asChild>
+                    <a href="google.com" target="_blank" rel="noreferrer">
+                      invite annotators to your workspace
+                      <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+                    </a>
+                  </Button>
+                  for them to review the items. After creating the queue,
+                  you&apos;ll get a direct link to share with them.
+                </Description>
+              </div>
+            </form>
+          </Form>
+        </DialogAutoScrollBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+            {submitText}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+// TODO lala invite ink, separate flow for selfhosted
+export default AddEditAnnotationQueueDialog;
