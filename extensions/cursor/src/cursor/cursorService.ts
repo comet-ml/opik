@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { findAndReturnNewTraces } from './sessionManager';
 import { logTracesToOpik } from '../opik';
 import { getSessionInfo, updateSessionInfo } from '../state';
-import { captureExceptionWithContext, logger } from '../sentry';
+import { Sentry } from '../sentry';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
@@ -28,7 +28,11 @@ export class CursorService {
     const startTime = Date.now();
     
     try {
-      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo);
+      // Check if we should skip historical conversations (useful for first-time setup)
+      const config = vscode.workspace.getConfiguration();
+      const skipHistorical = config.get<boolean>('opik.skipHistoricalConversations') ?? true;
+      
+      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo, skipHistorical);
       
       if (cursorResult && cursorResult.tracesData) {
         const { tracesData, updatedSessionInfo } = cursorResult;
@@ -40,6 +44,13 @@ export class CursorService {
           !trace.thread_id ||
           !trace.project_name
         );
+        
+        // Log to Sentry if we have invalid traces
+        if (invalidTraces.length > 0) {
+          const error = new Error(`Found ${invalidTraces.length} invalid traces out of ${tracesData.length} total traces`);
+          Sentry.captureException(error);
+          console.warn(`⚠️ Found ${invalidTraces.length} invalid traces - these will be skipped`);
+        }
         
         if (tracesData.length > 0) {
           console.log(`📤 Logging ${tracesData.length} cursor traces to Opik`);
@@ -67,14 +78,8 @@ export class CursorService {
                 sessionInfo[sessionId].lastUploadTime = sessionData.lastMessageTime;
               }
             } catch (sessionError) {
-              captureExceptionWithContext(sessionError as Error, {
-                operation: 'update_session',
-                sessionId: sessionId
-              });
-              logger.error(`Error updating session ${sessionId}`, { 
-                error: sessionError instanceof Error ? sessionError.message : String(sessionError),
-                sessionId: sessionId 
-              });
+              Sentry.captureException(sessionError);
+              console.error(`Error updating session ${sessionId}:`, sessionError);
               // Continue with other sessions even if one fails
             }
           });
@@ -82,6 +87,7 @@ export class CursorService {
           numberOfTracesLogged += tracesData.length;
           console.log(`✅ Successfully logged ${numberOfTracesLogged} cursor traces across ${Object.keys(updatedSessionInfo).length} composer sessions`);
         } else {
+          // This is normal behavior when there are no new conversations
           console.log(`ℹ️ No new cursor traces to log`);
         }
 
@@ -95,6 +101,8 @@ export class CursorService {
           return sum + (trace.metadata?.totalBubbles || 0);
         }, 0);
       } else {
+        const error = new Error("No cursor data returned from findAndReturnNewTraces");
+        Sentry.captureException(error);
         console.log(`⚠️ No cursor data returned`);
       }
     } catch (error) {
@@ -104,25 +112,8 @@ export class CursorService {
         installationPath: !!vsInstallationPath
       };
 
-      // Enhanced error logging based on error type
-      if (error instanceof Error) {
-        if (error.message.includes('SQLITE') || error.message.includes('database')) {
-          captureExceptionWithContext(error, { ...errorContext, errorType: 'database' });
-          logger.error('Database error processing cursor traces', { 
-            error: error.message,
-            stack: error.stack 
-          });
-        } else {
-          captureExceptionWithContext(error, { ...errorContext, errorType: 'general' });
-          logger.error('General error processing cursor traces', { 
-            error: error.message,
-            stack: error.stack 
-          });
-        }
-      } else {
-        captureExceptionWithContext(new Error(String(error)), { ...errorContext, errorType: 'unknown' });
-        logger.error('Unknown error processing cursor traces', { error: String(error) });
-      }
+      Sentry.captureException(error);
+      console.error('Error processing cursor traces:', error);
       
       throw error; // Re-throw to let the caller handle it
     } finally {

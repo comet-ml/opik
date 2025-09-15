@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { v7 as uuidv7 } from 'uuid';
 import { TraceData } from './interface';
-import { captureExceptionWithContext, logger } from './sentry';
+import { Sentry } from './sentry';
 
 interface OpikTrace extends Omit<TraceData, 'usage'> {
     id: string;
@@ -142,16 +142,8 @@ async function uploadTraceBatch(apiKey: string, batch: OpikTrace[], batchNum: nu
         );
         console.log(`✅ Trace batch ${batchNum} sent successfully`);
     } catch (error) {
-        captureExceptionWithContext(error as Error, {
-            operation: 'send_trace_batch',
-            batchNumber: batchNum,
-            batchSize: batch.length
-        });
-        logger.error(`Error sending trace batch ${batchNum}`, { 
-            error: error instanceof Error ? error.message : String(error),
-            batchNumber: batchNum,
-            batchSize: batch.length
-        });
+        Sentry.captureException(error);
+        console.error(`Error sending trace batch ${batchNum}:`, error);
         throw error;
     }
 }
@@ -174,16 +166,8 @@ async function uploadSpanBatch(apiKey: string, batch: OpikSpan[], batchNum: numb
         );
         console.log(`✅ Span batch ${batchNum} sent successfully`);
     } catch (error) {
-        captureExceptionWithContext(error as Error, {
-            operation: 'send_span_batch',
-            batchNumber: batchNum,
-            batchSize: batch.length
-        });
-        logger.error(`Error sending span batch ${batchNum}`, { 
-            error: error instanceof Error ? error.message : String(error),
-            batchNumber: batchNum,
-            batchSize: batch.length
-        });
+        Sentry.captureException(error);
+        console.error(`Error sending span batch ${batchNum}:`, error);
         throw error;
     }
 }

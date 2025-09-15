@@ -5,7 +5,7 @@ import initSqlJs, { Database, QueryExecResult, SqlValue } from 'sql.js';
 
 import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
-import { captureExceptionWithContext, logger } from '../sentry';
+import { Sentry } from '../sentry';
 
 import { TraceData } from "../interface";
 
@@ -13,12 +13,24 @@ import { TraceData } from "../interface";
  * Convert cursor conversations to Opik traces with per-session tracking.
  * Each composer session maintains its own progress tracking to avoid duplicate uploads.
  * 
+ * Strategy:
+ * If skipHistorical=true:
+ *   - Old never-synced conversations: Skip entirely (ignore historical data)
+ *   - Recent never-synced conversations (< 1 hour): Upload entire conversation
+ *   - Already synced, no new messages: Skip 
+ *   - Already synced, has new messages: Upload new messages only
+ * If skipHistorical=false:
+ *   - Never synced conversations: Upload entire conversation
+ *   - Already synced, no new messages: Skip (avoid duplicates)
+ *   - Already synced, has new messages: Upload new messages only
+ * 
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
  * @param sessionInfo Existing session info with per-composer tracking
+ * @param skipHistorical Whether to skip conversations without new messages
  * @returns Object containing traces and updated session info
  */
-async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>) {
+async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
@@ -33,19 +45,51 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         const composerId = conversation.composerId;
         const sessionId = `cursor-composer-${composerId}`;
         const lastUploadId = sessionInfo[sessionId]?.lastUploadId;
-
-        // Quick check: if we have a lastUploadId and the latest message ID matches it, skip this conversation
-        if (lastUploadId) {
-            const latestMessage = conversation.bubbles[conversation.bubbles.length - 1];
-            if (latestMessage && latestMessage.id === lastUploadId) {
-                continue; // No new messages in this conversation
+        
+        // Check if there are new messages
+        const latestMessage = conversation.bubbles[conversation.bubbles.length - 1];
+        const neverSynced = !lastUploadId;
+        const hasNewMessagesSinceSync = lastUploadId && latestMessage && latestMessage.id !== lastUploadId;
+        
+        // Determine if this is a recent/active conversation (within last hour)
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+        const latestMessageTime = latestMessage?.createdAt || latestMessage?.timestamp || conversation.createdAt || 0;
+        const isRecentActivity = (Date.now() - latestMessageTime) < ONE_HOUR_MS;
+        
+        // Apply skipHistorical logic:
+        if (skipHistorical) {
+            // If skipHistorical=true: process conversations with new messages OR recent activity
+            if (neverSynced && !isRecentActivity) {
+                continue; // Skip - old historical conversation and skipHistorical=true
+            }
+            if (!neverSynced && !hasNewMessagesSinceSync) {
+                continue; // Skip - no new messages since last sync
+            }
+        } else {
+            // If skipHistorical=false: process all conversations with new messages or never synced
+            if (!neverSynced && !hasNewMessagesSinceSync) {
+                continue; // Skip - no new messages and already synced
             }
         }
 
+        // Determine processing strategy:
+        // - If never synced (no lastUploadId): upload entire conversation
+        // - If previously synced: upload only new messages after lastUploadId
+        const uploadEntireConversation = lastUploadId === undefined;
+        
+        if (uploadEntireConversation) {
+            const reason = neverSynced ? 
+                (isRecentActivity ? "recent activity" : "never synced") : 
+                "has new messages";
+            console.log(`📤 Processing entire conversation for composer ${composerId} (${reason})`);
+        } else {
+            console.log(`📤 Processing new messages for composer ${composerId} after message ${lastUploadId}`);
+        }
+        
         const conversationTraces = processConversationBubbles(
             conversation, 
             opikProjectName, 
-            lastUploadId === undefined, // startAppending 
+            uploadEntireConversation,
             lastUploadId,
             gitInfo // Pass git info to bubble processing
         );
@@ -61,6 +105,13 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         }
     }
 
+    if (skipHistorical) {
+        const skippedSessions = Object.keys(updatedSessionInfo).length - tracesData.length;
+        if (skippedSessions > 0) {
+            console.log(`⏭️ Skipped ${skippedSessions} historical conversations (skipHistorical=true)`);
+        }
+    }
+    
     console.log(`✅ Generated ${tracesData.length} traces across ${Object.keys(updatedSessionInfo).length} active sessions`);
     return { tracesData, updatedSessionInfo };
 }
@@ -69,14 +120,14 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 function processConversationBubbles(
     conversation: any, 
     opikProjectName: string, 
-    startAppending: boolean, 
+    uploadEntireConversation: boolean, 
     lastUploadId: string | undefined,
     gitInfo: { branch?: string; commit?: string; remote?: string; repoName?: string } | null
 ) {
     const traces: TraceData[] = [];
     let lastMessageId: string | undefined = undefined;
     let lastMessageTime: number | undefined = undefined;
-    let shouldAppend = startAppending;
+    let shouldAppend = uploadEntireConversation;
 
     // Initialize sequential timestamp starting from conversation createdAt
     let currentTimestamp = conversation.createdAt || Date.now();
@@ -114,7 +165,8 @@ function processConversationBubbles(
         lastMessageId = lastMessage.id;
         lastMessageTime = lastMessage.resolvedTimestamp;
 
-        // Check if we should start appending from this point
+        // If we're uploading the entire conversation, process all groups
+        // If we're uploading incrementally, find where to start from lastUploadId
         if (!shouldAppend) {
             // Check both user and AI messages for the lastUploadId
             const hasTargetMessage = [...group.userMessages, ...group.aiMessages]
@@ -127,7 +179,7 @@ function processConversationBubbles(
         }
 
         if (!shouldAppend) {
-            continue;
+            continue; // Still haven't reached the point where we left off
         }
 
         // Only upload complete conversations (both user and AI messages)
@@ -264,30 +316,16 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
                     bubbleCount: bubbles.length
                 });
             } catch (parseErr) {
-                captureExceptionWithContext(parseErr as Error, {
-                    operation: 'parse_composer_data',
-                    rowIndex: index,
-                    databasePath: stateDbPath
-                });
-                logger.error(`Could not parse composer data for row ${index}`, { 
-                    error: parseErr instanceof Error ? parseErr.message : String(parseErr),
-                    rowIndex: index 
-                });
+                Sentry.captureException(parseErr);
+                console.error(`Could not parse composer data for row ${index}:`, parseErr);
             }
         });
         
         db.close();
         return conversations;
     } catch (error) {
-        captureExceptionWithContext(error as Error, {
-            operation: 'read_database',
-            databasePath: stateDbPath,
-            databaseExists: fs.existsSync(stateDbPath)
-        });
-        logger.error(`Error reading database ${stateDbPath}`, { 
-            error: error instanceof Error ? error.message : String(error),
-            databasePath: path.basename(path.dirname(stateDbPath))
-        });
+        Sentry.captureException(error);
+        console.error(`Error reading database ${stateDbPath}:`, error);
         throw error;
     }
 }
@@ -296,16 +334,20 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
  * Find all state.vscdb files in the given globalStorage directories
  */
 
-export async function findAndReturnNewTraces(context: vscode.ExtensionContext, VSInstallationPath: string, sessionInfo: Record<string, SessionInfo>) {
+export async function findAndReturnNewTraces(context: vscode.ExtensionContext, VSInstallationPath: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
     
     const globalStoragePaths = findFolder(VSInstallationPath, 'globalStorage');
     
     if (globalStoragePaths.length > 1) {
+        const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
+        Sentry.captureException(error);
         console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
     }
     
     if (globalStoragePaths.length === 0) {
+        const error = new Error("Could not find global SQLite state DB.");
+        Sentry.captureException(error);
         console.warn("Could not find global SQLite state DB.")
         return null;
     }
@@ -315,6 +357,8 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
     const stateDbPath = path.join(globalStoragePath, 'state.vscdb');
     
     if (!fs.existsSync(stateDbPath)) {
+        const error = new Error(`Could not find global SQLite state DB at path: ${stateDbPath}`);
+        Sentry.captureException(error);
         console.warn("Could not find global SQLite state DB.")
         return null;
     } else {
@@ -323,7 +367,7 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
-                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo);
+                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo, skipHistorical);
                 
                 return {
                     tracesData: result.tracesData,
@@ -331,15 +375,15 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
                 };
             }
             
+            // Log to Sentry when conversations are found but no traces generated
+            if (conversations.length > 0) {
+                const error = new Error(`Found ${conversations.length} conversations but generated 0 traces`);
+                Sentry.captureException(error);
+            }
             return { tracesData: [], updatedSessionInfo: {} };
         } catch (error) {
-            captureExceptionWithContext(error as Error, {
-                operation: 'read_cursor_chat_data',
-                installationPath: !!VSInstallationPath
-            });
-            logger.error("Error reading cursor chat data", { 
-                error: error instanceof Error ? error.message : String(error) 
-            });
+            Sentry.captureException(error);
+            console.error("Error reading cursor chat data:", error);
             return null;
         }
     }
@@ -535,9 +579,7 @@ async function getGitInfo(): Promise<{ branch?: string; commit?: string; remote?
         return null;
     } catch (error) {
         // This is expected to fail sometimes, so we only log as debug level
-        logger.debug('Could not get git information', { 
-            error: error instanceof Error ? error.message : String(error) 
-        });
+        console.log('Could not get git information:', error);
         return null;
     }
 }

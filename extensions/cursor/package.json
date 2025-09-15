@@ -36,6 +36,11 @@
           "type": "string",
           "default": "",
           "description": "Path to the VSCode user data directory. Leave empty to use the default path."
+        },
+        "opik.skipHistoricalConversations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip conversations without new messages. When enabled, only conversations with new messages are processed. When disabled, all unsynced conversations are processed."
         }
       }
     }

@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import * as vscode from 'vscode';
 
 export function initializeSentry(context: vscode.ExtensionContext) {
-  const sentryDsn = "https://68bfd76b1b03ebc98b047f769ef9eebb@o168229.ingest.us.sentry.io/451000128274432";
+  const sentryDsn = "https://68bfd76b1b03ebc98b047f769ef9eebb@o168229.ingest.us.sentry.io/4510001282744321";
   
   Sentry.init({
     dsn: sentryDsn,
@@ -47,17 +47,5 @@ export function initializeSentry(context: vscode.ExtensionContext) {
   console.log("Sentry initialized for error tracking");
 }
 
-// Helper function to capture exceptions with context
-export function captureExceptionWithContext(error: Error, context?: Record<string, any>) {
-  Sentry.withScope((scope) => {
-    if (context) {
-      Object.entries(context).forEach(([key, value]) => {
-        scope.setTag(key, String(value));
-      });
-    }
-    Sentry.captureException(error);
-  });
-}
-
-// Get the Sentry logger
-export const { logger } = Sentry;
+// Simple error capture - just export Sentry for direct use
+export { Sentry };

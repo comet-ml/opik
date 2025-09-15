@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';  
 import { v4 as uuidv4 } from 'uuid';
-import { captureExceptionWithContext, logger } from './sentry';
+import { Sentry } from './sentry';
 
 // Create output channel for logging
 let outputChannel: vscode.OutputChannel;
@@ -60,14 +60,8 @@ export function readJsonFile(filePath: string): any {
       const fileContents = fs.readFileSync(filePath, 'utf-8');
       return JSON.parse(fileContents);
     } catch (error) {
-      captureExceptionWithContext(error as Error, {
-        operation: 'read_json_file',
-        filePath: filePath
-      });
-      logger.error(`Error reading or parsing ${filePath}`, { 
-        error: error instanceof Error ? error.message : String(error),
-        filePath: filePath
-      });
+      Sentry.captureException(error);
+      console.error(`Error reading or parsing ${filePath}:`, error);
       return null;
     }
   }
@@ -135,13 +129,8 @@ export function getOpikApiKey(): string | undefined {
       }
     }
   } catch (error) {
-    captureExceptionWithContext(error as Error, {
-      operation: 'read_opik_config',
-      configPath: '~/.opik.config'
-    });
-    logger.debug('Could not read ~/.opik.config file', { 
-      error: error instanceof Error ? error.message : String(error) 
-    });
+    // Don't capture this as it's expected to fail sometimes
+    console.log('Could not read ~/.opik.config file:', error);
   }
   
   return undefined;
