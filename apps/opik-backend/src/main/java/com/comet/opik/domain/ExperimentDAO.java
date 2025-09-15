@@ -740,9 +740,19 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
-                    .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .status(getStatusOrDefault(row))
                     .build();
         });
+    }
+
+    private static ExperimentStatus getStatusOrDefault(Row row) {
+        try {
+            String statusValue = row.get("status", String.class);
+            return ExperimentStatus.fromString(statusValue);
+        } catch (Exception e) {
+            // Status column doesn't exist in database (pre-migration)
+            return ExperimentStatus.RUNNING;
+        }
     }
 
     private static BigDecimal getCostValue(Row row, String fieldName) {
@@ -1191,7 +1201,7 @@ class ExperimentDAO {
                 :type,
                 :optimization_id,
                 :status,
-                :created_at,
+                fromUnixTimestamp64Milli(:created_at_epoch * 1000),
                 now()
             )
             """;
@@ -1216,7 +1226,7 @@ class ExperimentDAO {
                 : (existingExperiment.metadata() != null ? existingExperiment.metadata().toString() : null);
         var mergedType = experimentUpdate.type() != null
                 ? experimentUpdate.type().getValue()
-                : (existingExperiment.type() != null ? existingExperiment.type().getValue() : null);
+                : (existingExperiment.type() != null ? existingExperiment.type().getValue() : "regular");
         var mergedStatus = experimentUpdate.status() != null
                 ? experimentUpdate.status().getValue()
                 : (existingExperiment.status() != null ? existingExperiment.status().getValue() : "running");
@@ -1232,19 +1242,22 @@ class ExperimentDAO {
                 .bind("prompt_id", extractPromptId(existingExperiment))
                 .bind("prompt_versions", extractPromptVersionsMap(existingExperiment))
                 .bind("type", mergedType)
-                .bind("optimization_id", existingExperiment.optimizationId())
+                .bind("optimization_id",
+                        existingExperiment.optimizationId() != null
+                                ? existingExperiment.optimizationId().toString()
+                                : "")
                 .bind("status", mergedStatus)
-                .bind("created_at", existingExperiment.createdAt());
+                .bind("created_at_epoch", existingExperiment.createdAt().getEpochSecond());
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private String extractPromptVersionId(Experiment experiment) {
-        return experiment.promptVersion() != null ? experiment.promptVersion().id().toString() : null;
+        return experiment.promptVersion() != null ? experiment.promptVersion().id().toString() : "";
     }
 
     private String extractPromptId(Experiment experiment) {
-        return experiment.promptVersion() != null ? experiment.promptVersion().promptId().toString() : null;
+        return experiment.promptVersion() != null ? experiment.promptVersion().promptId().toString() : "";
     }
 
     private Map<String, String> extractPromptVersionsMap(Experiment experiment) {
