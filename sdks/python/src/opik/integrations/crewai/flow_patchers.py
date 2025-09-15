@@ -5,9 +5,6 @@ from typing import Optional
 
 
 def patch_flow_init(project_name: Optional[str] = None) -> None:
-    if getattr(patch_flow_init, "_patched", False):  # type: ignore[attr-defined]
-        return
-
     original_init = crewai.Flow.__init__
 
     @functools.wraps(original_init)
@@ -36,9 +33,6 @@ def patch_flow_init(project_name: Optional[str] = None) -> None:
 
 
 def patch_flow_kickoff_async(project_name: Optional[str] = None) -> None:
-    if getattr(patch_flow_kickoff_async, "_patched", False):  # type: ignore[attr-defined]
-        return
-
     # We only need to patch the async version of the kickoff method because
     # the sync version calls it internally
     original_kickoff_async = crewai.Flow.kickoff_async
