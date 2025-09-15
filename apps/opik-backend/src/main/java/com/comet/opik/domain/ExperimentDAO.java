@@ -1177,8 +1177,8 @@ class ExperimentDAO {
                 .bind("id", id)
                 .bind("name", experimentUpdate.name())
                 .bind("metadata", experimentUpdate.metadata() != null ? experimentUpdate.metadata().toString() : null)
-                .bind("type", experimentUpdate.type() != null ? experimentUpdate.type().toString() : null)
-                .bind("status", experimentUpdate.status() != null ? experimentUpdate.status().toString() : null);
+                .bind("type", experimentUpdate.type() != null ? experimentUpdate.type().getValue() : null)
+                .bind("status", experimentUpdate.status() != null ? experimentUpdate.status().getValue() : null);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

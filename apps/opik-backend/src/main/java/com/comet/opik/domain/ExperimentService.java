@@ -449,7 +449,9 @@ public class ExperimentService {
     @WithSpan
     public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
-        return experimentDAO.update(id, experimentUpdate)
+        return experimentDAO.getById(id)
+                .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
+                .then(experimentDAO.update(id, experimentUpdate))
                 .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
                 .onErrorResume(throwable -> {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
