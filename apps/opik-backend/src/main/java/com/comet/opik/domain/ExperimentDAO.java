@@ -7,6 +7,7 @@ import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
@@ -47,6 +48,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -84,7 +86,8 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
-                optimization_id
+                optimization_id,
+                status
             )
             SELECT
                 if(
@@ -102,7 +105,8 @@ class ExperimentDAO {
                 new.prompt_id,
                 new.prompt_versions,
                 new.type,
-                new.optimization_id
+                new.optimization_id,
+                new.status
             FROM (
                 SELECT
                 :id AS id,
@@ -116,7 +120,8 @@ class ExperimentDAO {
                 :prompt_id AS prompt_id,
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
-                :optimization_id AS optimization_id
+                :optimization_id AS optimization_id,
+                :status AS status
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -627,7 +632,8 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
-                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.RUNNING).getValue());
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -734,6 +740,7 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
+                    .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .build();
         });
     }
@@ -1153,33 +1160,100 @@ class ExperimentDAO {
         });
     }
 
-    private static final String UPDATE = """
-            ALTER TABLE experiments UPDATE
-                name = CASE WHEN :name IS NOT NULL THEN :name ELSE name END,
-                metadata = CASE WHEN :metadata IS NOT NULL THEN :metadata ELSE metadata END,
-                type = CASE WHEN :type IS NOT NULL THEN :type ELSE type END,
-                status = CASE WHEN :status IS NOT NULL THEN :status ELSE status END,
-                last_updated_at = now()
-            WHERE workspace_id = :workspaceId AND id = :id
+    private static final String UPDATE_INSERT = """
+            INSERT INTO experiments (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                metadata,
+                created_by,
+                last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                type,
+                optimization_id,
+                status,
+                created_at,
+                last_updated_at
+            ) VALUES (
+                :id,
+                :dataset_id,
+                :name,
+                :workspace_id,
+                :metadata,
+                :created_by,
+                :last_updated_by,
+                :prompt_version_id,
+                :prompt_id,
+                :prompt_versions,
+                :type,
+                :optimization_id,
+                :status,
+                :created_at,
+                now()
+            )
             """;
 
     @WithSpan
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> update(id, experimentUpdate, connection))
-                .then();
+        return getById(id)
+                .flatMap(existingExperiment -> Mono.from(connectionFactory.create())
+                        .flatMapMany(
+                                connection -> updateWithInsert(id, experimentUpdate, existingExperiment, connection))
+                        .then());
     }
 
-    private Publisher<? extends Result> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
-            Connection connection) {
-        var statement = connection.createStatement(UPDATE)
+    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
+            @NonNull Experiment existingExperiment, Connection connection) {
+
+        // Merge update fields with existing data, only updating non-null fields
+        var mergedName = experimentUpdate.name() != null ? experimentUpdate.name() : existingExperiment.name();
+        var mergedMetadata = experimentUpdate.metadata() != null
+                ? experimentUpdate.metadata().toString()
+                : (existingExperiment.metadata() != null ? existingExperiment.metadata().toString() : null);
+        var mergedType = experimentUpdate.type() != null
+                ? experimentUpdate.type().getValue()
+                : (existingExperiment.type() != null ? existingExperiment.type().getValue() : null);
+        var mergedStatus = experimentUpdate.status() != null
+                ? experimentUpdate.status().getValue()
+                : (existingExperiment.status() != null ? existingExperiment.status().getValue() : "running");
+
+        var statement = connection.createStatement(UPDATE_INSERT)
                 .bind("id", id)
-                .bind("name", experimentUpdate.name())
-                .bind("metadata", experimentUpdate.metadata() != null ? experimentUpdate.metadata().toString() : null)
-                .bind("type", experimentUpdate.type() != null ? experimentUpdate.type().getValue() : null)
-                .bind("status", experimentUpdate.status() != null ? experimentUpdate.status().getValue() : null);
+                .bind("dataset_id", existingExperiment.datasetId())
+                .bind("name", mergedName)
+                .bind("metadata", mergedMetadata)
+                .bind("created_by", existingExperiment.createdBy())
+                .bind("last_updated_by", existingExperiment.lastUpdatedBy())
+                .bind("prompt_version_id", extractPromptVersionId(existingExperiment))
+                .bind("prompt_id", extractPromptId(existingExperiment))
+                .bind("prompt_versions", extractPromptVersionsMap(existingExperiment))
+                .bind("type", mergedType)
+                .bind("optimization_id", existingExperiment.optimizationId())
+                .bind("status", mergedStatus)
+                .bind("created_at", existingExperiment.createdAt());
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private String extractPromptVersionId(Experiment experiment) {
+        return experiment.promptVersion() != null ? experiment.promptVersion().id().toString() : null;
+    }
+
+    private String extractPromptId(Experiment experiment) {
+        return experiment.promptVersion() != null ? experiment.promptVersion().promptId().toString() : null;
+    }
+
+    private Map<String, String> extractPromptVersionsMap(Experiment experiment) {
+        if (experiment.promptVersions() == null || experiment.promptVersions().isEmpty()) {
+            return Map.of();
+        }
+        return experiment.promptVersions().stream()
+                .collect(Collectors.toMap(
+                        link -> link.promptId().toString(),
+                        link -> link.id().toString()));
     }
 }

@@ -5229,6 +5229,7 @@ class ExperimentsResourceTest {
             assertThat(updatedExperiment.metadata().toString()).contains("\"version\":\"2.0\"");
             assertThat(updatedExperiment.metadata().toString()).contains("\"model\":\"gpt-4\"");
             assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.TRIAL);
+            assertThat(updatedExperiment.status()).isEqualTo(ExperimentStatus.RUNNING);
         }
 
         @Test
