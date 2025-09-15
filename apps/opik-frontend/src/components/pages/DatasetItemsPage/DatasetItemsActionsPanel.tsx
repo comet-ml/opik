@@ -1,23 +1,28 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash, Sparkles } from "lucide-react";
+import get from "lodash/get";
+import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 
-type DatasetItemsActionsPanelsProps = {
+type DatasetItemsActionsPanelProps = {
   datasetItems: DatasetItem[];
   datasetId: string;
   datasetName: string;
+  columnsToExport: string[];
+  dynamicColumns: string[];
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
-  DatasetItemsActionsPanelsProps
-> = ({ datasetItems, datasetId, datasetName }) => {
+  DatasetItemsActionsPanelProps
+> = ({ datasetItems, datasetId, datasetName, columnsToExport, dynamicColumns }) => {
   const resetKeyRef = useRef(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -39,6 +44,31 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
+
+  const mapRowData = useCallback(() => {
+    return datasetItems.map((item) => {
+      return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
+        // Check if this column is a dynamic dataset column
+        if (dynamicColumns.includes(column)) {
+          // Dynamic columns are stored in the item.data object
+          acc[column] = get(item.data, column, "");
+        } else {
+          // Handle direct properties like id, created_at, etc.
+          acc[column] = get(item, column, "");
+        }
+        return acc;
+      }, {});
+    });
+  }, [datasetItems, columnsToExport, dynamicColumns]);
+
+  const generateFileName = useCallback(
+    (extension = "csv") => {
+      return `${slugify(datasetName, {
+        lower: true,
+      })}-dataset-items.${extension}`;
+    },
+    [datasetName],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -77,6 +107,11 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         Expand dataset with AI
       </Button>
 
+      <ExportToButton
+        disabled={disabled || columnsToExport.length === 0}
+        getData={mapRowData}
+        generateFileName={generateFileName}
+      />
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
