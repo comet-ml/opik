@@ -411,7 +411,7 @@ class TraceDAOImpl implements TraceDAO {
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations,
                 any(aqa.queue_id) as annotation_queue_id,
-                any(aqa.annotation_queue_name) as annotation_queue_name
+                any(aqa.queue_name) as annotation_queue_name
             FROM (
                 SELECT
                     *,
@@ -1627,21 +1627,30 @@ class TraceDAOImpl implements TraceDAO {
                             queue_id,
                             queue_name,
                             annotation_queue_name,
-                            ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY thread_id) as rn
+                            ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY priority ASC) as rn
                         FROM (
+                            -- Direct thread annotations (priority)
                             SELECT
-                                aagg.trace_id as thread_id,
-                                aagg.queue_id,
-                                aagg.queue_name,
-                                aagg.queue_name
-                            FROM annotation_queue_agg aagg
+                                taqa.thread_id,
+                                taqa.queue_id,
+                                taqa.queue_name,
+                                taqa.queue_name as annotation_queue_name,
+                                1 as priority
+                            FROM thread_annotation_queue_agg taqa
+
                             UNION ALL
+
+                            -- Trace-level annotations grouped by thread
                             SELECT
-                                tagg.thread_id,
-                                tagg.queue_id,
-                                tagg.queue_name,
-                                tagg.queue_name
-                            FROM thread_annotation_queue_agg tagg
+                                tf.thread_id,
+                                groupArray(aqa.queue_id) as queue_id,
+                                groupArray(aqa.queue_name) as queue_name,
+                                groupArray(aqa.queue_name) as annotation_queue_name,
+                                2 as priority
+                            FROM traces_final tf
+                            LEFT JOIN annotation_queue_agg aqa ON aqa.trace_id = tf.id
+                            WHERE aqa.queue_id IS NOT NULL
+                            GROUP BY tf.thread_id
                         )
                     )
                     WHERE rn = 1
@@ -2521,10 +2530,12 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
-                .annotationQueueId(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUE_ID, row, "annotation_queue_id",
-                        String.class))
-                .annotationQueueName(getValue(exclude, Trace.TraceField.ANNOTATION_QUEUE_NAME, row,
-                        "annotation_queue_name", String.class))
+                .annotationQueueId(exclude.contains(Trace.TraceField.ANNOTATION_QUEUE_ID)
+                        ? null
+                        : getOptionalColumn(row, "annotation_queue_id", String.class))
+                .annotationQueueName(exclude.contains(Trace.TraceField.ANNOTATION_QUEUE_NAME)
+                        ? null
+                        : getOptionalColumn(row, "annotation_queue_name", String.class))
                 .build());
     }
 
@@ -3160,9 +3171,18 @@ class TraceDAOImpl implements TraceDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .annotationQueueId(row.get("annotation_queue_id", String.class))
-                .annotationQueueName(row.get("annotation_queue_name", String.class))
+                .annotationQueueId(getOptionalColumn(row, "annotation_queue_id", String.class))
+                .annotationQueueName(getOptionalColumn(row, "annotation_queue_name", String.class))
                 .build());
+    }
+
+    private <T> T getOptionalColumn(io.r2dbc.spi.Row row, String columnName, Class<T> type) {
+        try {
+            return row.get(columnName, type);
+        } catch (Exception e) {
+            // Column doesn't exist, return null
+            return null;
+        }
     }
 
     @Override

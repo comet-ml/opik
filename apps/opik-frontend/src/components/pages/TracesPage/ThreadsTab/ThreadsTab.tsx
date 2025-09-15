@@ -69,8 +69,6 @@ import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/Traces
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { ThreadStatus } from "@/types/thread";
-import { Filter } from "@/types/filters";
-import { v7 as uuidv7 } from "uuid";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -427,22 +425,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const handleRowClick = useCallback((row?: Thread) => {
     if (!row) return;
 
-    // Create filter for thread_id
-    const threadFilter: Filter = {
-      id: uuidv7(),
-      field: "thread_id",
-      type: COLUMN_TYPE.string,
-      operator: "=",
-      value: row.id,
-    };
-
-    // Navigate to traces tab with thread filter
-    window.location.href = `${
-      window.location.pathname
-    }?type=traces&traces_filters=${encodeURIComponent(
-      JSON.stringify([threadFilter]),
-    )}`;
-  }, []);
+    // Open thread details panel
+    setThreadId(row.id);
+  }, [setThreadId]);
 
   const columns = useMemo(() => {
     return [

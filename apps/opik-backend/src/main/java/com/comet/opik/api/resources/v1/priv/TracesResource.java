@@ -657,6 +657,14 @@ public class TracesResource {
                 identifier.threadId(), workspaceId);
 
         TraceThread thread = service.getThreadById(projectId, identifier.threadId())
+                .onErrorResume(jakarta.ws.rs.NotFoundException.class, ex -> {
+                    log.info(
+                            "Thread not found in trace_threads table, attempting to create missing record for thread_id '{}' and project_id '{}'",
+                            identifier.threadId(), projectId);
+                    // Try to create the missing thread record and then retrieve it
+                    return traceThreadService.getOrCreateThreadId(projectId, identifier.threadId())
+                            .then(service.getThreadById(projectId, identifier.threadId()));
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
