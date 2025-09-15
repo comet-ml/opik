@@ -47,7 +47,9 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     logger.info("Waiting for demo data to generate")
     while True:
         try:
-            projects_page.check_project_exists_on_current_page("Opik Demo Agent Observability")
+            projects_page.check_project_exists_on_current_page(
+                "Opik Demo Agent Observability"
+            )
             projects_page.check_project_exists_on_current_page("Opik Demo Assistant")
             break
         except Exception as e:
@@ -92,6 +94,8 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     prompts_page = PromptLibraryPage(page)
     prompts_page.go_to_page()
     try:
-        prompts_page.check_prompt_exists_in_workspace("Demo - Opik SDK Assistant - System Prompt")
+        prompts_page.check_prompt_exists_in_workspace(
+            "Demo - Opik SDK Assistant - System Prompt"
+        )
     except Exception as _:
         raise AssertionError("Demo - Opik SDK Assistant - System Prompt not found")
