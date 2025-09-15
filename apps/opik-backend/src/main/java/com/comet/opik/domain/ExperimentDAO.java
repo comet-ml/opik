@@ -1249,7 +1249,10 @@ class ExperimentDAO {
                 .bind("status", mergedStatus)
                 .bind("created_at_epoch", existingExperiment.createdAt().getEpochSecond());
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        return makeFluxContextAware((userName, workspaceId) -> {
+            log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
+            return Flux.from(statement.bind("workspace_id", workspaceId).execute());
+        });
     }
 
     private String extractPromptVersionId(Experiment experiment) {
@@ -1258,6 +1261,50 @@ class ExperimentDAO {
 
     private String extractPromptId(Experiment experiment) {
         return experiment.promptVersion() != null ? experiment.promptVersion().promptId().toString() : "";
+    }
+
+    private List<String> extractPromptIds(Experiment experiment) {
+        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
+            return experiment.promptVersions().stream()
+                    .map(pv -> pv.promptId().toString())
+                    .collect(Collectors.toList());
+        } else if (experiment.promptVersion() != null) {
+            return List.of(experiment.promptVersion().promptId().toString());
+        }
+        return List.of();
+    }
+
+    private List<String> extractPromptVersionIds(Experiment experiment) {
+        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
+            return experiment.promptVersions().stream()
+                    .map(pv -> pv.id().toString())
+                    .collect(Collectors.toList());
+        } else if (experiment.promptVersion() != null) {
+            return List.of(experiment.promptVersion().id().toString());
+        }
+        return List.of();
+    }
+
+    private UUID[] extractPromptIdsAsUuidArray(Experiment experiment) {
+        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
+            return experiment.promptVersions().stream()
+                    .map(pv -> pv.promptId())
+                    .toArray(UUID[]::new);
+        } else if (experiment.promptVersion() != null) {
+            return new UUID[]{experiment.promptVersion().promptId()};
+        }
+        return new UUID[0];
+    }
+
+    private UUID[][] extractPromptVersionIdsAsUuidArray(Experiment experiment) {
+        if (experiment.promptVersions() != null && !experiment.promptVersions().isEmpty()) {
+            return experiment.promptVersions().stream()
+                    .map(pv -> new UUID[]{pv.id()})
+                    .toArray(UUID[][]::new);
+        } else if (experiment.promptVersion() != null) {
+            return new UUID[][]{new UUID[]{experiment.promptVersion().id()}};
+        }
+        return new UUID[0][];
     }
 
     private Map<String, String> extractPromptVersionsMap(Experiment experiment) {
