@@ -14,6 +14,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     traceThreadPythonEvaluatorEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
+    humanAnnotationEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -22,5 +23,6 @@ export declare namespace ServiceTogglesConfig {
         traceThreadPythonEvaluatorEnabled: boolean;
         guardrailsEnabled: boolean;
         opikAIEnabled: boolean;
+        humanAnnotationEnabled: boolean;
     }
 }

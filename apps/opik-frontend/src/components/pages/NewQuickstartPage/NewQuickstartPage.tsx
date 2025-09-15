@@ -37,7 +37,10 @@ const NewQuickstartPage: React.FunctionComponent = () => {
             </div>
           </div>
 
-          <IntegrationExplorer.QuickInstall />
+          <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <IntegrationExplorer.QuickInstall />
+            <IntegrationExplorer.TypeScriptSDK />
+          </div>
 
           <IntegrationExplorer.Tabs>
             <IntegrationExplorer.Grid />

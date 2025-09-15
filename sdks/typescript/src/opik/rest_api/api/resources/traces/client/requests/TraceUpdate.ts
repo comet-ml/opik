@@ -17,7 +17,7 @@ export interface TraceUpdate {
     endTime?: Date;
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
-    metadata?: OpikApi.JsonNode;
+    metadata?: OpikApi.JsonListString;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfo;
     threadId?: string;

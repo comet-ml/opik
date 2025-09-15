@@ -91,8 +91,11 @@ public class RetriableHttpClient {
                     int statusCode = response.getStatus();
 
                     if (isRetryableStatusCode(statusCode)) {
+                        response.bufferEntity(); // Buffer the entity to allow multiple reads
+                        String body = response.readEntity(String.class);
                         return Mono.error(new RetryUtils.RetryableHttpException(
-                                "Service temporarily unavailable (HTTP " + statusCode + ")", statusCode));
+                                "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode, body),
+                                statusCode));
                     }
 
                     return Mono.just(response);

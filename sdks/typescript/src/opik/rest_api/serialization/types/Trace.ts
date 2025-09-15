@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonListString } from "./JsonListString";
-import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
@@ -22,7 +21,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
     input: JsonListString.optional(),
     output: JsonListString.optional(),
-    metadata: JsonNode.optional(),
+    metadata: JsonListString.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
@@ -54,7 +53,7 @@ export declare namespace Trace {
         end_time?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
-        metadata?: JsonNode.Raw | null;
+        metadata?: JsonListString.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfo.Raw | null;
         usage?: Record<string, number> | null;

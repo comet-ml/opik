@@ -7,7 +7,6 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
-from .json_node_experiment_item_bulk_write_view import JsonNodeExperimentItemBulkWriteView
 
 
 class TraceExperimentItemBulkWriteView(UniversalBaseModel):
@@ -26,7 +25,7 @@ class TraceExperimentItemBulkWriteView(UniversalBaseModel):
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListStringExperimentItemBulkWriteView] = None
     output: typing.Optional[JsonListStringExperimentItemBulkWriteView] = None
-    metadata: typing.Optional[JsonNodeExperimentItemBulkWriteView] = None
+    metadata: typing.Optional[JsonListStringExperimentItemBulkWriteView] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoExperimentItemBulkWriteView] = None
     last_updated_at: typing.Optional[dt.datetime] = None

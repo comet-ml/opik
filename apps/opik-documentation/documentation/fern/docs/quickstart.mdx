@@ -321,7 +321,7 @@ It is common for LLM applications to use chains rather than just calling the LLM
 like [LangChain](/tracing/integrations/langchain), [LangGraph](/tracing/integrations/langgraph) or [LLamaIndex](/tracing/integrations/llama_index),
 or by writing custom python code.
 
-Opik makes it easy for your to log your chains no matter how you implement them:
+Opik makes it easy for you to log your chains no matter how you implement them:
 
 <Tabs>
     <Tab value="Custom Python Code" title="Custom Python Code">
@@ -431,7 +431,7 @@ set_global_handler("opik")
 opik_callback_handler = global_handler
 ```
 
-You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index).
+Your LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index).
 
 <Info>
   Your chains will now be logged to Opik and can be viewed in the Opik UI. To

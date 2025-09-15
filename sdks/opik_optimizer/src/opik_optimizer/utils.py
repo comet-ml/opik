@@ -354,3 +354,14 @@ def python_type_to_json_type(python_type: type) -> str:
         return "array"
     else:
         return "string"  # default fallback
+
+
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    from .colbert import ColBERTv2
+
+    results = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(query, k=3)
+    return [str(item.text) for item in results if hasattr(item, "text")]

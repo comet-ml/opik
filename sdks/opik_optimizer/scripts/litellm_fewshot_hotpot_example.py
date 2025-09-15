@@ -8,20 +8,9 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
 )
 from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.utils import search_wikipedia
 
-# For wikipedia tool:
-import dspy
-
-
-def search_wikipedia(query: str) -> list[str]:
-    """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
-    """
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=3
-    )
-    return [item["text"] for item in results]
+# NOTE: functions are automatically tracked in the ChatPrompt
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:

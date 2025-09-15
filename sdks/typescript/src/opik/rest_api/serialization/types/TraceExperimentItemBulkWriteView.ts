@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonListStringExperimentItemBulkWriteView } from "./JsonListStringExperimentItemBulkWriteView";
-import { JsonNodeExperimentItemBulkWriteView } from "./JsonNodeExperimentItemBulkWriteView";
 import { ErrorInfoExperimentItemBulkWriteView } from "./ErrorInfoExperimentItemBulkWriteView";
 
 export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
@@ -20,7 +19,7 @@ export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
     input: JsonListStringExperimentItemBulkWriteView.optional(),
     output: JsonListStringExperimentItemBulkWriteView.optional(),
-    metadata: JsonNodeExperimentItemBulkWriteView.optional(),
+    metadata: JsonListStringExperimentItemBulkWriteView.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     errorInfo: core.serialization.property("error_info", ErrorInfoExperimentItemBulkWriteView.optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -36,7 +35,7 @@ export declare namespace TraceExperimentItemBulkWriteView {
         end_time?: string | null;
         input?: JsonListStringExperimentItemBulkWriteView.Raw | null;
         output?: JsonListStringExperimentItemBulkWriteView.Raw | null;
-        metadata?: JsonNodeExperimentItemBulkWriteView.Raw | null;
+        metadata?: JsonListStringExperimentItemBulkWriteView.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfoExperimentItemBulkWriteView.Raw | null;
         last_updated_at?: string | null;

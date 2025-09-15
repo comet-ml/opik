@@ -418,10 +418,10 @@ def _verify_experiment_prompts(
     # check that experiment config/metadata contains Prompt's template
     experiment_prompts = experiment_content.metadata["prompts"]
 
-    for i, prompt in enumerate(prompts):
+    for prompt in prompts:
         assert (
-            experiment_prompts[i] == prompt.prompt
-        ), f"{experiment_prompts[i]} != {prompt.prompt}"
+            experiment_prompts[prompt.name] == prompt.prompt
+        ), f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
 
 
 def verify_optimization(

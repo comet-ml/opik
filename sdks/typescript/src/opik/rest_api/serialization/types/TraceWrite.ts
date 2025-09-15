@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonListStringWrite } from "./JsonListStringWrite";
-import { JsonNodeWrite } from "./JsonNodeWrite";
 import { ErrorInfoWrite } from "./ErrorInfoWrite";
 
 export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.Raw, OpikApi.TraceWrite> =
@@ -18,7 +17,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListStringWrite.optional(),
         output: JsonListStringWrite.optional(),
-        metadata: JsonNodeWrite.optional(),
+        metadata: JsonListStringWrite.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -34,7 +33,7 @@ export declare namespace TraceWrite {
         end_time?: string | null;
         input?: JsonListStringWrite.Raw | null;
         output?: JsonListStringWrite.Raw | null;
-        metadata?: JsonNodeWrite.Raw | null;
+        metadata?: JsonListStringWrite.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfoWrite.Raw | null;
         last_updated_at?: string | null;

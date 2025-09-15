@@ -5,7 +5,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.json_node_write import JsonNodeWrite
+from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.optimization_public import OptimizationPublic
 from ..types.optimization_write_status import OptimizationWriteStatus
@@ -88,7 +88,7 @@ class OptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -107,7 +107,7 @@ class OptimizationsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -144,7 +144,7 @@ class OptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -163,7 +163,7 @@ class OptimizationsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -358,7 +358,7 @@ class AsyncOptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -377,7 +377,7 @@ class AsyncOptimizationsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -417,7 +417,7 @@ class AsyncOptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -436,7 +436,7 @@ class AsyncOptimizationsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 

@@ -6,9 +6,11 @@ import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 
 @Getter
+@Setter
 public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty

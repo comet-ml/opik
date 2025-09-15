@@ -13,8 +13,6 @@ from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThrea
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_page_public import TracePagePublic
@@ -337,7 +335,7 @@ class TracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -364,7 +362,7 @@ class TracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -492,7 +490,7 @@ class TracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -519,7 +517,7 @@ class TracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1683,7 +1681,7 @@ class AsyncTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -1710,7 +1708,7 @@ class AsyncTracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1850,7 +1848,7 @@ class AsyncTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -1877,7 +1875,7 @@ class AsyncTracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 

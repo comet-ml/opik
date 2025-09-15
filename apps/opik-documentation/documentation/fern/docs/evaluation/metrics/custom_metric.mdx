@@ -93,10 +93,10 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy.
         Analyze it carefully and respond with a number between 0 and 1: 1 if completely
-        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of the your response
+        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of your response
         should be a single number with no other text.
 
-        The format of the your response should be a JSON object with no additional text or backticks that follows the format:
+        The format of your response should be a JSON object with no additional text or backticks that follows the format:
         {{
             "score": <score between 0 and 1>
         }}

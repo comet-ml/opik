@@ -52,6 +52,11 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     cell: IdCell as never,
   },
   {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "type",
     label: "Type",
     type: COLUMN_TYPE.string,

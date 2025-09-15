@@ -7,7 +7,6 @@ import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { SpanUpdateType } from "../../types/SpanUpdateType";
 import { JsonListString } from "../../../../types/JsonListString";
-import { JsonNode } from "../../../../types/JsonNode";
 import { ErrorInfo } from "../../../../types/ErrorInfo";
 
 export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, OpikApi.SpanUpdate> =
@@ -21,7 +20,7 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
-        metadata: JsonNode.optional(),
+        metadata: JsonListString.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -41,7 +40,7 @@ export declare namespace SpanUpdate {
         end_time?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
-        metadata?: JsonNode.Raw | null;
+        metadata?: JsonListString.Raw | null;
         model?: string | null;
         provider?: string | null;
         tags?: string[] | null;

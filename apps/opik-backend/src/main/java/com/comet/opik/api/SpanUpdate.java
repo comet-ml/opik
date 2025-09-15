@@ -33,7 +33,7 @@ public record SpanUpdate(
         @InRange Instant endTime,
         @Schema(implementation = JsonListString.class) JsonNode input,
         @Schema(implementation = JsonListString.class) JsonNode output,
-        JsonNode metadata,
+        @Schema(implementation = JsonListString.class) JsonNode metadata,
         String model,
         String provider,
         Set<String> tags,
