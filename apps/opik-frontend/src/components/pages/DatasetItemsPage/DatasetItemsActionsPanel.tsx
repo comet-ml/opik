@@ -22,7 +22,13 @@ type DatasetItemsActionsPanelProps = {
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
   DatasetItemsActionsPanelProps
-> = ({ datasetItems, datasetId, datasetName, columnsToExport, dynamicColumns }) => {
+> = ({
+  datasetItems,
+  datasetId,
+  datasetName,
+  columnsToExport,
+  dynamicColumns,
+}) => {
   const resetKeyRef = useRef(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [expansionDialogOpen, setExpansionDialogOpen] =
