@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:add_status_to_experiments:1.0.0
+--changeset idoberko2:000038_add_status_to_experiments
 --comment: Add status field to experiments table to track experiment state
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
