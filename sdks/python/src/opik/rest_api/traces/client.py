@@ -1194,12 +1194,7 @@ class TracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1209,17 +1204,7 @@ class TracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1232,18 +1217,9 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+        client.traces.update_thread(thread_model_id='threadModelId', )
         """
-        _response = self._raw_client.update_thread(
-            thread_model_id,
-            text=text,
-            id=id,
-            created_at=created_at,
-            last_updated_at=last_updated_at,
-            created_by=created_by,
-            last_updated_by=last_updated_by,
-            request_options=request_options,
-        )
+        _response = self._raw_client.update_thread(thread_model_id, tags=tags, request_options=request_options)
         return _response.data
 
     def update_thread_comment(
@@ -2607,12 +2583,7 @@ class AsyncTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2622,17 +2593,7 @@ class AsyncTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2647,19 +2608,10 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+            await client.traces.update_thread(thread_model_id='threadModelId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.update_thread(
-            thread_model_id,
-            text=text,
-            id=id,
-            created_at=created_at,
-            last_updated_at=last_updated_at,
-            created_by=created_by,
-            last_updated_by=last_updated_by,
-            request_options=request_options,
-        )
+        _response = await self._raw_client.update_thread(thread_model_id, tags=tags, request_options=request_options)
         return _response.data
 
     async def update_thread_comment(
