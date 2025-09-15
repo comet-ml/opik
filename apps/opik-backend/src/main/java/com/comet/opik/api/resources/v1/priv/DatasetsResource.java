@@ -458,11 +458,19 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Expanding dataset with id '{}' on workspaceId '{}'", datasetId, workspaceId);
-        DatasetExpansionResponse response = expansionService.expandDataset(datasetId, request);
-        log.info("Generated {} samples for dataset with id '{}' on workspaceId '{}'",
-                response.totalGenerated(), datasetId, workspaceId);
 
-        return Response.ok(response).build();
+        try {
+            DatasetExpansionResponse response = expansionService.expandDataset(datasetId, request);
+            log.info("Generated {} samples for dataset with id '{}' on workspaceId '{}'",
+                    response.totalGenerated(), datasetId, workspaceId);
+            return Response.ok(response).build();
+        } catch (RuntimeException e) {
+            log.warn("Failed to expand dataset with id '{}' on workspaceId '{}': {}",
+                    datasetId, workspaceId, e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(e.getMessage()))
+                    .build();
+        }
     }
 
 }

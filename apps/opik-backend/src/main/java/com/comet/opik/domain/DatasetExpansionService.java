@@ -209,7 +209,11 @@ public class DatasetExpansionService {
 
         } catch (Exception e) {
             log.error("Failed to generate samples using LLM", e);
-            throw new RuntimeException("Failed to generate synthetic samples: " + e.getMessage());
+            // If it's already a RuntimeException with a detailed message, preserve it
+            if (e instanceof RuntimeException && e.getMessage().contains("AI model")) {
+                throw (RuntimeException) e;
+            }
+            throw new RuntimeException("Failed to generate synthetic samples: " + e.getMessage(), e);
         }
     }
 
@@ -221,10 +225,22 @@ public class DatasetExpansionService {
             if (cleanedContent.startsWith("```json")) {
                 cleanedContent = cleanedContent.substring(7);
             }
+            if (cleanedContent.startsWith("```")) {
+                cleanedContent = cleanedContent.substring(3);
+            }
             if (cleanedContent.endsWith("```")) {
                 cleanedContent = cleanedContent.substring(0, cleanedContent.length() - 3);
             }
             cleanedContent = cleanedContent.trim();
+
+            // Additional cleaning for common LLM response patterns
+            if (cleanedContent.startsWith("Here") || cleanedContent.startsWith("I'll")) {
+                // Look for the first '[' to find the actual JSON array
+                int firstBracket = cleanedContent.indexOf('[');
+                if (firstBracket != -1) {
+                    cleanedContent = cleanedContent.substring(firstBracket);
+                }
+            }
 
             // Log the actual content we're trying to parse for debugging
             log.info("Attempting to parse LLM response. Content length: {}", cleanedContent.length());
@@ -258,6 +274,33 @@ public class DatasetExpansionService {
                         samples.add(sample);
                     }
                 }
+            } else if (rootNode.isObject()) {
+                // Handle case where LLM returns a single object instead of array
+                log.warn("LLM returned single object instead of array, wrapping in array");
+                ObjectNode dataNode = (ObjectNode) rootNode;
+                dataNode.put("_generated", true);
+                dataNode.put("_generation_model", model);
+
+                Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
+                        objectMapper.getTypeFactory().constructMapType(Map.class, String.class,
+                                JsonNode.class));
+
+                DatasetItem sample = DatasetItem.builder()
+                        .id(idGenerator.generateId())
+                        .datasetId(datasetId)
+                        .data(dataMap)
+                        .source(com.comet.opik.api.DatasetItemSource.MANUAL)
+                        .build();
+
+                samples.add(sample);
+            } else {
+                throw new RuntimeException("Expected JSON array or object, but got: " + rootNode.getNodeType());
+            }
+
+            // Check if we got any samples
+            if (samples.isEmpty()) {
+                throw new RuntimeException(
+                        "No valid samples found in the AI response. The response may be empty or contain only invalid data structures.");
             }
 
             // Limit to the requested number of samples even if LLM provided more
@@ -272,15 +315,60 @@ public class DatasetExpansionService {
         } catch (Exception e) {
             log.error("Failed to parse generated samples", e);
 
-            // Check if it's a JSON parsing error and provide more specific error message
-            if (e instanceof com.fasterxml.jackson.core.JsonParseException ||
-                    e instanceof com.fasterxml.jackson.core.io.JsonEOFException) {
-                throw new RuntimeException(
-                        "The AI model returned malformed or incomplete JSON. This may happen if the response was too long and got truncated. Try generating fewer samples or using a custom prompt with simpler JSON structure.");
-            }
+            // Log the raw content for debugging
+            log.error("Raw LLM response that failed to parse: {}",
+                    generatedContent.length() > 2000 ? generatedContent.substring(0, 2000) + "..." : generatedContent);
 
-            throw new RuntimeException("Failed to parse generated samples: " + e.getMessage());
+            // Provide detailed user-friendly error messages
+            String userMessage = buildUserFriendlyErrorMessage(e, generatedContent);
+            throw new RuntimeException(userMessage, e);
         }
+    }
+
+    private String buildUserFriendlyErrorMessage(Exception e, String generatedContent) {
+        // Check the type of error and provide specific guidance
+        if (e instanceof com.fasterxml.jackson.core.JsonParseException) {
+            com.fasterxml.jackson.core.JsonParseException jsonError = (com.fasterxml.jackson.core.JsonParseException) e;
+            return String.format("The AI model returned invalid JSON at line %d, column %d: %s. " +
+                    "This often happens when the model includes explanatory text before or after the JSON. " +
+                    "Try using a different model or a custom prompt that emphasizes returning only valid JSON.",
+                    jsonError.getLocation().getLineNr(),
+                    jsonError.getLocation().getColumnNr(),
+                    jsonError.getOriginalMessage());
+        }
+
+        if (e instanceof com.fasterxml.jackson.core.io.JsonEOFException) {
+            return "The AI model's response was cut off before completing the JSON structure. " +
+                    "This usually means the response hit the model's token limit. " +
+                    "Try reducing the number of samples requested, using a simpler data structure, or using a model with a higher token limit.";
+        }
+
+        if (e instanceof com.fasterxml.jackson.databind.JsonMappingException) {
+            return "The AI model returned JSON with an unexpected structure that couldn't be processed. " +
+                    "The model may not have followed the exact format from your dataset examples. " +
+                    "Try using a custom prompt with more specific formatting instructions.";
+        }
+
+        // Check if the response looks like it contains explanation text
+        if (generatedContent.contains("Here") || generatedContent.contains("I'll") ||
+                generatedContent.contains("explanation") || generatedContent.contains("generate")) {
+            return "The AI model included explanatory text instead of returning pure JSON. " +
+                    "This model may need more specific instructions. " +
+                    "Try a custom prompt that ends with 'Return ONLY the JSON array, no explanation or additional text.'";
+        }
+
+        // Check if response is empty or very short
+        if (generatedContent.trim().length() < 10) {
+            return "The AI model returned an empty or very short response. " +
+                    "This may indicate the model encountered an error or the prompt was unclear. " +
+                    "Try rephrasing your request or using a different model.";
+        }
+
+        // Generic fallback with the original error
+        return String.format("Unable to parse the AI model's response: %s. " +
+                "The response format may not match expectations. " +
+                "You can try using fewer samples, a different model, or a custom prompt with specific formatting requirements.",
+                e.getMessage());
     }
 
 }
