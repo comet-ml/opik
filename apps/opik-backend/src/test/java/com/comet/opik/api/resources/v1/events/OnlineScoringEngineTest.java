@@ -1,9 +1,13 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.LogItem.LogLevel;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TracesCreated;
@@ -14,6 +18,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
@@ -75,11 +80,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import static com.comet.opik.api.LogItem.LogLevel;
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
-import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -548,12 +548,14 @@ class OnlineScoringEngineTest {
         var invalidAiMsgTxt = "a" + validAiMsgTxt;
         var emptyAiMsgTxt = "{}";
         var emptyJson = "";
+        var flatAiMsgTxt = "{\"user_satisfaction_score\":75.0,\"reason\":\"why\",\"chat_summary\":\"summary\"}";
 
         return Stream.of(
                 arguments(validAiMsgTxt, 3),
                 arguments(invalidAiMsgTxt, 0),
                 arguments(emptyAiMsgTxt, 0),
-                arguments(emptyJson, 0));
+                arguments(emptyJson, 0),
+                arguments(flatAiMsgTxt, 0));
     }
 
     @ParameterizedTest

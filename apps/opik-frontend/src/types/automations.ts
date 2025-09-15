@@ -81,4 +81,9 @@ export interface EvaluatorRuleLogItem {
   timestamp: string;
   level: EVALUATOR_LOG_LEVEL;
   message: string;
+  markers?: Record<string, string>;
+}
+
+export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
+  id: string;
 }
