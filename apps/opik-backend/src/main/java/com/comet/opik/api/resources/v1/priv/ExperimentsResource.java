@@ -488,7 +488,7 @@ public class ExperimentsResource {
     }
 
     @PATCH
-    @Path("/update/{id}")
+    @Path("/{id}")
     public Response update(
             @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull ExperimentUpdate experimentUpdate) {
