@@ -33,6 +33,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -125,7 +126,7 @@ class AnnotationQueuesResourceTest {
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    List.of(annotationQueue), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
@@ -137,7 +138,8 @@ class AnnotationQueuesResourceTest {
                     .projectId(null) // Invalid
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(List.of(annotationQueue), API_KEY, TEST_WORKSPACE,
+            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+                    API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
     }

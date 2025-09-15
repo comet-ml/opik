@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CL
     description     String               DEFAULT '',
     instructions    String               DEFAULT '',
     scope           Enum8('trace' = 1, 'thread' = 2),
-    comments_enabled Boolean             DEFAULT true,
+    comments_enabled Boolean             DEFAULT false,
     feedback_definitions Array(FixedString(36)),
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     created_by      String               DEFAULT '',

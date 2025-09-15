@@ -54,7 +54,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueue.toBuilder()
                 .id(id)
-                .commentsEnabled(annotationQueue.commentsEnabled() != null ? annotationQueue.commentsEnabled() : true)
+                .commentsEnabled(annotationQueue.commentsEnabled() != null ? annotationQueue.commentsEnabled() : false)
                 .feedbackDefinitions(annotationQueue.feedbackDefinitions() != null
                         ? annotationQueue.feedbackDefinitions()
                         : List.of())

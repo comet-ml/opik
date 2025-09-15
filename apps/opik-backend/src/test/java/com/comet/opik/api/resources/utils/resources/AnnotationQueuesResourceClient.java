@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.List;
+import java.util.SequencedSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,7 +22,8 @@ public class AnnotationQueuesResourceClient {
     private final String baseURI;
     private final PodamFactory podamFactory;
 
-    public void createAnnotationQueueBatch(List<AnnotationQueue> annotationQueues, String apiKey, String workspaceName,
+    public void createAnnotationQueueBatch(SequencedSet<AnnotationQueue> annotationQueues, String apiKey,
+            String workspaceName,
             int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("batch")
