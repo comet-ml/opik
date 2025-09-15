@@ -15,10 +15,10 @@ export interface AnnotationQueue {
   project_id: string;
   project_name: string;
   name: string;
-  description: string;
-  instructions: string;
+  description?: string;
+  instructions?: string;
   comments_enabled: boolean;
-  feedback_definitions: string[];
+  feedback_definition_names: string[];
   scope: ANNOTATION_QUEUE_SCOPE;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];

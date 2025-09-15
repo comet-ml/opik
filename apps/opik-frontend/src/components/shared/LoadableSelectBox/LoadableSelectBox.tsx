@@ -202,7 +202,10 @@ export const LoadableSelectBox = ({
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
+                  option.description ? "min-h-12 py-2" : "h-10",
+                )}
                 onClick={() => {
                   if (multiselect) {
                     const newSelectedValues = isSelected(option.value)
@@ -225,7 +228,14 @@ export const LoadableSelectBox = ({
                   )}
                 </div>
 
-                <div className="comet-body-s truncate">{option.label}</div>
+                <div className="flex-1">
+                  <div className="comet-body-s truncate">{option.label}</div>
+                  {option.description && (
+                    <div className="comet-body-xs text-muted-foreground truncate">
+                      {option.description}
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           ) : (
