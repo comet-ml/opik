@@ -293,9 +293,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
             <div
               key={node.id}
               className={cn(
-                "absolute left-0 flex w-full flex-col gap-1.5 px-1.5 py-2 cursor-pointer rounded-md hover:bg-[hsl(var(--primary-foreground))]",
+                "absolute left-0 flex w-full flex-col gap-1.5 px-1.5 py-2 cursor-pointer rounded-md hover:bg-primary-foreground",
                 {
-                  "bg-[hsl(var(--primary-foreground))]": isFocused,
+                  "bg-primary-foreground": isFocused,
                   "opacity-50": isOutOfSearch,
                 },
               )}
