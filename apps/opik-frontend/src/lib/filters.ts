@@ -81,6 +81,21 @@ export const generatePromptFilters = (promptId?: string) => {
   ] as Filter[];
 };
 
+export const generateProjectFilters = (projectId?: string) => {
+  if (!projectId) return undefined;
+
+  return [
+    {
+      id: uniqid(),
+      field: "project_id",
+      type: COLUMN_TYPE.string,
+      operator: "contains",
+      key: "",
+      value: projectId,
+    },
+  ] as Filter[];
+};
+
 const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
   switch (filter.operator) {
     case "=":
