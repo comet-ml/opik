@@ -46,7 +46,7 @@ const PromptPage: React.FunctionComponent = () => {
       </PageBodyStickyContainer>
       {prompt?.description && (
         <PageBodyStickyContainer
-          className="mb-4 -mt-3 flex min-h-8 items-center justify-between"
+          className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
           direction="horizontal"
         >
           <div className="text-muted-slate">{prompt.description}</div>

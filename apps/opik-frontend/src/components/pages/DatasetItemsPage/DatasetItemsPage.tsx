@@ -295,7 +295,7 @@ const DatasetItemsPage = () => {
           </h1>
         </div>
         {dataset?.description && (
-          <div className="text-muted-slate -mt-3 mb-4">
+          <div className="-mt-3 mb-4 text-muted-slate">
             {dataset.description}
           </div>
         )}
