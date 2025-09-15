@@ -294,6 +294,11 @@ const DatasetItemsPage = () => {
             {dataset?.name}
           </h1>
         </div>
+        {dataset?.description && (
+          <div className="text-muted-slate -mt-3 mb-4">
+            {dataset.description}
+          </div>
+        )}
         {dataset?.created_at && (
           <div className="mb-2 flex gap-4 overflow-x-auto">
             <DateTag date={dataset?.created_at} />

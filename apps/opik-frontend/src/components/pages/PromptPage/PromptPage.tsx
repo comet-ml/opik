@@ -44,7 +44,14 @@ const PromptPage: React.FunctionComponent = () => {
       >
         <h1 className="comet-title-l truncate break-words">{promptName}</h1>
       </PageBodyStickyContainer>
-
+      {prompt?.description && (
+        <PageBodyStickyContainer
+          className="mb-4 -mt-3 flex min-h-8 items-center justify-between"
+          direction="horizontal"
+        >
+          <div className="text-muted-slate">{prompt.description}</div>
+        </PageBodyStickyContainer>
+      )}
       <PageBodyStickyContainer
         className="pb-4"
         direction="horizontal"
