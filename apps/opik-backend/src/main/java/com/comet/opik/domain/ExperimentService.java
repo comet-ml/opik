@@ -15,14 +15,14 @@ import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -71,6 +71,7 @@ public class ExperimentService {
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull ExperimentResponseBuilder responseBuilder;
+    private final @NonNull LockService lockService;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -502,45 +503,24 @@ public class ExperimentService {
         return experimentDAO.getDailyCreatedCount();
     }
 
-    public Mono<ExperimentUpdatePlan> planUpdate(UUID experimentId, String incomingName, JsonNode incomingMetadata) {
-        return experimentDAO.getById(experimentId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Experiment not found: " + experimentId)))
-                .map(current -> {
-                    // target name
-                    String targetName = current.name();
-                    if (incomingName != null) {
-                        targetName = StringUtils.isBlank(incomingName)
-                                ? current.name()
-                                : incomingName;
-                    }
+    public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
 
-                    // target metadata (stringified for plan)
-                    String currentMetaStr = JsonUtils.getStringOrDefault(current.metadata());
-                    JsonNode targetMetaNode = incomingMetadata != null ? incomingMetadata : current.metadata();
-                    String targetMetadata = JsonUtils.getStringOrDefault(targetMetaNode);
+        if (isNoOperation(experimentUpdate)) {
+            return Mono.empty();
+        }
 
-                    boolean changed = !java.util.Objects.equals(targetName, current.name())
-                            || !java.util.Objects.equals(targetMetadata, currentMetaStr);
-
-                    log.info(
-                            "Update plan for id='{}': currentName='{}' → targetName='{}'; currentMeta={} → targetMeta={}; changed={}",
-                            experimentId, current.name(), targetName, currentMetaStr, targetMetadata, changed);
-
-                    return new ExperimentUpdatePlan(targetName, targetMetadata, changed);
-                });
+        return Mono.defer(() -> experimentDAO.getById(id)
+                .switchIfEmpty(Mono.error(new NotFoundException("Experiment Not Found")))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(experiment -> lockService.executeWithLock(
+                        new LockService.Lock(id, "Experiment"),
+                        Mono.defer(() -> experimentDAO.update(id, experimentUpdate, experiment)))))
+                .then();
     }
 
-    @WithSpan
-    public Mono<Void> applyUpdatePlan(UUID experimentId, ExperimentUpdatePlan plan) {
-        return Mono.deferContextual(ctx -> {
-            String userName = ctx.get(RequestContext.USER_NAME);
-
-            return experimentDAO.updateNameAndMetadata(
-                    experimentId,
-                    plan.targetName(),
-                    plan.targetMetadata(),
-                    userName)
-                    .then();
-        });
+    private boolean isNoOperation(ExperimentUpdate experimentUpdate) {
+        return (experimentUpdate.name() == null || experimentUpdate.name().isBlank())
+                && experimentUpdate.metadata() == null;
     }
+
 }

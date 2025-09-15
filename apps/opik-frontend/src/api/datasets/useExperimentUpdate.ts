@@ -15,7 +15,7 @@ const useExperimentUpdateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ id, name, metadata }: UseExperimentUpdate) => {
-      const { data } = await api.post(`${EXPERIMENTS_REST_ENDPOINT}update/${id}`, {
+      const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}update/${id}`, {
         name,
         metadata
       });
