@@ -49,6 +49,7 @@ export enum EXPLAINER_ID {
   what_happens_if_i_edit_a_thread_rule = "what_happens_if_i_edit_a_thread_rule",
   what_happens_if_i_edit_a_feedback_definition = "what_happens_if_i_edit_a_feedback_definition",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
+  what_are_annotation_queues = "what_are_annotation_queues",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
   whats_the_optimizer = "whats_the_optimizer",
@@ -171,6 +172,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_is_human_review,
     description:
       "Human review fields let you manually rate LLM outputs. Use them to gather structured feedback and monitor quality over time.",
+  },
+  [EXPLAINER_ID.what_are_annotation_queues]: {
+    id: EXPLAINER_ID.what_are_annotation_queues, // TODO lala add link for doctumentation for this
+    description:
+      "Annotation queues organize traces or threads for structured human review by SME users. Create queues with sampling rules to systematically collect feedback from subject matter experts and improve your model's performance.",
+    docLink: "/evaluation/annotation_queues",
   },
   [EXPLAINER_ID.whats_an_experiment]: {
     id: EXPLAINER_ID.whats_an_experiment,
