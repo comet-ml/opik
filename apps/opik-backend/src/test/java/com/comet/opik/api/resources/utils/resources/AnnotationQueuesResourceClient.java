@@ -2,14 +2,16 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.SequencedSet;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,7 +22,6 @@ public class AnnotationQueuesResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
-    private final PodamFactory podamFactory;
 
     public void createAnnotationQueueBatch(SequencedSet<AnnotationQueue> annotationQueues, String apiKey,
             String workspaceName,
@@ -31,6 +32,36 @@ public class AnnotationQueuesResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(AnnotationQueueBatch.builder().annotationQueues(annotationQueues).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void addItemsToAnnotationQueue(UUID queueId, Set<UUID> itemIds, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(queueId.toString())
+                .path("items")
+                .path("add")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(AnnotationQueueItemIds.builder().ids(itemIds).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void removeItemsFromAnnotationQueue(UUID queueId, Set<UUID> itemIds, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(queueId.toString())
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(AnnotationQueueItemIds.builder().ids(itemIds).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
