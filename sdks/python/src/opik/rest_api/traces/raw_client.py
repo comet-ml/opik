@@ -1620,12 +1620,7 @@ class RawTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1635,17 +1630,7 @@ class RawTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1658,12 +1643,7 @@ class RawTracesClient:
             f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
             method="PATCH",
             json={
-                "id": id,
-                "text": text,
-                "created_at": created_at,
-                "last_updated_at": last_updated_at,
-                "created_by": created_by,
-                "last_updated_by": last_updated_by,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -3424,12 +3404,7 @@ class AsyncRawTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3439,17 +3414,7 @@ class AsyncRawTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3462,12 +3427,7 @@ class AsyncRawTracesClient:
             f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
             method="PATCH",
             json={
-                "id": id,
-                "text": text,
-                "created_at": created_at,
-                "last_updated_at": last_updated_at,
-                "created_by": created_by,
-                "last_updated_by": last_updated_by,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
