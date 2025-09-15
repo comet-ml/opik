@@ -23,7 +23,7 @@ const useDatasetExpansionMutation = () => {
   >({
     mutationFn: async ({ datasetId, ...data }) => {
       const { data: response } = await api.post(
-        `${DATASETS_REST_ENDPOINT}${datasetId}/expand`,
+        `${DATASETS_REST_ENDPOINT}${datasetId}/expansions`,
         data,
       );
       return response;

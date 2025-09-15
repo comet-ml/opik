@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.DatasetExpansionRequest;
+import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
@@ -135,7 +135,7 @@ class DatasetsResourceIntegrationTest {
         when(requestContext.getVisibility())
                 .thenReturn(Visibility.PRIVATE);
 
-        var request = DatasetExpansionRequest.builder()
+        var request = DatasetExpansion.builder()
                 .model("gpt-4")
                 .sampleCount(2)
                 .build();
@@ -163,7 +163,7 @@ class DatasetsResourceIntegrationTest {
                 .thenReturn(mockResponse);
 
         // When
-        try (var response = EXT.target("/v1/private/datasets/" + datasetId + "/expand")
+        try (var response = EXT.target("/v1/private/datasets/" + datasetId + "/expansions")
                 .request()
                 .header("workspace", DEFAULT_WORKSPACE_NAME)
                 .post(Entity.json(request))) {

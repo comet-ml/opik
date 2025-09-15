@@ -14,10 +14,7 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetExpansionResponse(
         @Schema(description = "List of generated synthetic dataset items") List<DatasetItem> generatedSamples,
-
         @Schema(description = "Model used for generation", example = "gpt-4") String model,
-
         @Schema(description = "Total number of samples generated", example = "10") int totalGenerated,
-
         @Schema(description = "Generation timestamp", accessMode = Schema.AccessMode.READ_ONLY) Instant generationTime) {
 }

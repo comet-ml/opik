@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.DatasetExpansionRequest;
+import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -254,6 +254,23 @@ public class DatasetsResource {
         return Response.ok(dataset).build();
     }
 
+    @POST
+    @Path("/{id}/expansions")
+    @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
+            @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
+    })
+    @RateLimited
+    public Response expandDataset(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExpansion.class))) @JsonView(DatasetExpansion.View.Write.class) @NotNull @Valid DatasetExpansion request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Expanding dataset with id '{}' on workspaceId '{}'", datasetId, workspaceId);
+        var response = expansionService.expandDataset(datasetId, request);
+        log.info("Expanded dataset with id '{}' on workspaceId '{}', total samples '{}'",
+                datasetId, workspaceId, response.totalGenerated());
+        return Response.ok(response).build();
+    }
+
     // Dataset Item Resources
 
     @GET
@@ -444,33 +461,4 @@ public class DatasetsResource {
 
         return Response.ok(columns).build();
     }
-
-    @POST
-    @Path("/{id}/expand")
-    @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
-            @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
-    })
-    @RateLimited
-    public Response expandDataset(
-            @PathParam("id") UUID datasetId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExpansionRequest.class))) @JsonView(DatasetExpansionRequest.View.Write.class) @NotNull @Valid DatasetExpansionRequest request) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Expanding dataset with id '{}' on workspaceId '{}'", datasetId, workspaceId);
-
-        try {
-            DatasetExpansionResponse response = expansionService.expandDataset(datasetId, request);
-            log.info("Generated {} samples for dataset with id '{}' on workspaceId '{}'",
-                    response.totalGenerated(), datasetId, workspaceId);
-            return Response.ok(response).build();
-        } catch (RuntimeException e) {
-            log.warn("Failed to expand dataset with id '{}' on workspaceId '{}': {}",
-                    datasetId, workspaceId, e.getMessage());
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(e.getMessage()))
-                    .build();
-        }
-    }
-
 }
