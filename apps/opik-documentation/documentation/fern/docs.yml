@@ -106,7 +106,7 @@ navigation:
       - section: Observability
         slug: /tracing
         contents:
-          - page: Log traces
+          - page: 🕵️ Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
           - page: ✨ Trace Inspector

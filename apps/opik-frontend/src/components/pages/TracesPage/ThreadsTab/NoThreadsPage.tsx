@@ -20,7 +20,7 @@ const NoThreadsPage = () => {
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/tracing/log_traces")}
+              href={buildDocsUrl("/tracing/log_chat_conversations")}
               target="_blank"
               rel="noreferrer"
             >
