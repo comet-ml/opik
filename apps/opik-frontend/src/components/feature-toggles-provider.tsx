@@ -4,6 +4,8 @@ import { OnChangeFn } from "@/types/shared";
 import useFeatureToggle from "@/api/feature-toggle/useFeatureToggle";
 import useAppStore from "@/store/AppStore";
 
+// TODO lala add explainer for annotation queues tab and page
+
 type FeatureTogglesProps = {
   children: React.ReactNode;
 };
@@ -18,6 +20,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
+  [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED]: false,
 };
 
@@ -38,7 +41,11 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    if (data)
+      setFeatures({
+        ...data,
+        [FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED]: true,
+      });
   }, [data]);
 
   const value = useMemo(() => {

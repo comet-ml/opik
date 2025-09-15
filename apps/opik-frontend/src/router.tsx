@@ -33,6 +33,7 @@ import ConfigurationPage from "@/components/pages/ConfigurationPage/Configuratio
 import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/AnnotationQueuePage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
@@ -327,6 +328,18 @@ const redirectDatasetsRoute = createRoute({
   component: RedirectDatasets,
 });
 
+// ----------- SME flow
+const smeRoute = createRoute({
+  path: "/sme",
+  getParentRoute: () => workspaceRoute,
+});
+
+const homeSMERoute = createRoute({
+  path: "/",
+  getParentRoute: () => smeRoute,
+  component: () => <div>SME FLOW</div>, // TODO lala fix
+});
+
 // --------- playground
 
 const playgroundRoute = createRoute({
@@ -358,6 +371,15 @@ const onlineEvaluationRoute = createRoute({
     title: "Online evaluation",
   },
   component: OnlineEvaluationPage,
+});
+
+const annotationQueuesRoute = createRoute({
+  path: "/annotation-queues",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Annotation queues",
+  },
+  component: AnnotationQueuePage,
 });
 
 // ----------- Automation logs
@@ -406,9 +428,11 @@ const routeTree = rootRoute.addChildren([
         redirectProjectsRoute,
         redirectDatasetsRoute,
       ]),
+      smeRoute.addChildren([homeSMERoute]),
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
+      annotationQueuesRoute,
     ]),
   ]),
 ]);

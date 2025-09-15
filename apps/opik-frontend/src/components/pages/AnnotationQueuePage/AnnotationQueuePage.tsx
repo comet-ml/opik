@@ -29,17 +29,17 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
-import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ShowItemsCell from "@/components/pages-shared/annotation-queues/ShowItemsCell";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 import {
   convertColumnDataToColumn,
@@ -53,6 +53,7 @@ import {
   getRowId,
 } from "@/components/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
+import useAppStore from "@/store/AppStore";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -67,6 +68,7 @@ import {
   AnnotationQueue,
   ANNOTATION_QUEUE_SCOPE,
 } from "@/types/annotation-queues";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 
 const REFETCH_INTERVAL = 30000;
 
@@ -76,6 +78,18 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: "project",
+    label: "Project",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    accessorFn: (row) => row.project_id,
+    customMeta: {
+      nameKey: "project_name",
+      idKey: "project_id",
+      resource: RESOURCE_TYPE.project,
+    },
   },
   {
     id: "instructions",
@@ -158,6 +172,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "scope",
   "items_count",
+  "project",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
@@ -166,14 +181,15 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "last_updated_at",
   "scope",
   "items_count",
+  "project",
 ];
 
-const SELECTED_COLUMNS_KEY = "annotation-queues-selected-columns";
-const COLUMNS_WIDTH_KEY = "annotation-queues-columns-width";
-const COLUMNS_ORDER_KEY = "annotation-queues-columns-order";
-const COLUMNS_SORT_KEY = "annotation-queues-columns-sort";
-const PAGINATION_SIZE_KEY = "annotation-queues-pagination-size";
-const ROW_HEIGHT_KEY = "annotation-queues-row-height";
+const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
+const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
+const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
+const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
+const PAGINATION_SIZE_KEY = "workspace-annotation-queues-pagination-size";
+const ROW_HEIGHT_KEY = "workspace-annotation-queues-row-height";
 
 const FILTERS_CONFIG = {
   rowsMap: {
@@ -189,33 +205,33 @@ const FILTERS_CONFIG = {
   },
 };
 
-type AnnotationQueuesTabProps = {
-  projectId: string;
-};
-
-const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
-  projectId,
-}) => {
+export const AnnotationQueuePage: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const [search = "", setSearch] = useQueryParam("queues_search", StringParam, {
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
-  const [page = 1, setPage] = useQueryParam("queues_page", NumberParam, {
-    updateType: "replaceIn",
-  });
-  const [filters = [], setFilters] = useQueryParam(
-    "queues_filters",
-    JsonParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
 
-  const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
-    defaultValue: 10,
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
   });
+
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+    updateType: "replaceIn",
+  });
+
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
+
   const [height, setHeight] = useLocalStorageState<ROW_HEIGHT>(ROW_HEIGHT_KEY, {
     defaultValue: ROW_HEIGHT.small,
   });
@@ -252,9 +268,9 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 
   const { data, isPending: isLoading } = useAnnotationQueuesList(
     {
+      workspaceName,
       search: search as string,
       page: page as number,
-      projectId,
       size: size as number,
       filters,
       sorting: sortedColumns,
@@ -275,6 +291,11 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const selectedRows = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const noData = !search && filters.length === 0;
+  const noDataText = noData
+    ? "There are no annotation queues yet"
+    : "No search results";
 
   const handleNewQueue = useCallback(() => {
     setOpenDialog(true);
@@ -340,15 +361,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  const noDataText = useMemo(() => {
-    if (search) {
-      return `No annotation queues found for "${search}"`;
-    }
-    return "No annotation queues";
-  }, [search]);
-
-  const noData = !search && !filters.length;
-
   if (isLoading) {
     return <Loader />;
   }
@@ -359,32 +371,28 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
         <NoAnnotationQueuesPage
           openModal={handleNewQueue}
           Wrapper={NoDataPage}
-          height={188}
-          className="px-6"
         />
         <AddEditAnnotationQueueDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
           setOpen={setOpenDialog}
-          projectId={projectId}
         />
       </>
     );
   }
 
   return (
-    <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
-        />
-      </PageBodyStickyContainer>
-      <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
-        direction="bidirectional"
-        limitWidth
-      >
+    <div className="pt-6">
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="comet-title-l truncate break-words">
+          Annotation queues
+        </h1>
+      </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
+      />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -418,7 +426,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             Create new queue
           </Button>
         </div>
-      </PageBodyStickyContainer>
+      </div>
       <DataTable
         columns={columns}
         data={rows}
@@ -432,14 +440,9 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
       />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
-      >
+      <div className="py-4">
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -447,16 +450,15 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           sizeChange={setSize}
           total={data?.total ?? 0}
         />
-      </PageBodyStickyContainer>
+      </div>
 
       <AddEditAnnotationQueueDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
-        projectId={projectId}
       />
-    </>
+    </div>
   );
 };
 
-export default AnnotationQueuesTab;
+export default AnnotationQueuePage;

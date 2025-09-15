@@ -10,7 +10,7 @@ import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesS
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
-import { AnnotationQueuesTab } from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
+import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import { Button } from "@/components/ui/button";
 import { Construction } from "lucide-react";
 import { useState } from "react";
