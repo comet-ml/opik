@@ -48,7 +48,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -740,19 +739,9 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
-                    .status(getStatusOrDefault(row))
+                    .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .build();
         });
-    }
-
-    private static ExperimentStatus getStatusOrDefault(Row row) {
-        try {
-            String statusValue = row.get("status", String.class);
-            return ExperimentStatus.fromString(statusValue);
-        } catch (Exception e) {
-            // Status column doesn't exist in database (pre-migration)
-            return ExperimentStatus.RUNNING;
-        }
     }
 
     private static BigDecimal getCostValue(Row row, String fieldName) {
@@ -1212,15 +1201,13 @@ class ExperimentDAO {
     @WithSpan
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
-        return getById(id)
-                .flatMap(existingExperiment -> Mono.from(connectionFactory.create())
-                        .flatMapMany(
-                                connection -> updateWithInsert(id, experimentUpdate, existingExperiment, connection))
-                        .then());
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .then();
     }
 
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
-            @NonNull Experiment existingExperiment, Connection connection) {
+            Connection connection) {
 
         ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
         String sql = template.render();
@@ -1275,13 +1262,4 @@ class ExperimentDAO {
         }
     }
 
-    private Map<String, String> extractPromptVersionsMap(Experiment experiment) {
-        if (experiment.promptVersions() == null || experiment.promptVersions().isEmpty()) {
-            return Map.of();
-        }
-        return experiment.promptVersions().stream()
-                .collect(Collectors.toMap(
-                        link -> link.promptId().toString(),
-                        link -> link.id().toString()));
-    }
 }
