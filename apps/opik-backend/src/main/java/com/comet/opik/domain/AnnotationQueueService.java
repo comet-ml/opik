@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueBatch;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -18,7 +19,7 @@ import java.util.UUID;
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
-    Mono<UUID> create(@NonNull AnnotationQueue annotationQueue);
+    Mono<Integer> createBatch(@NonNull AnnotationQueueBatch batch);
 }
 
 @Singleton
@@ -31,14 +32,27 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     @Override
     @WithSpan
-    public Mono<UUID> create(@NonNull AnnotationQueue annotationQueue) {
+    public Mono<Integer> createBatch(@NonNull AnnotationQueueBatch batch) {
+        log.info("Creating annotation queue batch with '{}' items", batch.annotationQueues().size());
+
+        // Generate IDs and prepare annotation queues
+        List<AnnotationQueue> processedQueues = batch.annotationQueues().stream()
+                .map(this::prepareAnnotationQueue)
+                .toList();
+
+        return annotationQueueDAO.createBatch(processedQueues)
+                .thenReturn(processedQueues.size())
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private AnnotationQueue prepareAnnotationQueue(AnnotationQueue annotationQueue) {
         UUID id = annotationQueue.id() == null ? idGenerator.generateId() : annotationQueue.id();
         IdGenerator.validateVersion(id, "AnnotationQueue");
 
-        log.info("Creating annotation queue with id '{}', name '{}', project '{}'",
+        log.debug("Preparing annotation queue with id '{}', name '{}', project '{}'",
                 id, annotationQueue.name(), annotationQueue.projectId());
 
-        var newAnnotationQueue = annotationQueue.toBuilder()
+        return annotationQueue.toBuilder()
                 .id(id)
                 .commentsEnabled(annotationQueue.commentsEnabled() != null ? annotationQueue.commentsEnabled() : true)
                 .feedbackDefinitions(annotationQueue.feedbackDefinitions() != null
@@ -47,9 +61,5 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .build();
-
-        return annotationQueueDAO.create(newAnnotationQueue)
-                .thenReturn(id)
-                .subscribeOn(Schedulers.boundedElastic());
     }
 }

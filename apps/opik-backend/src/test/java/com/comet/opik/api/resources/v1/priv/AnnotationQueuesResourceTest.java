@@ -33,12 +33,12 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
-import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Annotation Queues Resource Test")
@@ -124,13 +124,8 @@ class AnnotationQueuesResourceTest {
                     .projectId(projectId)
                     .build();
 
-            // When
-            var annotationQueueId = annotationQueuesResourceClient.createAnnotationQueue(
-                    annotationQueue, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-
-            // Then
-            assertThat(annotationQueueId).isNotNull();
-            assertThat(annotationQueueId.version()).isEqualTo(7); // UUID v7 validation
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    List.of(annotationQueue), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
@@ -142,7 +137,7 @@ class AnnotationQueuesResourceTest {
                     .projectId(null) // Invalid
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue, API_KEY, TEST_WORKSPACE,
+            annotationQueuesResourceClient.createAnnotationQueueBatch(List.of(annotationQueue), API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
     }
