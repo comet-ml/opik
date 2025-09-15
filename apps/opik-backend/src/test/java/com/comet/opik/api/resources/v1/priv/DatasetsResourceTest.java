@@ -1559,7 +1559,7 @@ class DatasetsResourceTest {
 
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            DatasetItemBatch batch = new DatasetItemBatch(dataset.name(), null, datasetItems);
+            DatasetItemBatch batch = new DatasetItemBatch(dataset.name(), null, datasetItems, false);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2464,7 +2464,7 @@ class DatasetsResourceTest {
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
             datasetItems.forEach(datasetItem -> putAndAssert(
-                    new DatasetItemBatch(null, datasets.get(index.getAndIncrement()).id(), List.of(datasetItem)),
+                    new DatasetItemBatch(null, datasets.get(index.getAndIncrement()).id(), List.of(datasetItem), false),
                     workspaceName, apiKey));
 
             // Creating two traces with input, output and scores

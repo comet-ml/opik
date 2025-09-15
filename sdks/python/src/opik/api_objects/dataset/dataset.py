@@ -53,7 +53,7 @@ class Dataset:
         return self._description
 
     def __internal_api__insert_items_as_dataclasses__(
-        self, items: List[dataset_item.DatasetItem]
+        self, items: List[dataset_item.DatasetItem], include_trace_metadata: bool = False
     ) -> None:
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
@@ -91,22 +91,24 @@ class Dataset:
         for batch in batches:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch
+                dataset_name=self._name, items=batch, include_trace_metadata=include_trace_metadata
             )
 
-    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+    def insert(self, items: Sequence[Dict[str, Any]], include_trace_metadata: bool = False) -> None:
         """
         Insert new items into the dataset.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
+            include_trace_metadata: Whether to include trace metadata (tags, comments, 
+                feedback scores, etc.) in dataset items. Defaults to False.
         """
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         ]
-        self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+        self.__internal_api__insert_items_as_dataclasses__(dataset_items, include_trace_metadata)
 
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""

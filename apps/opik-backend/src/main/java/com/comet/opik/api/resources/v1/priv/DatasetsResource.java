@@ -340,9 +340,9 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}', includeTraceMetadata '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId, batch.includeTraceMetadata());
+        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items, batch.includeTraceMetadata()))
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();

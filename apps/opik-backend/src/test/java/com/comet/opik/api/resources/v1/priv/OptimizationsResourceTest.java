@@ -263,7 +263,7 @@ class OptimizationsResourceTest {
             datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE_NAME);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
-            DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items);
+            DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items, false);
 
             datasetResourceClient.createDatasetItems(itemBatch, TEST_WORKSPACE_NAME, API_KEY);
 
@@ -591,7 +591,7 @@ class OptimizationsResourceTest {
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
-            DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items);
+            DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items, false);
 
             datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
 

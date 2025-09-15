@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
 import isUndefined from "lodash/isUndefined";
-import { Database, MessageCircleWarning } from "lucide-react";
+import { Database, MessageCircleWarning, Info } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
@@ -20,6 +20,8 @@ import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutat
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
@@ -28,6 +30,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const DEFAULT_SIZE = 5;
 
@@ -47,6 +50,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [includeTraceMetadata, setIncludeTraceMetadata] = useState(false);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
@@ -125,13 +129,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               ...(isSpan ? { span_id: spanId } : {}),
             };
           }),
+          includeTraceMetadata,
         },
         {
           onSuccess: () => onItemsAdded(dataset),
         },
       );
     },
-    [setOpen, mutate, workspaceName, validRows, onItemsAdded],
+    [setOpen, mutate, workspaceName, validRows, onItemsAdded, includeTraceMetadata],
   );
 
   const renderListItems = () => {
@@ -213,43 +218,69 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             <DialogTitle>Add to dataset</DialogTitle>
           </DialogHeader>
           <div className="w-full overflow-hidden">
-            <ExplainerDescription
-              className="mb-4"
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
-              ]}
-            />
-            <div className="flex gap-2.5">
-              <SearchInput
-                searchText={search}
-                setSearchText={setSearch}
-              ></SearchInput>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setOpen(false);
-                  setOpenDialog(true);
-                }}
-                disabled={noValidRows}
-              >
-                Create new dataset
-              </Button>
-            </div>
-            {renderAlert()}
-            <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
-              {renderListItems()}
-            </div>
-            {total > DEFAULT_SIZE && (
-              <div className="pt-4">
-                <DataTablePagination
-                  page={page}
-                  pageChange={setPage}
-                  size={size}
-                  sizeChange={setSize}
-                  total={total}
-                ></DataTablePagination>
+            <div className="mb-6">
+              <p className="comet-body-s text-muted-slate mb-4">
+                Select a dataset to add traces. Optionally include trace metadata. You can then use the dataset in experiments to measure and track your LLM app's performance over time.
+              </p>
+              
+              {/* Options Section */}
+              <div className="mb-6">
+                <h4 className="comet-body-s-accented text-foreground mb-3">Options</h4>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="include-metadata"
+                    checked={includeTraceMetadata}
+                    onCheckedChange={(checked) => setIncludeTraceMetadata(checked as boolean)}
+                  />
+                  <Label htmlFor="include-metadata" className="text-sm font-medium cursor-pointer">
+                    Include trace metadata
+                  </Label>
+                  <TooltipWrapper content="Adds tags, comments, and feedback scores">
+                    <Info className="size-4 text-light-slate" />
+                  </TooltipWrapper>
+                </div>
               </div>
-            )}
+
+              {renderAlert()}
+              
+              {/* Datasets Section */}
+              <div>
+                <h4 className="comet-body-s-accented text-foreground mb-3">Datasets</h4>
+                <div className="flex gap-2.5 mb-4">
+                  <SearchInput
+                    searchText={search}
+                    setSearchText={setSearch}
+                    placeholder="Search datasets..."
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setOpen(false);
+                      setOpenDialog(true);
+                    }}
+                    disabled={noValidRows}
+                  >
+                    Create new dataset
+                  </Button>
+                </div>
+                
+                <div className="flex max-h-[300px] min-h-32 max-w-full flex-col justify-stretch overflow-y-auto border rounded-md">
+                  {renderListItems()}
+                </div>
+                
+                {total > DEFAULT_SIZE && (
+                  <div className="pt-4">
+                    <DataTablePagination
+                      page={page}
+                      pageChange={setPage}
+                      size={size}
+                      sizeChange={setSize}
+                      total={total}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
