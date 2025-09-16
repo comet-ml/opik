@@ -23,8 +23,8 @@ public class RedisConfig {
     private AwsIamAuthConfig awsIamAuth = new AwsIamAuthConfig();
 
     public Config build() {
-        RedisUrl redisUrl = RedisUrl.parse(singleNodeUrl);
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
+        RedisUrl redisUrl = RedisUrl.parse(singleNodeUrl);
 
         Config config = new Config();
 
