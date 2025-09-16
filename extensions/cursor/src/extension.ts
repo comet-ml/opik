@@ -5,12 +5,12 @@ import * as os from 'os';
 import { getDefaultVSCodeUserDataPath, getOrCreateUUID, getOpikApiKey } from './utils';
 import { CursorService } from './cursor/cursorService';
 import { initializeSentry, Sentry } from './sentry';
-
+import { MCPService } from './mcp/mcpService';
 
 export function activate(context: vscode.ExtensionContext) {
   // Initialize Sentry first
   initializeSentry(context);
-  
+
   try {
     console.log('Opik extension is now active!');
     // Create status bar item for API key configuration
@@ -20,7 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Function to update status bar based on API key configuration
     function updateStatusBar() {
       const apiKey = getOpikApiKey();
-      
+
       if (!apiKey) {
         statusBarItem.text = "$(warning) Opik: Configure API Key";
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
         statusBarItem.backgroundColor = undefined;
         statusBarItem.command = {
           command: 'workbench.action.openSettings',
-          arguments: ['@ext:jverre.opik'],
+          arguments: ['@ext:opik.opik'],
           title: 'Open Opik Settings'
         };
         statusBarItem.tooltip = 'Opik is active. Click to view settings.';
@@ -48,9 +48,20 @@ export function activate(context: vscode.ExtensionContext) {
     updateStatusBar();
 
     // Listen for configuration changes
-    const configChangeListener = vscode.workspace.onDidChangeConfiguration(event => {
-      if (event.affectsConfiguration('opik.apiKey')) {
-        updateStatusBar();
+    const configChangeListener = vscode.workspace.onDidChangeConfiguration(async event => {
+      try {
+        if (event.affectsConfiguration('opik.apiKey')) {
+          updateStatusBar();
+
+          // Re-register MCP server if API key changed
+          const newApiKey = getOpikApiKey();
+          if (newApiKey) {
+            await mcpService.reregisterServer(newApiKey);
+          }
+        }
+      } catch (error) {
+        Sentry.captureException(error);
+        console.error('Error handling configuration change:', error);
       }
     });
     context.subscriptions.push(configChangeListener);
@@ -59,9 +70,20 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       const opikConfigPath = path.join(os.homedir(), '.opik.config');
       if (fs.existsSync(opikConfigPath)) {
-        const configWatcher = fs.watch(opikConfigPath, (eventType) => {
-          if (eventType === 'change') {
-            updateStatusBar();
+        const configWatcher = fs.watch(opikConfigPath, async (eventType) => {
+          try {
+            if (eventType === 'change') {
+              updateStatusBar();
+
+              // Re-register MCP server if API key changed in config file
+              const newApiKey = getOpikApiKey();
+              if (newApiKey) {
+                await mcpService.reregisterServer(newApiKey);
+              }
+            }
+          } catch (error) {
+            Sentry.captureException(error);
+            console.error('Error handling config file change:', error);
           }
         });
         context.subscriptions.push({
@@ -78,7 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
     const apiKey = getOpikApiKey();
     const cursorProjectName: string = config.get('opik.projectName') || 'cursor';
     const customVSCodePath: string = config.get('opik.VSCodePath') || '';
-    
+
 
     const userDataPath = customVSCodePath || '';
     let VSInstallationPath = '';
@@ -94,6 +116,7 @@ export function activate(context: vscode.ExtensionContext) {
     let showAPIKeyWarning = true;
     let logAPIKeyBIEvent = true;
     const cursorService = new CursorService(context);
+    const mcpService = new MCPService(context);
 
     const interval = setInterval(async () => {
       try {
@@ -103,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
           // Track API key configuration issues
           const error = new Error("No API key configured - cannot log traces to Opik");
           Sentry.captureException(error);
-          
+
           vscode.window.showErrorMessage(
             'To log your chat sessions to Opik you need an API Key. Configure it in VS Code settings or ~/.opik.config file.',
             'Open Settings'
@@ -122,10 +145,18 @@ export function activate(context: vscode.ExtensionContext) {
             'Your chat history will now be logged to Opik!'
           )
           logAPIKeyBIEvent = false;
+
+          // Register MCP server when API key is available
+          try {
+            await mcpService.registerServer(apiKey);
+          } catch (error) {
+            Sentry.captureException(error);
+            console.error('Failed to register MCP server:', error);
+          }
         }
 
         const numberOfCursorTracesLogged = await cursorService.processCursorTraces(apiKey, VSInstallationPath);
-        
+
         console.log(`Number of Cursor traces logged: ${numberOfCursorTracesLogged}`);
         console.log('Finished loop');
       } catch (error) {
@@ -143,6 +174,6 @@ export function activate(context: vscode.ExtensionContext) {
   }
 }
 
-export function deactivate() { 
+export function deactivate() {
   console.log('Opik extension deactivated');
 }
