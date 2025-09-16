@@ -78,7 +78,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           size="sm"
           onClick={() => setRequestChartOpen(true)}
         >
-          <ChartLineIcon className="mr-2 size-3.5" />
+          <ChartLineIcon className="mr-1.5 size-3.5" />
           Request a chart
         </Button>
         <MetricDateRangeSelect

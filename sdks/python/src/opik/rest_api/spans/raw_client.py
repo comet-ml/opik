@@ -23,8 +23,6 @@ from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.span_page_public import SpanPagePublic
@@ -283,7 +281,7 @@ class RawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -320,7 +318,7 @@ class RawSpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -363,7 +361,9 @@ class RawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -542,7 +542,7 @@ class RawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -578,7 +578,7 @@ class RawSpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -616,7 +616,9 @@ class RawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -689,7 +691,12 @@ class RawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete span feedback score
@@ -699,6 +706,8 @@ class RawSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -712,6 +721,7 @@ class RawSpansClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -1339,7 +1349,7 @@ class AsyncRawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1376,7 +1386,7 @@ class AsyncRawSpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -1419,7 +1429,9 @@ class AsyncRawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -1598,7 +1610,7 @@ class AsyncRawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1634,7 +1646,7 @@ class AsyncRawSpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -1672,7 +1684,9 @@ class AsyncRawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -1745,7 +1759,12 @@ class AsyncRawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete span feedback score
@@ -1755,6 +1774,8 @@ class AsyncRawSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1768,6 +1789,7 @@ class AsyncRawSpansClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",

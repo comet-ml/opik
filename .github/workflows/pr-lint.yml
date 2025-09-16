@@ -32,13 +32,13 @@ jobs:
 
             // 1. Validate PR Title
             const title = pr.title;
-            const titleRegex = /^\[(OPIK-\d+|issue-\d+|NA)\](\s\[(BE|FE|DOCS|SDK|GHA)\])+\s.+$/;
+            const titleRegex = /^\[(OPIK-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA)\])*\s*.+$/;
             if (!titleRegex.test(title)) {
               errors.push(
-                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and at least one component tag (`[FE]`, `[BE]`, etc.).\n\n" +
+                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and may optionally include component tags (`[FE]`, `[BE]`, etc.).\n\n" +
                 "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx] [COMPONENT] Your change`\n" +
                 "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n\n" +
-                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug`*"
+                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug` or `[OPIK-1234] Fix bug`*"
               );
             }
 
@@ -70,7 +70,8 @@ jobs:
 
               const issuesContent = getSectionContent("## Issues");
               const issuesRegex = /(#\d+|OPIK-\d+)/;
-              if (issuesContent !== null && !issuesRegex.test(issuesContent)) {
+              const isNATicket = title.startsWith("[NA]");
+              if (issuesContent !== null && !isNATicket && !issuesRegex.test(issuesContent)) {
                  errors.push(
                    "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`) or Jira ticket (`OPIK-xxxx`) under the `## Issues` section."
                  );
@@ -94,4 +95,3 @@ jobs:
             } else {
                console.log("✅ PR linting passed!");
             }
-    continue-on-error: true

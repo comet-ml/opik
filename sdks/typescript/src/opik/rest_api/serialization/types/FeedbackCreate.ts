@@ -11,6 +11,7 @@ import { CategoricalFeedbackDefinitionCreate } from "./CategoricalFeedbackDefini
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
     name: core.serialization.string(),
+    description: core.serialization.string().optional(),
 });
 export const FeedbackCreate: core.serialization.Schema<serializers.FeedbackCreate.Raw, OpikApi.FeedbackCreate> =
     core.serialization
@@ -37,5 +38,6 @@ export declare namespace FeedbackCreate {
     export interface _Base {
         id?: string | null;
         name: string;
+        description?: string | null;
     }
 }

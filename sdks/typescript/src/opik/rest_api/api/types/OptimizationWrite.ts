@@ -10,6 +10,6 @@ export interface OptimizationWrite {
     datasetName: string;
     objectiveName: string;
     status: OpikApi.OptimizationWriteStatus;
-    metadata?: OpikApi.JsonNodeWrite;
+    metadata?: OpikApi.JsonListStringWrite;
     lastUpdatedAt?: Date;
 }

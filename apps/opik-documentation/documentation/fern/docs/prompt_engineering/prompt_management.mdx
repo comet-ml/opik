@@ -3,12 +3,12 @@ prompts in a library allows you to version them, reuse them across projects, and
 manage them in a central location.
 
 Using a prompt library does not mean you can't store your prompt in code, we
-have designed the prompt library to be work seamlessly with your existing prompt
+have designed the prompt library to work seamlessly with your existing prompt
 files while providing the benefits of a central prompt library.
 
 ## Managing prompts stored in code
 
-The recommend way to create and manage prompts is using The
+The recommended way to create and manage prompts is using the
 [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html)
 object. This will allow you to continue versioning your prompts in code while
 also getting the benefit of having prompt versions managed in the Opik platform
@@ -79,7 +79,7 @@ duplicate prompts.
 ## Using the low level SDK
 
 If you would rather keep prompts in the Opik platform and manually update / download
-them, you can use the low-level Python SDK to manage you prompts.
+them, you can use the low-level Python SDK to manage your prompts.
 
 ### Creating prompts
 
@@ -131,6 +131,66 @@ prompt.format(text="Hello, world!")
 ```
 
 If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest-api/overview).
+
+### Viewing prompt history (all versions)
+
+You can fetch the complete version history for a prompt by its exact name using [`get_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt_history):
+
+```python
+import opik
+
+client = opik.Opik()
+
+history = client.get_prompt_history(name="prompt-summary")
+for version in history:
+    print(version.commit, version.prompt)
+```
+
+This returns a list of Prompt objects (each representing a specific version) for the given prompt name.
+
+### Searching prompts
+
+To discover prompts by name substring and/or filters, use [`search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts). Filters are written in Opik Query Language (OQL):
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Search by name substring only
+latest_versions = client.search_prompts(
+    filter_string='name contains "summary"'
+)
+
+# Search by name substring and tags filter
+filtered = client.search_prompts(
+    filter_string='name contains "summary" AND tags contains "alpha" AND tags contains "beta"',
+)
+
+for prompt in filtered:
+    print(prompt.name, prompt.commit, prompt.prompt)
+```
+
+The `filter_string` parameter uses Opik Query Language (OQL) with the format:
+`"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
+
+**Supported columns for prompts:**
+
+| Column       | Type   | Operators                                                                   |
+| ------------ | ------ | --------------------------------------------------------------------------- |
+| `id`         | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`       | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `tags`       | List   | `contains`                                                                  |
+
+**Examples:**
+
+- `tags contains "production"` - Filter by tag
+- `name contains "summary"` - Filter by name substring
+- `created_by = "user@example.com"` - Filter by creator
+- `tags contains "alpha" AND tags contains "beta"` - Multiple tag filtering
+
+`search_prompts` returns the **latest** version for each matching prompt.
 
 ## Linking prompts to Experiments
 

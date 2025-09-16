@@ -19,6 +19,8 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -92,17 +94,17 @@ interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
-    Flux<BiInformation> getTraceBIInformation(Connection connection);
+    Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
-    Mono<Long> getDailyTraces(List<UUID> excludedProjectIds);
+    Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
@@ -734,9 +736,9 @@ class TraceDAOImpl implements TraceDAO {
             )
             SELECT
                   t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(!exclude_input)>, <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> substring(replaceRegexpAll(metadata, '<truncate>', '"[image]"'), 1, <truncationSize>) as metadata <else> metadata <endif><endif>
                   <if(!exclude_feedback_scores)>
                   , fsagg.feedback_scores_list as feedback_scores_list
                   , fsagg.feedback_scores as feedback_scores
@@ -762,7 +764,11 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
+             <if(excluded_project_ids)> AND id NOT IN (
+                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+             )
+             <endif>
              GROUP BY workspace_id
             ;
             """;
@@ -774,6 +780,11 @@ class TraceDAOImpl implements TraceDAO {
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            <if(excluded_project_ids)> AND id NOT IN (
+                SELECT DISTINCT id FROM traces WHERE project_id IN :excluded_project_ids
+                <if(demo_data_created_at)> AND created_at \\<= parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>
+            )
+            <endif>
             GROUP BY workspace_id, created_by
             ;
             """;
@@ -1069,6 +1080,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -1269,7 +1281,16 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
                 countDistinct(t.id) AS trace_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(t.duration)) AS duration,
+                arrayMap(
+                  v -> toDecimal64(
+                         greatest(
+                           least(if(isFinite(v), v, 0),  999999999.999999999),
+                           -999999999.999999999
+                         ),
+                         9
+                       ),
+                  quantiles(0.5, 0.9, 0.99)(t.duration)
+                ) AS duration,
                 sum(input_count) AS input,
                 sum(output_count) AS output,
                 sum(metadata_count) AS metadata,
@@ -1277,6 +1298,7 @@ class TraceDAOImpl implements TraceDAO {
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
+                avg(s.span_count) AS span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
@@ -1487,8 +1509,8 @@ class TraceDAOImpl implements TraceDAO {
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                        <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
                         sumMap(s.usage) as usage,
@@ -1738,8 +1760,8 @@ class TraceDAOImpl implements TraceDAO {
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
-                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                    <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -2030,6 +2052,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
@@ -2256,16 +2279,16 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
@@ -2421,6 +2444,7 @@ class TraceDAOImpl implements TraceDAO {
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
@@ -2632,22 +2656,71 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
+    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(@NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        var statement = connection.createStatement(new ST(TRACE_COUNT_BY_WORKSPACE_ID).render());
-        return Mono.from(statement.execute())
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+
+        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
+        }
+
+        return asyncTemplate
+                .nonTransaction(
+                        connection -> {
+                            Statement statement = connection.createStatement(template.render());
+
+                            if (!excludedProjectIds.isEmpty()) {
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
+                            }
+
+                            if (demoDataCreatedAt.isPresent()) {
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
+                            }
+
+                            return Mono.from(statement.execute());
+                        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
-                        .traceCount(row.get("trace_count", Integer.class)).build()));
+                        .traceCount(row.get("trace_count", Integer.class))
+                        .build()));
     }
 
     @Override
     @WithSpan
-    public Flux<BiInformation> getTraceBIInformation(Connection connection) {
+    public Flux<BiInformation> getTraceBIInformation(@NonNull Map<UUID, Instant> excludedProjectIds) {
 
-        var statement = connection.createStatement(TRACE_DAILY_BI_INFORMATION);
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        return Mono.from(statement.execute())
+        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(template.render());
+
+            if (!excludedProjectIds.isEmpty()) {
+                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+            }
+
+            if (demoDataCreatedAt.isPresent()) {
+                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
+            }
+
+            return Mono.from(statement.execute());
+        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> BiInformation.builder()
                         .workspaceId(row.get("workspace_id", String.class))
                         .user(row.get("user", String.class))
@@ -2676,20 +2749,32 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> getDailyTraces(@NonNull List<UUID> excludedProjectIds) {
-        ST sql = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+    public Mono<Long> getDailyTraces(@NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+
+        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
-            sql.add("excluded_project_ids", excludedProjectIds);
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        if (demoDataCreatedAt.isPresent()) {
+            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
         }
 
         return asyncTemplate
                 .nonTransaction(
                         connection -> {
-                            Statement statement = connection.createStatement(sql.render());
+                            Statement statement = connection.createStatement(template.render());
 
                             if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids", excludedProjectIds);
+                                statement.bind("excluded_project_ids",
+                                        excludedProjectIds.keySet().toArray(UUID[]::new));
+                            }
+
+                            if (demoDataCreatedAt.isPresent()) {
+                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
                             }
 
                             return Mono.from(statement.execute());
@@ -2754,6 +2839,8 @@ class TraceDAOImpl implements TraceDAO {
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                    template = template.add("truncationSize",
+                            configuration.getResponseFormatting().getTruncationSize());
                     template = template.add("offset", offset);
 
                     var finalTemplate = template;
@@ -2794,6 +2881,7 @@ class TraceDAOImpl implements TraceDAO {
 
             ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             template.add("limit", limit)
                     .add("stream", true);
@@ -2988,6 +3076,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())

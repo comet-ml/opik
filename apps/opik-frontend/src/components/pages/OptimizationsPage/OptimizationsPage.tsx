@@ -474,7 +474,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             size="sm"
             onClick={handleNewOptimizationClick}
           >
-            <Info className="mr-2 size-3.5" />
+            <Info className="mr-1.5 size-3.5" />
             Create new optimization
           </Button>
         </div>

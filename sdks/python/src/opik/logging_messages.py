@@ -37,6 +37,10 @@ ANSWER_RELEVANCE_SCORE_CALC_FAILED = "Failed to calculate answer relevance score
 
 MODERATION_SCORE_CALC_FAILED = "Failed to calculate moderation score"
 
+STRUCTURED_OUTPUT_COMPLIANCE_FAILED = (
+    "Failed to parse structured output compliance metric output."
+)
+
 CONTEXT_RECALL_SCORE_CALC_FAILED = "Failed to calculate context recall score"
 
 GEVAL_SCORE_CALC_FAILED = "Failed to calculate g-eval score"
