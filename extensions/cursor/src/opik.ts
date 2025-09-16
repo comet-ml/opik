@@ -63,6 +63,10 @@ async function uploadTraces(apiKey: string, traces: TraceData[], batchSize: numb
     // Generate trace IDs and convert to OpikTrace format
     const opikTraces: OpikTrace[] = traces.map(trace => {
         const { usage, ...traceWithoutUsage } = trace;
+        traceWithoutUsage.metadata = {
+            ...(traceWithoutUsage.metadata || {}),
+            created_from: "cursor-extension"
+        };
         return {
             ...traceWithoutUsage,
             id: generateTraceId(trace.start_time)
@@ -87,6 +91,10 @@ async function uploadTracesWithSpans(apiKey: string, traces: TraceData[], batchS
         
         // Create trace without usage
         const { usage, ...traceWithoutUsage } = trace;
+        traceWithoutUsage.metadata = {
+            ...(traceWithoutUsage.metadata || {}),
+            created_from: "cursor-extension"
+        };
         opikTraces.push({
             ...traceWithoutUsage,
             id: traceId
