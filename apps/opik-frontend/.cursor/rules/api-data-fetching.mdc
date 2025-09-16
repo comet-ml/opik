@@ -1,7 +1,7 @@
 ---
 description: Frontend API and data fetching patterns using React Query
 globs: "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # API & Data Fetching Patterns
@@ -9,6 +9,7 @@ alwaysApply: false
 ## React Query Hook Structure
 
 ### Query Hook Template
+
 ```typescript
 // File: src/api/entity/useEntityList.ts
 import { useQuery } from "@tanstack/react-query";
@@ -52,11 +53,13 @@ export default function useEntityList(
 ```
 
 ### Query Key Patterns
+
 - Use descriptive keys: `[ENTITIES_KEY, params]`
 - Include all parameters that affect the query
 - Use constants for query keys defined in `api.ts`
 
 ### Data Processing
+
 ```typescript
 // Simple fallbacks (no useMemo needed)
 const entities = data?.content ?? [];
@@ -64,18 +67,21 @@ const totalItems = data?.total ?? 0;
 
 // Complex transformations (use useMemo)
 const processedEntities = useMemo(() => {
-  return data?.content
-    ?.filter(entity => entity.status === 'active')
-    ?.map(entity => ({
-      ...entity,
-      displayName: formatEntityName(entity),
-    })) ?? [];
+  return (
+    data?.content
+      ?.filter((entity) => entity.status === "active")
+      ?.map((entity) => ({
+        ...entity,
+        displayName: formatEntityName(entity),
+      })) ?? []
+  );
 }, [data?.content]);
 ```
 
 ## Mutation Patterns
 
 ### Basic Mutation
+
 ```typescript
 const mutation = useMutation({
   mutationFn: deleteEntity,
@@ -90,24 +96,26 @@ const mutation = useMutation({
 ```
 
 ### Optimistic Updates
+
 ```typescript
 const updateMutation = useMutation({
   mutationFn: updateEntity,
   onMutate: async (newEntity) => {
     // Cancel outgoing refetches
     await queryClient.cancelQueries({ queryKey: [ENTITIES_KEY] });
-    
+
     // Snapshot previous value
     const previousEntities = queryClient.getQueryData([ENTITIES_KEY]);
-    
+
     // Optimistically update
     queryClient.setQueryData([ENTITIES_KEY], (old) => ({
       ...old,
-      content: old?.content?.map(entity => 
-        entity.id === newEntity.id ? { ...entity, ...newEntity } : entity
-      ) ?? []
+      content:
+        old?.content?.map((entity) =>
+          entity.id === newEntity.id ? { ...entity, ...newEntity } : entity,
+        ) ?? [],
     }));
-    
+
     return { previousEntities };
   },
   onError: (err, newEntity, context) => {
@@ -124,6 +132,7 @@ const updateMutation = useMutation({
 ## Loading and Error States
 
 ### Loading Patterns
+
 ```typescript
 // Query loading
 if (isLoading) return <Loader />;
@@ -140,6 +149,7 @@ if (error) return <div>Error: {error.message}</div>;
 ```
 
 ### Toast Notifications
+
 ```typescript
 import { useToast } from "@/components/ui/use-toast";
 
@@ -148,16 +158,17 @@ const { toast } = useToast();
 // Success toast
 toast({ description: "Operation completed successfully" });
 
-// Error toast  
-toast({ 
-  description: "Operation failed", 
-  variant: "destructive" 
+// Error toast
+toast({
+  description: "Operation failed",
+  variant: "destructive",
 });
 ```
 
 ## API Response Handling
 
 ### Error Boundaries
+
 ```typescript
 // Use React Query's built-in error handling
 const { data, error, isLoading, isError } = useQuery({
@@ -178,17 +189,14 @@ if (isError) {
 ```
 
 ### Pagination Handling
+
 ```typescript
-const {
-  data,
-  fetchNextPage,
-  hasNextPage,
-  isFetchingNextPage,
-} = useInfiniteQuery({
-  queryKey: ['entities'],
-  queryFn: ({ pageParam = 1 }) => fetchEntities({ page: pageParam }),
-  getNextPageParam: (lastPage) => {
-    return lastPage.hasMore ? lastPage.page + 1 : undefined;
-  },
-});
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  useInfiniteQuery({
+    queryKey: ["entities"],
+    queryFn: ({ pageParam = 1 }) => fetchEntities({ page: pageParam }),
+    getNextPageParam: (lastPage) => {
+      return lastPage.hasMore ? lastPage.page + 1 : undefined;
+    },
+  });
 ```
