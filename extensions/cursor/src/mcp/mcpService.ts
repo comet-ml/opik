@@ -25,7 +25,6 @@ export class MCPService {
                 return false;
             }
 
-
             console.log('Registering Opik MCP server...');
 
             // Register the server using Cursor's MCP extension API
