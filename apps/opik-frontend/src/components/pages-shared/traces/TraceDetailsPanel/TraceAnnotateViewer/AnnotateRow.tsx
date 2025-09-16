@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
 import { Copy, MessageSquareMore, Trash, X } from "lucide-react";
@@ -306,7 +305,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center justify-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScoreData?.value) && (
+        {!!feedbackScoreData?.value && (
           <Button
             variant="outline"
             size="icon-sm"
@@ -331,7 +330,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScoreData?.value) && (
+        {!!feedbackScoreData?.value && (
           <Button
             variant="minimal"
             size="icon-sm"

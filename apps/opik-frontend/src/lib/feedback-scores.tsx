@@ -187,13 +187,39 @@ export const setTraceCache = async (
 };
 
 export const generateUpdateMutation =
-  (score: TraceFeedbackScore) => (feedbackScores?: TraceFeedbackScore[]) => {
+  (score: TraceFeedbackScore, author?: string) =>
+  (feedbackScores?: TraceFeedbackScore[]) => {
     let retVal = feedbackScores || [];
 
     let isUpdated = false;
     retVal = retVal.map((feedbackScore) => {
       if (feedbackScore.name === score.name) {
         isUpdated = true;
+
+        if (hasValuesByAuthor(feedbackScore) && author) {
+          const updatedValueByAuthor: FeedbackScoreValueByAuthorMap = {
+            ...feedbackScore.value_by_author,
+            [author]: {
+              value: score.value,
+              reason: score.reason,
+              category_name: score.category_name,
+              source: score.source || FEEDBACK_SCORE_TYPE.ui,
+              last_updated_at: new Date().toISOString(),
+            },
+          };
+
+          const aggregated =
+            aggregateMultiAuthorFeedbackScore(updatedValueByAuthor);
+
+          return {
+            ...feedbackScore,
+            ...aggregated,
+            value_by_author: updatedValueByAuthor,
+            last_updated_at: new Date().toISOString(),
+            last_updated_by: author,
+          };
+        }
+
         return { ...feedbackScore, ...score };
       }
 
@@ -259,4 +285,39 @@ export const extractReasonsFromValueByAuthor = (
       value,
     }))
     .filter((v) => v.reason.trim());
+};
+
+export const aggregateMultiAuthorFeedbackScore = (
+  valueByAuthor: FeedbackScoreValueByAuthorMap,
+) => {
+  const allValues = Object.values(valueByAuthor);
+
+  if (allValues.length === 0) {
+    return {
+      value: 0,
+      category_name: undefined,
+      reason: undefined,
+    };
+  }
+
+  const aggregatedValue =
+    allValues.length === 1
+      ? allValues[0].value
+      : allValues.reduce((sum, item) => sum + item.value, 0) / allValues.length;
+
+  const aggregatedCategoryName = allValues
+    .map((item) => item.category_name)
+    .filter(Boolean)
+    .join(", ");
+
+  const aggregatedReason = allValues
+    .map((item) => item.reason)
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    value: aggregatedValue,
+    category_name: aggregatedCategoryName || undefined,
+    reason: aggregatedReason || undefined,
+  };
 };
