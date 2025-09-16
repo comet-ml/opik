@@ -30,9 +30,11 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     The test will:
     1. Create a new user (via the fixture)
     2. Login with the new user credentials (handled by the fixture)
-    3. Navigate to projects page to verify demo projects exist
-    4. Navigate to datasets page to verify demo datasets exist
-    5. Delete the user (handled by the fixture)
+    3. Navigate to projects page to verify demo projects exist (Opik Demo Agent Observability, Opik Demo Assistant)
+    4. Navigate to datasets page to verify demo datasets exist (Opik Demo Questions)
+    5. Navigate to experiments page to verify demo experiments exist (Demo-opik-assistant-v2)
+    6. Navigate to prompts page to verify demo prompts exist (Demo - Opik SDK Assistant - System Prompt)
+    7. Delete the user (handled by the fixture)
     """
 
     projects_page = ProjectsPage(page)
@@ -45,8 +47,10 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     logger.info("Waiting for demo data to generate")
     while True:
         try:
-            projects_page.check_project_exists_on_current_page("Demo evaluation")
-            projects_page.check_project_exists_on_current_page("Demo chatbot 🤖")
+            projects_page.check_project_exists_on_current_page(
+                "Opik Demo Agent Observability"
+            )
+            projects_page.check_project_exists_on_current_page("Opik Demo Assistant")
             break
         except Exception as e:
             elapsed_time = time.time() - start_time
@@ -60,8 +64,8 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
             time.sleep(retry_interval)
             logger.info(f"Retrying check... ({elapsed_time:.1f}s elapsed)")
 
-    projects_page.check_project_exists_on_current_page("Demo chatbot 🤖")
-    projects_page.click_project("Demo chatbot 🤖")
+    projects_page.check_project_exists_on_current_page("Opik Demo Assistant")
+    projects_page.click_project("Opik Demo Assistant")
 
     logger.info("Checking demo project has generated traces")
     traces_page = TracesPage(page, traces_created=True)
@@ -74,22 +78,24 @@ def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     datasets_page.go_to_page()
 
     try:
-        datasets_page.check_dataset_exists_on_page_by_name("Demo dataset")
+        datasets_page.check_dataset_exists_on_page_by_name("Opik Demo Questions")
     except Exception as _:
-        raise AssertionError("Demo dataset not found")
+        raise AssertionError("Opik Demo Questions dataset not found")
 
     logger.info("Checking demo experiment generated")
     experiments_page = ExperimentsPage(page)
     experiments_page.go_to_page()
     try:
-        experiments_page.check_experiment_exists_by_name("Demo experiment")
+        experiments_page.check_experiment_exists_by_name("Demo-opik-assistant-v2")
     except Exception as _:
-        raise AssertionError("Demo experiment not found")
+        raise AssertionError("Demo-opik-assistant-v2 experiment not found")
 
     logger.info("Checking demo prompt generated")
     prompts_page = PromptLibraryPage(page)
     prompts_page.go_to_page()
     try:
-        prompts_page.check_prompt_exists_in_workspace("Q&A Prompt")
+        prompts_page.check_prompt_exists_in_workspace(
+            "Demo - Opik SDK Assistant - System Prompt"
+        )
     except Exception as _:
-        raise AssertionError("Demo prompt not found")
+        raise AssertionError("Demo - Opik SDK Assistant - System Prompt not found")
