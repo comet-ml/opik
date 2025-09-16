@@ -328,6 +328,7 @@ class ExperimentDAO {
                 e.prompt_versions as prompt_versions,
                 e.optimization_id as optimization_id,
                 e.type as type,
+                e.status as status,
                 fs.feedback_scores as feedback_scores,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
