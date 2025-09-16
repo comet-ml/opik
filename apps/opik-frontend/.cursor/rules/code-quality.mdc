@@ -117,7 +117,14 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date-utils";
 import useEntityStore from "@/store/EntityStore";
 
-// 5. Types and constants
+// 5. Lodash utilities (grouped together)
+import isString from "lodash/isString";
+import isArray from "lodash/isArray";
+import isEmpty from "lodash/isEmpty";
+import pick from "lodash/pick";
+import groupBy from "lodash/groupBy";
+
+// 6. Types and constants
 import { COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
 import { UserData, ApiResponse } from "@/types/api";
 ```
@@ -243,7 +250,7 @@ const Dialog: React.FC<{
 const useEntityActions = (entityId: string) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
-  
+
   const deleteEntity = useCallback(async () => {
     setIsDeleting(true);
     try {
@@ -255,20 +262,20 @@ const useEntityActions = (entityId: string) => {
       setIsDeleting(false);
     }
   }, [entityId, toast]);
-  
+
   return { deleteEntity, isDeleting };
 };
 
 // Usage in component
 const EntityCard: React.FC<{ entity: Entity }> = ({ entity }) => {
   const { deleteEntity, isDeleting } = useEntityActions(entity.id);
-  
+
   return (
     <Card>
       <CardContent>{entity.name}</CardContent>
       <CardActions>
-        <Button 
-          variant="destructive" 
+        <Button
+          variant="destructive"
           onClick={deleteEntity}
           disabled={isDeleting}
         >
@@ -278,6 +285,141 @@ const EntityCard: React.FC<{ entity: Entity }> = ({ entity }) => {
     </Card>
   );
 };
+```
+
+## Utility Libraries
+
+### Lodash Usage Guidelines
+
+Use Lodash for complex operations, but **always import methods individually** for optimal tree-shaking and bundle size:
+
+```typescript
+// ✅ Good: Individual imports for tree-shaking
+import pick from "lodash/pick";
+import merge from "lodash/merge";
+import cloneDeep from "lodash/cloneDeep";
+import uniqBy from "lodash/uniqBy";
+import groupBy from "lodash/groupBy";
+import orderBy from "lodash/orderBy";
+import isNil from "lodash/isNil";
+import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
+import camelCase from "lodash/camelCase";
+import capitalize from "lodash/capitalize";
+
+// ✅ Object operations
+const user = pick(rawUser, ["id", "name", "email"]);
+const merged = merge({}, defaultConfig, userConfig);
+const deepCloned = cloneDeep(complexObject);
+
+// ✅ Array operations
+const uniqueItems = uniqBy(items, "id");
+const grouped = groupBy(users, "role");
+const sorted = orderBy(data, ["date", "name"], ["desc", "asc"]);
+
+// ✅ Type checking - Use Lodash methods instead of built-in type checks
+import isString from "lodash/isString";
+import isNumber from "lodash/isNumber";
+import isBoolean from "lodash/isBoolean";
+import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
+import isFunction from "lodash/isFunction";
+import isDate from "lodash/isDate";
+import isRegExp from "lodash/isRegExp";
+import isNull from "lodash/isNull";
+
+// ✅ Prefer Lodash type determination over built-in methods
+if (isString(value)) {
+  /* handle string */
+}
+if (isNumber(value)) {
+  /* handle number */
+}
+if (isBoolean(value)) {
+  /* handle boolean */
+}
+if (isObject(value)) {
+  /* handle object */
+}
+if (isArray(value)) {
+  /* handle array */
+}
+
+// ❌ Avoid: Default import (includes entire library)
+import _ from "lodash"; // Bad for bundle size
+const user = _.pick(rawUser, ["id", "name", "email"]);
+
+// ❌ Avoid: Named imports from main module (still includes more than needed)
+import { pick, merge, cloneDeep } from "lodash"; // Less efficient than individual imports
+
+// ❌ Avoid: Lodash only for very specific simple operations where built-in is clearer
+import has from "lodash/has";
+const hasProperty = has(obj, "prop"); // Use: 'prop' in obj or obj.hasOwnProperty('prop')
+```
+
+## Functionality Isolation Patterns
+
+### Isolating for Future Replacement
+
+When you like the emulation of some functionality, try to isolate it in a way that makes it easy to replace in the future:
+
+```typescript
+// ✅ Good: Isolated date formatting service
+// lib/dateService.ts
+export interface DateService {
+  format(date: Date, format: string): string;
+  parse(dateString: string): Date;
+  isValid(date: any): boolean;
+}
+
+class MomentDateService implements DateService {
+  format(date: Date, format: string): string {
+    return moment(date).format(format);
+  }
+
+  parse(dateString: string): Date {
+    return moment(dateString).toDate();
+  }
+
+  isValid(date: any): boolean {
+    return moment(date).isValid();
+  }
+}
+
+// Export single instance
+export const dateService: DateService = new MomentDateService();
+
+// Usage in components
+import { dateService } from "@/lib/dateService";
+
+const formattedDate = dateService.format(new Date(), "YYYY-MM-DD");
+
+// ✅ Easy to replace later with different implementation:
+// class DayJsDateService implements DateService { ... }
+// export const dateService: DateService = new DayJsDateService();
+```
+
+```typescript
+// ✅ Good: Isolated chart service
+// lib/chartService.ts
+export interface ChartService {
+  createLineChart(data: ChartData[], container: HTMLElement): ChartInstance;
+  updateChart(chart: ChartInstance, data: ChartData[]): void;
+  destroyChart(chart: ChartInstance): void;
+}
+
+class RechartsService implements ChartService {
+  createLineChart(data: ChartData[], container: HTMLElement): ChartInstance {
+    // Recharts implementation
+    return new RechartsInstance(data, container);
+  }
+
+  // ... other methods
+}
+
+export const chartService: ChartService = new RechartsService();
+
+// Easy to replace with D3, Chart.js, etc.
 ```
 
 ## Code Formatting
@@ -293,7 +435,7 @@ const config = {
 
 const items = [
   "item1",
-  "item2", 
+  "item2",
   "item3", // <- trailing comma
 ];
 
@@ -313,31 +455,31 @@ const UserManagement: React.FC = () => {
   // 1. State declarations
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+
   // 2. Queries and mutations
   const { data: users, isLoading } = useUserList();
   const deleteMutation = useDeleteUser();
-  
+
   // 3. Memoized values (only when needed)
-  const activeUsers = useMemo(() => 
-    users?.filter(user => user.isActive) ?? [], 
+  const activeUsers = useMemo(() =>
+    users?.filter(user => user.isActive) ?? [],
     [users]
   );
-  
+
   // 4. Event handlers
   const handleUserSelect = useCallback((user: UserData) => {
     setSelectedUser(user);
     setIsDialogOpen(true);
   }, []);
-  
+
   const handleDeleteUser = useCallback(async (userId: string) => {
     await deleteMutation.mutateAsync(userId);
     setIsDialogOpen(false);
   }, [deleteMutation]);
-  
+
   // 5. Early returns
   if (isLoading) return <LoadingSpinner />;
-  
+
   // 6. Main render
   return (
     <div className="space-y-4">
