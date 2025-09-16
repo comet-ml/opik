@@ -129,6 +129,25 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
+**개발용 서비스 프로파일**
+
+Opik 설치 스크립트는 다양한 개발 시나리오를 위한 서비스 프로파일을 지원합니다:
+
+```bash
+# 전체 Opik 스위트 (기본 동작)
+./opik.sh
+
+# 인프라스트럭처 서비스만 (데이터베이스, 캐시 등)
+./opik.sh --infra
+
+# 인프라스트럭처 + 백엔드 서비스
+./opik.sh --backend
+
+# 모든 프로파일에서 가드레일 활성화
+./opik.sh --guardrails # 전체 Opik 스위트 + 가드레일
+./opik.sh --backend --guardrails # 인프라스트럭처 + 백엔드 + 가드레일
+```
+
 `--help` 또는 `--info` 옵션으로 문제 해결 가능. Docker 컨테이너는 비루트 사용자 실행을 보장하여 보안 강화. 실행 후 브라우저에서 [localhost:5173](http://localhost:5173) 접속. 자세한 내용은 [로컬 배포 가이드](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik) 참조.
 
 #### Kubernetes & Helm (대규모 운영)

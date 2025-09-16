@@ -129,6 +129,25 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
+**开发服务配置文件**
+
+Opik 安装脚本现在支持针对不同开发场景的服务配置文件：
+
+```bash
+# 完整 Opik 套件（默认行为）
+./opik.sh
+
+# 仅基础设施服务（数据库、缓存等）
+./opik.sh --infra
+
+# 基础设施 + 后端服务
+./opik.sh --backend
+
+# 在任何配置文件中启用守护栏
+./opik.sh --guardrails # 完整 Opik 套件 + 守护栏
+./opik.sh --backend --guardrails # 基础设施 + 后端 + 守护栏
+```
+
 使用 `--help` 或 `--info` 查看更多选项。Dockerfile 已确保容器以非 root 用户运行以增强安全性。启动成功后，打开浏览器访问 [localhost:5173](http://localhost:5173)。详情请见 [本地部署指南](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik)。
 
 #### Kubernetes & Helm（大规模生产）
