@@ -21,4 +21,6 @@ export interface TraceExperimentItemBulkWriteView {
     errorInfo?: OpikApi.ErrorInfoExperimentItemBulkWriteView;
     lastUpdatedAt?: Date;
     threadId?: string;
+    /** ID of the prompt version used in this trace */
+    promptVersionId?: string;
 }

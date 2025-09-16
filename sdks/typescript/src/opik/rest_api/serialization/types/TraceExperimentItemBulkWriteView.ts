@@ -24,6 +24,7 @@ export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     errorInfo: core.serialization.property("error_info", ErrorInfoExperimentItemBulkWriteView.optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+    promptVersionId: core.serialization.property("prompt_version_id", core.serialization.string().optional()),
 });
 
 export declare namespace TraceExperimentItemBulkWriteView {
@@ -40,5 +41,6 @@ export declare namespace TraceExperimentItemBulkWriteView {
         error_info?: ErrorInfoExperimentItemBulkWriteView.Raw | null;
         last_updated_at?: string | null;
         thread_id?: string | null;
+        prompt_version_id?: string | null;
     }
 }

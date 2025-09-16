@@ -28,6 +28,8 @@ export interface TracePublic {
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
     threadId?: string;
+    /** ID of the prompt version used in this trace */
+    promptVersionId?: string;
     visibilityMode?: OpikApi.TracePublicVisibilityMode;
     llmSpanCount?: number;
 }
