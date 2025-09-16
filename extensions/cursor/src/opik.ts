@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { TraceData } from './interface';
 import { Sentry } from './sentry';
 
@@ -7,14 +8,19 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
     console.log(`📦 Processing ${traces.length} traces using Opik SDK`);
     
     try {
+        // Get configuration values
+        const config = vscode.workspace.getConfiguration();
+        const apiUrl = config.get<string>('opik.apiUrl', 'https://www.comet.com/opik/api');
+        const workspace = config.get<string>('opik.workspace', 'default');
+
         // Dynamically import Opik SDK
         const { Opik } = await import('opik');
-        
+
         // Initialize Opik client
         const client = new Opik({
             apiKey: apiKey,
-            apiUrl: "https://www.comet.com/opik/api",
-            workspaceName: "default"
+            apiUrl: apiUrl,
+            workspaceName: workspace
         });
         
         // Process traces using the SDK
