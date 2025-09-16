@@ -8,7 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .experiment_type import ExperimentType
 from .feedback_score_average import FeedbackScoreAverage
-from .json_node import JsonNode
+from .json_list_string import JsonListString
 from .percentage_values import PercentageValues
 from .prompt_version_link import PromptVersionLink
 
@@ -18,7 +18,7 @@ class Experiment(UniversalBaseModel):
     dataset_name: str
     dataset_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
-    metadata: typing.Optional[JsonNode] = None
+    metadata: typing.Optional[JsonListString] = None
     type: typing.Optional[ExperimentType] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None

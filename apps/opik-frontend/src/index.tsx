@@ -12,6 +12,7 @@ import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
 // other styles
 import "react18-json-view/src/style.css";
+import "react18-json-view/src/dark.css";
 
 const container = document.getElementById("root") as HTMLDivElement;
 const root = createRoot(container);

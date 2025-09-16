@@ -3,6 +3,7 @@
 import typing
 
 import httpx
+from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
 from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient, AutomationRuleEvaluatorsClient
 from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletionsClient
@@ -88,6 +89,7 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
+        self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
@@ -221,6 +223,7 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
+        self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
