@@ -181,6 +181,9 @@ navigation:
               - page: Cohere
                 path: docs/tracing/integrations/cohere.mdx
                 slug: cohere
+              - page: Cursor
+                path: docs/tracing/integrations/cursor.mdx
+                slug: cursor
               - page: Crewai
                 path: docs/tracing/integrations/crewai.mdx
                 slug: crewai
