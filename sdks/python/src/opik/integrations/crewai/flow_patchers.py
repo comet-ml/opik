@@ -42,6 +42,7 @@ def patch_flow_kickoff_async(project_name: Optional[str] = None) -> None:
         wrapped = opik_tracker.track(
             project_name=project_name,
             tags=["crewai"],
+            name="Flow.kickoff_async",
             metadata={"created_from": "crewai"},
         )(original_kickoff_async)
         return await wrapped(self, *args, **kwargs)
