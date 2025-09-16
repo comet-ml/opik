@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClie
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
@@ -29,6 +30,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -41,6 +43,7 @@ import java.util.UUID;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Annotation Queues Resource Test")
@@ -84,15 +87,17 @@ class AnnotationQueuesResourceTest {
     private String baseURI;
     private ProjectResourceClient projectResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.clickHouseTemplate = clickHouseTemplate;
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
@@ -172,6 +177,8 @@ class AnnotationQueuesResourceTest {
             // When & Then
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
         }
 
         @Test
@@ -198,9 +205,13 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+
             // When & Then - Remove the items
             annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(0);
         }
 
         @Test
@@ -270,5 +281,18 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
                     annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
+    }
+
+    private int getItemsCount(String workspaceId, UUID queueId) {
+        String itemsCountQuery = "SELECT count(*) as cnt FROM annotation_queue_items WHERE workspace_id=:workspace_id AND queue_id=:queue_id";
+
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(itemsCountQuery)
+                    .bind("workspace_id", workspaceId)
+                    .bind("queue_id", queueId.toString());
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("cnt", Integer.class)))
+                    .singleOrEmpty();
+        }).block();
     }
 }
