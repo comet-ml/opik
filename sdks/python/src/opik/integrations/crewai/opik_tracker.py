@@ -2,6 +2,7 @@ from typing import Optional
 
 import crewai
 
+import opik.integrations.litellm
 from . import crewai_decorator, flow_patchers
 
 __IS_TRACKING_ENABLED = False
@@ -33,14 +34,12 @@ def track_crewai(
         project_name=project_name,
     )
 
-    import litellm
-
     crewai.Crew.kickoff = crewai_wrapper(crewai.Crew.kickoff)
     crewai.Crew.kickoff_for_each = crewai_wrapper(crewai.Crew.kickoff_for_each)
     crewai.Agent.execute_task = crewai_wrapper(crewai.Agent.execute_task)
     crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
 
-    litellm.completion = crewai_wrapper(litellm.completion)
+    opik.integrations.litellm.track_litellm()
 
     flow_patchers.patch_flow_init(project_name=project_name)
     flow_patchers.patch_flow_kickoff_async(project_name=project_name)
