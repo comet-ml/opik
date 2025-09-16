@@ -5224,12 +5224,11 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("Updated Experiment");
-            assertThat(updatedExperiment.metadata().toString()).contains("\"version\":\"2.0\"");
-            assertThat(updatedExperiment.metadata().toString()).contains("\"model\":\"gpt-4\"");
-            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.TRIAL);
-            assertThat(updatedExperiment.status()).isEqualTo(ExperimentStatus.RUNNING);
+            getAndAssert(experimentId, experiment.toBuilder()
+                    .name(experimentUpdate.name())
+                    .metadata(experimentUpdate.metadata())
+                    .type(experimentUpdate.type())
+                    .status(experimentUpdate.status()).build(), TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5253,10 +5252,8 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getAndAssert(experimentId, null, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("New Name Only");
-            assertThat(updatedExperiment.metadata().toString()).contains("\"original\":\"value\""); // metadata unchanged
-            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.REGULAR); // type unchanged
+            getAndAssert(experimentId, experiment.toBuilder().name(experimentUpdate.name()).build(), TEST_WORKSPACE,
+                    API_KEY);
         }
 
         @Test
@@ -5279,11 +5276,7 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getAndAssert(experimentId, null, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("Original Name"); // name unchanged
-            assertThat(updatedExperiment.metadata().toString()).contains("\"temperature\":0.7");
-            assertThat(updatedExperiment.metadata().toString()).contains("\"max_tokens\":100");
-            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.REGULAR); // type unchanged
+            getAndAssert(experimentId, experiment.toBuilder().metadata(newMetadata).build(), TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5307,10 +5300,8 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getAndAssert(experimentId, null, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("Original Name"); // name unchanged
-            assertThat(updatedExperiment.metadata().toString()).contains("\"original\":\"value\""); // metadata unchanged
-            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.MINI_BATCH);
+            getAndAssert(experimentId, experiment.toBuilder().type(experimentUpdate.type()).build(), TEST_WORKSPACE,
+                    API_KEY);
         }
 
         @Test
@@ -5332,10 +5323,8 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("Original Name"); // name unchanged
-            assertThat(updatedExperiment.type()).isEqualTo(ExperimentType.REGULAR); // type unchanged
-            assertThat(updatedExperiment.status()).isEqualTo(ExperimentStatus.COMPLETED);
+            getAndAssert(experimentId, experiment.toBuilder().status(experimentUpdate.status()).build(), TEST_WORKSPACE,
+                    API_KEY);
         }
 
         @Test
