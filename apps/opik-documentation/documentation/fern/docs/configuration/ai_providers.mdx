@@ -52,6 +52,7 @@ Opik supports integration with various AI providers, including:
 - OpenRouter
 - Gemini
 - VertexAI
+- Azure OpenAI
 - LM Studio (coming soon)
 - vLLM / Ollama / any other OpenAI API-compliant provider
 
@@ -95,6 +96,30 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key for one your existing Google Cloud project
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "Gemini" as the provider and paste your key
+
+#### Azure OpenAI
+
+Azure OpenAI provides enterprise-grade access to OpenAI models through Microsoft Azure. To use Azure OpenAI with Opik:
+
+1. Get your Azure OpenAI endpoint URL
+   - Go to [portal.azure.com](https://portal.azure.com)
+   - Navigate to your Azure OpenAI resource
+   - Copy your endpoint URL (it looks like `https://your-company.openai.azure.com`)
+
+2. Construct the complete API URL
+   - Add `/openai/v1` to the end of your endpoint URL
+   - Your complete URL should look like: `https://your-company.openai.azure.com/openai/v1`
+
+3. Configure in Opik
+   - In Opik, go to **Configuration → AI Providers**
+   - Click **"Add Configuration"**
+   - Select **"vLLM / Custom provider"** from the dropdown
+   - Enter your complete URL in the URL field: `https://your-company.openai.azure.com/openai/v1`
+   - Add your Azure OpenAI API key in the API Key field
+   - In the Models section, list the models you have deployed in Azure (e.g., `gpt-4o`)
+   - Click **Save** to store the configuration
+
+Once saved, you can use your Azure OpenAI models directly from Online Scores and the Playground.
 
 #### Vertex AI
 

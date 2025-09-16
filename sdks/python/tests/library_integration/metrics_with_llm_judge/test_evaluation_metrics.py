@@ -6,6 +6,10 @@ import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
 from ragas import metrics as ragas_metrics
 from ragas import llms as ragas_llms
+from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema import (
+    FewShotExampleStructuredOutputCompliance,
+)
+
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -249,6 +253,112 @@ def test__trajectory_accuracy__poor_quality(model):
     assert_helpers.assert_score_result(result)
     # The score should be low due to inappropriate actions
     assert result.value <= 0.61  # Should get a low score for poor trajectory
+
+
+@model_parametrizer
+def test__structured_output_compliance__valid_json(model):
+    """Test structured output compliance with valid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__invalid_json(model):
+    """Test structured output compliance with invalid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": New York}'
+    )
+
+    assert_helpers.assert_score_result(result)
+    # Should get a low score for invalid JSON
+    assert result.value < 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_schema(model):
+    """Test structured output compliance with schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema="User(name: str, age: int)"
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_few_shot_examples(model):
+    """Test structured output compliance with few-shot examples."""
+    few_shot_examples = [
+        FewShotExampleStructuredOutputCompliance(
+            title="Valid JSON",
+            output='{"name": "Alice", "age": 25}',
+            schema="User(name: str, age: int)",
+            score=True,
+            reason="Valid JSON format",
+        ),
+        FewShotExampleStructuredOutputCompliance(
+            title="Invalid JSON",
+            output='{"name": "Bob", age: 30}',
+            schema="User(name: str, age: int)",
+            score=False,
+            reason="Missing quotes around age value",
+        ),
+    ]
+
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, few_shot_examples=few_shot_examples, track=False
+    )
+
+    result = structured_output_metric.score(output='{"name": "John", "age": 30}')
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_json_schema(model):
+    """Test structured output compliance with JSON schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+    schema = '{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}'
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema=schema
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@pytest.mark.asyncio
+async def test__structured_output_compliance__async():
+    """Test structured output compliance with async model."""
+
+    structured_output_metric = metrics.StructuredOutputCompliance()
+
+    result = await structured_output_metric.ascore(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result, include_reason=False)
+    assert result.value > 0.5
 
 
 def test__ragas_exact_match():

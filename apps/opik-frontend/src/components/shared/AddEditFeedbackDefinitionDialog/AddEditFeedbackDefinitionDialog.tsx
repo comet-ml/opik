@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import useAppStore from "@/store/AppStore";
 import {
   CreateFeedbackDefinition,
@@ -70,6 +71,9 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   const [name, setName] = useState<CreateFeedbackDefinition["name"]>(
     feedbackDefinition?.name ?? "",
   );
+  const [description, setDescription] = useState<
+    CreateFeedbackDefinition["description"]
+  >(feedbackDefinition?.description ?? "");
   const [type, setType] = useState<CreateFeedbackDefinition["type"]>(
     feedbackDefinition?.type ?? FEEDBACK_DEFINITION_TYPE.categorical,
   );
@@ -92,8 +96,9 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
       details,
       name,
       type,
+      description,
     } as CreateFeedbackDefinition;
-  }, [details, name, type]);
+  }, [details, name, type, description]);
 
   const submitHandler = useCallback(() => {
     if (!composedFeedbackDefinition) return;
@@ -127,6 +132,17 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
             placeholder="Feedback definition name"
             value={name}
             onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-2 pb-4">
+          <Label htmlFor="feedbackDefinitionDescription">Description</Label>
+          <Textarea
+            id="feedbackDefinitionDescription"
+            placeholder="Feedback definition description"
+            className="min-h-20"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={255}
           />
         </div>
         <div className="flex flex-col gap-2 pb-4">

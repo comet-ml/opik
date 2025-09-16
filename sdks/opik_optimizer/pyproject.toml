@@ -1,3 +1,34 @@
+[project]
+name = "opik_optimizer"
+version = "1.0.6"
+description = "Agent optimization with Opik"
+authors = [
+    {name = "Comet ML", email = "support@comet.com"}
+]
+license = {text = "Apache 2.0"}
+readme = "README.md"
+requires-python = ">=3.9,<3.13"
+dependencies = [
+    "datasets",
+    "deap>=1.4.3",
+    "diskcache",
+    "hf_xet",
+    "litellm",
+    "opik>=1.7.17",
+    "optuna",
+    "pandas",
+    "pydantic",
+    "pyrate-limiter",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-conv"]
+
+[project.urls]
+Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
+Repository = "https://github.com/comet-ml/opik"
+
 [tool.mypy]
 follow_imports = "skip"
 ignore_missing_imports = true
@@ -5,7 +36,6 @@ disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
 exclude = "src/opik_optimizer/mipro_optimizer/"
-
 
 [tool.uv]
 managed = false

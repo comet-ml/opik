@@ -18,7 +18,7 @@ public class RetryUtils {
 
     public static RetryBackoffSpec handleConnectionError() {
         return Retry.backoff(3, Duration.ofMillis(100))
-                .doBeforeRetry(retrySignal -> log.debug("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(throwable -> {
                     log.debug("Filtering for retry: {}", throwable.getMessage());
@@ -55,7 +55,7 @@ public class RetryUtils {
     public static RetryBackoffSpec handleHttpErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
         return Retry.backoff(maxAttempts, minBackoff)
                 .maxBackoff(maxBackoff)
-                .doBeforeRetry(retrySignal -> log.debug("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(throwable -> {
                     log.debug("Filtering for retry: {}", throwable.getMessage());

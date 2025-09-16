@@ -106,10 +106,10 @@ navigation:
       - section: Observability
         slug: /tracing
         contents:
-          - page: Log traces
+          - page: 🕵️ Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
-          - page: ✨ Trace Inspector
+          - page: ✨ Opik Assist
             path: docs/tracing/opik_assist.mdx
             slug: opik_assist
           - page: Debug Mode & Environment Variables
@@ -175,9 +175,15 @@ navigation:
               - page: BytePlus
                 path: docs/tracing/integrations/byteplus.mdx
                 slug: byteplus
+              - page: Cloudflare Workers AI
+                path: docs/tracing/integrations/cloudflare-workers-ai.mdx
+                slug: cloudflare-workers-ai
               - page: Cohere
                 path: docs/tracing/integrations/cohere.mdx
                 slug: cohere
+              - page: Cursor
+                path: docs/tracing/integrations/cursor.mdx
+                slug: cursor
               - page: Crewai
                 path: docs/tracing/integrations/crewai.mdx
                 slug: crewai
@@ -211,13 +217,13 @@ navigation:
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor
-              - page: LangChainJS
+              - page: LangChain (JS/TS)
                 path: docs/tracing/integrations/langchainjs.mdx
                 slug: langchainjs
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
-              - page: Langchain
+              - page: LangChain (Python)
                 path: docs/tracing/integrations/langchain.mdx
                 slug: langchain
               - page: LiteLLM
@@ -241,9 +247,12 @@ navigation:
               - page: Ollama
                 path: docs/tracing/integrations/ollama.mdx
                 slug: ollama
-              - page: OpenAI
+              - page: OpenAI (Python)
                 path: docs/tracing/integrations/openai.mdx
                 slug: openai
+              - page: OpenAI (JS/TS)
+                path: docs/tracing/integrations/openai-typescript.mdx
+                slug: openai-typescript
               - page: OpenAI Agents
                 path: docs/tracing/integrations/openai_agents.mdx
                 slug: openai_agents
@@ -497,6 +506,9 @@ navigation:
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture
+      - page: Advanced clickhouse backup
+        path: docs/self-host/backup.mdx
+        slug: backup
       - section: Configuration
         slug: /configure
         contents:
@@ -622,24 +634,6 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
-          - section: Integrations
-            slug: integrations
-            contents:
-              - page: Overview
-                path: docs/reference/typescript-sdk/integrations/overview.mdx
-                slug: overview
-              - page: Vercel AI SDK
-                path: docs/reference/typescript-sdk/integrations/vercel-ai-sdk.mdx
-                slug: vercel-ai-sdk
-              - page: LangChain
-                path: docs/reference/typescript-sdk/integrations/langchain.mdx
-                slug: langchain
-              - page: OpenAI
-                path: docs/reference/typescript-sdk/integrations/openai.mdx
-                slug: openai
-              - page: Cloudflare Workers AI
-                path: docs/reference/typescript-sdk/integrations/workers-ai.mdx
-                slug: workers-ai
           - section: Evaluation
             slug: evaluation
             contents:
@@ -798,6 +792,18 @@ redirects:
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
     destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+  # TypeScript SDK integration redirects
+  - source: "/docs/opik/reference/typescript-sdk/integrations/vercel-ai-sdk"
+    destination: "/docs/opik/tracing/integrations/vercel-ai-sdk"
+    permanent: true
+  - source: "/docs/opik/reference/typescript-sdk/integrations/langchain"
+    destination: "/docs/opik/tracing/integrations/langchainjs"
+    permanent: true
+  - source: "/docs/opik/reference/typescript-sdk/integrations/openai"
+    destination: "/docs/opik/tracing/integrations/openai-typescript"
+    permanent: true
+  - source: "/docs/opik/reference/typescript-sdk/integrations/workers-ai"
+    destination: "/docs/opik/tracing/integrations/cloudflare-workers-ai"
     permanent: true
   - source: "/docs/opik/prompt_engineering/agent_optimization"
     destination: "/docs/opik/agent_optimization/overview"

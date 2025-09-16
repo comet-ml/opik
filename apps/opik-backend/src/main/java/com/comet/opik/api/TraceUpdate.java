@@ -25,7 +25,7 @@ public record TraceUpdate(
         @InRange Instant endTime,
         @Schema(implementation = JsonListString.class) JsonNode input,
         @Schema(implementation = JsonListString.class) JsonNode output,
-        JsonNode metadata,
+        @Schema(implementation = JsonListString.class) JsonNode metadata,
         Set<String> tags,
         ErrorInfo errorInfo,
         String threadId) {

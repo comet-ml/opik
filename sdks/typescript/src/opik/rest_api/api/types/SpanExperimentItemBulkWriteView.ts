@@ -13,7 +13,7 @@ export interface SpanExperimentItemBulkWriteView {
     endTime?: Date;
     input?: OpikApi.JsonListStringExperimentItemBulkWriteView;
     output?: OpikApi.JsonListStringExperimentItemBulkWriteView;
-    metadata?: OpikApi.JsonNodeExperimentItemBulkWriteView;
+    metadata?: OpikApi.JsonListStringExperimentItemBulkWriteView;
     model?: string;
     provider?: string;
     tags?: string[];

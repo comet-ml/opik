@@ -1,12 +1,13 @@
 ---
 description: Frontend technology stack and project structure guidelines
 globs: "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Frontend Technology Stack & Architecture
 
 ## Core Technologies
+
 - **React 18** with **TypeScript**
 - **Vite** as build tool and dev server
 - **TanStack Router** for routing
@@ -20,6 +21,7 @@ alwaysApply: false
 - **Lodash** for utility functions
 
 ## Project Structure
+
 ```
 src/
 ├── api/                    # API layer with React Query hooks
@@ -38,6 +40,7 @@ src/
 ```
 
 ## Component Structure Pattern
+
 ```typescript
 // Standard component structure
 import React, { useMemo, useCallback } from "react";
@@ -56,7 +59,7 @@ const Component: React.FunctionComponent<ComponentProps> = ({
   // 2. useMemo for expensive computations (only when needed)
   // 3. useCallback for event handlers (only when passed to children)
   // 4. Other hooks
-  
+
   return (
     <div className="component-container">
       {/* JSX */}

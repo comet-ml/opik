@@ -293,6 +293,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: "false"
+  # Default: false
+  # Description: Whether or not Human Annotation feature is enabled
+  humanAnnotationEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

@@ -13,7 +13,7 @@ export interface TraceWrite {
     endTime?: Date;
     input?: OpikApi.JsonListStringWrite;
     output?: OpikApi.JsonListStringWrite;
-    metadata?: OpikApi.JsonNodeWrite;
+    metadata?: OpikApi.JsonListStringWrite;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoWrite;
     lastUpdatedAt?: Date;
