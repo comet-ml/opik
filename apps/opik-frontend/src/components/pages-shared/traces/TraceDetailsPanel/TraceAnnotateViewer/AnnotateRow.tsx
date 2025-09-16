@@ -69,17 +69,17 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
       return {
         value: isNumber(rawValue) ? rawValue : ("" as const),
-        reason: feedbackScore.value_by_author[userName]?.reason || "",
+        reason: feedbackScore.value_by_author[userName]?.reason ?? "",
         category_name:
-          feedbackScore.value_by_author[userName]?.category_name || "",
+          feedbackScore.value_by_author[userName]?.category_name ?? "",
       };
     }
 
-    const rawValue = feedbackScore?.value || "";
+    const rawValue = feedbackScore?.value ?? "";
     return {
       value: isNumber(rawValue) ? rawValue : ("" as const),
-      reason: feedbackScore?.reason || "",
-      category_name: feedbackScore?.category_name || "",
+      reason: feedbackScore?.reason ?? "",
+      category_name: feedbackScore?.category_name ?? "",
     };
   }, [feedbackScore, userName]);
 
@@ -305,7 +305,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center justify-center overflow-hidden border-t border-border">
-        {!!feedbackScoreData?.value && (
+        {feedbackScoreData?.value !== "" && (
           <Button
             variant="outline"
             size="icon-sm"
@@ -330,7 +330,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center overflow-hidden border-t border-border">
-        {!!feedbackScoreData?.value && (
+        {feedbackScoreData?.value !== "" && (
           <Button
             variant="minimal"
             size="icon-sm"
