@@ -435,11 +435,8 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
 
             while not done and attempts < max_attempts:
                 try:
-                    thread_data = client.rest_client.traces.get_trace_thread(thread_id=thread, project_name=project_name)
-                    if thread_data.status == "inactive":
-                        done = True
-                    else:
-                        client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                    client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                    done = True
                 except Exception as e:
                     logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
                     attempts += 1
@@ -473,7 +470,7 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
                     time.sleep(0.5)
 
         # Process all threads concurrently using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(len(threads), 10)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(threads), 4)) as executor:
             # Submit all thread processing tasks
             future_to_thread = {executor.submit(process_thread, thread): thread for thread in threads}
 
