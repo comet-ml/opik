@@ -410,6 +410,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.*,
                 t.id as id,
                 t.project_id as project_id,
+                t.prompt_version_id as prompt_version_id,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
