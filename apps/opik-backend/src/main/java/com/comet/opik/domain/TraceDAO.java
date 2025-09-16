@@ -2632,6 +2632,12 @@ class TraceDAOImpl implements TraceDAO {
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
                         .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
 
+                if (trace.promptVersionId() != null) {
+                    statement.bind("prompt_version_id" + i, trace.promptVersionId());
+                } else {
+                    statement.bindNull("prompt_version_id" + i, String.class);
+                }
+
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
                 } else {
