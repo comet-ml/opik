@@ -227,6 +227,7 @@ class Opik:
         project_name: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        prompt_version_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
@@ -248,6 +249,8 @@ class Opik:
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
+            prompt_version_id: The ID of the prompt version used in this trace.
+                This links the trace to a specific version of a prompt for better traceability.
             attachments: The list of attachments to be uploaded to the trace.
 
         Returns:
@@ -274,6 +277,7 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            prompt_version_id=prompt_version_id,
             last_updated_at=last_updated_at,
         )
         self._streamer.put(create_trace_message)
