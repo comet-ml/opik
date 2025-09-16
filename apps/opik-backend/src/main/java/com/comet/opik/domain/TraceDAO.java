@@ -145,6 +145,7 @@ class TraceDAOImpl implements TraceDAO {
                 created_by,
                 last_updated_by,
                 thread_id,
+                prompt_version_id,
                 visibility_mode
             )
             VALUES
@@ -165,6 +166,7 @@ class TraceDAOImpl implements TraceDAO {
                         :user_name,
                         :user_name,
                         :thread_id<item.index>,
+                        :prompt_version_id<item.index>,
                         if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>)
                     )
                     <if(item.hasNext)>,<endif>
@@ -195,6 +197,7 @@ class TraceDAOImpl implements TraceDAO {
                 created_by,
                 last_updated_by,
                 thread_id,
+                prompt_version_id,
                 visibility_mode
             )
             SELECT
@@ -251,6 +254,10 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.thread_id
                 ) as thread_id,
                 multiIf(
+                    isNotNull(old_trace.prompt_version_id), old_trace.prompt_version_id,
+                    new_trace.prompt_version_id
+                ) as prompt_version_id,
+                multiIf(
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode
@@ -271,6 +278,7 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :thread_id as thread_id,
+                    :prompt_version_id as prompt_version_id,
                     if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode
             ) as new_trace
             LEFT JOIN (
@@ -291,7 +299,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, prompt_version_id, visibility_mode
             )
             SELECT
             	id,
@@ -309,6 +317,7 @@ class TraceDAOImpl implements TraceDAO {
             	created_by,
                 :user_name as last_updated_by,
                 <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
+                <if(prompt_version_id)> :prompt_version_id <else> prompt_version_id <endif> as prompt_version_id,
                 visibility_mode
             FROM traces
             WHERE id = :id
@@ -944,7 +953,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, prompt_version_id, visibility_mode
             )
             SELECT
                 new_trace.id as id,
@@ -1007,6 +1016,10 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.thread_id
                 ) as thread_id,
                 multiIf(
+                    isNotNull(old_trace.prompt_version_id), old_trace.prompt_version_id,
+                    new_trace.prompt_version_id
+                ) as prompt_version_id,
+                multiIf(
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode
@@ -1027,6 +1040,7 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
+                    <if(prompt_version_id)> :prompt_version_id <else> null <endif> as prompt_version_id,
                     <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode
             ) as new_trace
             LEFT JOIN (
