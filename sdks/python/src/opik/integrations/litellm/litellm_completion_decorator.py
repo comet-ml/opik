@@ -174,6 +174,6 @@ def _get_provider_from_model(model_name: str) -> Optional[LLMProvider]:
             "groq": LLMProvider.GROQ,
         }
 
-        return provider_mapping.get(provider_name, LLMProvider.OPENAI)
+        return provider_mapping.get(provider_name, None)
     except Exception:
         return None
