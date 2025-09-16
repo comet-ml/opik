@@ -673,7 +673,7 @@ class ExperimentDAO {
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
                 .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
-                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.RUNNING).getValue());
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue());
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
