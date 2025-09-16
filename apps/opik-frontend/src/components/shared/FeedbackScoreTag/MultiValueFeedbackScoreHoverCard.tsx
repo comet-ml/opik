@@ -6,7 +6,6 @@ import {
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 import React from "react";
 import { Separator } from "@/components/ui/separator";
-import DoubleSquare from "@/icons/double-square.svg?react";
 import {
   getCategoricFeedbackScoreValuesMap,
   getIsCategoricFeedbackScore,
@@ -16,8 +15,8 @@ import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
     <div className="flex h-6 items-center gap-1.5 pl-1 pr-2">
-      <DoubleSquare
-        className="size-4 text-[var(--bg-color)]"
+      <div
+        className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
         style={{ "--bg-color": color } as React.CSSProperties}
       />
       <div className="comet-body-xs-accented truncate text-foreground">
@@ -85,10 +84,10 @@ const CategoricalScoreContent = ({
           <div key={category}>
             <div className="flex flex-col gap-1">
               <div className="flex h-6 items-center justify-between px-2">
-                <span className="comet-body-xs-accented text-foreground">
+                <span className="comet-body-xs-accented truncate text-foreground">
                   {value}
                 </span>
-                <span className="comet-body-xs-accented text-foreground">
+                <span className="comet-body-xs-accented shrink-0 text-foreground">
                   {users.length} {users.length === 1 ? "user" : "users"}
                 </span>
               </div>
@@ -112,7 +111,7 @@ const CategoricalScoreContent = ({
 
 type MultiValueFeedbackScoreHoverCardProps = {
   color: string;
-  valueByAuthor: FeedbackScoreValueByAuthorMap;
+  valueByAuthor?: FeedbackScoreValueByAuthorMap;
   label: string;
   value: number | string;
   category?: string;

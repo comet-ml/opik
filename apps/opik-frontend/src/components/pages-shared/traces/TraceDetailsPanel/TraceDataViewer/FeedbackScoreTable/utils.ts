@@ -3,7 +3,7 @@ import {
   TraceFeedbackScore,
 } from "@/types/traces";
 import { ExpandingFeedbackScoreRow } from "./types";
-import { isMultiValueFeedbackScore } from "@/lib/feedback-scores";
+import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
 import { PARENT_ROW_ID_PREFIX } from "./constants";
 
 export const mapFeedbackScoresToRowsWithExpanded = (
@@ -12,7 +12,7 @@ export const mapFeedbackScoresToRowsWithExpanded = (
   const rows: ExpandingFeedbackScoreRow[] = [];
 
   feedbackScores.forEach((feedbackScore) => {
-    if (isMultiValueFeedbackScore(feedbackScore)) {
+    if (getIsMultiValueFeedbackScore(feedbackScore.value_by_author)) {
       const parentId = `${PARENT_ROW_ID_PREFIX}${feedbackScore.name}`;
       const parentRow: ExpandingFeedbackScoreRow = {
         id: parentId,
@@ -49,5 +49,5 @@ export const getIsParentFeedbackScoreRow = (
 ): row is ExpandingFeedbackScoreRow & {
   value_by_author: FeedbackScoreValueByAuthorMap;
 } => {
-  return isMultiValueFeedbackScore(row) && !row.author;
+  return getIsMultiValueFeedbackScore(row.value_by_author) && !row.author;
 };

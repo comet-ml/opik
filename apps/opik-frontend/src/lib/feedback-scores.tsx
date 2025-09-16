@@ -23,18 +23,13 @@ export const FEEDBACK_SCORE_SOURCE_MAP = {
 };
 
 export function getIsMultiValueFeedbackScore(
-  score: unknown,
-): score is TraceFeedbackScore & {
-  value_by_author: FeedbackScoreValueByAuthorMap;
-} {
+  value_by_author: unknown,
+): value_by_author is FeedbackScoreValueByAuthorMap {
   return Boolean(
-    score &&
-      typeof score === "object" &&
-      "value_by_author" in score &&
-      score.value_by_author &&
-      typeof score.value_by_author === "object" &&
-      !Array.isArray(score.value_by_author) &&
-      Object.keys(score.value_by_author).length > 1,
+    value_by_author &&
+      typeof value_by_author === "object" &&
+      !Array.isArray(value_by_author) &&
+      Object.keys(value_by_author).length > 1,
   );
 }
 
@@ -250,3 +245,18 @@ export const getFeedbackScoreValue = (
   scores: Array<TraceFeedbackScore | AggregatedFeedbackScore>,
   scoreName: string,
 ) => getFeedbackScore(scores, scoreName)?.value;
+
+export const extractReasonsFromValueByAuthor = (
+  valueByAuthor?: FeedbackScoreValueByAuthorMap,
+) => {
+  if (!valueByAuthor) return [];
+
+  return Object.entries(valueByAuthor).map(
+    ([author, { reason, last_updated_at, value }]) => ({
+      author,
+      reason: reason || "",
+      lastUpdatedAt: last_updated_at,
+      value,
+    }),
+  );
+};

@@ -4,6 +4,7 @@ import { ExpandingFeedbackScoreRow } from "../types";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { cn } from "@/lib/utils";
 import { getIsParentFeedbackScoreRow } from "../utils";
+import { extractReasonsFromValueByAuthor } from "@/lib/feedback-scores";
 
 const ReasonCell = (
   context: CellContext<ExpandingFeedbackScoreRow, string>,
@@ -14,14 +15,7 @@ const ReasonCell = (
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(rowData);
 
   const reasons = isParentFeedbackScoreRow
-    ? Object.entries(rowData.value_by_author)
-        .map(([author, { reason, last_updated_at, value }]) => ({
-          author,
-          reason: reason || "",
-          lastUpdatedAt: last_updated_at,
-          value,
-        }))
-        .filter(({ reason }) => reason)
+    ? extractReasonsFromValueByAuthor(rowData.value_by_author)
     : [
         {
           reason: value,

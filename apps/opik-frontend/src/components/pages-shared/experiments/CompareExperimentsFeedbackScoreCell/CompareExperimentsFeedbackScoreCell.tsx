@@ -7,6 +7,11 @@ import VerticallySplitCellWrapper, {
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 import { MessageSquareMore } from "lucide-react";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
+import {
+  extractReasonsFromValueByAuthor,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
+import FeedbackScoreCellValue from "@/components/shared/DataTableCells/FeedbackScoreCellValue";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -24,15 +29,25 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
       return "-";
     }
 
+    let reasons = feedbackScore.reason
+      ? [
+          {
+            reason: feedbackScore.reason,
+            author: feedbackScore.last_updated_by,
+            lastUpdatedAt: feedbackScore.last_updated_at,
+          },
+        ]
+      : [];
+
+    if (getIsMultiValueFeedbackScore(feedbackScore.value_by_author)) {
+      reasons = extractReasonsFromValueByAuthor(feedbackScore.value_by_author);
+    }
+
     return (
       <div className="flex h-4 w-full items-center justify-end gap-1">
-        <div className="truncate">{feedbackScore.value}</div>
-        {feedbackScore.reason && (
-          <FeedbackScoreReasonTooltip
-            reason={feedbackScore.reason}
-            lastUpdatedAt={feedbackScore.last_updated_at}
-            lastUpdatedBy={feedbackScore.last_updated_by}
-          >
+        <FeedbackScoreCellValue feedbackScore={feedbackScore} />
+        {reasons.length > 0 && (
+          <FeedbackScoreReasonTooltip reasons={reasons}>
             <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
           </FeedbackScoreReasonTooltip>
         )}

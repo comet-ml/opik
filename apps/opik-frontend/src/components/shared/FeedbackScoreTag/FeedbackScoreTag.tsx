@@ -9,7 +9,10 @@ import { cn } from "@/lib/utils";
 import FeedbackScoreReasonTooltip from "./FeedbackScoreReasonTooltip";
 import MultiValueFeedbackScoreHoverCard from "./MultiValueFeedbackScoreHoverCard";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
-import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
+import {
+  extractReasonsFromValueByAuthor,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
 
 type FeedbackScoreTagProps = {
   label: string;
@@ -43,49 +46,14 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   );
 
   const isRemovable = isFunction(onDelete);
-  const isMultiValue =
-    valueByAuthor && getIsMultiValueFeedbackScore(valueByAuthor);
 
-  // Handle reasons for both single and multi-value scores
   const reasons = useMemo(() => {
-    if (isMultiValue && valueByAuthor) {
-      if (!getIsMultiValueFeedbackScore(valueByAuthor)) {
-        return Object.entries(valueByAuthor)
-          .map(([author, scoreData]) => {
-            const data = scoreData as {
-              reason?: string;
-              last_updated_at: string;
-              value: number;
-            };
-            return {
-              author,
-              reason: data.reason || "",
-              lastUpdatedAt: data.last_updated_at,
-              value: data.value,
-            };
-          })
-          .filter(({ reason }) => reason);
-      }
-
-      return [
-        {
-          reason: String(value),
-          author: lastUpdatedBy,
-          lastUpdatedAt: lastUpdatedAt,
-        },
-      ];
+    if (getIsMultiValueFeedbackScore(valueByAuthor)) {
+      return extractReasonsFromValueByAuthor(valueByAuthor);
     }
 
-    // Single value score
     return reason ? [{ reason, author: lastUpdatedBy, lastUpdatedAt }] : [];
-  }, [
-    valueByAuthor,
-    value,
-    reason,
-    lastUpdatedBy,
-    lastUpdatedAt,
-    isMultiValue,
-  ]);
+  }, [valueByAuthor, reason, lastUpdatedBy, lastUpdatedAt]);
 
   const hasReasons = reasons.length > 0;
 
@@ -101,7 +69,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
 
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex max-w-full items-center gap-1.5">
       {/* Icon - rounded div for all feedback scores */}
       <div
         className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
@@ -111,7 +79,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       {/* Label */}
       <div
         data-testid="feedback-score-tag-label"
-        className="comet-body-s-accented truncate text-muted-slate"
+        className="comet-body-s-accented min-w-0 truncate text-muted-slate"
       >
         {label}
       </div>
