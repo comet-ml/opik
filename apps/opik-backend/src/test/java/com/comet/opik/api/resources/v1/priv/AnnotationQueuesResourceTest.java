@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClie
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
@@ -29,17 +30,20 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Annotation Queues Resource Test")
@@ -81,19 +85,19 @@ class AnnotationQueuesResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private String baseURI;
-    private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
-        this.client = client;
 
         ClientSupportUtils.config(client);
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
-        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI, factory);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.clickHouseTemplate = clickHouseTemplate;
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
@@ -142,5 +146,153 @@ class AnnotationQueuesResourceTest {
                     API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
+    }
+
+    @Nested
+    @DisplayName("Annotation Queue Item Management")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AnnotationQueueItemManagement {
+
+        @Test
+        @DisplayName("should add items to annotation queue when valid request")
+        void addItemsToAnnotationQueue() {
+            // Given - Create a project and annotation queue first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Generate some item IDs to add
+            var itemIds = Set.of(
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID());
+
+            // When & Then
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+        }
+
+        @Test
+        @DisplayName("should remove items from annotation queue when valid request")
+        void removeItemsFromAnnotationQueue() {
+            // Given - Create a project and annotation queue first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Generate some item IDs to add first, then remove
+            var itemIds = Set.of(
+                    UUID.randomUUID(),
+                    UUID.randomUUID());
+
+            // Add items first
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+
+            // When & Then - Remove the items
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should return 404 when adding items to non-existent annotation queue")
+        void addItemsToAnnotationQueueWhenQueueNotExistsShouldReturn404() {
+            // Given - Non-existent queue ID
+            var nonExistentQueueId = UUID.randomUUID();
+            var itemIds = Set.of(UUID.randomUUID());
+
+            // When & Then
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    nonExistentQueueId, itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should return 404 when removing items from non-existent annotation queue")
+        void removeItemsFromAnnotationQueueWhenQueueNotExistsShouldReturn404() {
+            // Given - Non-existent queue ID
+            var nonExistentQueueId = UUID.randomUUID();
+            var itemIds = Set.of(UUID.randomUUID());
+
+            // When & Then
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    nonExistentQueueId, itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        void addItemsToAnnotationQueueWhenEmptyItemList() {
+            // Given - Create a project and annotation queue first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Empty item list
+            var emptyItemIds = Set.<UUID>of();
+
+            // When & Then
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        void removeItemsFromAnnotationQueueWhenEmptyItemList() {
+            // Given - Create a project and annotation queue first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Empty item list
+            var emptyItemIds = Set.<UUID>of();
+
+            // When & Then
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    private int getItemsCount(String workspaceId, UUID queueId) {
+        String itemsCountQuery = "SELECT count(*) as cnt FROM annotation_queue_items WHERE workspace_id=:workspace_id AND queue_id=:queue_id";
+
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(itemsCountQuery)
+                    .bind("workspace_id", workspaceId)
+                    .bind("queue_id", queueId.toString());
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("cnt", Integer.class)))
+                    .singleOrEmpty();
+        }).block();
     }
 }
