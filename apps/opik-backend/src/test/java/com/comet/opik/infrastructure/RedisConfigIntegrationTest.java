@@ -30,13 +30,13 @@ class RedisConfigIntegrationTest {
     private static final String AWS_RESOURCE_NAME = System.getenv("AWS_RESOURCE_NAME");
 
     @Test
-    @DisplayName("Should connect to ElasticCache Redis and perform basic operations using AWS IAM authentication")
+    @DisplayName("Should connect to ElastiCache Redis and perform basic operations using AWS IAM authentication")
     @EnabledIfEnvironmentVariable(named = "AWS_ACCESS_KEY_ID", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "AWS_SECRET_ACCESS_KEY", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "AWS_USER_ID", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "AWS_RESOURCE_NAME", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "REDIS_URL", matches = ".+")
-    void shouldConnectToElasticCacheRedis_withAwsIamAuth() {
+    void shouldConnectToElastiCacheRedis_withAwsIamAuth() {
         log.info("🚀 Starting Redis AWS IAM integration test");
 
         // Given
