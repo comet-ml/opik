@@ -1,6 +1,7 @@
 ---
 subtitle: Step-by-step guide on how to evaluate conversation threads
 ---
+
 When you are running multi-turn conversations using frameworks that support LLM agents, the Opik integration will
 automatically group related traces into conversation threads using parameters suitable for each framework.
 
@@ -57,20 +58,39 @@ filter_string='id = "0197ad2a" AND status = "inactive"'
 
 **Supported filter fields and operators**
 
-The `evaluate_threads` function supports the following filter fields in the `filter_string` and
-operators to be applied to the corresponding fields:
+The `evaluate_threads` function supports the following filter fields in the `filter_string` using Opik Query Language (OQL).
+All fields and operators are the same as those supported by `search_traces` and `search_spans`:
 
-| Field              | Type     | Operators                     |
-|--------------------|----------|-------------------------------|
-| id                 | string   | ``=, contains, not_contains`` |
-| status             | string   | ``=, contains, not_contains`` |
-| start_time         | datetime | ``=, >, <, >=, <=``           |
-| end_time           | datetime | ``=, >, <, >=, <=``           |
-| feedback_scores    | dict     | ``=, >, <, >=, <=``           |
-| tags               | list     | ``contains``                  |
-| duration           | number   | ``=, >, <, >=, <=``           |
-| number_of_messages | number   | ``=, >, <, >=, <=``           |
-| created_by         | string   | ``=, contains, not_contains`` |
+| Field                     | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `thread_id`               | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `type`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `model`                   | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `provider`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `status`                  | String     | `=`, `contains`, `not_contains`                                             |
+| `start_time`              | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `end_time`                | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `input`                   | String     | `=`, `contains`, `not_contains`                                             |
+| `output`                  | String     | `=`, `contains`, `not_contains`                                             |
+| `metadata`                | Dictionary | `=`, `contains`, `>`, `<`                                                   |
+| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `tags`                    | List       | `contains`                                                                  |
+| `usage.total_tokens`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `usage.prompt_tokens`     | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `usage.completion_tokens` | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `duration`                | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `number_of_messages`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `total_estimated_cost`    | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+
+**Rules:**
+
+- String values must be wrapped in double quotes
+- DateTime fields require ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
+- Use dot notation for nested objects: `metadata.model`, `feedback_scores.accuracy`
+- Multiple conditions can be combined with `AND` (OR is not supported)
 
 The `feedback_scores` field is a dictionary where the keys are the metric names and the values are the metric values.
 You can use it to filter threads based on their feedback scores. For example, if you want to evaluate only threads
@@ -95,6 +115,7 @@ Once the evaluation is complete, you can access the evaluation results in the Op
   Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
 
   You can only evaluate/score threads that are inactive.
+
 </Note>
 
 ## Next steps

@@ -4,10 +4,18 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .annotation_queue import AnnotationQueue
 
 
-class TraceThreadUpdate(UniversalBaseModel):
-    tags: typing.Optional[typing.List[str]] = None
+class AnnotationQueueBatch(UniversalBaseModel):
+    """
+    Batch of annotation queues to create
+    """
+
+    annotation_queues: typing.List[AnnotationQueue] = pydantic.Field()
+    """
+    List of annotation queues to create
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

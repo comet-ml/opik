@@ -977,7 +977,41 @@ class Opik:
 
         Args:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
-            filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `start_time >= "2024-01-01T00:00:00Z"` - Filter by start date
+                - `start_time > "2024-01-01T00:00:00Z" AND start_time < "2024-02-01T00:00:00Z"` - Date range
+                - `input contains "question"` - Filter by input content
+                - `usage.total_tokens > 1000` - Filter by token usage
+                - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `tags contains "production"` - Filter by tag
+                - `metadata.model = "gpt-4"` - Filter by metadata field
+                - `thread_id = "thread_123"` - Filter by thread ID
+
+                If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
         """
@@ -1015,7 +1049,41 @@ class Opik:
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
-            filter_string: A filter string to narrow down the search.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `start_time >= "2024-01-01T00:00:00Z"` - Filter by start date
+                - `start_time > "2024-01-01T00:00:00Z" AND start_time < "2024-02-01T00:00:00Z"` - Date range
+                - `input contains "question"` - Filter by input content
+                - `usage.total_tokens > 1000` - Filter by token usage
+                - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `tags contains "production"` - Filter by tag
+                - `metadata.model = "gpt-4"` - Filter by metadata field
+                - `thread_id = "thread_123"` - Filter by thread ID
+
+                If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
         """
@@ -1216,8 +1284,28 @@ class Opik:
         Retrieve the latest prompt versions for the given search parameters.
 
         Parameters:
-            filter_string: A filter string using Opik Query Language. It will be parsed and
-                converted into a stringified list of filters expected by the backend.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`: String fields
+                - `tags`: List field (use "contains" operator only)
+                - `created_by`: String field
+
+                Supported operators by column:
+                - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `tags`: contains (only)
+
+                Examples:
+                - `tags contains "alpha"` - Filter by tag
+                - `tags contains "alpha" AND tags contains "beta"` - Filter by multiple tags
+                - `name contains "summary"` - Filter by name substring
+                - `created_by = "user@example.com"` - Filter by creator
+                - `id starts_with "prompt_"` - Filter by ID prefix
+
+                If not provided, all prompts matching the name filter will be returned.
 
         Returns:
             List[Prompt]: A list of Prompt instances found.

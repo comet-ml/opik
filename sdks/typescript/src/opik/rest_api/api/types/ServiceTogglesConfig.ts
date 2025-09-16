@@ -7,4 +7,5 @@ export interface ServiceTogglesConfig {
     traceThreadPythonEvaluatorEnabled: boolean;
     guardrailsEnabled: boolean;
     opikAiEnabled: boolean;
+    humanAnnotationEnabled: boolean;
 }
