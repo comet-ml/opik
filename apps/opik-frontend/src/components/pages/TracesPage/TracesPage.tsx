@@ -66,6 +66,14 @@ const TracesPage = () => {
             </Button>
           )}
         </PageBodyStickyContainer>
+        {project?.description && (
+          <PageBodyStickyContainer
+            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
+            direction="horizontal"
+          >
+            <div className="text-muted-slate">{project.description}</div>
+          </PageBodyStickyContainer>
+        )}
         <Tabs
           defaultValue="traces"
           value={type as string}
