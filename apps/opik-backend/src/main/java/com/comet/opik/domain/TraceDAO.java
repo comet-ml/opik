@@ -2338,6 +2338,8 @@ class TraceDAOImpl implements TraceDAO {
                 .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
                 .threadId(StringUtils.defaultIfBlank(
                         getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
+                .promptVersionId(
+                        getValue(exclude, Trace.TraceField.PROMPT_VERSION_ID, row, "prompt_version_id", UUID.class))
                 .visibilityMode(Optional.ofNullable(
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
