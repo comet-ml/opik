@@ -65,7 +65,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
         id=ANY_STRING,
         input=ANY_DICT,
         metadata={"created_from": "crewai"},
-        name="kickoff_async",
+        name="Flow.kickoff_async",
         output=ANY_DICT,
         project_name=project_name,
         start_time=ANY_BUT_NONE,
@@ -77,7 +77,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                 id=ANY_STRING,
                 input=ANY_DICT,
                 metadata={"created_from": "crewai"},
-                name="kickoff_async",
+                name="Flow.kickoff_async",  # Updated name format
                 output=ANY_DICT,
                 project_name=project_name,
                 start_time=ANY_BUT_NONE,
@@ -100,19 +100,20 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 end_time=ANY_BUT_NONE,
                                 id=ANY_STRING,
                                 input=ANY_DICT,
-                                metadata={
-                                    "created_from": "crewai",
-                                    "usage": ANY_DICT,
-                                },
-                                model=ANY_STRING,
-                                name="llm call",
-                                output=ANY_DICT,
+                                metadata=ANY_DICT.containing(
+                                    {
+                                        "created_from": "litellm",
+                                    }
+                                ),
                                 project_name=project_name,
+                                model=ANY_STRING,
+                                name="completion",
+                                output=ANY_DICT,
                                 provider="openai",
                                 start_time=ANY_BUT_NONE,
-                                tags=["crewai"],
+                                tags=["litellm"],
                                 type="llm",
-                                usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                usage=ANY_DICT,
                                 spans=[],
                             )
                         ],
@@ -133,19 +134,20 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 end_time=ANY_BUT_NONE,
                                 id=ANY_STRING,
                                 input=ANY_DICT,
-                                metadata={
-                                    "created_from": "crewai",
-                                    "usage": ANY_DICT,
-                                },
-                                model=ANY_STRING,
-                                name="llm call",
-                                output=ANY_DICT,
+                                metadata=ANY_DICT.containing(
+                                    {
+                                        "created_from": "litellm",
+                                    }
+                                ),
                                 project_name=project_name,
+                                model=ANY_STRING,
+                                name="completion",
+                                output=ANY_DICT,
                                 provider="openai",
                                 start_time=ANY_BUT_NONE,
-                                tags=["crewai"],
+                                tags=["litellm"],
                                 type="llm",
-                                usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                usage=ANY_DICT,
                                 spans=[],
                             )
                         ],

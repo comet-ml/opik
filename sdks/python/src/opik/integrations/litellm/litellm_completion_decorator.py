@@ -64,7 +64,6 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         metadata.update(
             {
                 "created_from": "litellm",
-                "type": "litellm_completion",
             }
         )
 
@@ -158,9 +157,6 @@ def _get_provider_from_model(model_name: str) -> Optional[LLMProvider]:
     """
     Extract the actual provider from the model name using LiteLLM's built-in method.
     """
-    if not model_name:
-        return LLMProvider.OPENAI  # Default fallback
-
     try:
         provider_info = litellm.get_llm_provider(model_name)
         provider_name = provider_info[1] if len(provider_info) > 1 else None

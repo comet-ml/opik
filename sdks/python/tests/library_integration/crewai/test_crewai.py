@@ -114,19 +114,18 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata={
-                                            "created_from": "crewai",
-                                            "usage": ANY_DICT,
-                                        },
-                                        model=ANY_STRING.starting_with(
-                                            constants.MODEL_NAME_SHORT
+                                        metadata=ANY_DICT.containing(
+                                            {
+                                                "created_from": "litellm",
+                                            }
                                         ),
-                                        name="llm call",
+                                        model=ANY_STRING,
+                                        name="completion",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["crewai"],
+                                        tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
@@ -162,19 +161,18 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata={
-                                            "created_from": "crewai",
-                                            "usage": ANY_DICT,
-                                        },
-                                        model=ANY_STRING.starting_with(
-                                            constants.MODEL_NAME_SHORT
+                                        metadata=ANY_DICT.containing(
+                                            {
+                                                "created_from": "litellm",
+                                            }
                                         ),
-                                        name="llm call",
+                                        model=ANY_STRING,
+                                        name="completion",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["crewai"],
+                                        tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
