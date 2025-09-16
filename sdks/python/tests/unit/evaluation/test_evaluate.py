@@ -119,6 +119,7 @@ def test_evaluate__happyflow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -193,6 +194,7 @@ def test_evaluate__happyflow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={"output": ANY_BUT_NONE},
                     start_time=ANY_BUT_NONE,
@@ -344,6 +346,7 @@ def test_evaluate_with_scoring_key_mapping(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -422,6 +425,7 @@ def test_evaluate_with_scoring_key_mapping(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -1039,6 +1043,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -1157,6 +1162,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "trial_id": 0,
                     },
                     output={"output": ANY_BUT_NONE},
                     start_time=ANY_BUT_NONE,
