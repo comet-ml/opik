@@ -1,7 +1,7 @@
 ---
 description: Frontend form handling patterns using React Hook Form and Zod
 globs: "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Form Handling Patterns
@@ -9,6 +9,7 @@ alwaysApply: false
 ## React Hook Form + Zod Pattern
 
 ### Basic Form Setup
+
 ```typescript
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -40,6 +41,7 @@ const onSubmit = useCallback((data: FormData) => {
 ```
 
 ### Form JSX Structure
+
 ```typescript
 <Form {...form}>
   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -56,7 +58,7 @@ const onSubmit = useCallback((data: FormData) => {
         </FormItem>
       )}
     />
-    
+
     <FormField
       control={form.control}
       name="email"
@@ -70,7 +72,7 @@ const onSubmit = useCallback((data: FormData) => {
         </FormItem>
       )}
     />
-    
+
     <Button type="submit" disabled={form.formState.isSubmitting}>
       {form.formState.isSubmitting && <Spinner className="mr-2" />}
       Submit
@@ -82,6 +84,7 @@ const onSubmit = useCallback((data: FormData) => {
 ## Advanced Form Patterns
 
 ### Dynamic Form Fields
+
 ```typescript
 const formSchema = z.object({
   items: z.array(z.object({
@@ -110,10 +113,10 @@ const { fields, append, remove } = useFieldArray({
         </FormItem>
       )}
     />
-    
-    <Button 
-      type="button" 
-      variant="outline" 
+
+    <Button
+      type="button"
+      variant="outline"
       onClick={() => remove(index)}
     >
       Remove
@@ -121,8 +124,8 @@ const { fields, append, remove } = useFieldArray({
   </div>
 ))}
 
-<Button 
-  type="button" 
+<Button
+  type="button"
   onClick={() => append({ name: "", value: "" })}
 >
   Add Item
@@ -130,23 +133,33 @@ const { fields, append, remove } = useFieldArray({
 ```
 
 ### Conditional Validation
+
 ```typescript
-const formSchema = z.object({
-  type: z.enum(["user", "admin"]),
-  permissions: z.array(z.string()).optional(),
-}).refine((data) => {
-  // Conditional validation: admin must have permissions
-  if (data.type === "admin" && (!data.permissions || data.permissions.length === 0)) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Admin users must have at least one permission",
-  path: ["permissions"],
-});
+const formSchema = z
+  .object({
+    type: z.enum(["user", "admin"]),
+    permissions: z.array(z.string()).optional(),
+  })
+  .refine(
+    (data) => {
+      // Conditional validation: admin must have permissions
+      if (
+        data.type === "admin" &&
+        (!data.permissions || data.permissions.length === 0)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Admin users must have at least one permission",
+      path: ["permissions"],
+    },
+  );
 ```
 
 ### Custom Field Components
+
 ```typescript
 // Custom field wrapper
 interface CustomFieldProps {
@@ -165,7 +178,7 @@ const CustomField: React.FC<CustomFieldProps> = ({
   children,
 }) => {
   const form = useFormContext();
-  
+
   return (
     <FormField
       control={form.control}
@@ -202,6 +215,7 @@ const CustomField: React.FC<CustomFieldProps> = ({
 ## Form State Management
 
 ### Loading and Error States
+
 ```typescript
 const [isSubmitting, setIsSubmitting] = useState(false);
 const [submitError, setSubmitError] = useState<string | null>(null);
@@ -209,16 +223,16 @@ const [submitError, setSubmitError] = useState<string | null>(null);
 const onSubmit = useCallback(async (data: FormData) => {
   setIsSubmitting(true);
   setSubmitError(null);
-  
+
   try {
     await submitForm(data);
     toast({ description: "Form submitted successfully!" });
     form.reset();
   } catch (error) {
     setSubmitError(error.message);
-    toast({ 
-      description: "Failed to submit form", 
-      variant: "destructive" 
+    toast({
+      description: "Failed to submit form",
+      variant: "destructive"
     });
   } finally {
     setIsSubmitting(false);
@@ -239,6 +253,7 @@ const onSubmit = useCallback(async (data: FormData) => {
 ```
 
 ### Form Reset and Default Values
+
 ```typescript
 // Reset form to default values
 const handleReset = useCallback(() => {
@@ -246,9 +261,12 @@ const handleReset = useCallback(() => {
 }, [form]);
 
 // Reset with new default values
-const handleResetWithData = useCallback((newData: Partial<FormData>) => {
-  form.reset(newData);
-}, [form]);
+const handleResetWithData = useCallback(
+  (newData: Partial<FormData>) => {
+    form.reset(newData);
+  },
+  [form],
+);
 
 // Watch for changes
 const watchedValues = form.watch();
@@ -263,24 +281,35 @@ useEffect(() => {
 ## Validation Patterns
 
 ### Custom Validators
+
 ```typescript
-const phoneSchema = z.string().refine((val) => {
-  const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-  return phoneRegex.test(val);
-}, {
-  message: "Invalid phone number format",
-});
+const phoneSchema = z.string().refine(
+  (val) => {
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    return phoneRegex.test(val);
+  },
+  {
+    message: "Invalid phone number format",
+  },
+);
 
 // Async validation
-const emailSchema = z.string().email().refine(async (email) => {
-  const isAvailable = await checkEmailAvailability(email);
-  return isAvailable;
-}, {
-  message: "Email is already taken",
-});
+const emailSchema = z
+  .string()
+  .email()
+  .refine(
+    async (email) => {
+      const isAvailable = await checkEmailAvailability(email);
+      return isAvailable;
+    },
+    {
+      message: "Email is already taken",
+    },
+  );
 ```
 
 ### Multi-step Forms
+
 ```typescript
 const steps = [
   { name: "Personal Info", schema: personalInfoSchema },
@@ -299,11 +328,11 @@ const form = useForm({
 const handleNext = useCallback(async () => {
   const isValid = await form.trigger();
   if (isValid) {
-    setCurrentStep(prev => Math.min(prev + 1, steps.length - 1));
+    setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   }
 }, [form]);
 
 const handlePrevious = useCallback(() => {
-  setCurrentStep(prev => Math.max(prev - 1, 0));
+  setCurrentStep((prev) => Math.max(prev - 1, 0));
 }, []);
 ```
