@@ -56,8 +56,8 @@ public class DatasetExpansionService {
                 : buildGenerationPrompt(existingItems.content(), request);
         // Generate samples using LLM with batch processing for large requests
         var generatedSamples = generateSamplesInBatches(generationPrompt, request, datasetId, workspaceId);
-        log.info("Generated '{}' samples for datasetId '{}', workspaceId '{}'",
-                generatedSamples.size(), datasetId, workspaceId);
+        log.info("Finished dataset expansion for datasetId '{}', workspaceId '{}', total samples '{}'",
+                datasetId, workspaceId, generatedSamples.size());
         return DatasetExpansionResponse.builder()
                 .generatedSamples(generatedSamples)
                 .model(request.model())
@@ -141,7 +141,7 @@ public class DatasetExpansionService {
                                 "Generate exactly " + currentBatchSize + " samples");
             }
 
-            log.info("Processing batch {}/{} - generating {} samples",
+            log.info("Processing batch '{}/{}' - generating '{}' samples",
                     batchNumber, (int) Math.ceil((double) totalSamples / batchSize), currentBatchSize);
 
             // Generate samples for this batch
@@ -177,21 +177,12 @@ public class DatasetExpansionService {
             var response = chatCompletionService.create(chatRequest, workspaceId);
 
             var generatedContent = response.choices().get(0).message().content();
-            log.info("LLM generated content length: '{}' characters", generatedContent.length());
-            log.info("LLM content preview: '{}'",
-                    generatedContent.length() > 200 ? generatedContent.substring(0, 200) + "..." : generatedContent);
+            log.debug("LLM generated content length: '{}' characters", generatedContent.length());
 
             // Parse the JSON response
             var parsedSamples = parseGeneratedSamples(
                     generatedContent, datasetId, request.model(), request.sampleCount());
-            log.info("Parsed '{}' samples from LLM response", parsedSamples.size());
-
-            // Log the actual sample data to debug empty samples
-            for (int i = 0; i < parsedSamples.size() && i < 3; i++) {
-                var sample = parsedSamples.get(i);
-                log.info("Sample '{}' data: '{}'", i + 1, sample.data());
-            }
-
+            log.debug("Parsed '{}' samples from LLM response", parsedSamples.size());
             return parsedSamples;
 
         } catch (Exception exception) {
@@ -230,11 +221,11 @@ public class DatasetExpansionService {
             }
 
             // Log the actual content we're trying to parse for debugging
-            log.info("Attempting to parse LLM response. Content length: '{}'", cleanedContent.length());
-            log.info("Content to parse: '{}'",
+            log.debug("Attempting to parse LLM response. Content length: '{}'", cleanedContent.length());
+            log.debug("Content to parse: '{}'",
                     cleanedContent.length() > 500 ? cleanedContent.substring(0, 500) + "..." : cleanedContent);
 
-            var rootNode = JsonUtils.readTree(cleanedContent);
+            var rootNode = JsonUtils.getJsonNodeFromString(cleanedContent);
             List<DatasetItem> samples = new ArrayList<>();
 
             if (rootNode.isArray()) {
