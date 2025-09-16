@@ -3,7 +3,7 @@
   "displayName": "Opik - Save and share your chat history",
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
-  "publisher": "jverre",
+  "publisher": "opik",
   "version": "0.2.0",
   "preview": false,
   "engines": {
