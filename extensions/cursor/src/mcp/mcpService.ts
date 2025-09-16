@@ -77,8 +77,6 @@ export class MCPService {
             console.log('Unregistering Opik MCP server...');
 
             await (vscode as any).cursor.mcp.unregisterServer(this.serverName);
-
-
             console.log('✅ Opik MCP server unregistered successfully');
             return true;
 
