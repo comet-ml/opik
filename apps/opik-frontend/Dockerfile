@@ -56,8 +56,7 @@ RUN rm -f /etc/nginx/nginx.conf.default && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
     sed -i '/user nginx/d' /etc/nginx/nginx.conf && \
-    sed -i 's/error_log\ \/var\/log\/nginx\/error.log/error_log\ \/dev\/stderr/' /etc/nginx/nginx.conf && \
-    sed -i '/http {/a\    access_log off;' /etc/nginx/nginx.conf
+    sed -i 's/error_log\ \/var\/log\/nginx\/error.log/error_log\ \/dev\/stderr/' /etc/nginx/nginx.conf
 RUN mkdir -p /var/cache/nginx /run && \
     chown -R nginx:nginx /var/cache/nginx /etc/nginx /run /var/run && \
     chmod -R g+w /var/cache/nginx /etc/nginx /run /var/run && \
