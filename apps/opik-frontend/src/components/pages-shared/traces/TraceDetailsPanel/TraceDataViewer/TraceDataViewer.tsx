@@ -6,6 +6,7 @@ import {
   Brain,
   Clock,
   Coins,
+  FileTerminal,
   Hash,
   MessageSquareMore,
   PenLine,
@@ -28,6 +29,7 @@ import AgentGraphTab from "./AgentGraphTab";
 import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
+import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/UserCommentHoverList";
 import {
@@ -100,6 +102,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
+
+  // Fetch prompt version information if available (only for traces)
+  const promptVersionId = "prompt_version_id" in data ? data.prompt_version_id : undefined;
+  const { data: promptVersion } = usePromptVersionById(
+    { versionId: promptVersionId! },
+    { enabled: Boolean(promptVersionId) }
+  );
 
   return (
     <div className="size-full max-w-full overflow-auto">
@@ -184,6 +193,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   {data.comments.length}
                 </div>
               </UserCommentHoverList>
+            )}
+            {promptVersion && (
+              <TooltipWrapper content={`Prompt: ${promptVersion.prompt_id} | Version: ${promptVersion.commit}`}>
+                <div
+                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  data-testid="data-viewer-prompt-version"
+                >
+                  <FileTerminal className="size-3 shrink-0" />{" "}
+                  {promptVersion.commit}
+                </div>
+              </TooltipWrapper>
             )}
             {(model || provider) && (
               <TooltipWrapper
