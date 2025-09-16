@@ -251,12 +251,12 @@ export const extractReasonsFromValueByAuthor = (
 ) => {
   if (!valueByAuthor) return [];
 
-  return Object.entries(valueByAuthor).map(
-    ([author, { reason, last_updated_at, value }]) => ({
+  return Object.entries(valueByAuthor)
+    .map(([author, { reason, last_updated_at, value }]) => ({
       author,
       reason: reason || "",
       lastUpdatedAt: last_updated_at,
       value,
-    }),
-  );
+    }))
+    .filter((v) => v.reason.trim());
 };
