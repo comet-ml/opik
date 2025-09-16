@@ -70,13 +70,10 @@
   },
   "dependencies": {
     "@sentry/node": "^10.11.0",
-    "@types/uuid": "^10.0.0",
-    "axios": "^1.8.4",
     "glob": "^11.0.1",
     "node-fetch": "^3.3.2",
     "opik": "^1.7.2",
     "posthog-node": "^4.18.0",
-    "sql.js": "^1.10.2",
-    "uuid": "^11.1.0"
+    "sql.js": "^1.10.2"
   }
 }
