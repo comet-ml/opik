@@ -1,7 +1,7 @@
 ---
 description: Frontend state management patterns using Zustand and local storage
 globs: "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # State Management Patterns
@@ -9,6 +9,7 @@ alwaysApply: false
 ## Zustand Store Pattern
 
 ### Store Structure
+
 ```typescript
 // File: src/store/EntityStore.ts
 import { create } from "zustand";
@@ -30,19 +31,18 @@ const useEntityStore = create<EntityStore>((set) => ({
   // State
   selectedEntity: null,
   filters: defaultFilters,
-  
+
   // Actions
   setSelectedEntity: (entity) => set({ selectedEntity: entity }),
-  updateFilters: (newFilters) => 
+  updateFilters: (newFilters) =>
     set((state) => ({ filters: { ...state.filters, ...newFilters } })),
   resetFilters: () => set({ filters: defaultFilters }),
 }));
 
 // Exported selectors
-export const useSelectedEntity = () => 
+export const useSelectedEntity = () =>
   useEntityStore((state) => state.selectedEntity);
-export const useEntityFilters = () => 
-  useEntityStore((state) => state.filters);
+export const useEntityFilters = () => useEntityStore((state) => state.filters);
 
 export default useEntityStore;
 ```
@@ -66,6 +66,7 @@ const { selectedEntity, filters } = useEntityStore();
 ## Local Storage Integration
 
 ### Using use-local-storage-state
+
 ```typescript
 // Use use-local-storage-state for persistence
 import useLocalStorageState from "use-local-storage-state";
@@ -79,16 +80,20 @@ const [preferences, setPreferences] = useLocalStorageState("userPreferences", {
 });
 
 // Update specific preference
-const updatePreference = useCallback((key: string, value: any) => {
-  setPreferences(prev => ({ ...prev, [key]: value }));
-}, [setPreferences]);
+const updatePreference = useCallback(
+  (key: string, value: any) => {
+    setPreferences((prev) => ({ ...prev, [key]: value }));
+  },
+  [setPreferences],
+);
 ```
 
 ### Local Storage Patterns
+
 ```typescript
 // ✅ Good: Type-safe local storage
 interface UserPreferences {
-  theme: 'light' | 'dark';
+  theme: "light" | "dark";
   sidebarCollapsed: boolean;
   tablePageSize: number;
 }
@@ -101,7 +106,7 @@ const [preferences, setPreferences] = useLocalStorageState<UserPreferences>(
       sidebarCollapsed: false,
       tablePageSize: 10,
     },
-  }
+  },
 );
 
 // ❌ Avoid: Untyped local storage
@@ -113,6 +118,7 @@ const [prefs, setPrefs] = useLocalStorageState("prefs", {
 ## State Composition Patterns
 
 ### Combining Multiple Stores
+
 ```typescript
 // Use multiple focused stores instead of one large store
 const useUIStore = create<UIState>((set) => ({
@@ -131,12 +137,13 @@ const useDataStore = create<DataState>((set) => ({
 const Component = () => {
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const entities = useDataStore((state) => state.entities);
-  
+
   return <div>{/* Component JSX */}</div>;
 };
 ```
 
 ### Context for Component Trees
+
 ```typescript
 // Use context sparingly, prefer prop passing
 interface ComponentContextValue {
@@ -166,34 +173,36 @@ const useComponentContext = () => {
 ## State Synchronization
 
 ### Syncing with URL State
+
 ```typescript
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 const EntityListPage = () => {
   const navigate = useNavigate();
   const { page, search, sortBy } = useSearch({ strict: false });
-  
+
   const updateUrl = useCallback((updates: Partial<SearchParams>) => {
     navigate({
       search: (prev) => ({ ...prev, ...updates }),
     });
   }, [navigate]);
-  
+
   const handlePageChange = useCallback((newPage: number) => {
     updateUrl({ page: newPage });
   }, [updateUrl]);
-  
+
   return <div>{/* Component JSX */}</div>;
 };
 ```
 
 ### Syncing Stores with Server State
+
 ```typescript
 // Sync Zustand store with React Query data
 const useEntitySync = () => {
   const setEntities = useEntityStore((state) => state.setEntities);
   const { data } = useEntityList();
-  
+
   useEffect(() => {
     if (data?.content) {
       setEntities(data.content);
@@ -210,16 +219,19 @@ const useEntitySync = () => {
 
 ```typescript
 // ✅ Good: Shallow comparison for objects
-import { shallow } from 'zustand/shallow';
+import { shallow } from "zustand/shallow";
 
 const { filters, selectedEntity } = useEntityStore(
   (state) => ({ filters: state.filters, selectedEntity: state.selectedEntity }),
-  shallow
+  shallow,
 );
 
 // ✅ Good: Memoized actions
-const actions = useMemo(() => ({
-  updateFilters: useEntityStore.getState().updateFilters,
-  resetFilters: useEntityStore.getState().resetFilters,
-}), []);
+const actions = useMemo(
+  () => ({
+    updateFilters: useEntityStore.getState().updateFilters,
+    resetFilters: useEntityStore.getState().resetFilters,
+  }),
+  [],
+);
 ```
