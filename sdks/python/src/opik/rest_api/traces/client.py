@@ -340,6 +340,7 @@ class TracesClient:
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        prompt_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -372,6 +373,9 @@ class TracesClient:
 
         thread_id : typing.Optional[str]
 
+        prompt_version_id : typing.Optional[str]
+            ID of the prompt version used in this trace
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -399,6 +403,7 @@ class TracesClient:
             error_info=error_info,
             last_updated_at=last_updated_at,
             thread_id=thread_id,
+            prompt_version_id=prompt_version_id,
             request_options=request_options,
         )
         return _response.data
@@ -1662,6 +1667,7 @@ class AsyncTracesClient:
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        prompt_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1694,6 +1700,9 @@ class AsyncTracesClient:
 
         thread_id : typing.Optional[str]
 
+        prompt_version_id : typing.Optional[str]
+            ID of the prompt version used in this trace
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1724,6 +1733,7 @@ class AsyncTracesClient:
             error_info=error_info,
             last_updated_at=last_updated_at,
             thread_id=thread_id,
+            prompt_version_id=prompt_version_id,
             request_options=request_options,
         )
         return _response.data

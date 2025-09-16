@@ -22,6 +22,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+        promptVersionId: core.serialization.property("prompt_version_id", core.serialization.string().optional()),
     });
 
 export declare namespace TraceWrite {
@@ -38,5 +39,6 @@ export declare namespace TraceWrite {
         error_info?: ErrorInfoWrite.Raw | null;
         last_updated_at?: string | null;
         thread_id?: string | null;
+        prompt_version_id?: string | null;
     }
 }

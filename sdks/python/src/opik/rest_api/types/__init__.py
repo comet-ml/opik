@@ -5,6 +5,7 @@
 from .aggregation_data import AggregationData
 from .annotation_queue import AnnotationQueue
 from .annotation_queue_batch import AnnotationQueueBatch
+from .annotation_queue_item_ids import AnnotationQueueItemIds
 from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
@@ -379,6 +380,7 @@ __all__ = [
     "AggregationData",
     "AnnotationQueue",
     "AnnotationQueueBatch",
+    "AnnotationQueueItemIds",
     "AnnotationQueueScope",
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
