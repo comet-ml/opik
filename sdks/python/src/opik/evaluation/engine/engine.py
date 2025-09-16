@@ -47,6 +47,7 @@ class EvaluationEngine:
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
+        trial_id: int,
     ) -> test_result.TestResult:
         score_results: List[score_result.ScoreResult] = []
 
@@ -91,7 +92,9 @@ class EvaluationEngine:
                 )
 
         test_result_ = test_result.TestResult(
-            test_case=test_case_, score_results=score_results
+            test_case=test_case_,
+            score_results=score_results,
+            trial_id=trial_id,
         )
         rest_operations.log_test_result_scores(
             client=self._client,
@@ -104,6 +107,7 @@ class EvaluationEngine:
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
+        trial_id: int,
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -151,6 +155,7 @@ class EvaluationEngine:
             )
             test_result_ = self._evaluate_test_case(
                 test_case_=test_case_,
+                trial_id=trial_id,
             )
 
         return test_result_
@@ -162,6 +167,7 @@ class EvaluationEngine:
         nb_samples: Optional[int],
         dataset_item_ids: Optional[List[str]],
         dataset_sampler: Optional[samplers.BaseDatasetSampler],
+        trial_count: int,
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
             nb_samples=nb_samples,
@@ -171,18 +177,22 @@ class EvaluationEngine:
         if dataset_sampler is not None:
             dataset_items = dataset_sampler.sample(dataset_items)
 
-        evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
-            functools.partial(
-                self._evaluate_llm_task,
-                item=item,
-                task=task,
-            )
-            for item in dataset_items
-        ]
+        test_results: List[test_result.TestResult] = []
 
-        test_results = evaluation_tasks_executor.execute(
-            evaluation_tasks, self._workers, self._verbose
-        )
+        for trial_id in range(trial_count):
+            evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
+                functools.partial(
+                    self._evaluate_llm_task,
+                    item=item,
+                    task=task,
+                    trial_id=trial_id,
+                )
+                for item in dataset_items
+            ]
+
+            test_results += evaluation_tasks_executor.execute(
+                evaluation_tasks, self._workers, self._verbose
+            )
 
         return test_results
 
