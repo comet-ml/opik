@@ -127,6 +127,20 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  # AWS IAM authentication configuration (optional)
+  # When enabled, takes precedence over singleNodeUrl authentication
+  awsIamAuth:
+    # Default: false
+    # Description: Enable AWS IAM authentication for ElasticCache Redis
+    enabled: ${OPIK_REDIS_AWS_IAM_AUTH_ENABLED:-false}
+    # Description: AWS User ID for IAM authentication
+    awsUserId: ${OPIK_REDIS_AWS_USER_ID:-default}
+    # Default: us-east-1
+    # Description: AWS region where ElastiCache is deployed
+    awsRegion: ${OPIK_REDIS_AWS_REGION:-us-east-1}
+    # Default: opik-redis
+    # Description: ElasticCache resource name (replication group/cluster/serverless name)
+    awsResourceName: ${REDIS_AWS_RESOURCE_NAME:-opik-redis}
 
 openTelemetry:
   # Default: 3h
