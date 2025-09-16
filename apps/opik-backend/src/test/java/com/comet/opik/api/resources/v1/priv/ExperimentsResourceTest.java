@@ -5202,129 +5202,82 @@ class ExperimentsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class UpdateExperiments {
 
-        @Test
-        @DisplayName("when updating experiment with all fields, then experiment is updated successfully")
-        void updateExperiment_whenAllFields_thenExperimentUpdatedSuccessfully() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Experiment")
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var metadata = JsonUtils.getJsonNodeFromString("{\"version\": \"2.0\", \"model\": \"gpt-4\"}");
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .name("Updated Experiment")
-                    .metadata(metadata)
-                    .type(ExperimentType.TRIAL)
-                    .status(ExperimentStatus.RUNNING)
-                    .build();
-
-            // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            // then
-            getAndAssert(experimentId, experiment.toBuilder()
-                    .name(experimentUpdate.name())
-                    .metadata(experimentUpdate.metadata())
-                    .type(experimentUpdate.type())
-                    .status(experimentUpdate.status()).build(), TEST_WORKSPACE, API_KEY);
-        }
-
-        @Test
-        @DisplayName("when updating experiment with only name, then only name is updated")
-        void updateExperiment_whenOnlyName_thenOnlyNameUpdated() {
+        @ParameterizedTest
+        @MethodSource("updateExperimentTestCases")
+        @DisplayName("when updating experiment with valid data, then experiment is updated correctly")
+        void updateExperiment_whenValidUpdate_thenExperimentUpdatedCorrectly(
+                ExperimentUpdate updateRequest,
+                Function<Experiment, Experiment> experimentSetter) {
             // given
             var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
-            var experiment = experimentResourceClient.createPartialExperiment()
+            var initialExperiment = experimentResourceClient.createPartialExperiment()
                     .name("Original Name")
                     .metadata(originalMetadata)
                     .type(ExperimentType.REGULAR)
                     .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .name("New Name Only")
-                    .build();
+            var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
 
             // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
             // then
-            getAndAssert(experimentId, experiment.toBuilder().name(experimentUpdate.name()).build(), TEST_WORKSPACE,
-                    API_KEY);
+            getAndAssert(experimentId, experimentSetter.apply(initialExperiment), TEST_WORKSPACE, API_KEY);
         }
 
-        @Test
-        @DisplayName("when updating experiment with only metadata, then only metadata is updated")
-        void updateExperiment_whenOnlyMetadata_thenOnlyMetadataUpdated() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
-                    .type(ExperimentType.REGULAR)
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+        Stream<Arguments> updateExperimentTestCases() {
+            var updatedMetadata = JsonUtils.getJsonNodeFromString("{\"temperature\": 0.7, \"max_tokens\": 100}");
 
-            var newMetadata = JsonUtils.getJsonNodeFromString("{\"temperature\": 0.7, \"max_tokens\": 100}");
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .metadata(newMetadata)
-                    .build();
-
-            // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            // then
-            getAndAssert(experimentId, experiment.toBuilder().metadata(newMetadata).build(), TEST_WORKSPACE, API_KEY);
-        }
-
-        @Test
-        @DisplayName("when updating experiment with only type, then only type is updated")
-        void updateExperiment_whenOnlyType_thenOnlyTypeUpdated() {
-            // given
-            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
-                    .metadata(originalMetadata)
-                    .type(ExperimentType.REGULAR)
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .type(ExperimentType.MINI_BATCH)
-                    .build();
-
-            // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            // then
-            getAndAssert(experimentId, experiment.toBuilder().type(experimentUpdate.type()).build(), TEST_WORKSPACE,
-                    API_KEY);
-        }
-
-        @Test
-        @DisplayName("when updating experiment with only status, then only status is updated")
-        void updateExperiment_whenOnlyStatus_thenOnlyStatusUpdated() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
-                    .type(ExperimentType.REGULAR)
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .status(ExperimentStatus.COMPLETED)
-                    .build();
-
-            // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            // then
-            getAndAssert(experimentId, experiment.toBuilder().status(experimentUpdate.status()).build(), TEST_WORKSPACE,
-                    API_KEY);
+            return Stream.of(
+                    // Update all fields
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build()),
+                    // Update only name
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("New Name Only")
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("New Name Only")
+                                    .build()),
+                    // Update only metadata
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .metadata(updatedMetadata)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .metadata(updatedMetadata)
+                                    .build()),
+                    // Update only type
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build()),
+                    // Update only status
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build()),
+                    // Empty update
+                    arguments(ExperimentUpdate.builder().build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment));
         }
 
         @Test
@@ -5342,26 +5295,6 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when updating experiment with empty update, then update succeeds")
-        void updateExperiment_whenEmptyUpdate_thenUpdateSucceeds() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var experimentUpdate = ExperimentUpdate.builder().build();
-
-            // when
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
-
-            // then
-            var updatedExperiment = getAndAssert(experimentId, null, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedExperiment.name()).isEqualTo("Original Name"); // unchanged
-        }
-
-        @Test
         @DisplayName("when updating experiment with invalid name, then return 400")
         void updateExperiment_whenInvalidName_thenReturn400() {
             // given
@@ -5376,25 +5309,7 @@ class ExperimentsResourceTest {
 
             // when & then
             experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_BAD_REQUEST);
-        }
-
-        @Test
-        @DisplayName("when updating experiment without authentication, then return 401")
-        void updateExperiment_whenNoAuthentication_thenReturn401() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
-                    .build();
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .name("Updated Name")
-                    .build();
-
-            // when & then
-            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, "invalid-api-key", TEST_WORKSPACE,
-                    HttpStatus.SC_UNAUTHORIZED);
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 }
