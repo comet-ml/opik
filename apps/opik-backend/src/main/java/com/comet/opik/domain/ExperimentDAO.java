@@ -53,6 +53,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -611,6 +612,45 @@ class ExperimentDAO {
             ;
             """;
 
+    private static final String UPDATE = """
+            INSERT INTO experiments (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                metadata,
+                created_by,
+                last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                type,
+                optimization_id,
+                status,
+                created_at,
+                last_updated_at
+            )
+            SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                created_at,
+                now64(9) as last_updated_at
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
@@ -1159,45 +1199,6 @@ class ExperimentDAO {
         });
     }
 
-    private static final String UPDATE = """
-            INSERT INTO experiments (
-                id,
-                dataset_id,
-                name,
-                workspace_id,
-                metadata,
-                created_by,
-                last_updated_by,
-                prompt_version_id,
-                prompt_id,
-                prompt_versions,
-                type,
-                optimization_id,
-                status,
-                created_at,
-                last_updated_at
-            )
-            SELECT
-                id,
-                dataset_id,
-                <if(name)> :name <else> name <endif> as name,
-                workspace_id,
-                <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                created_by,
-                :user_name as last_updated_by,
-                prompt_version_id,
-                prompt_id,
-                prompt_versions,
-                <if(type)> :type <else> type <endif> as type,
-                optimization_id,
-                <if(status)> :status <else> status <endif> as status,
-                created_at,
-                now64(9) as last_updated_at
-            FROM experiments
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            """;
-
     @WithSpan
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
@@ -1216,10 +1217,7 @@ class ExperimentDAO {
         bindUpdateParams(experimentUpdate, statement);
         statement.bind("id", id);
 
-        return makeFluxContextAware((userName, workspaceId) -> {
-            log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
-            return Flux.from(statement.bind("workspace_id", workspaceId).bind("user_name", userName).execute());
-        });
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
     }
 
     private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {

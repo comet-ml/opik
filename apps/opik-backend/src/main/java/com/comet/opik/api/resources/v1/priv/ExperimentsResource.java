@@ -289,7 +289,7 @@ public class ExperimentsResource {
     })
     @RateLimited
     public Response update(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @Valid ExperimentUpdate experimentUpdate) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull @Valid ExperimentUpdate experimentUpdate) {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
         experimentService.update(id, experimentUpdate)
