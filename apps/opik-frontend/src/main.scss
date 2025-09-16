@@ -168,6 +168,18 @@
     --tag-blue-bg: #e2effd;
     --tag-blue-text: #19426b;
 
+    /* Info box colors (blue variant for informational content) */
+    --info-box-bg: 214 100% 92%;
+    --info-box-text: 224 76% 40%;
+    --info-box-icon-bg: 214 100% 92%;
+    --info-box-icon-text: 217 91% 60%;
+
+    /* Warning/tip box colors (amber variant for tips and warnings) */
+    --warning-box-bg: 45 93% 89%;
+    --warning-box-text: 32 85% 32%;
+    --warning-box-icon-bg: 45 93% 58%;
+    --warning-box-icon-text: 32 85% 32%;
+
     --radius: 0.5rem;
 
     --header-height: 60px;
@@ -305,6 +317,18 @@
     --tag-turquoise-text: #a7f3d0;
     --tag-blue-bg: #1e3a8a;
     --tag-blue-text: #dbeafe;
+
+    /* Info box colors - Dark Mode */
+    --info-box-bg: 224 76% 33%;
+    --info-box-text: 221 83% 78%;
+    --info-box-icon-bg: 232 94% 48%;
+    --info-box-icon-text: 213 93% 68%;
+
+    /* Warning/tip box colors - Dark Mode */
+    --warning-box-bg: 32 85% 32%;
+    --warning-box-text: 48 96% 64%;
+    --warning-box-icon-bg: 32 95% 44%;
+    --warning-box-icon-text: 45 93% 58%;
   }
 
   /* CodeMirror cursor and selection fix for dark mode */

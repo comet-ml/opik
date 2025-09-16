@@ -27,7 +27,7 @@ module.exports = {
       },
       colors: {
         white: "var(--white)",
-        
+
         /* Action cards */
         "action-trace-background": "var(--action-trace-background)",
         "action-trace-text": "var(--action-trace-text)",
@@ -82,15 +82,15 @@ module.exports = {
           foreground: "hsl(var(--tooltip-foreground))",
         },
         soft: {
-          background: "hsl(var(--soft-background))"
+          background: "hsl(var(--soft-background))",
         },
         slate: {
-          300: "hsl(var(--slate-300))"
+          300: "hsl(var(--slate-300))",
         },
         gray: {
           100: "var(--gray-100)",
         },
-        
+
         /* Custom colors for simplified class names */
         "toggle-outline-active": "var(--toggle-outline-active)",
         "diff-removed-bg": "var(--diff-removed-bg)",
@@ -102,6 +102,18 @@ module.exports = {
         "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
         "thread-active": "var(--thread-active)",
+
+        /* Info box colors */
+        "info-box-bg": "hsl(var(--info-box-bg))",
+        "info-box-text": "hsl(var(--info-box-text))",
+        "info-box-icon-bg": "hsl(var(--info-box-icon-bg))",
+        "info-box-icon-text": "hsl(var(--info-box-icon-text))",
+
+        /* Warning box colors */
+        "warning-box-bg": "hsl(var(--warning-box-bg))",
+        "warning-box-text": "hsl(var(--warning-box-text))",
+        "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
+        "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",
