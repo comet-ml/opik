@@ -159,6 +159,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/annotation-queues/{id}/items/add:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Add items to annotation queue
+      description: Add traces or threads to annotation queue
+      operationId: addItemsToAnnotationQueue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueItemIds"
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/annotation-queues/batch:
     post:
       tags:
@@ -188,6 +216,34 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "409":
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{id}/items/delete:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Remove items from annotation queue
+      description: Remove items from annotation queue
+      operationId: removeItemsFromAnnotationQueue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueItemIds"
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -4119,6 +4175,19 @@ components:
           type: string
         details:
           type: string
+    AnnotationQueueItemIds:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AnnotationQueue:
       required:
       - name
@@ -4439,6 +4508,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -4446,10 +4519,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4691,6 +4760,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -4698,10 +4771,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4879,6 +4948,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -4886,10 +4959,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -5098,6 +5167,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -5105,10 +5178,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -5179,6 +5248,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -5186,10 +5259,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6905,6 +6974,10 @@ components:
           readOnly: true
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          description: ID of the prompt version used in this trace
+          format: uuid
         visibility_mode:
           type: string
           readOnly: true
@@ -7127,6 +7200,10 @@ components:
           format: date-time
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          description: ID of the prompt version used in this trace
+          format: uuid
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -9703,6 +9780,10 @@ components:
           format: date-time
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          description: ID of the prompt version used in this trace
+          format: uuid
     TraceBatch:
       required:
       - traces
@@ -9891,6 +9972,10 @@ components:
           readOnly: true
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          description: ID of the prompt version used in this trace
+          format: uuid
         visibility_mode:
           type: string
           readOnly: true

@@ -63,7 +63,8 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
-        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) @Schema(description = "ID of the prompt version used in this trace") UUID promptVersionId,
+        @JsonView({Trace.View.Public.class,
+                Trace.View.Write.class}) @Schema(description = "ID of the prompt version used in this trace") UUID promptVersionId,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,
         @JsonView({
