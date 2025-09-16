@@ -1,10 +1,14 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueInfo;
+import com.comet.opik.api.AnnotationQueueReviewer;
+import com.comet.opik.api.FeedbackScoreAverage;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -17,9 +21,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -36,6 +42,8 @@ public interface AnnotationQueueDAO {
     Mono<Void> createBatch(List<AnnotationQueue> annotationQueues);
 
     Mono<AnnotationQueue> findById(UUID id);
+
+    Mono<AnnotationQueueInfo> findQueueInfoById(UUID id);
 
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
@@ -111,26 +119,159 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND item_id IN :item_ids
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String SELECT_QUEUE_INFO_BY_ID = """
             SELECT
-                workspace_id,
-                project_id,
                 id,
-                name,
-                description,
-                instructions,
-                comments_enabled,
-                feedback_definitions,
-                scope,
-                created_at,
-                created_by,
-                last_updated_at,
-                last_updated_by
+                project_id
             FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id = :id
             ORDER BY last_updated_at DESC
             LIMIT 1 BY id
+            """;
+
+    private static final String SELECT_BY_ID = """
+            WITH queues_final AS
+            (
+                SELECT
+                    *
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                AND id = :id
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
+            ), queue_items_final AS
+            (
+                SELECT DISTINCT
+                    queue_id,
+                    item_id
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = (SELECT project_id FROM queues_final)
+                AND queue_id = :id
+            ), queue_items_count AS (
+                SELECT queue_id, count(1) AS items_count
+                FROM queue_items_final
+                GROUP BY queue_id
+            ), feedback_scores_combined AS (
+                SELECT entity_id,
+                       name,
+                       value,
+                       created_by
+                FROM feedback_scores FINAL
+                WHERE workspace_id = :workspace_id
+                    AND project_id = (SELECT project_id FROM queues_final)
+                    AND entity_id IN (SELECT item_id FROM queue_items_final)
+                    AND name in (SELECT arrayJoin(feedback_definitions) FROM queues_final)
+                UNION ALL
+                SELECT
+                    entity_id,
+                    name,
+                    value,
+                    created_by
+                FROM authored_feedback_scores FINAL
+                WHERE workspace_id = :workspace_id
+                   AND project_id = (SELECT project_id FROM queues_final)
+                   AND entity_id IN (SELECT item_id FROM queue_items_final)
+                   AND name in (SELECT arrayJoin(feedback_definitions) FROM queues_final)
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    entity_id,
+                    name,
+                    groupArray(value) AS values
+                FROM feedback_scores_combined
+                GROUP BY entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    entity_id,
+                    name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
+                FROM feedback_scores_combined_grouped
+            ), feedback_scores_agg AS (
+                SELECT
+                    fs_avg.queue_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        qi.queue_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM (
+                        SELECT
+                            queue_id,
+                            item_id
+                        FROM queue_items_final
+                    ) as qi
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id,
+                            value
+                        FROM feedback_scores_final
+                    ) fs ON fs.entity_id = qi.item_id
+                    GROUP BY qi.queue_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY queue_id
+            ), feedback_scores_reviewers_grouped AS (
+                SELECT
+                    entity_id,
+                    created_by,
+                    COUNT(1) AS cnt
+                FROM feedback_scores_combined
+                GROUP BY entity_id, created_by
+            ), feedback_scores_reviewers_agg AS (
+                SELECT
+                    fsr_sum.queue_id,
+                    mapFromArrays(
+                        groupArray(fsr_sum.username),
+                        groupArray(fsr_sum.cnt)
+                    ) AS reviewers
+                FROM (
+                    SELECT
+                        qi.queue_id,
+                        fsr.created_by AS username,
+                        sum(fsr.cnt) AS cnt
+                    FROM (
+                        SELECT
+                            queue_id,
+                            item_id
+                        FROM queue_items_final
+                    ) as qi
+                    JOIN (
+                        SELECT
+                            created_by,
+                            entity_id,
+                            cnt
+                        FROM feedback_scores_reviewers_grouped
+                    ) fsr ON fsr.entity_id = qi.item_id
+                    GROUP BY qi.queue_id, fsr.created_by
+                ) as fsr_sum
+                GROUP BY queue_id
+            )
+            SELECT
+                q.project_id,
+                q.id,
+                q.name,
+                q.description,
+                q.instructions,
+                q.comments_enabled,
+                q.feedback_definitions,
+                q.scope,
+                q.created_at,
+                q.created_by,
+                q.last_updated_at,
+                q.last_updated_by,
+                qic.items_count as items_count,
+                fs.feedback_scores as feedback_scores,
+                fsra.reviewers as reviewers,
+            FROM queues_final AS q
+            LEFT JOIN queue_items_count AS qic ON q.id = qic.queue_id
+            LEFT JOIN feedback_scores_agg AS fs ON q.id = fs.queue_id
+            LEFT JOIN feedback_scores_reviewers_agg AS fsra ON q.id = fsra.queue_id
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -156,6 +297,17 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> findById(id, connection))
                 .flatMap(this::mapAnnotationQueue)
+                .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<AnnotationQueueInfo> findQueueInfoById(UUID id) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findQueueInfoById(id, connection))
+                .flatMap(result -> result.map((row, rowMetadata) -> AnnotationQueueInfo.builder()
+                        .id(row.get("id", UUID.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .build()))
                 .singleOrEmpty();
     }
 
@@ -193,7 +345,16 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {
-        var statement = connection.createStatement(SELECT_BY_ID)
+        var statement = connection
+                .createStatement(SELECT_BY_ID)
+                .bind("id", id);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private Flux<? extends Result> findQueueInfoById(UUID id, Connection connection) {
+        var statement = connection
+                .createStatement(SELECT_QUEUE_INFO_BY_ID)
                 .bind("id", id);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -216,9 +377,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("scope" + i, annotationQueue.scope().getValue())
                     .bind("comments_enabled" + i, annotationQueue.commentsEnabled())
                     .bind("feedback_definitions" + i,
-                            annotationQueue.feedbackDefinitions() != null
-                                    ? annotationQueue.feedbackDefinitions().toArray(UUID[]::new)
-                                    : new UUID[]{});
+                            annotationQueue.feedbackDefinitionNames() != null
+                                    ? annotationQueue.feedbackDefinitionNames().toArray(String[]::new)
+                                    : new String[]{});
             i++;
         }
 
@@ -252,14 +413,60 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .description(row.get("description", String.class))
                 .instructions(row.get("instructions", String.class))
                 .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
-                .feedbackDefinitions(Arrays.stream(row.get("feedback_definitions", String[].class))
-                        .map(UUID::fromString)
+                .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
                         .toList())
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
+                .itemsCount(row.get("items_count", Long.class))
+                .reviewers(mapReviewers(row))
+                .feedbackScores(mapFeedbackScores(row))
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build());
+    }
+
+    private List<AnnotationQueueReviewer> mapReviewers(Row row) {
+        Object[][] reviewersData = row.get("reviewers", Object[][].class);
+        if (reviewersData == null || reviewersData.length == 0) {
+            return null;
+        }
+
+        return Arrays.stream(reviewersData)
+                .map(reviewerTuple -> {
+                    if (reviewerTuple.length >= 2) {
+                        String username = (String) reviewerTuple[0];
+                        Long count = ((Number) reviewerTuple[1]).longValue();
+                        return AnnotationQueueReviewer.builder()
+                                .username(username)
+                                .status(count)
+                                .build();
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private List<FeedbackScoreAverage> mapFeedbackScores(Row row) {
+        Object[][] feedbackScoresData = row.get("feedback_scores", Object[][].class);
+        if (feedbackScoresData == null || feedbackScoresData.length == 0) {
+            return null;
+        }
+
+        return Arrays.stream(feedbackScoresData)
+                .map(scoreTuple -> {
+                    if (scoreTuple.length >= 2) {
+                        String name = (String) scoreTuple[0];
+                        Number value = (Number) scoreTuple[1];
+                        return FeedbackScoreAverage.builder()
+                                .name(name)
+                                .value(BigDecimal.valueOf(value.doubleValue()))
+                                .build();
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
     }
 }

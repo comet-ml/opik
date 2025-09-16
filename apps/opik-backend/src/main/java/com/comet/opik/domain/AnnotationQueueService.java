@@ -21,11 +21,13 @@ import java.util.UUID;
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
-    Mono<Integer> createBatch(@NonNull AnnotationQueueBatch batch);
+    Mono<Integer> createBatch(AnnotationQueueBatch batch);
 
-    Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds);
+    Mono<AnnotationQueue> findById(@NonNull UUID id);
 
-    Mono<Long> removeItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds);
+    Mono<Long> addItems(UUID queueId, Set<UUID> itemIds);
+
+    Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds);
 }
 
 @Singleton
@@ -51,6 +53,17 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> findById(@NonNull UUID id) {
+        log.debug("Finding annotation queue by id '{}'", id);
+
+        return annotationQueueDAO.findById(id)
+                .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                .doOnSuccess(queue -> log.debug("Found annotation queue with id '{}'", id))
+                .doOnError(error -> log.debug("Annotation queue not found with id '{}'", id));
+    }
+
     @WithSpan
     @Override
     public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds) {
@@ -59,7 +72,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.just(0L);
         }
 
-        return annotationQueueDAO.findById(queueId)
+        return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
                 .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId()))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
@@ -75,7 +88,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.just(0L);
         }
 
-        return annotationQueueDAO.findById(queueId)
+        return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
                 .flatMap(queue -> annotationQueueDAO.removeItems(queueId, itemIds, queue.projectId()))
                 .doOnSuccess(removedCount -> log.debug(
@@ -94,8 +107,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         return annotationQueue.toBuilder()
                 .id(id)
                 .commentsEnabled(annotationQueue.commentsEnabled() != null ? annotationQueue.commentsEnabled() : false)
-                .feedbackDefinitions(annotationQueue.feedbackDefinitions() != null
-                        ? annotationQueue.feedbackDefinitions()
+                .feedbackDefinitionNames(annotationQueue.feedbackDefinitionNames() != null
+                        ? annotationQueue.feedbackDefinitionNames()
                         : List.of())
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())

@@ -35,9 +35,13 @@ public record AnnotationQueue(
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable Boolean commentsEnabled,
         @JsonView({AnnotationQueue.View.Public.class,
-                AnnotationQueue.View.Write.class}) @Nullable List<UUID> feedbackDefinitions,
+                AnnotationQueue.View.Write.class}) @Nullable List<String> feedbackDefinitionNames,
         @JsonView({
-                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
+        @JsonView({
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
+        @JsonView({
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long itemsCount,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({

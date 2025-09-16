@@ -6,7 +6,6 @@ import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +19,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -46,6 +46,28 @@ public class AnnotationQueuesResource {
     private final @NonNull AnnotationQueueService annotationQueueService;
     private final @NonNull Provider<RequestContext> requestContext;
 
+    @GET
+    @Path("/{id}")
+    @Operation(operationId = "getAnnotationQueueById", summary = "Get annotation queue by id", description = "Get annotation queue by id", responses = {
+            @ApiResponse(responseCode = "200", description = "Annotation queue resource", content = @Content(schema = @Schema(implementation = AnnotationQueue.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView(AnnotationQueue.View.Public.class)
+    public Response getAnnotationQueueById(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding annotation queue by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var annotationQueue = annotationQueueService.findById(id)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found annotation queue by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(annotationQueue).build();
+    }
+
     @POST
     @Path("/batch")
     @Operation(operationId = "createAnnotationQueueBatch", summary = "Create annotation queue batch", description = "Create multiple annotation queues for human annotation workflows", responses = {
@@ -54,7 +76,6 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @RateLimited
     public Response createAnnotationQueueBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueBatch.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueueBatch batch) {
 
