@@ -15,6 +15,7 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.comet.opik.infrastructure.RedisConfig.AwsIamAuthConfig;
@@ -27,6 +28,14 @@ public class AwsIamCredentialsResolver implements CredentialsResolver {
 
     private final AwsCredentialsProvider credentialsProvider;
     private final AwsIamAuthConfig awsIamAuth;
+
+    // Shared single-threaded executor for cache refreshes
+    private final ExecutorService cacheRefreshExecutor;
+
+    {
+        cacheRefreshExecutor = Executors.newSingleThreadExecutor();
+        Runtime.getRuntime().addShutdownHook(new Thread(cacheRefreshExecutor::shutdown));
+    }
 
     public AwsIamCredentialsResolver(AwsIamAuthConfig awsIamAuth) {
         this(DefaultCredentialsProvider.builder().build(), awsIamAuth);
@@ -51,7 +60,7 @@ public class AwsIamCredentialsResolver implements CredentialsResolver {
 
                 @Override
                 public ListenableFuture<String> reload(String key, String oldValue) {
-                    return Futures.submit(() -> generateToken(), Executors.newSingleThreadExecutor());
+                    return Futures.submit(() -> generateToken(), cacheRefreshExecutor);
                 }
             });
 
