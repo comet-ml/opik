@@ -18,4 +18,6 @@ export interface TraceWrite {
     errorInfo?: OpikApi.ErrorInfoWrite;
     lastUpdatedAt?: Date;
     threadId?: string;
+    /** ID of the prompt version used in this trace */
+    promptVersionId?: string;
 }

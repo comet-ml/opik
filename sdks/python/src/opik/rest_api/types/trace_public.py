@@ -40,6 +40,11 @@ class TracePublic(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    prompt_version_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    ID of the prompt version used in this trace
+    """
+
     visibility_mode: typing.Optional[TracePublicVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
 

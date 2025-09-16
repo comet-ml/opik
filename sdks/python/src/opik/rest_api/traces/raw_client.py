@@ -394,6 +394,7 @@ class RawTracesClient:
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        prompt_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -426,6 +427,9 @@ class RawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        prompt_version_id : typing.Optional[str]
+            ID of the prompt version used in this trace
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -457,6 +461,7 @@ class RawTracesClient:
                 ),
                 "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
+                "prompt_version_id": prompt_version_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2176,6 +2181,7 @@ class AsyncRawTracesClient:
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        prompt_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2208,6 +2214,9 @@ class AsyncRawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        prompt_version_id : typing.Optional[str]
+            ID of the prompt version used in this trace
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2239,6 +2248,7 @@ class AsyncRawTracesClient:
                 ),
                 "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
+                "prompt_version_id": prompt_version_id,
             },
             headers={
                 "content-type": "application/json",
