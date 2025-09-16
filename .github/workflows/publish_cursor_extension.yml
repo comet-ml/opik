@@ -11,6 +11,9 @@ jobs:
     permissions:
       contents: write
       packages: write
+    defaults:
+      run:
+        working-directory: extensions/cursor
 
     steps:
     - name: Checkout repository
@@ -33,11 +36,6 @@ jobs:
     - name: Get Extension Filename
       id: get_filename
       run: echo "filename=$(ls *.vsix)" >> $GITHUB_OUTPUT
-
-    - name: Publish Extension to VS Code Marketplace
-      env:
-        VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      run: npm run deploy
 
     - name: Publish Extension to Open VSX
       env:
