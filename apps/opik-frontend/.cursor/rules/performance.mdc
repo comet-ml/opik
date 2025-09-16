@@ -1,7 +1,7 @@
 ---
 description: Frontend performance optimization rules for React hooks and data processing
 globs: "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Frontend Performance Guidelines
@@ -9,6 +9,7 @@ alwaysApply: false
 ## Selective useMemo Usage
 
 **Use useMemo ONLY for:**
+
 - Complex computations that are expensive to recalculate
 - Data transformations with multiple operations or iterations
 - Large array filtering/sorting operations
@@ -18,9 +19,9 @@ alwaysApply: false
 // ✅ Good: Complex computation
 const expensiveValue = useMemo(() => {
   return largeDataSet
-    .filter(item => item.category === selectedCategory)
+    .filter((item) => item.category === selectedCategory)
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(item => transformItem(item));
+    .map((item) => transformItem(item));
 }, [largeDataSet, selectedCategory]);
 
 // ✅ Good: API data transformation for child components
@@ -36,6 +37,7 @@ const isVisible = useMemo(() => showModal, [showModal]); // Unnecessary
 ## Selective useCallback Usage
 
 **Use useCallback ONLY for:**
+
 - Functions passed as props to child components
 - Functions used in useEffect dependencies
 - Event handlers in frequently re-rendering components
@@ -43,10 +45,13 @@ const isVisible = useMemo(() => showModal, [showModal]); // Unnecessary
 
 ```typescript
 // ✅ Good: Function passed to child component
-const handleItemSelect = useCallback((id: string) => {
-  setSelectedItem(id);
-  onSelectionChange?.(id);
-}, [onSelectionChange]);
+const handleItemSelect = useCallback(
+  (id: string) => {
+    setSelectedItem(id);
+    onSelectionChange?.(id);
+  },
+  [onSelectionChange],
+);
 
 // ✅ Good: Function used in effect dependency
 const fetchData = useCallback(async () => {
@@ -68,16 +73,19 @@ const processValue = useCallback((value) => value.toUpperCase(), []); // Unneces
 ## Data Processing Patterns
 
 ### API Response Handling
+
 ```typescript
 // ✅ For complex transformations
 const processedItems = useMemo(() => {
-  return data?.content
-    ?.filter(item => item.status === 'active')
-    ?.map(item => ({
-      ...item,
-      displayName: `${item.firstName} ${item.lastName}`,
-      formattedDate: formatDate(item.createdAt)
-    })) ?? [];
+  return (
+    data?.content
+      ?.filter((item) => item.status === "active")
+      ?.map((item) => ({
+        ...item,
+        displayName: `${item.firstName} ${item.lastName}`,
+        formattedDate: formatDate(item.createdAt),
+      })) ?? []
+  );
 }, [data?.content]);
 
 // ✅ For simple fallbacks
@@ -86,6 +94,7 @@ const totalCount = data?.total ?? 0; // No useMemo needed
 ```
 
 ### Column Definitions
+
 ```typescript
 // ✅ Memoize complex column definitions
 const columns: ColumnDef<DataType>[] = useMemo(() => [
