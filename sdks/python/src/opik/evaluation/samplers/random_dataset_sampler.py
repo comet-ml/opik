@@ -39,12 +39,10 @@ class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
         # Determine how many samples to take
         sample_size = min(len(data_items), self.max_samples)
 
+        # Do sample first to avoid shuffling the entire dataset
+        items = rng.sample(data_items, sample_size)
+
         if self.shuffle:
-            # Create a copy of the data items and shuffle it
-            items_copy = data_items.copy()
-            rng.shuffle(items_copy)
-            # Take the first sample_size items
-            return items_copy[:sample_size]
-        else:
-            # Sample without replacement using random.sample
-            return rng.sample(data_items, sample_size)
+            rng.shuffle(items)
+
+        return items
