@@ -90,6 +90,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       />
 
       <DatasetExpansionDialog
+        key={`dataset-expansion-${resetKeyRef.current}`}
         datasetId={datasetId}
         open={expansionDialogOpen}
         setOpen={setExpansionDialogOpen}
@@ -97,6 +98,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       />
 
       <GeneratedSamplesDialog
+        key={`generate-samples-${resetKeyRef.current}`}
         datasetId={datasetId}
         datasetName={datasetName}
         samples={generatedSamples}
@@ -107,7 +109,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => setExpansionDialogOpen(true)}
+        onClick={() => {
+          setExpansionDialogOpen(true);
+          resetKeyRef.current = resetKeyRef.current + 1;
+        }}
       >
         <Sparkles className="mr-2 size-4" />
         Expand dataset with AI

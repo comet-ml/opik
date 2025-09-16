@@ -1,8 +1,7 @@
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
+import { AlertTriangle, XCircle, Info } from "lucide-react";
+import { get, isObject, isString, isNumber } from "lodash";
 
-import useDatasetExpansionMutation from "@/api/datasets/useDatasetExpansionMutation";
-import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,18 +18,33 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, XCircle, Info } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Tag } from "@/components/ui/tag";
+
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import useDatasetExpansionMutation from "@/api/datasets/useDatasetExpansionMutation";
+import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
+import useAppStore from "@/store/AppStore";
+import useLastPickedModel from "@/hooks/useLastPickedModel";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import useProgressSimulation from "./useProgressSimulation";
 import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import { Tag } from "@/components/ui/tag";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+
+const DATASET_EXPANSION_LAST_PICKED_MODEL = "opik-dataset-expansion-model";
+const SAMPLE_COUNT_MIN = 1;
+const SAMPLE_COUNT_MAX = 200;
+const MIN_PROMPT_LENGTH = 10;
+const ANALYSIS_SAMPLE_SIZE = 50;
+const FIELD_FREQUENCY_THRESHOLD = 0.8;
+const PROGRESS_COMPLETION_DELAY = 1000;
 
 type DatasetExpansionDialogProps = {
   datasetId: string;
@@ -44,18 +58,57 @@ const DatasetExpansionDialog: React.FunctionComponent<
 > = ({ datasetId: initialDatasetId, open, setOpen, onSamplesGenerated }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const [selectedModel, setSelectedModel] = useState<PROVIDER_MODEL_TYPE | "">(
-    () => {
-      const saved = localStorage.getItem("opik-dataset-expansion-model");
-      return saved ? (saved as PROVIDER_MODEL_TYPE) : "";
+  const [lastPickedModel, setLastPickedModel] = useLastPickedModel({
+    key: DATASET_EXPANSION_LAST_PICKED_MODEL,
+  });
+
+  const { data: providerKeysData } = useProviderKeys({
+    workspaceName,
+  });
+
+  const providerKeys = useMemo(() => {
+    return providerKeysData?.content?.map((c) => c.provider) || [];
+  }, [providerKeysData]);
+
+  const { calculateModelProvider, calculateDefaultModel } =
+    useLLMProviderModelsData();
+
+  const { model, provider } = useMemo(() => {
+    const calculatedModel = calculateDefaultModel(
+      lastPickedModel,
+      providerKeys,
+    ) as PROVIDER_MODEL_TYPE;
+    const calculatedProvider = calculateModelProvider(calculatedModel);
+    return {
+      model: calculatedModel,
+      provider: calculatedProvider,
+    };
+  }, [
+    calculateDefaultModel,
+    calculateModelProvider,
+    lastPickedModel,
+    providerKeys,
+  ]);
+
+  const handleAddProvider = useCallback(
+    (provider: PROVIDER_TYPE) => {
+      if (!model) {
+        setLastPickedModel(calculateDefaultModel(model, [provider], provider));
+      }
     },
+    [calculateDefaultModel, model, setLastPickedModel],
   );
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    () => {
-      const saved = localStorage.getItem("opik-dataset-expansion-provider");
-      return saved ? (saved as PROVIDER_TYPE) : "";
+
+  const handleDeleteProvider = useCallback(
+    (provider: PROVIDER_TYPE) => {
+      const currentProvider = calculateModelProvider(model);
+      if (currentProvider === provider) {
+        setLastPickedModel("");
+      }
     },
+    [calculateModelProvider, model, setLastPickedModel],
   );
+
   const [sampleCount, setSampleCount] = useState<number>(5);
   const [variationInstructions, setVariationInstructions] =
     useState<string>("");
@@ -64,25 +117,26 @@ const DatasetExpansionDialog: React.FunctionComponent<
   const [hasUserEditedPrompt, setHasUserEditedPrompt] =
     useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [generationProgress, setGenerationProgress] = useState<number>(0);
-  const [progressMessage, setProgressMessage] = useState<string>("");
   const [showAllFields, setShowAllFields] = useState<boolean>(false);
 
   const { mutate, isPending, error, isError } = useDatasetExpansionMutation();
+  const {
+    progress: generationProgress,
+    message: progressMessage,
+    complete,
+  } = useProgressSimulation(isPending);
 
-  // Fetch dataset items to analyze structure automatically
   const { data: sampleData, isLoading: isAnalyzing } = useDatasetItemsList(
     {
       datasetId: initialDatasetId || "",
       page: 1,
-      size: 50, // Analyze up to 50 items for better pattern detection
+      size: ANALYSIS_SAMPLE_SIZE,
     },
     {
       enabled: !!initialDatasetId && open,
     },
   );
 
-  // Analyze dataset structure from sample data
   const datasetAnalysis = useMemo(() => {
     if (!sampleData?.content?.length) return null;
 
@@ -97,18 +151,22 @@ const DatasetExpansionDialog: React.FunctionComponent<
         if (!fieldTypes[key]) fieldTypes[key] = new Set();
 
         const value = (item.data as Record<string, unknown>)[key];
-        if (typeof value === "object" && value !== null) {
+        if (isObject(value)) {
           fieldTypes[key].add("object");
+        } else if (isString(value)) {
+          fieldTypes[key].add("string");
+        } else if (isNumber(value)) {
+          fieldTypes[key].add("number");
         } else {
           fieldTypes[key].add(typeof value);
         }
       });
     });
 
-    // Only include fields that appear in at least 80% of samples
     const totalSamples = sampleData.content.length;
     const commonFields = Array.from(fields).filter(
-      (field) => fieldFrequency[field] >= totalSamples * 0.8,
+      (field) =>
+        fieldFrequency[field] >= totalSamples * FIELD_FREQUENCY_THRESHOLD,
     );
 
     return {
@@ -126,7 +184,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
     };
   }, [sampleData?.content]);
 
-  // Generate default prompt
   const defaultPrompt = useMemo(() => {
     if (!sampleData?.content?.length) return "";
 
@@ -156,115 +213,97 @@ const DatasetExpansionDialog: React.FunctionComponent<
     return prompt;
   }, [sampleData?.content, sampleCount, preserveFields, variationInstructions]);
 
-  // Initialize and update custom prompt with default prompt
-  React.useEffect(() => {
+  useEffect(() => {
     if (defaultPrompt) {
       if (!customPrompt || !hasUserEditedPrompt) {
-        // Set custom prompt to default if it's empty or user hasn't manually edited it
         setCustomPrompt(defaultPrompt);
       }
     }
   }, [defaultPrompt, customPrompt, hasUserEditedPrompt]);
 
-  // Auto-populate preserve fields when analysis is available
-  React.useEffect(() => {
+  useEffect(() => {
     if (datasetAnalysis?.commonFields && preserveFields.length === 0) {
       setPreserveFields(datasetAnalysis.commonFields);
     }
   }, [datasetAnalysis?.commonFields, preserveFields.length]);
 
-  const handleSubmit = useCallback(() => {
-    if (!selectedModel || !initialDatasetId) return;
-
-    // Reset any previous validation errors
+  const validateForm = useCallback(() => {
     setValidationError(null);
 
-    // Client-side validation
-    const sampleCountNumber =
-      typeof sampleCount === "string" ? parseInt(sampleCount, 10) : sampleCount;
+    const sampleCountNumber = isString(sampleCount)
+      ? parseInt(sampleCount, 10)
+      : sampleCount;
+
     if (
       isNaN(sampleCountNumber) ||
-      sampleCountNumber < 1 ||
-      sampleCountNumber > 200
+      sampleCountNumber < SAMPLE_COUNT_MIN ||
+      sampleCountNumber > SAMPLE_COUNT_MAX
     ) {
-      setValidationError("Sample count must be between 1 and 200.");
-      return;
+      setValidationError(
+        `Sample count must be between ${SAMPLE_COUNT_MIN} and ${SAMPLE_COUNT_MAX}.`,
+      );
+      return false;
     }
 
-    if (customPrompt && customPrompt.trim().length < 10) {
-      setValidationError("Custom prompt must be at least 10 characters long.");
-      return;
+    if (customPrompt && customPrompt.trim().length < MIN_PROMPT_LENGTH) {
+      setValidationError(
+        `Custom prompt must be at least ${MIN_PROMPT_LENGTH} characters long.`,
+      );
+      return false;
     }
 
     if (!sampleData?.content?.length) {
       setValidationError(
         "Dataset analysis is still in progress. Please wait for it to complete.",
       );
-      return;
+      return false;
     }
 
+    return true;
+  }, [sampleCount, customPrompt, sampleData?.content?.length]);
+
+  const getErrorMessage = useCallback(() => {
+    return (
+      get(error, ["response", "data", "message"], error?.message) ||
+      "An error occurred while generating samples. Please try again."
+    );
+  }, [error]);
+
+  const handleSubmit = useCallback(() => {
+    if (!model || !initialDatasetId) return;
+
+    if (!validateForm()) return;
+
+    const sampleCountNumber = isString(sampleCount)
+      ? parseInt(sampleCount, 10)
+      : sampleCount;
+
     const requestData: DatasetExpansionRequest = {
-      model: selectedModel,
+      model: model,
       sample_count: sampleCountNumber,
       preserve_fields: preserveFields.length > 0 ? preserveFields : undefined,
       variation_instructions: variationInstructions?.trim() || undefined,
       custom_prompt: hasUserEditedPrompt ? customPrompt : undefined,
     };
 
-    // Start progress simulation
-    setGenerationProgress(0);
-    setProgressMessage("Initializing AI generation...");
-
-    const progressInterval = setInterval(() => {
-      setGenerationProgress((prev) => {
-        const next = prev + Math.random() * 15;
-        if (next > 90) return 90; // Don't complete until actual response
-
-        // Update progress messages
-        if (next > 20 && next <= 40) {
-          setProgressMessage("Analyzing dataset patterns...");
-        } else if (next > 40 && next <= 70) {
-          setProgressMessage("Generating synthetic samples...");
-        } else if (next > 70) {
-          setProgressMessage("Finalizing generated data...");
-        }
-
-        return next;
-      });
-    }, 800);
-
     mutate(
       { datasetId: initialDatasetId, ...requestData },
       {
         onSuccess: (response) => {
-          clearInterval(progressInterval);
-          setGenerationProgress(100);
-          setProgressMessage("Generation completed successfully!");
+          complete();
 
-          // Small delay to show completion before closing
           setTimeout(() => {
             onSamplesGenerated?.(response.generated_samples);
             setOpen(false);
-            // Reset form and progress (keep model selection for next time)
-            setSampleCount(5);
-            setVariationInstructions("");
-            setPreserveFields([]);
-            setValidationError(null);
-            setGenerationProgress(0);
-            setProgressMessage("");
-          }, 1000);
+          }, PROGRESS_COMPLETION_DELAY);
         },
-        onError: () => {
-          clearInterval(progressInterval);
-          setGenerationProgress(0);
-          setProgressMessage("");
-          // Error handling is managed by the mutation itself via toast
-        },
+        onError: () => {},
       },
     );
   }, [
     initialDatasetId,
-    selectedModel,
+    model,
+    validateForm,
     sampleCount,
     preserveFields,
     variationInstructions,
@@ -272,18 +311,13 @@ const DatasetExpansionDialog: React.FunctionComponent<
     mutate,
     onSamplesGenerated,
     setOpen,
-    sampleData?.content?.length,
     hasUserEditedPrompt,
+    complete,
   ]);
 
   const handleModelChange = useCallback(
-    (model: PROVIDER_MODEL_TYPE, provider: PROVIDER_TYPE) => {
-      setSelectedModel(model);
-      setSelectedProvider(provider);
-      localStorage.setItem("opik-dataset-expansion-model", model);
-      localStorage.setItem("opik-dataset-expansion-provider", provider);
-    },
-    [],
+    (model: PROVIDER_MODEL_TYPE) => setLastPickedModel(model),
+    [setLastPickedModel],
   );
 
   return (
@@ -300,19 +334,15 @@ const DatasetExpansionDialog: React.FunctionComponent<
           </p>
         </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col gap-4">
-          {/* Error Display */}
           {(validationError || isError) && (
-            <Alert variant="destructive" size="sm">
+            <Alert variant="destructive" size="sm" className="mb-4">
               <XCircle className="size-4" />
               <AlertTitle>Generation Error</AlertTitle>
               <AlertDescription>
-                {validationError ||
-                  (error as Error)?.message ||
-                  "An error occurred while generating samples. Please try again."}
+                {validationError || getErrorMessage()}
               </AlertDescription>
             </Alert>
           )}
-          {/* Dataset Structure Analysis - Enhanced Loading State */}
           {isAnalyzing && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 rounded-lg border bg-gradient-to-r from-primary/5 to-primary/10 p-4">
@@ -327,7 +357,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 </div>
               </div>
 
-              {/* Loading skeletons for the fields that will appear */}
               <div className="space-y-2">
                 <Skeleton className="h-4 w-32" />
                 <div className="flex items-center gap-2">
@@ -342,7 +371,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
             </div>
           )}
 
-          {/* Empty Dataset State */}
           {!isAnalyzing &&
             sampleData?.content &&
             sampleData.content.length === 0 && (
@@ -362,9 +390,9 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="rounded-md bg-blue-100 p-1.5 dark:bg-blue-900/20">
+                      <div className="rounded-md bg-info-box-icon-bg p-1.5">
                         <svg
-                          className="size-4 text-blue-600 dark:text-blue-400"
+                          className="size-4 text-info-box-icon-text"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -466,10 +494,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
                       </div>
                     )}
 
-                    <div className="rounded-md bg-amber-50 p-3 text-xs dark:bg-amber-900/20">
+                    <div className="rounded-md bg-warning-box-bg p-3 text-xs">
                       <div className="flex items-start gap-2">
                         <svg
-                          className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400"
+                          className="mt-0.5 size-3 shrink-0 text-warning-box-icon-text"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -477,14 +505,15 @@ const DatasetExpansionDialog: React.FunctionComponent<
                         >
                           <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
-                        <div className="text-amber-800 dark:text-amber-200">
+                        <div className="text-warning-box-text">
                           <div className="font-medium">
                             Field preservation tips:
                           </div>
                           <div className="mt-1 space-y-1">
                             <div>
-                              • Fields appearing in ≥80% of samples are
-                              auto-selected
+                              • Fields appearing in ≥
+                              {Math.round(FIELD_FREQUENCY_THRESHOLD * 100)}% of
+                              samples are auto-selected
                             </div>
                             <div>
                               • Selected fields will maintain similar patterns
@@ -502,10 +531,12 @@ const DatasetExpansionDialog: React.FunctionComponent<
           <div className="mt-6 space-y-2">
             <Label htmlFor="model">Model</Label>
             <PromptModelSelect
-              value={selectedModel}
+              value={model}
               workspaceName={workspaceName}
               onChange={handleModelChange}
-              provider={selectedProvider}
+              provider={provider}
+              onAddProvider={handleAddProvider}
+              onDeleteProvider={handleDeleteProvider}
             />
           </div>
 
@@ -514,28 +545,28 @@ const DatasetExpansionDialog: React.FunctionComponent<
             <Input
               id="sample-count"
               type="number"
-              min={1}
-              max={200}
+              min={SAMPLE_COUNT_MIN}
+              max={SAMPLE_COUNT_MAX}
               value={sampleCount}
               onChange={(e) => {
                 const value = e.target.value;
-                // Clear validation error when user starts typing
                 if (validationError) setValidationError(null);
 
-                // Allow empty input for editing - store empty string temporarily
                 if (value === "") {
-                  setSampleCount("" as unknown as number); // Temporarily allow empty string
+                  setSampleCount(0);
                   return;
                 }
 
                 const num = parseInt(value, 10);
-                if (!isNaN(num)) {
+                if (!isNaN(num) && num >= 0) {
                   setSampleCount(num);
                 }
               }}
               className="w-full"
             />
-            <p className="comet-body-s text-muted-foreground">Range 1-200</p>
+            <p className="comet-body-s text-muted-foreground">
+              Range {SAMPLE_COUNT_MIN}-{SAMPLE_COUNT_MAX}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -552,7 +583,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
             />
           </div>
 
-          {/* Enhanced Prompt Preview and Editing */}
           {defaultPrompt && (
             <Accordion type="single" collapsible className="mt-6 w-full">
               <AccordionItem
@@ -597,7 +627,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
                       onChange={(e) => {
                         setCustomPrompt(e.target.value);
                         setHasUserEditedPrompt(true);
-                        // Clear validation error when user starts typing
                         if (validationError) setValidationError(null);
                       }}
                       rows={12}
@@ -621,9 +650,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
           </DialogClose>
           <Button
             onClick={handleSubmit}
-            disabled={
-              !selectedModel || !initialDatasetId || isAnalyzing || isPending
-            }
+            disabled={!model || !initialDatasetId || isAnalyzing || isPending}
             className={isPending ? "relative overflow-hidden" : ""}
             size="lg"
           >
