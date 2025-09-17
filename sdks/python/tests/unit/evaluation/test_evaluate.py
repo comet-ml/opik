@@ -10,7 +10,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics, samplers
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
-from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
+from ...testlib import ANY_BUT_NONE, ANY_STRING, ANY_LIST, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
 
@@ -1368,3 +1368,300 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
         reference = actual_trace.input["reference"]
         expected_score = 1.0 if reference == "Hello, world!" else 0.0
         assert feedback_score.value == expected_score
+
+
+def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
+    fake_backend,
+):
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input={"message": "say hello"},
+            reference="hello",
+        ),
+        dataset_item.DatasetItem(
+            id="dataset-item-id-2",
+            input={"message": "say bye"},
+            reference="bye",
+        ),
+    ]
+
+    def say_task(dataset_item: Dict[str, Any]):
+        if dataset_item["input"]["message"] == "say hello":
+            return {"output": "hello"}
+
+        if dataset_item["input"]["message"] == "say bye":
+            return {"output": "not bye"}
+
+        raise Exception
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            evaluation.evaluate(
+                dataset=mock_dataset,
+                task=say_task,
+                experiment_name="the-experiment-name",
+                scoring_metrics=[metrics.Equals()],
+                task_threads=1,
+                trial_count=2,
+            )
+
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="the-experiment-name",
+        experiment_config=None,
+        prompts=None,
+    )
+
+    # With 2 trials and 2 dataset items, we expect 4 calls to insert
+    mock_experiment.insert.assert_has_calls(
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
+    )
+
+    # With 2 trials and 2 dataset items, we should have 4 trace trees total
+    assert len(fake_backend.trace_trees) == 4
+
+    # Check that we have 2 traces for each dataset item
+    dataset_item_1_traces = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.input["id"] == "dataset-item-id-1"
+    ]
+    dataset_item_2_traces = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.input["id"] == "dataset-item-id-2"
+    ]
+
+    assert len(dataset_item_1_traces) == 2
+    assert len(dataset_item_2_traces) == 2
+
+    # Define expected trace models
+    EXPECTED_TRACE_DATASET_ITEM_1 = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input={
+            "input": {"message": "say hello"},
+            "reference": "hello",
+            "id": "dataset-item-id-1",
+        },
+        output={"output": "hello"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        feedback_scores=[
+            FeedbackScoreModel(
+                id=ANY_BUT_NONE,
+                name="equals_metric",
+                value=1.0,
+            )
+        ],
+        spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
+    )
+
+    EXPECTED_TRACE_DATASET_ITEM_2 = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input={
+            "input": {"message": "say bye"},
+            "reference": "bye",
+            "id": "dataset-item-id-2",
+        },
+        output={"output": "not bye"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        feedback_scores=[
+            FeedbackScoreModel(
+                id=ANY_BUT_NONE,
+                name="equals_metric",
+                value=0.0,
+            )
+        ],
+        spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
+    )
+
+    # Verify each trace matches the expected model
+    for trace in dataset_item_1_traces:
+        assert_equal(EXPECTED_TRACE_DATASET_ITEM_1, trace)
+
+    for trace in dataset_item_2_traces:
+        assert_equal(EXPECTED_TRACE_DATASET_ITEM_2, trace)
+
+
+def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
+    fake_backend,
+):
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            question="Hello, world!",
+            reference="Hello, world!",
+        ),
+        dataset_item.DatasetItem(
+            id="dataset-item-id-2",
+            question="What is the capital of France?",
+            reference="Paris",
+        ),
+    ]
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    mock_models_factory_get = mock.Mock()
+    mock_model = mock.Mock()
+    mock_model.model_name = "some-model-name"
+    mock_model.generate_provider_response.return_value = mock.Mock(
+        choices=[mock.Mock(message=mock.Mock(content="Hello, world!"))]
+    )
+    mock_models_factory_get.return_value = mock_model
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            with mock.patch.object(
+                models_factory,
+                "get",
+                mock_models_factory_get,
+            ):
+                evaluation.evaluate_prompt(
+                    dataset=mock_dataset,
+                    messages=[
+                        {"role": "user", "content": "LLM response: {{input}}"},
+                    ],
+                    experiment_name="the-experiment-name",
+                    model="some-model-name",
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                    trial_count=2,
+                )
+
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="the-experiment-name",
+        experiment_config={
+            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
+            "model": "some-model-name",
+        },
+        prompts=None,
+    )
+
+    # With 2 trials and 2 dataset items, we expect 4 calls to insert
+    mock_experiment.insert.assert_has_calls(
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
+    )
+
+    # With 2 trials and 2 dataset items, we should have 4 trace trees total
+    assert len(fake_backend.trace_trees) == 4
+
+    # Check that we have 2 traces for each dataset item
+    dataset_item_1_traces = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.input["id"] == "dataset-item-id-1"
+    ]
+    dataset_item_2_traces = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.input["id"] == "dataset-item-id-2"
+    ]
+
+    assert len(dataset_item_1_traces) == 2
+    assert len(dataset_item_2_traces) == 2
+
+    # Define expected trace models
+    EXPECTED_TRACE_DATASET_ITEM_1 = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input={
+            "question": "Hello, world!",
+            "reference": "Hello, world!",
+            "id": "dataset-item-id-1",
+        },
+        output={
+            "input": [{"role": "user", "content": "LLM response: {{input}}"}],
+            "output": "Hello, world!",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        feedback_scores=[
+            FeedbackScoreModel(
+                id=ANY_BUT_NONE,
+                name="equals_metric",
+                value=1.0,
+            )
+        ],
+        spans=ANY_LIST,  # We don't need to verify span details for this test
+    )
+
+    EXPECTED_TRACE_DATASET_ITEM_2 = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input={
+            "question": "What is the capital of France?",
+            "reference": "Paris",
+            "id": "dataset-item-id-2",
+        },
+        output={
+            "input": [{"role": "user", "content": "LLM response: {{input}}"}],
+            "output": "Hello, world!",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        feedback_scores=[
+            FeedbackScoreModel(
+                id=ANY_BUT_NONE,
+                name="equals_metric",
+                value=0.0,
+            )
+        ],
+        spans=ANY_LIST,  # We don't need to verify span details for this test
+    )
+
+    for trace in dataset_item_1_traces:
+        assert_equal(EXPECTED_TRACE_DATASET_ITEM_1, trace)
+
+    for trace in dataset_item_2_traces:
+        assert_equal(EXPECTED_TRACE_DATASET_ITEM_2, trace)
