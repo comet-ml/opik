@@ -6,6 +6,8 @@ from typing import Optional
 
 def patch_flow_init(project_name: Optional[str] = None) -> None:
     original_init = crewai.Flow.__init__
+    if hasattr(patch_flow_init, "_patched"):
+        return
 
     @functools.wraps(original_init)
     def _init_wrapper(self, *args, **kwargs) -> None:  # type: ignore
@@ -36,6 +38,8 @@ def patch_flow_kickoff_async(project_name: Optional[str] = None) -> None:
     # We only need to patch the async version of the kickoff method because
     # the sync version calls it internally
     original_kickoff_async = crewai.Flow.kickoff_async
+    if hasattr(patch_flow_kickoff_async, "_patched"):
+        return
 
     @functools.wraps(original_kickoff_async)
     async def _kickoff_async_wrapper(self, *args, **kwargs):  # type: ignore
