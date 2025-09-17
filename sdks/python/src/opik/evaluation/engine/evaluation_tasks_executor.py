@@ -10,7 +10,10 @@ T = TypeVar("T")
 
 
 def execute(
-    evaluation_tasks: List[EvaluationTask[T]], workers: int, verbose: int
+    evaluation_tasks: List[EvaluationTask[T]],
+    workers: int,
+    verbose: int,
+    desc: str = "Evaluation",
 ) -> List[T]:
     if workers == 1:
         test_results = [
@@ -18,7 +21,7 @@ def execute(
             for evaluation_task in _tqdm(
                 evaluation_tasks,
                 disable=(verbose < 1),
-                desc="Evaluation",
+                desc=desc,
                 total=len(evaluation_tasks),
             )
         ]
@@ -37,7 +40,7 @@ def execute(
                     test_result_futures,
                 ),
                 disable=(verbose < 1),
-                desc="Evaluation",
+                desc=desc,
                 total=len(test_result_futures),
             )
         ]
