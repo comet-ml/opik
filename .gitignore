@@ -1,6 +1,10 @@
 # Mac
 .DS_Store
 
+# Environment variables
+.env.local
+.env
+
 # IntelliJ
 .idea/
 *.iml
