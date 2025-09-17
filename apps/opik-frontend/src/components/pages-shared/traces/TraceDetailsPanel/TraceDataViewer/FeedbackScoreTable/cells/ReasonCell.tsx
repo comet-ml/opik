@@ -26,6 +26,10 @@ const ReasonCell = (
 
   const reasonsList = reasons.map((reason) => reason.reason).join(", ");
 
+  if (reasons.length === 0) {
+    return null;
+  }
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
