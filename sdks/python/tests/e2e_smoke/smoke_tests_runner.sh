@@ -12,7 +12,7 @@ python_files=$(find . -maxdepth 1 -name "*.py" ! -name "__init__.py")
 
 # Check if any Python files were found
 if [ -z "$python_files" ]; then
-    echo "No Python files found in current directory"
+    echo "No Python files found in current directory: $(pwd)"
     exit 1
 fi
 
