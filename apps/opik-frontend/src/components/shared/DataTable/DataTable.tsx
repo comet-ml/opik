@@ -341,6 +341,10 @@ const DataTable = <TData, TValue>({
           </TableCell>
         );
       }
+
+      if (!getSubRows) {
+        return null;
+      }
     }
 
     if (cell.getIsPlaceholder()) {

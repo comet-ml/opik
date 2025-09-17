@@ -235,7 +235,7 @@ export const generateUpdateMutation =
 
 export const generateDeleteMutation =
   (name: string, author?: string) =>
-  (feedbackScores?: TraceFeedbackScore[]) => {
+  (feedbackScores?: TraceFeedbackScore[]): TraceFeedbackScore[] => {
     const retVal = feedbackScores || [];
     if (!author) {
       return retVal.filter((feedbackScore) => feedbackScore.name !== name);
@@ -243,14 +243,29 @@ export const generateDeleteMutation =
 
     return retVal
       .map((feedbackScore) => {
-        if (feedbackScore.name !== name && feedbackScore.value_by_author) {
-          delete feedbackScore.value_by_author[author];
-          return feedbackScore;
+        if (feedbackScore.name === name && hasValuesByAuthor(feedbackScore)) {
+          const updatedValueByAuthor = { ...feedbackScore.value_by_author };
+          delete updatedValueByAuthor[author];
+
+          if (Object.keys(updatedValueByAuthor).length === 0) {
+            return null;
+          }
+
+          const aggregated =
+            aggregateMultiAuthorFeedbackScore(updatedValueByAuthor);
+
+          return {
+            ...feedbackScore,
+            ...aggregated,
+            value_by_author: updatedValueByAuthor,
+            last_updated_at: new Date().toISOString(),
+            last_updated_by: author,
+          };
         }
 
         return feedbackScore;
       })
-      .filter(Boolean);
+      .filter((feedbackScore) => feedbackScore !== null);
   };
 
 export const categoryOptionLabelRenderer = (

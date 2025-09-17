@@ -13,7 +13,7 @@ const AuthorCell = (
     ? [row.author]
     : Object.keys(row.value_by_author ?? {});
 
-  const authorsList = authors.join(", ");
+  const authorsList = authors.sort().join(", ");
 
   return (
     <CellWrapper

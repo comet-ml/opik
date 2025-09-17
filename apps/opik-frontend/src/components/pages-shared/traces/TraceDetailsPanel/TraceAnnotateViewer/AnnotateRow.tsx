@@ -96,6 +96,12 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const [value, setValue] = useState<number | "">(feedbackScoreData.value);
   useEffect(() => {
     setValue(feedbackScoreData.value);
+
+    if (!feedbackScoreData.value) {
+      setEditReason(false);
+      setReasonValue(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackScoreData.value]);
 
   const handleChangeValue = useCallback(

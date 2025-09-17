@@ -1,3 +1,4 @@
+import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
@@ -8,44 +9,40 @@ import {
 } from "@/components/shared/FeedbackScoreTag/utils";
 import { ExpandingFeedbackScoreRow } from "../types";
 import { getIsParentFeedbackScoreRow } from "../utils";
+import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 
-const ValueCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
+type ValueCellProps = CellContext<ExpandingFeedbackScoreRow, string>;
+
+const formatCategoricScoreValue = (
+  valuesByAuthor: FeedbackScoreValueByAuthorMap,
+): string => {
+  const scoreValuesMap = getCategoricFeedbackScoreValuesMap(valuesByAuthor);
+  return Array.from(scoreValuesMap.values())
+    .map(({ users, value }) => `${users.length}x ${value}`)
+    .join(", ");
+};
+
+const renderParentValue = (displayText: string): React.ReactElement => (
+  <div className="truncate text-light-slate">{displayText}</div>
+);
+
+const ValueCell: React.FC<ValueCellProps> = (context) => {
   const rowData = context.row.original;
   const value = context.getValue();
 
-  const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(rowData);
+  const isParentRow = getIsParentFeedbackScoreRow(rowData);
   const isCategoricScore = getIsCategoricFeedbackScore(rowData.category_name);
 
-  const renderValue = () => {
-    if (isParentFeedbackScoreRow) {
-      if (isCategoricScore) {
-        const scoreValuesMap = getCategoricFeedbackScoreValuesMap(
-          rowData.value_by_author ?? {},
-        );
-
-        return (
-          <div className="flex gap-1 text-light-slate">
-            {Array.from(scoreValuesMap.entries()).map(
-              ([category, { users, value }], index) => (
-                <div key={category} className="flex items-center gap-1">
-                  <span>{users.length}x</span>
-                  <span className="truncate">
-                    {value}
-                    {index < scoreValuesMap.size - 1 && ","}
-                  </span>
-                </div>
-              ),
-            )}
-          </div>
-        );
-      }
-
-      return (
-        <div className="flex items-center gap-1 text-light-slate">
-          <span>avg.</span>
-          <span className="truncate">{value}</span>
-        </div>
+  const cellContent = useMemo((): string | React.ReactElement => {
+    if (isParentRow && isCategoricScore) {
+      const displayText = formatCategoricScoreValue(
+        rowData.value_by_author ?? {},
       );
+      return renderParentValue(displayText);
+    }
+
+    if (isParentRow) {
+      return renderParentValue(value);
     }
 
     if (rowData.category_name) {
@@ -53,7 +50,13 @@ const ValueCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
     }
 
     return value;
-  };
+  }, [
+    isParentRow,
+    isCategoricScore,
+    rowData.value_by_author,
+    rowData.category_name,
+    value,
+  ]);
 
   return (
     <CellWrapper
@@ -61,8 +64,8 @@ const ValueCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <TooltipWrapper content={renderValue()} stopClickPropagation>
-        <span className="truncate direction-alternate">{renderValue()}</span>
+      <TooltipWrapper content={cellContent} stopClickPropagation>
+        <span className="truncate direction-alternate">{cellContent}</span>
       </TooltipWrapper>
     </CellWrapper>
   );
