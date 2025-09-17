@@ -612,15 +612,9 @@ public class TracesResource {
 
         log.info("Creating trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
-        try {
-            commentService.createBatchForTraces(payload.ids(), payload.text())
-                    .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                    .block();
-        } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), e.getMessage()))
-                    .build();
-        }
+        commentService.createBatchForTraces(payload.ids(), payload.text())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
         log.info("Created trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
