@@ -476,8 +476,20 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             )
 
         if all_scores:
-            client.rest_client.traces.score_batch_of_threads(scores=all_scores)
-
+            done = False
+            max_attempts = 10
+            attempts = 0
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.score_batch_of_threads(scores=all_scores)
+                    done = True
+                    attempts = 0
+                except Exception as e:
+                    logger.error(f"Error scoring batch of threads attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
+            if not done:
+                logger.error("Failed to score batch of threads after %d attempts", max_attempts)
     except Exception as e:
         logger.error(e)
     finally:
