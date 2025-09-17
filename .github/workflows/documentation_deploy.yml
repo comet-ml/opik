@@ -24,6 +24,7 @@ jobs:
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
           SEGMENT_WRITE_KEY: ${{ secrets.SEGMENT_WRITE_KEY }}
+          GTM_CONTAINER_ID: ${{ secrets.GTM_CONTAINER_ID }}
         run: |
           cd apps/opik-documentation/documentation
           fern generate --docs
