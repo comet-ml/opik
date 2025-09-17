@@ -1,3 +1,4 @@
+import random
 from typing import List, Optional
 
 from opik.api_objects.dataset import dataset_item
@@ -32,17 +33,16 @@ class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
         if len(data_items) == 0:
             return []
 
-        try:
-            import numpy as np
-        except ImportError:
-            raise ImportError(
-                "numpy is required for RandomDatasetSampler. Please install numpy to use this sampler."
-            )
+        # Create a random number generator with the specified seed
+        rng = random.Random(self.seed)
 
-        generator = np.random.default_rng(self.seed)
-        return generator.choice(
-            data_items,
-            size=min(len(data_items), self.max_samples),
-            replace=False,
-            shuffle=self.shuffle,
-        ).tolist()
+        # Determine how many samples to take
+        sample_size = min(len(data_items), self.max_samples)
+
+        # Do sample first to avoid shuffling the entire dataset
+        items = rng.sample(data_items, sample_size)
+
+        if self.shuffle:
+            rng.shuffle(items)
+
+        return items
