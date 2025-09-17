@@ -12,9 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import java.util.List;
+import java.util.Map;
 
 import java.util.Set;
 import java.util.UUID;
+import jakarta.ws.rs.BadRequestException;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -92,42 +94,40 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<Long> createBatchForTraces(@NonNull Set<UUID> traceIds, @NonNull String text) {
-        if (traceIds.isEmpty()) {
-            return Mono.just(0L);
-        }
-
-        List<UUID> ids = traceIds.stream().toList();
-
-        return transactionTemplateAsync
-                .nonTransaction(connection -> traceDAO.getProjectIdsByTraceIds(traceIds, connection))
-                .flatMap(map -> {
-                    if (map.size() != ids.size()) {
-                        return Mono.error(new jakarta.ws.rs.BadRequestException("Some traces were not found in the workspace"));
-                    }
-                    List<UUID> projectIds = ids.stream().map(map::get).toList();
-                    List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectIds,
-                            Comment.builder().text(text).build());
-                });
+        return createBatch(
+                traceIds,
+                text,
+                transactionTemplateAsync.nonTransaction(connection -> traceDAO.getProjectIdsByTraceIds(traceIds, connection)),
+                CommentDAO.EntityType.TRACE);
     }
 
     @Override
     public Mono<Long> createBatchForSpans(@NonNull Set<UUID> spanIds, @NonNull String text) {
-        if (spanIds.isEmpty()) {
+        return createBatch(
+                spanIds,
+                text,
+                spanDAO.getProjectIdsBySpanIds(spanIds),
+                CommentDAO.EntityType.SPAN);
+    }
+
+    private Mono<Long> createBatch(Set<UUID> idsSet,
+                                   String text,
+                                   Mono<Map<UUID, UUID>> idsToProjectIds,
+                                   CommentDAO.EntityType entityType) {
+        if (idsSet.isEmpty()) {
             return Mono.just(0L);
         }
 
-        List<UUID> ids = spanIds.stream().toList();
+        List<UUID> ids = idsSet.stream().toList();
 
-        return spanDAO.getProjectIdsBySpanIds(spanIds)
-                .flatMap(map -> {
-                    if (map.size() != ids.size()) {
-                        return Mono.error(new jakarta.ws.rs.BadRequestException("Some spans were not found in the workspace"));
-                    }
-                    List<UUID> projectIds = ids.stream().map(map::get).toList();
-                    List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectIds,
-                            Comment.builder().text(text).build());
-                });
+        return idsToProjectIds.flatMap(map -> {
+            if (map.size() != ids.size()) {
+                return Mono.error(new BadRequestException("Some entities were not found in the workspace"));
+            }
+            List<UUID> projectIds = ids.stream().map(map::get).toList();
+            List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
+            return commentDAO.addCommentsBatch(entityType, ids, generatedIds, projectIds,
+                    Comment.builder().text(text).build());
+        });
     }
 }
