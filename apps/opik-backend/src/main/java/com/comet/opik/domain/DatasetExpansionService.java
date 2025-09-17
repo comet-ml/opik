@@ -42,7 +42,7 @@ public class DatasetExpansionService {
         log.info("Starting dataset expansion for datasetId '{}', workspaceId '{}', sampleCount: '{}'",
                 datasetId, workspaceId, request.sampleCount());
         // Get existing dataset items to analyze
-        var existingItems = datasetItemService.getItems(datasetId, 1, 10, false)
+        var existingItems = datasetItemService.getItems(datasetId, 1, 10, null, false)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();

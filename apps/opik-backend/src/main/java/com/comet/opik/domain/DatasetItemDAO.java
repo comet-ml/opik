@@ -46,8 +46,7 @@ public interface DatasetItemDAO {
     Mono<Long> save(UUID datasetId, List<DatasetItem> batch);
 
     Mono<Long> delete(List<UUID> ids);
-
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, boolean truncate);
+    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, String search, boolean truncate);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
@@ -150,6 +149,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
+            <if(search)>AND arrayExists(value -> positionCaseInsensitive(toString(value), :search) > 0, mapValues(data))<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit OFFSET :offset
@@ -180,6 +180,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
+                <if(search)>AND arrayExists(value -> positionCaseInsensitive(toString(value), :search) > 0, mapValues(data))<endif>
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
@@ -959,41 +960,69 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
+    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, String search,
+            boolean truncate) {
 
-        Segment segmentCount = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page_count");
+        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
 
-        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
-                .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
-                        .bind("datasetId", datasetId)
+            // Determine if we have a search
+            boolean hasSearch = search != null && !search.trim().isEmpty();
+
+            // Get count and columns using the unified count query
+            Segment segmentCount = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_count");
+
+            // Create the StringTemplate for the count query
+            ST countTemplate = new ST(SELECT_DATASET_ITEMS_COUNT);
+            countTemplate = countTemplate.add("search", hasSearch);
+
+            // Create the count statement
+            var countStatement = connection.createStatement(countTemplate.render())
+                    .bind("datasetId", datasetId)
+                    .bind("workspace_id", workspaceId);
+
+            // Bind search parameter if needed
+            if (hasSearch && search != null) {
+                countStatement.bind("search", search.trim());
+            }
+
+            Mono<Map.Entry<Long, Set<Column>>> countAndColumnsMono = Flux.from(countStatement.execute())
+                    .doFinally(signalType -> endSegment(segmentCount))
+                    .flatMap(results -> DatasetItemResultMapper.mapCountAndColumns(results, "data"))
+                    .reduce(DatasetItemResultMapper::groupResults);
+
+            // Get the items using the unified query
+            return countAndColumnsMono.flatMap(countAndColumns -> {
+                long total = countAndColumns.getKey();
+                Set<Column> columns = countAndColumns.getValue();
+
+                Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page");
+
+                // Create the StringTemplate for the unified query
+                ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
+                template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+
+                // Add search condition to template
+                template = template.add("search", hasSearch);
+
+                // Create the statement
+                var itemsStatement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
-                        .execute())
-                .doFinally(signalType -> endSegment(segmentCount))
-                .flatMap(results -> DatasetItemResultMapper.mapCountAndColumns(results, "data"))
-                .reduce(DatasetItemResultMapper::groupResults)
-                .flatMap(result -> {
+                        .bind("datasetId", datasetId)
+                        .bind("limit", size)
+                        .bind("offset", (page - 1) * size);
 
-                    Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page");
+                // Bind search parameter if needed
+                if (hasSearch && search != null) {
+                    itemsStatement.bind("search", search.trim());
+                }
 
-                    long total = result.getKey();
-                    Set<Column> columns = result.getValue();
-
-                    ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
-                    template = template.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
-
-                    return Flux.from(connection.createStatement(template.render())
-                            .bind("workspace_id", workspaceId)
-                            .bind("datasetId", datasetId)
-                            .bind("limit", size)
-                            .bind("offset", (page - 1) * size)
-                            .execute())
-                            .flatMap(DatasetItemResultMapper::mapItem)
-                            .collectList()
-                            .flatMap(items -> Mono
-                                    .just(new DatasetItemPage(items, page, items.size(), total, columns)))
-                            .doFinally(signalType -> endSegment(segment));
-                })));
+                return Flux.from(itemsStatement.execute())
+                        .flatMap(DatasetItemResultMapper::mapItem)
+                        .collectList()
+                        .map(items -> new DatasetItemPage(items, page, items.size(), total, columns))
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        }));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
