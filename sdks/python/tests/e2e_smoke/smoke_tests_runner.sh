@@ -19,8 +19,6 @@ fi
 # Track failures to report aggregate result at the end
 failed=0
 
-#echo "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
-
 # Execute each Python file
 for file in $python_files; do
     echo "═════════════════════════════════════════════════════════════════"
