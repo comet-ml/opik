@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueInfo;
 import com.comet.opik.api.AnnotationQueueReviewer;
-import com.comet.opik.api.FeedbackScoreAverage;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -21,17 +20,18 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.ExperimentDAO.getFeedbackScores;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
@@ -267,7 +267,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.last_updated_by,
                 qic.items_count as items_count,
                 fs.feedback_scores as feedback_scores,
-                fsra.reviewers as reviewers,
+                fsra.reviewers as reviewers
             FROM queues_final AS q
             LEFT JOIN queue_items_count AS qic ON q.id = qic.queue_id
             LEFT JOIN feedback_scores_agg AS fs ON q.id = fs.queue_id
@@ -418,7 +418,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
-                .feedbackScores(mapFeedbackScores(row))
+                .feedbackScores(getFeedbackScores(row))
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
@@ -427,46 +427,18 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private List<AnnotationQueueReviewer> mapReviewers(Row row) {
-        Object[][] reviewersData = row.get("reviewers", Object[][].class);
-        if (reviewersData == null || reviewersData.length == 0) {
-            return null;
-        }
-
-        return Arrays.stream(reviewersData)
-                .map(reviewerTuple -> {
-                    if (reviewerTuple.length >= 2) {
-                        String username = (String) reviewerTuple[0];
-                        Long count = ((Number) reviewerTuple[1]).longValue();
-                        return AnnotationQueueReviewer.builder()
-                                .username(username)
-                                .status(count)
-                                .build();
-                    }
-                    return null;
-                })
-                .filter(Objects::nonNull)
+        List<AnnotationQueueReviewer> reviewers = Optional
+                .ofNullable(row.get("reviewers", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
+                .orElse(Map.of())
+                .entrySet()
+                .stream()
+                .map(reviewer -> AnnotationQueueReviewer.builder()
+                        .username(reviewer.getKey())
+                        .status(reviewer.getValue().longValue())
+                        .build())
                 .toList();
-    }
 
-    private List<FeedbackScoreAverage> mapFeedbackScores(Row row) {
-        Object[][] feedbackScoresData = row.get("feedback_scores", Object[][].class);
-        if (feedbackScoresData == null || feedbackScoresData.length == 0) {
-            return null;
-        }
-
-        return Arrays.stream(feedbackScoresData)
-                .map(scoreTuple -> {
-                    if (scoreTuple.length >= 2) {
-                        String name = (String) scoreTuple[0];
-                        Number value = (Number) scoreTuple[1];
-                        return FeedbackScoreAverage.builder()
-                                .name(name)
-                                .value(BigDecimal.valueOf(value.doubleValue()))
-                                .build();
-                    }
-                    return null;
-                })
-                .filter(Objects::nonNull)
-                .toList();
+        return reviewers.isEmpty() ? null : reviewers;
     }
 }

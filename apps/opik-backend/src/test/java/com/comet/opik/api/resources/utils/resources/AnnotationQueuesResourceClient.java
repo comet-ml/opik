@@ -66,4 +66,22 @@ public class AnnotationQueuesResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
+
+    public AnnotationQueue getAnnotationQueueById(UUID queueId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(queueId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 200) {
+                return response.readEntity(AnnotationQueue.class);
+            }
+            return null;
+        }
+    }
 }

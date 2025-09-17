@@ -1,18 +1,25 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -35,10 +42,13 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -54,6 +64,10 @@ class AnnotationQueuesResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+
+    private static final String[] QUEUE_IGNORED_FIELDS = new String[]{
+            "reviewers", "feedbackScores", "itemsCount", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -87,6 +101,7 @@ class AnnotationQueuesResourceTest {
     private String baseURI;
     private ProjectResourceClient projectResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
@@ -97,6 +112,7 @@ class AnnotationQueuesResourceTest {
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.clickHouseTemplate = clickHouseTemplate;
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
@@ -257,7 +273,7 @@ class AnnotationQueuesResourceTest {
 
             // When & Then
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
         }
 
         @Test
@@ -279,8 +295,276 @@ class AnnotationQueuesResourceTest {
 
             // When & Then
             annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
-                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                    annotationQueue.id(), emptyItemIds, API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
         }
+    }
+
+    @Nested
+    @DisplayName("Get Annotation Queue By Id")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetAnnotationQueueById {
+
+        @Test
+        @DisplayName("should get annotation queue for traces when valid id with aggregated feedback scores")
+        void getAnnotationQueueForTracesWithFeedbackScores() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue for traces
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality", "relevance"))
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create traces and add them to the queue
+            var trace1 = createTrace(project.name());
+            var trace2 = createTrace(project.name());
+            var trace3 = createTrace(project.name()); // This trace won't be in the queue
+
+            var itemIds = Set.of(trace1, trace2);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create feedback scores - some for traces in the queue, some for traces not in the queue
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
+            createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name());
+            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name());
+            createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name());
+
+            // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
+            createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name());
+            createFeedbackScoreForTrace(trace3, "relevance", 0.6, project.name());
+
+            // Feedback scores with different names (not in feedbackDefinitionNames) - should not be aggregated
+            createFeedbackScoreForTrace(trace1, "other_metric", 0.3, project.name());
+
+            // When
+            var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(retrievedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+
+            // Verify aggregated feedback scores only include scores from traces in the queue
+            // and only for feedbackDefinitionNames specified in the queue
+            assertThat(retrievedQueue.feedbackScores()).hasSize(2);
+
+            var feedbackScoreMap = retrievedQueue.feedbackScores().stream()
+                    .collect(Collectors.toMap(
+                            FeedbackScoreAverage::name,
+                            FeedbackScoreAverage::value));
+
+            // Expected averages: quality = (0.8 + 0.7) / 2 = 0.75, relevance = (0.9 + 0.85) / 2 = 0.875
+            assertThat(feedbackScoreMap.get("quality")).isEqualByComparingTo(new BigDecimal("0.75"));
+            assertThat(feedbackScoreMap.get("relevance")).isEqualByComparingTo(new BigDecimal("0.875"));
+
+            // Ensure other_metric is not included
+            assertThat(feedbackScoreMap).doesNotContainKey("other_metric");
+
+            // Verify reviewers match the original annotation queue
+            assertThat(retrievedQueue.reviewers()).hasSize(1);
+            assertThat(retrievedQueue.reviewers().getFirst().username()).isEqualTo(USER);
+            assertThat(retrievedQueue.reviewers().getFirst().status()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("should get annotation queue for threads when valid id with aggregated feedback scores")
+        void getAnnotationQueueForThreadsWithFeedbackScores() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue for threads
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .feedbackDefinitionNames(List.of("coherence", "completeness"))
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create traces with thread IDs and add thread IDs to the queue
+            var threadId1 = UUID.randomUUID();
+            var threadId2 = UUID.randomUUID();
+            var threadId3 = UUID.randomUUID(); // This thread won't be in the queue
+
+            createTraceWithThread(project.name(), threadId1);
+            createTraceWithThread(project.name(), threadId2);
+            createTraceWithThread(project.name(), threadId3);
+
+            // Close threads first (required before adding feedback scores)
+            closeThread(threadId1, projectId, project.name());
+            closeThread(threadId2, projectId, project.name());
+            closeThread(threadId3, projectId, project.name());
+
+            // Retrieve threads to get their threadModelId (needed for annotation queue items)
+            TraceThreadPage threadsPage = traceResourceClient.getTraceThreads(
+                    projectId, project.name(), API_KEY, TEST_WORKSPACE, List.of(), List.of(), Map.of());
+
+            var threadIdToModelId = threadsPage.content().stream()
+                    .collect(Collectors.toMap(
+                            thread -> thread.id(),
+                            thread -> thread.threadModelId()));
+
+            var itemIds = Set.of(threadIdToModelId.get(threadId1.toString()),
+                    threadIdToModelId.get(threadId2.toString()));
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create thread feedback scores - some for threads in the queue, some for threads not in the queue
+            createFeedbackScoreForThread(threadId1, "coherence", 0.9, project.name());
+            createFeedbackScoreForThread(threadId1, "completeness", 0.8, project.name());
+            createFeedbackScoreForThread(threadId2, "coherence", 0.85, project.name());
+            createFeedbackScoreForThread(threadId2, "completeness", 0.75, project.name());
+
+            // Feedback scores for threadId3 (NOT in the queue) - should not be aggregated
+            createFeedbackScoreForThread(threadId3, "coherence", 0.4, project.name());
+            createFeedbackScoreForThread(threadId3, "completeness", 0.3, project.name());
+
+            // Feedback scores with different names (not in feedbackDefinitionNames) - should not be aggregated
+            createFeedbackScoreForThread(threadId1, "other_thread_metric", 0.2, project.name());
+
+            // When
+            var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(retrievedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+
+            assertThat(retrievedQueue.itemsCount()).isEqualTo(2L);
+
+            // Verify aggregated feedback scores only include scores from threads in the queue
+            // and only for feedbackDefinitionNames specified in the queue
+            assertThat(retrievedQueue.feedbackScores()).hasSize(2);
+
+            var feedbackScoreMap = retrievedQueue.feedbackScores().stream()
+                    .collect(Collectors.toMap(
+                            FeedbackScoreAverage::name,
+                            FeedbackScoreAverage::value));
+
+            // Expected averages: coherence = (0.9 + 0.85) / 2 = 0.875, completeness = (0.8 + 0.75) / 2 = 0.775
+            assertThat(feedbackScoreMap.get("coherence")).isEqualByComparingTo(new BigDecimal("0.875"));
+            assertThat(feedbackScoreMap.get("completeness")).isEqualByComparingTo(new BigDecimal("0.775"));
+
+            // Ensure other_thread_metric is not included
+            assertThat(feedbackScoreMap).doesNotContainKey("other_thread_metric");
+
+            // Verify reviewers match the original annotation queue
+            assertThat(retrievedQueue.reviewers()).hasSize(1);
+            assertThat(retrievedQueue.reviewers().getFirst().username()).isEqualTo(USER);
+            assertThat(retrievedQueue.reviewers().getFirst().status()).isEqualTo(4L);
+        }
+
+        @Test
+        @DisplayName("should return 404 when annotation queue not found")
+        void getAnnotationQueueWhenNotFound() {
+            // Given - Non-existent queue ID
+            var nonExistentQueueId = UUID.randomUUID();
+
+            // When & Then
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    nonExistentQueueId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should get annotation queue with empty feedback scores when no feedback scores exist")
+        void getAnnotationQueueWithEmptyFeedbackScores() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue for traces
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create traces and add them to the queue but don't create any feedback scores
+            var trace1 = createTrace(project.name());
+            var itemIds = Set.of(trace1);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // When
+            var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(retrievedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+
+            assertThat(retrievedQueue.itemsCount()).isEqualTo(1L);
+            assertThat(retrievedQueue.feedbackScores()).isNull();
+            assertThat(retrievedQueue.reviewers()).isNull();
+        }
+    }
+
+    private UUID createTrace(String projectName) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        return traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+    }
+
+    private UUID createTraceWithThread(String projectName, UUID threadId) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .threadId(threadId.toString())
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        return traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName) {
+        var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                .id(traceId)
+                .name(scoreName)
+                .value(BigDecimal.valueOf(scoreValue))
+                .projectName(projectName)
+                .build();
+        traceResourceClient.feedbackScores(List.of(feedbackScore), API_KEY, TEST_WORKSPACE);
+    }
+
+    private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
+            String projectName) {
+        var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
+                .threadId(threadId.toString())
+                .name(scoreName)
+                .value(BigDecimal.valueOf(scoreValue))
+                .projectName(projectName)
+                .build();
+        traceResourceClient.threadFeedbackScores(List.of(feedbackScore), API_KEY, TEST_WORKSPACE);
+    }
+
+    private void closeThread(UUID threadId, UUID projectId, String projectName) {
+        traceResourceClient.closeTraceThread(threadId.toString(), projectId, projectName, API_KEY, TEST_WORKSPACE);
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {
