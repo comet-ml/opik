@@ -73,6 +73,7 @@ type FormData = z.infer<typeof formSchema>;
 type AddEditAnnotationQueueDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  onQueueCreated?: (queue: Partial<AnnotationQueue>) => void;
   projectId?: string;
   scope?: ANNOTATION_QUEUE_SCOPE;
   queue?: AnnotationQueue;
@@ -80,7 +81,14 @@ type AddEditAnnotationQueueDialogProps = {
 
 const AddEditAnnotationQueueDialog: React.FunctionComponent<
   AddEditAnnotationQueueDialogProps
-> = ({ open, setOpen, projectId, scope, queue: defaultQueue }) => {
+> = ({
+  open,
+  setOpen,
+  projectId,
+  scope,
+  onQueueCreated,
+  queue: defaultQueue,
+}) => {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -112,27 +120,34 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     };
   }, [form]);
 
-  const onQueueCreatedEdited = useCallback(() => {
-    // TODO Lala: Remove this
-    toast({
-      title: "Annotation queue created",
-      description: "SOME DESCRIPTION",
-      actions: [
-        <ToastAction
-          variant="link"
-          size="sm"
-          className="px-0"
-          altText="Go to project"
-          key="Go to project"
-          onClick={() => {
-            console.log("some acction");
-          }}
-        >
-          Go to project
-        </ToastAction>,
-      ],
-    });
-  }, [toast]);
+  const onQueueCreatedEdited = useCallback(
+    (queue: Partial<AnnotationQueue>) => {
+      if (onQueueCreated) {
+        onQueueCreated(queue);
+      }
+
+      // TODO Lala: Remove this
+      toast({
+        title: "Annotation queue created",
+        description: "SOME DESCRIPTION",
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Go to project"
+            key="Go to project"
+            onClick={() => {
+              console.log("some acction");
+            }}
+          >
+            Go to project
+          </ToastAction>,
+        ],
+      });
+    },
+    [onQueueCreated, toast],
+  );
 
   const createQueue = useCallback(() => {
     createMutate(

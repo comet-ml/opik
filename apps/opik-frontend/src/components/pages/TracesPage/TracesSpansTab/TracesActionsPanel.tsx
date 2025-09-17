@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Database, Tag, Trash } from "lucide-react";
+import { Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -83,12 +83,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   return (
     <div className="flex items-center gap-2">
-      <AddToDatasetDialog
-        key={`dataset-${resetKeyRef.current}`}
-        rows={rows}
-        open={open === 1}
-        setOpen={setOpen}
-      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}
@@ -108,20 +102,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
-      <TooltipWrapper content="Add to dataset">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen(1);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Database className="mr-2 size-4" />
-          Add to dataset
-        </Button>
-      </TooltipWrapper>
+      <AddToDropdown rows={rows} disabled={disabled} />
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
