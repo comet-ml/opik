@@ -5,6 +5,7 @@ export * from "./WorkspaceSpansCount";
 export * from "./TraceCountResponse";
 export * from "./WorkspaceTraceCount";
 export * from "./ErrorMessage";
+export * from "./AnnotationQueueItemIds";
 export * from "./AnnotationQueueScope";
 export * from "./AnnotationQueue";
 export * from "./AnnotationQueueBatch";

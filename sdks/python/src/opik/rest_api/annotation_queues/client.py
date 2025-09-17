@@ -26,6 +26,34 @@ class AnnotationQueuesClient:
         """
         return self._raw_client
 
+    def add_items_to_annotation_queue(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Add traces or threads to annotation queue
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.add_items_to_annotation_queue(id='id', ids=['ids'], )
+        """
+        _response = self._raw_client.add_items_to_annotation_queue(id, ids=ids, request_options=request_options)
+        return _response.data
+
     def create_annotation_queue_batch(
         self,
         *,
@@ -59,6 +87,34 @@ class AnnotationQueuesClient:
         )
         return _response.data
 
+    def remove_items_from_annotation_queue(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Remove items from annotation queue
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.remove_items_from_annotation_queue(id='id', ids=['ids'], )
+        """
+        _response = self._raw_client.remove_items_from_annotation_queue(id, ids=ids, request_options=request_options)
+        return _response.data
+
 
 class AsyncAnnotationQueuesClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -74,6 +130,37 @@ class AsyncAnnotationQueuesClient:
         AsyncRawAnnotationQueuesClient
         """
         return self._raw_client
+
+    async def add_items_to_annotation_queue(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Add traces or threads to annotation queue
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.add_items_to_annotation_queue(id='id', ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.add_items_to_annotation_queue(id, ids=ids, request_options=request_options)
+        return _response.data
 
     async def create_annotation_queue_batch(
         self,
@@ -108,5 +195,38 @@ class AsyncAnnotationQueuesClient:
         """
         _response = await self._raw_client.create_annotation_queue_batch(
             annotation_queues=annotation_queues, request_options=request_options
+        )
+        return _response.data
+
+    async def remove_items_from_annotation_queue(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Remove items from annotation queue
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.remove_items_from_annotation_queue(id='id', ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.remove_items_from_annotation_queue(
+            id, ids=ids, request_options=request_options
         )
         return _response.data
