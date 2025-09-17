@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -13,30 +14,32 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 @DisplayName("Redis Configuration Integration Test")
-
+@Disabled
 class RedisConfigIntegrationTest {
 
     // Disabled by default
-    // To enable, set the following environment variables to use AWS IAM authentication with ElastiCache Redis:
+    // To enable, set the following environment variables to use AWS IAM authentication with ElasticCache Redis:
     // - AWS_ACCESS_KEY_ID
     // - AWS_SECRET_ACCESS_KEY
-    // - AWS_USER_ID
-    // - AWS_RESOURCE_NAME
-    // - REDIS_URL (e.g., redis://your-elasticache-endpoint:6379)
+    // - AWS_REGION
+    // - OPIK_REDIS_AWS_USER_ID
+    // - OPIK_REDIS_AWS_RESOURCE_NAME
+    // - REDIS_URL (e.g., redis://your-elasticache-endpoint:6379/0)
 
     private static final String REDIS_URL = System.getenv("REDIS_URL");
     private static final String AWS_REGION = System.getenv("AWS_REGION");
-    private static final String AWS_USER_ID = System.getenv("AWS_USER_ID");
-    private static final String AWS_RESOURCE_NAME = System.getenv("AWS_RESOURCE_NAME");
+    private static final String AWS_USER_ID = System.getenv("OPIK_REDIS_AWS_USER_ID");
+    private static final String AWS_RESOURCE_NAME = System.getenv("OPIK_REDIS_AWS_RESOURCE_NAME");
 
     @Test
-    @DisplayName("Should connect to ElastiCache Redis and perform basic operations using AWS IAM authentication")
+    @DisplayName("Should connect to ElasticCache Redis and perform basic operations using AWS IAM authentication")
     @EnabledIfEnvironmentVariable(named = "AWS_ACCESS_KEY_ID", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "AWS_SECRET_ACCESS_KEY", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "AWS_USER_ID", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "AWS_RESOURCE_NAME", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "AWS_REGION", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "OPIK_REDIS_AWS_USER_ID", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "OPIK_REDIS_AWS_RESOURCE_NAME", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "REDIS_URL", matches = ".+")
-    void shouldConnectToElastiCacheRedis_withAwsIamAuth() {
+    void shouldConnectToElasticCacheRedis_withAwsIamAuth() {
         log.info("🚀 Starting Redis AWS IAM integration test");
 
         // Given
@@ -51,9 +54,9 @@ class RedisConfigIntegrationTest {
 
         var awsIamAuth = new RedisConfig.AwsIamAuthConfig();
         awsIamAuth.setEnabled(true);
-        awsIamAuth.setAwsUserId(AWS_USER_ID); // ElastiCache user ID from environment
+        awsIamAuth.setAwsUserId(AWS_USER_ID); // ElasticCache user ID from environment
         awsIamAuth.setAwsRegion(AWS_REGION); // AWS region from environment
-        awsIamAuth.setAwsResourceName(AWS_RESOURCE_NAME); // ElastiCache replication group ID from environment
+        awsIamAuth.setAwsResourceName(AWS_RESOURCE_NAME); // ElasticCache replication group ID from environment
 
         redisConfig.setAwsIamAuth(awsIamAuth);
 

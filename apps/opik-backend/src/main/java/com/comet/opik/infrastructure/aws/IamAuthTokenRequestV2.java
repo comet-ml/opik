@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.aws;
 
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.signer.Aws4Signer;
 import software.amazon.awssdk.auth.signer.params.Aws4PresignerParams;
@@ -11,6 +13,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 
+@RequiredArgsConstructor
 public class IamAuthTokenRequestV2 {
 
     private static final SdkHttpMethod REQUEST_METHOD = SdkHttpMethod.GET;
@@ -19,17 +22,11 @@ public class IamAuthTokenRequestV2 {
     private static final String PARAM_USER = "User";
     private static final String ACTION_NAME = "connect";
     private static final String SERVICE_NAME = "elasticache";
-    private static final Duration TOKEN_EXPIRY_DURATION_SECONDS = Duration.ofMinutes(15);
 
-    private final String userId;
-    private final String resourceName;
-    private final String region;
-
-    public IamAuthTokenRequestV2(String userId, String resourceName, String region) {
-        this.userId = userId;
-        this.resourceName = resourceName;
-        this.region = region;
-    }
+    private final @NonNull String userId;
+    private final @NonNull String resourceName;
+    private final @NonNull String region;
+    private final @NonNull Duration tokenExpiryDuration;
 
     public String toSignedRequestUri(AwsCredentials credentials) {
         SdkHttpFullRequest request = getSignableRequest();
@@ -55,7 +52,7 @@ public class IamAuthTokenRequestV2 {
     }
 
     private SdkHttpFullRequest sign(SdkHttpFullRequest request, AwsCredentials credentials) {
-        Instant expiryInstant = Instant.now().plus(TOKEN_EXPIRY_DURATION_SECONDS);
+        Instant expiryInstant = Instant.now().plus(tokenExpiryDuration);
         Aws4Signer signer = Aws4Signer.create();
         Aws4PresignerParams signerParams = Aws4PresignerParams.builder()
                 .signingRegion(Region.of(region))

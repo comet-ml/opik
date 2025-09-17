@@ -137,10 +137,19 @@ redis:
     awsUserId: ${OPIK_REDIS_AWS_USER_ID:-default}
     # Default: us-east-1
     # Description: AWS region where ElastiCache is deployed
-    awsRegion: ${OPIK_REDIS_AWS_REGION:-us-east-1}
+    awsRegion: ${AWS_REGION:-us-east-1}
     # Default: opik-redis
     # Description: ElasticCache resource name (replication group/cluster/serverless name)
-    awsResourceName: ${REDIS_AWS_RESOURCE_NAME:-opik-redis}
+    awsResourceName: ${OPIK_REDIS_AWS_RESOURCE_NAME:-opik-redis}
+    # Default: 13m
+    # Description: How often to refresh the AWS authentication token
+    tokenCacheRefreshAfter: ${OPIK_REDIS_AWS_TOKEN_CACHE_REFRESH_AFTER:-13m}
+    # Default: 14m
+    # Description: How long the AWS authentication token will be cached locally
+    tokenCacheExpireAfter: ${OPIK_REDIS_AWS_TOKEN_CACHE_EXPIRE_AFTER:-14m}
+    # Default: 15m
+    # Description: How long the AWS authentication token is valid
+    tokenExpiryDuration: ${OPIK_REDIS_AWS_TOKEN_EXPIRY_DURATION:-15m}
 
 openTelemetry:
   # Default: 3h
