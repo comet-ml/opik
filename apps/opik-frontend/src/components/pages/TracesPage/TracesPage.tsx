@@ -133,10 +133,7 @@ const TracesPage = () => {
           </TabsContent>
           {isHumanAnnotationEnabled && (
             <TabsContent value="annotation-queues">
-              <AnnotationQueuesTab
-                projectId={projectId}
-                projectName={projectName}
-              />
+              <AnnotationQueuesTab projectId={projectId} />
             </TabsContent>
           )}
         </Tabs>
