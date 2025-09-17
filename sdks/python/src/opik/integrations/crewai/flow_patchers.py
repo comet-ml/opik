@@ -6,6 +6,7 @@ from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
+
 def patch_flow_init(project_name: Optional[str] = None) -> None:
     original_init = crewai.Flow.__init__
     if hasattr(patch_flow_init, "_patched"):
@@ -29,7 +30,10 @@ def patch_flow_init(project_name: Optional[str] = None) -> None:
 
                 flow_registered_methods[method_name] = decorated
         except Exception:
-            LOGGER.warning("An error occurred during Opik instrumentation of CrewAI Flow", exc_info=True)
+            LOGGER.error(
+                "An error occurred during Opik instrumentation of CrewAI Flow",
+                exc_info=True,
+            )
 
     crewai.Flow.__init__ = _init_wrapper  # type: ignore[assignment]
 
