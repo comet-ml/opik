@@ -35,7 +35,7 @@ type FeedbackScoresEditorFooterProps = {
 const FeedbackScoresEditorHeader: React.FC = () => {
   return (
     <div className="flex items-center gap-1 pb-2">
-      <span className="comet-body-s-accented truncate">Human review</span>
+      <span className="comet-body-s-accented truncate">Your scores</span>
       <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_human_review]} />
     </div>
   );

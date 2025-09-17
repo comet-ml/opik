@@ -49,20 +49,25 @@ const TraceAnnotateViewer: React.FunctionComponent<
     >
       <div className="size-full overflow-y-auto">
         {hasFeedbackScores && (
-          <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-            {data.feedback_scores?.map((score) => (
-              <FeedbackScoreTag
-                key={score.name}
-                label={score.name}
-                value={score.value}
-                reason={score.reason}
-                lastUpdatedAt={score.last_updated_at}
-                lastUpdatedBy={score.last_updated_by}
-                valueByAuthor={score.value_by_author}
-                category={score.category_name}
-              />
-            ))}
-          </div>
+          <>
+            <div className="comet-body-s-accented truncate px-6 pt-4">
+              All scores
+            </div>
+            <div className="flex flex-wrap gap-2 px-6 py-2">
+              {data.feedback_scores?.map((score) => (
+                <FeedbackScoreTag
+                  key={score.name}
+                  label={score.name}
+                  value={score.value}
+                  reason={score.reason}
+                  lastUpdatedAt={score.last_updated_at}
+                  lastUpdatedBy={score.last_updated_by}
+                  valueByAuthor={score.value_by_author}
+                  category={score.category_name}
+                />
+              ))}
+            </div>
+          </>
         )}
         <FeedbackScoresEditor
           key={`${traceId}-${spanId}`}
