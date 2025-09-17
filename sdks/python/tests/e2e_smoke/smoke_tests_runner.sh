@@ -30,7 +30,7 @@ for file in $python_files; do
 
     # Check execution status
     if [ $? -eq 0 ]; then
-        echo ">>> ✅ Test passed: $file"
+        echo ">>> ✔ Test passed: $file"
     else
         echo ">>> ❌ Test failed: $file"
         failed=1
