@@ -98,11 +98,15 @@ class CommentServiceImpl implements CommentService {
 
         List<UUID> ids = traceIds.stream().toList();
 
-        return traceDAO.getProjectIdFromTrace(ids.get(0))
-                .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.get(0))))
-                .flatMap(projectId -> {
+        return transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getProjectIdsByTraceIds(traceIds, connection))
+                .flatMap(map -> {
+                    if (map.size() != ids.size()) {
+                        return Mono.error(new jakarta.ws.rs.BadRequestException("Some traces were not found in the workspace"));
+                    }
+                    List<UUID> projectIds = ids.stream().map(map::get).toList();
                     List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectId,
+                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectIds,
                             Comment.builder().text(text).build());
                 });
     }
@@ -115,11 +119,14 @@ class CommentServiceImpl implements CommentService {
 
         List<UUID> ids = spanIds.stream().toList();
 
-        return spanDAO.getProjectIdFromSpan(ids.get(0))
-                .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.get(0))))
-                .flatMap(projectId -> {
+        return spanDAO.getProjectIdsBySpanIds(spanIds)
+                .flatMap(map -> {
+                    if (map.size() != ids.size()) {
+                        return Mono.error(new jakarta.ws.rs.BadRequestException("Some spans were not found in the workspace"));
+                    }
+                    List<UUID> projectIds = ids.stream().map(map::get).toList();
                     List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectId,
+                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectIds,
                             Comment.builder().text(text).build());
                 });
     }

@@ -34,6 +34,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.Map;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -1855,6 +1856,16 @@ class SpanDAO {
                 .collectList();
     }
 
+    private static final String SELECT_SPAN_ID_AND_PROJECT = """
+            SELECT
+                id,
+                project_id
+            FROM spans
+            WHERE id IN :spanIds
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
     @WithSpan
     public Mono<UUID> getProjectIdFromSpan(@NonNull UUID spanId) {
 
@@ -1868,6 +1879,27 @@ class SpanDAO {
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                 .singleOrEmpty();
+    }
+
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsBySpanIds(@NonNull Set<UUID> spanIds) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+
+                    var statement = connection.createStatement(SELECT_SPAN_ID_AND_PROJECT)
+                            .bind("spanIds", spanIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                        row.get("id", UUID.class),
+                        row.get("project_id", UUID.class)
+                )))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
     @WithSpan
