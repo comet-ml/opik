@@ -125,6 +125,8 @@ class OpikTracer(BaseTracer):
         run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
+        trace_additional_metadata: Dict[str, Any] = {}
+
         if run_dict["error"] is not None:
             output = None
             error_info = {
