@@ -1,16 +1,17 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
 import get from "lodash/get";
+import first from "lodash/first";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { Thread } from "@/types/traces";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
-import first from "lodash/first";
 
 type ThreadsActionsPanelProps = {
   rows: Thread[];
@@ -80,6 +81,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
+      <AddToDropdown rows={rows} disabled={disabled} />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}
