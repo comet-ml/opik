@@ -372,9 +372,7 @@ class AnnotationQueuesResourceTest {
             assertThat(feedbackScoreMap).doesNotContainKey("other_metric");
 
             // Verify reviewers match the original annotation queue
-            assertThat(retrievedQueue.reviewers()).hasSize(1);
-            assertThat(retrievedQueue.reviewers().getFirst().username()).isEqualTo(USER);
-            assertThat(retrievedQueue.reviewers().getFirst().status()).isEqualTo(4L);
+            verifyReviewers(retrievedQueue, 4L);
         }
 
         @Test
@@ -466,9 +464,7 @@ class AnnotationQueuesResourceTest {
             assertThat(feedbackScoreMap).doesNotContainKey("other_thread_metric");
 
             // Verify reviewers match the original annotation queue
-            assertThat(retrievedQueue.reviewers()).hasSize(1);
-            assertThat(retrievedQueue.reviewers().getFirst().username()).isEqualTo(USER);
-            assertThat(retrievedQueue.reviewers().getFirst().status()).isEqualTo(4L);
+            verifyReviewers(retrievedQueue, 4L);
         }
 
         @Test
@@ -565,6 +561,12 @@ class AnnotationQueuesResourceTest {
 
     private void closeThread(UUID threadId, UUID projectId, String projectName) {
         traceResourceClient.closeTraceThread(threadId.toString(), projectId, projectName, API_KEY, TEST_WORKSPACE);
+    }
+
+    private void verifyReviewers(AnnotationQueue queue, Long expectedStatus) {
+        assertThat(queue.reviewers()).hasSize(1);
+        assertThat(queue.reviewers().getFirst().username()).isEqualTo(USER);
+        assertThat(queue.reviewers().getFirst().status()).isEqualTo(expectedStatus);
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {
