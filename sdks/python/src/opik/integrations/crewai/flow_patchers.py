@@ -1,8 +1,10 @@
+import logging
 import crewai
 import functools
 from opik.decorator import tracker as opik_tracker
 from typing import Optional
 
+LOGGER = logging.getLogger(__name__)
 
 def patch_flow_init(project_name: Optional[str] = None) -> None:
     original_init = crewai.Flow.__init__
@@ -27,7 +29,7 @@ def patch_flow_init(project_name: Optional[str] = None) -> None:
 
                 flow_registered_methods[method_name] = decorated
         except Exception:
-            pass
+            LOGGER.warning("An error occurred during Opik instrumentation of CrewAI Flow", exc_info=True)
 
     crewai.Flow.__init__ = _init_wrapper  # type: ignore[assignment]
 
