@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import findIndex from "lodash/findIndex";
 import get from "lodash/get";
@@ -16,6 +22,7 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DateTag from "@/components/shared/DateTag/DateTag";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
@@ -75,6 +82,10 @@ const DatasetItemsPage = () => {
     updateType: "replaceIn",
   });
 
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
@@ -109,6 +120,7 @@ const DatasetItemsPage = () => {
       datasetId,
       page: page as number,
       size: size as number,
+      search: search || undefined,
       truncate: true,
     },
     {
@@ -138,6 +150,13 @@ const DatasetItemsPage = () => {
 
   const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
   const noDataText = "There are no dataset items yet";
+
+  // Reset page to 1 when search changes
+  useEffect(() => {
+    if (page !== 1) {
+      setPage(1);
+    }
+  }, [search, page, setPage]); // Only reset when search changes
 
   const selectedRows: DatasetItem[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -311,7 +330,14 @@ const DatasetItemsPage = () => {
         />
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2"></div>
+        <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search || undefined}
+            setSearchText={setSearch}
+            placeholder="Search"
+            className="w-96"
+          />
+        </div>
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel
             datasetItems={selectedRows}

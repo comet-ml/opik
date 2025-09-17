@@ -282,12 +282,13 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("search") @Schema(description = "Search text to filter dataset items by content in input, output, expected_output, expected_answer, and question fields") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
-                workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, truncate)
+        log.info("Finding dataset items by id '{}', page '{}', size '{}', search '{}' on workspace_id '{}''", id, page,
+                size, search, workspaceId);
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, search, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
