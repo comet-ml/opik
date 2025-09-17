@@ -587,13 +587,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Delete trace comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         commentService.delete(batchDelete)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted trace comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -610,7 +610,7 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating trace comments batch with ids '{}' on workspaceId '{}'", payload.ids(), workspaceId);
+        log.info("Creating trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
         if (payload.ids() == null || payload.ids().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -638,7 +638,7 @@ public class TracesResource {
                     .build();
         }
 
-        log.info("Created trace comments batch with ids '{}' on workspaceId '{}'", payload.ids(), workspaceId);
+        log.info("Created trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -793,7 +793,7 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted trace threads with ids '{}' on workspaceId '{}'", traceThreads.threadIds(), workspaceId);
+        log.info("Deleted trace threads with size '{}' on workspaceId '{}'", traceThreads.threadIds().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -1048,13 +1048,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Delete thread comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         commentService.delete(batchDelete)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted thread comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
