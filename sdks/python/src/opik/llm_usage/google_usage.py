@@ -1,11 +1,13 @@
 from typing import Optional, Dict, Any
+
+
 from . import base_original_provider_usage
 
 
 class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     """Google AI / VertexAI calls token usage data. Updated 11.03.2025"""
 
-    candidates_token_count: int
+    candidates_token_count: Optional[int]
     """Number of tokens in the response(s)."""
 
     prompt_token_count: int
@@ -25,4 +27,8 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
 
     @classmethod
     def from_original_usage_dict(cls, usage: Dict[str, Any]) -> "GoogleGeminiUsage":
+        # Handle None values by converting them to 0 for candidates_token_count
+        if usage.get("candidates_token_count") is None:
+            usage = usage.copy()
+            usage["candidates_token_count"] = 0
         return cls(**usage)

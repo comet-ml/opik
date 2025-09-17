@@ -27,15 +27,17 @@ def build_opik_usage(
 ) -> opik_usage.OpikUsage:
     build_functions = _PROVIDER_TO_OPIK_USAGE_BUILDERS[provider]
 
+    exc = None
     for build_function in build_functions:
         try:
             result = build_function(usage)
             return result
-        except Exception:
+        except Exception as exc_info:
+            exc = exc_info
             pass
 
     raise ValueError(
-        f"Failed to build OpikUsage for provider {provider} and usage {usage}"
+        f"Failed to build OpikUsage for provider {provider} and usage {usage}, reason: {exc}"
     )
 
 
