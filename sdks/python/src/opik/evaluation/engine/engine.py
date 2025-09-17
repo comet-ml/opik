@@ -47,7 +47,7 @@ class EvaluationEngine:
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
-        trial_id: Optional[int] = 0,
+        trial_id: int = 0,
     ) -> test_result.TestResult:
         score_results: List[score_result.ScoreResult] = []
 
@@ -204,7 +204,6 @@ class EvaluationEngine:
     def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
-
     ) -> List[test_result.TestResult]:
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
