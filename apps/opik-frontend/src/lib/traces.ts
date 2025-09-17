@@ -18,7 +18,11 @@ export const generateTagVariant = (label: string) => {
   return TAG_VARIANTS[index % TAG_VARIANTS.length];
 };
 
-export const isObjectSpan = (object: object) => get(object, "trace_id", false);
+export const isObjectSpan = (object: object) =>
+  Boolean(get(object, "trace_id", false));
+
+export const isObjectThread = (object: object) =>
+  Boolean(get(object, "thread_model_id", false));
 
 export const isNumericFeedbackScoreValid = (
   { min, max }: { min: number; max: number },
