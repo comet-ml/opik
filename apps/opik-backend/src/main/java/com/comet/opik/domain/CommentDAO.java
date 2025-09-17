@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
@@ -175,8 +176,8 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Long> addCommentsBatch(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
             @NonNull UUID projectId, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var items = com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
-            var template = new org.stringtemplate.v4.ST(INSERT_COMMENTS_BATCH).add("items", items);
+            var items = TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
+            var template = new ST(INSERT_COMMENTS_BATCH).add("items", items);
 
             var statement = connection.createStatement(template.render())
                     .bind("entity_type", entityType.getType())
@@ -185,7 +186,7 @@ class CommentDAOImpl implements CommentDAO {
 
             int i = 0;
             for (UUID entityId : entityIds) {
-                statement.bind("id" + i, java.util.UUID.randomUUID())
+                statement.bind("id" + i, UUID.randomUUID())
                         .bind("entity_id" + i, entityId);
                 i++;
             }
