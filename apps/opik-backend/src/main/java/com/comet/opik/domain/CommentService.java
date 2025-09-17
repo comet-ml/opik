@@ -103,14 +103,17 @@ class CommentServiceImpl implements CommentService {
                     if (workspaces.size() > 1) {
                         return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
                     }
-                    java.util.Set<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).collect(java.util.stream.Collectors.toSet());
+                    java.util.List<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).toList();
                     if (ids.isEmpty()) {
                         return Mono.just(0L);
                     }
-                    return traceDAO.getProjectIdFromTrace(ids.iterator().next())
-                            .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.iterator().next())))
-                            .flatMap(projectId -> commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, projectId,
-                                    Comment.builder().text(text).build()));
+                    return traceDAO.getProjectIdFromTrace(ids.get(0))
+                            .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.get(0))))
+                            .flatMap(projectId -> {
+                                java.util.List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
+                                return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectId,
+                                        Comment.builder().text(text).build());
+                            });
                 });
     }
 
@@ -127,14 +130,17 @@ class CommentServiceImpl implements CommentService {
                     if (workspaces.size() > 1) {
                         return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
                     }
-                    java.util.Set<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).collect(java.util.stream.Collectors.toSet());
+                    java.util.List<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).toList();
                     if (ids.isEmpty()) {
                         return Mono.just(0L);
                     }
-                    return spanDAO.getProjectIdFromSpan(ids.iterator().next())
-                            .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.iterator().next())))
-                            .flatMap(projectId -> commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, projectId,
-                                    Comment.builder().text(text).build()));
+                    return spanDAO.getProjectIdFromSpan(ids.get(0))
+                            .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.get(0))))
+                            .flatMap(projectId -> {
+                                java.util.List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
+                                return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectId,
+                                        Comment.builder().text(text).build());
+                            });
                 });
     }
 }
