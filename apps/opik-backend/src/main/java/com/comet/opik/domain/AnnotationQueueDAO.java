@@ -3,6 +3,11 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueInfo;
 import com.comet.opik.api.AnnotationQueueReviewer;
+import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -48,6 +53,8 @@ public interface AnnotationQueueDAO {
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
+
+    Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 }
 
 @Singleton
@@ -149,6 +156,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 FROM annotation_queues
                 WHERE workspace_id = :workspace_id
                 <if(id)> AND id = :id <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND (<filters>) <endif>
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
             ), queue_items_final AS
@@ -264,9 +273,30 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             LEFT JOIN queue_items_count AS qic ON q.id = qic.queue_id
             LEFT JOIN feedback_scores_agg AS fs ON q.id = fs.queue_id
             LEFT JOIN feedback_scores_reviewers_agg AS fsra ON q.id = fsra.queue_id
+            <if(sort_fields)> ORDER BY <sort_fields> <endif>
+            <if(limit)> LIMIT :limit <endif>
+            <if(offset)> OFFSET :offset <endif>
+            """;
+
+    private static final String COUNT = """
+            WITH queues_final AS
+            (
+                SELECT id
+                FROM annotation_queues
+                WHERE workspace_id = :workspace_id
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND (<filters>) <endif>
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT count(id) as count
+            FROM queues_final
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull AnnotationQueueSortingFactory sortingFactory;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Mono<Void> createBatch(@NonNull List<AnnotationQueue> annotationQueues) {
@@ -435,5 +465,80 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .toList();
 
         return reviewers.isEmpty() ? null : reviewers;
+    }
+
+    @Override
+    public Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size,
+            AnnotationQueueSearchCriteria searchCriteria) {
+        return countTotal(searchCriteria).flatMap(total -> find(page, size, searchCriteria, total));
+    }
+
+    private Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size,
+            AnnotationQueueSearchCriteria searchCriteria, Long total) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> find(page, size, searchCriteria, connection))
+                .flatMap(this::mapAnnotationQueue)
+                .collectList()
+                .map(annotationQueues -> new AnnotationQueue.AnnotationQueuePage(page, annotationQueues.size(), total,
+                        annotationQueues,
+                        sortingFactory.getSortableFields()));
+    }
+
+    private Publisher<? extends Result> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria,
+            Connection connection) {
+        log.info("Finding annotation queues by '{}', page '{}', size '{}'", searchCriteria, page, size);
+
+        var sorting = sortingQueryBuilder.toOrderBySql(searchCriteria.sortingFields());
+
+        int offset = (page - 1) * size;
+
+        var template = newFindTemplate(FIND, searchCriteria);
+
+        template.add("sort_fields", sorting);
+        template.add("limit", size);
+        template.add("offset", offset);
+
+        var statement = connection.createStatement(template.render())
+                .bind("limit", size)
+                .bind("offset", offset);
+
+        bindSearchCriteria(statement, searchCriteria);
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private Mono<Long> countTotal(AnnotationQueueSearchCriteria searchCriteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> countTotal(searchCriteria, connection))
+                .flatMap(result -> result.map(row -> row.get("count", Long.class)))
+                .reduce(0L, Long::sum);
+    }
+
+    private Publisher<? extends Result> countTotal(AnnotationQueueSearchCriteria searchCriteria,
+            Connection connection) {
+        var template = newFindTemplate(COUNT, searchCriteria);
+
+        var statement = connection.createStatement(template.render());
+        bindSearchCriteria(statement, searchCriteria);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private ST newFindTemplate(String query, AnnotationQueueSearchCriteria searchCriteria) {
+        var template = new ST(query);
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(searchCriteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_QUEUE))
+                .ifPresent(annotationQueueFilters -> template.add("filters", annotationQueueFilters));
+
+        return template;
+    }
+
+    private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(searchCriteria.filters())
+                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_QUEUE));
     }
 }

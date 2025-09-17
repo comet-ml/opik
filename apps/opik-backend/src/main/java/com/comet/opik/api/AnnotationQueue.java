@@ -26,6 +26,8 @@ public record AnnotationQueue(
         @JsonView( {
                 AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @Nullable UUID id,
         @JsonView({AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @NotNull UUID projectId,
+        @JsonView({
+                AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String projectName,
         @JsonView({AnnotationQueue.View.Public.class, AnnotationQueue.View.Write.class}) @NotBlank String name,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) String description,
@@ -74,6 +76,20 @@ public record AnnotationQueue(
         }
 
         public static class Write {
+        }
+    }
+
+    @Builder(toBuilder = true)
+    public record AnnotationQueuePage(
+            @JsonView( {
+                    View.Public.class}) int page,
+            @JsonView({View.Public.class}) int size,
+            @JsonView({View.Public.class}) long total,
+            @JsonView({View.Public.class}) List<AnnotationQueue> content,
+            @JsonView({View.Public.class}) List<String> sortableBy) implements Page<AnnotationQueue>{
+
+        public static AnnotationQueuePage empty(int page, List<String> sortableBy) {
+            return new AnnotationQueuePage(page, 0, 0, List.of(), sortableBy);
         }
     }
 }

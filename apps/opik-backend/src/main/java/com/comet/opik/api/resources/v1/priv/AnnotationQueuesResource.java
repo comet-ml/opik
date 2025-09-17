@@ -4,6 +4,11 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
+import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.filter.AnnotationQueueFilter;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -17,19 +22,23 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -45,6 +54,38 @@ public class AnnotationQueuesResource {
 
     private final @NonNull AnnotationQueueService annotationQueueService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull AnnotationQueueSortingFactory sortingFactory;
+    private final @NonNull FiltersFactory filtersFactory;
+
+    @GET
+    @Operation(operationId = "findAnnotationQueues", summary = "Find annotation queues", description = "Find annotation queues with filtering and sorting", responses = {
+            @ApiResponse(responseCode = "200", description = "Annotation queues page", content = @Content(schema = @Schema(implementation = AnnotationQueue.AnnotationQueuePage.class)))
+    })
+    @JsonView(AnnotationQueue.View.Public.class)
+    public Response findAnnotationQueues(
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("name") String name,
+            @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting) {
+
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        var annotationQueueFilters = filtersFactory.newFilters(filters, AnnotationQueueFilter.LIST_TYPE_REFERENCE);
+
+        var searchCriteria = AnnotationQueueSearchCriteria.builder()
+                .name(name)
+                .filters(annotationQueueFilters)
+                .sortingFields(sortingFields)
+                .build();
+
+        log.info("Finding annotation queues by '{}', page '{}', size '{}'", searchCriteria, page, size);
+        var annotationQueues = annotationQueueService.find(page, size, searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found annotation queues by '{}', count '{}', page '{}', size '{}'",
+                searchCriteria, annotationQueues.size(), page, size);
+        return Response.ok().entity(annotationQueues).build();
+    }
 
     @GET
     @Path("/{id}")

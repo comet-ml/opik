@@ -2,9 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
+import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.Project;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
@@ -15,8 +19,10 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
@@ -24,6 +30,8 @@ public interface AnnotationQueueService {
     Mono<Integer> createBatch(AnnotationQueueBatch batch);
 
     Mono<AnnotationQueue> findById(@NonNull UUID id);
+
+    Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds);
 
@@ -37,6 +45,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull ProjectService projectService;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     @WithSpan
@@ -60,8 +70,21 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return annotationQueueDAO.findById(id)
                 .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                .flatMap(this::enhanceWithProjectName)
                 .doOnSuccess(queue -> log.debug("Found annotation queue with id '{}'", id))
                 .doOnError(error -> log.debug("Annotation queue not found with id '{}'", id));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size,
+            AnnotationQueueSearchCriteria searchCriteria) {
+        log.info("Finding annotation queues by '{}', page '{}', size '{}'", searchCriteria, page, size);
+
+        return annotationQueueDAO.find(page, size, searchCriteria)
+                .flatMap(this::enhancePageWithProjectNames)
+                .doOnSuccess(result -> log.debug("Found annotation queues by '{}', count '{}', page '{}', size '{}'",
+                        searchCriteria, result.content().size(), page, size));
     }
 
     @WithSpan
@@ -95,6 +118,66 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                         "Successfully removed '{}' items from annotation queue with id '{}'", removedCount, queueId))
                 .doOnError(error -> log.debug("Failed to remove items from annotation queue with id '{}'", queueId,
                         error));
+    }
+
+    private Mono<AnnotationQueue> enhanceWithProjectName(AnnotationQueue annotationQueue) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            List<Project> projects = projectService.findByIds(workspaceId, Set.of(annotationQueue.projectId()));
+            if (projects.isEmpty()) {
+                log.warn("Project not found for annotation queue '{}' with project id '{}'",
+                        annotationQueue.id(), annotationQueue.projectId());
+                return Mono.just(annotationQueue);
+            }
+
+            String projectName = projects.getFirst().name();
+            return Mono.just(annotationQueue.toBuilder()
+                    .projectName(projectName)
+                    .build());
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<AnnotationQueue.AnnotationQueuePage> enhancePageWithProjectNames(
+            AnnotationQueue.AnnotationQueuePage page) {
+        if (page.content().isEmpty()) {
+            return Mono.just(page);
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Extract all unique project IDs
+            Set<UUID> projectIds = page.content().stream()
+                    .map(AnnotationQueue::projectId)
+                    .collect(Collectors.toSet());
+
+            // Get projects in bulk
+            List<Project> projects = projectService.findByIds(workspaceId, projectIds);
+
+            // Create mapping from project ID to project name
+            Map<UUID, String> projectIdToNameMap = projects.stream()
+                    .collect(Collectors.toMap(Project::id, Project::name));
+
+            // Enhance all annotation queues with project names
+            List<AnnotationQueue> enhancedQueues = page.content().stream()
+                    .map(queue -> {
+                        String projectName = projectIdToNameMap.get(queue.projectId());
+                        if (projectName == null) {
+                            log.warn("Project not found for annotation queue '{}' with project id '{}'",
+                                    queue.id(), queue.projectId());
+                        }
+                        return queue.toBuilder()
+                                .projectName(projectName)
+                                .build();
+                    })
+                    .toList();
+
+            // Return enhanced page
+            return Mono.just(page.toBuilder()
+                    .content(enhancedQueues)
+                    .build());
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private AnnotationQueue prepareAnnotationQueue(AnnotationQueue annotationQueue) {

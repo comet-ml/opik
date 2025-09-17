@@ -315,6 +315,7 @@ class AnnotationQueuesResourceTest {
             var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
                     .toBuilder()
                     .projectId(projectId)
+                    .projectName(project.name())
                     .scope(AnnotationQueue.AnnotationScope.TRACE)
                     .feedbackDefinitionNames(List.of("quality", "relevance"))
                     .build();
@@ -386,6 +387,7 @@ class AnnotationQueuesResourceTest {
             var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
                     .toBuilder()
                     .projectId(projectId)
+                    .projectName(project.name())
                     .scope(AnnotationQueue.AnnotationScope.THREAD)
                     .feedbackDefinitionNames(List.of("coherence", "completeness"))
                     .build();
@@ -489,6 +491,7 @@ class AnnotationQueuesResourceTest {
             var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
                     .toBuilder()
                     .projectId(projectId)
+                    .projectName(project.name())
                     .scope(AnnotationQueue.AnnotationScope.TRACE)
                     .build();
 
