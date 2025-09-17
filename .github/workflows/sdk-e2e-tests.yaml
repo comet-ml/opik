@@ -69,8 +69,8 @@ jobs:
 
         - name: Run smoke tests
           run: |
-            cd ${{ github.workspace }}/sdks/python
-            ./smoke_tests_runner.sh
+            ${{ github.workspace }}/sdks/python
+            ./tests/e2e_smoke/smoke_tests_runner.sh
 
         - name: Install test requirements
           run: |

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# This is script to execute smoke tests with naked OPIK installation
+# This is a script to execute smoke tests with naked OPIK installation
 #
 echo "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
 echo ""
