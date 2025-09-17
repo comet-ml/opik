@@ -56,13 +56,13 @@ public class RedisConfig {
         private boolean enabled = false;
 
         @Valid @JsonProperty
-        @NotBlank private String awsUserId;
+        @NotNull private String awsUserId = "";
 
         @Valid @JsonProperty
         @NotBlank private String awsRegion = "us-east-1";
 
         @Valid @JsonProperty
-        @NotBlank private String awsResourceName; // replication group / cluster / serverless name
+        @NotNull private String awsResourceName = ""; // replication group / cluster / serverless name
 
         // Token cache refresh/expire timings
         @Valid @JsonProperty

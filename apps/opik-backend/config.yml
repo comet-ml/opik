@@ -134,13 +134,13 @@ redis:
     # Description: Enable AWS IAM authentication for ElasticCache Redis
     enabled: ${OPIK_REDIS_AWS_IAM_AUTH_ENABLED:-false}
     # Description: AWS User ID for IAM authentication
-    awsUserId: ${OPIK_REDIS_AWS_USER_ID:-default}
+    awsUserId: ${OPIK_REDIS_AWS_USER_ID:-''}
     # Default: us-east-1
     # Description: AWS region where ElastiCache is deployed
     awsRegion: ${AWS_REGION:-us-east-1}
     # Default: opik-redis
     # Description: ElasticCache resource name (replication group/cluster/serverless name)
-    awsResourceName: ${OPIK_REDIS_AWS_RESOURCE_NAME:-opik-redis}
+    awsResourceName: ${OPIK_REDIS_AWS_RESOURCE_NAME:-''}
     # Default: 13m
     # Description: How often to refresh the AWS authentication token
     tokenCacheRefreshAfter: ${OPIK_REDIS_AWS_TOKEN_CACHE_REFRESH_AFTER:-13m}
