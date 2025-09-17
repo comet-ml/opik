@@ -35,6 +35,7 @@ export type TraceFeedbackScore = {
   reason?: string;
   name: string;
   source: FEEDBACK_SCORE_TYPE;
+  created_by?: string;
   last_updated_by?: string;
   last_updated_at?: string;
   value: number;

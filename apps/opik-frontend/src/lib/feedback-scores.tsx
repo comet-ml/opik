@@ -15,6 +15,7 @@ import {
 import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExperimentsList";
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
+import { isUndefined } from "lodash";
 
 export const FEEDBACK_SCORE_SOURCE_MAP = {
   [FEEDBACK_SCORE_TYPE.online_scoring]: "Online evaluation",
@@ -275,7 +276,7 @@ export const categoryOptionLabelRenderer = (
   name: string,
   value?: number | string,
 ) => {
-  if (!value) return name;
+  if (isUndefined(value)) return name;
 
   return `${name} (${value})`;
 };
