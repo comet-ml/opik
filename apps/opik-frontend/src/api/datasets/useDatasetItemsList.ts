@@ -9,6 +9,7 @@ type UseDatasetItemsListParams = {
   filters?: Filters;
   page: number;
   size: number;
+  search?: string;
   truncate?: boolean;
 };
 
@@ -25,6 +26,7 @@ const getDatasetItemsList = async (
     filters,
     size,
     page,
+    search,
     truncate = false,
   }: UseDatasetItemsListParams,
 ) => {
@@ -36,6 +38,7 @@ const getDatasetItemsList = async (
         ...processFilters(filters),
         size,
         page,
+        search,
         truncate,
       },
     },

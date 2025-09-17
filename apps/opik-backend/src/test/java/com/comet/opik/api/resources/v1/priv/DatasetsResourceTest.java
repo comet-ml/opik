@@ -4213,6 +4213,305 @@ class DatasetsResourceTest {
                 assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
             }
         }
+
+        @Test
+        @DisplayName("when searching with valid search term, then return matching items")
+        void getDatasetItemsByDatasetId__whenSearchingWithValidSearchTerm__thenReturnMatchingItems() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var searchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("search for AI model"),
+                            "type", new TextNode("question"),
+                            "category", new TextNode("artificial intelligence")))
+                    .build();
+
+            var nonSearchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("how to cook pasta"),
+                            "type", new TextNode("recipe"),
+                            "category", new TextNode("cooking")))
+                    .build();
+
+            var items = List.of(searchableItem, nonSearchableItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "AI")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                List<DatasetItem> expectedContent = List.of(searchableItem);
+
+                assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+            }
+        }
+
+        @Test
+        @DisplayName("when searching with case insensitive term, then return matching items")
+        void getDatasetItemsByDatasetId__whenSearchingWithCaseInsensitiveTerm__thenReturnMatchingItems() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var itemWithUpperCase = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("This is a TEST document")))
+                    .build();
+
+            var itemWithLowerCase = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("Another test file")))
+                    .build();
+
+            var itemWithMixedCase = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("Test Results Analysis")))
+                    .build();
+
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("No matching content here")))
+                    .build();
+
+            var items = List.of(itemWithUpperCase, itemWithLowerCase, itemWithMixedCase, nonMatchingItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "test")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                List<DatasetItem> expectedContent = List.of(itemWithMixedCase, itemWithLowerCase, itemWithUpperCase);
+
+                assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+            }
+        }
+
+        @Test
+        @DisplayName("when searching with empty string, then return all items")
+        void getDatasetItemsByDatasetId__whenSearchingWithEmptyString__thenReturnAllItems() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
+            }
+        }
+
+        @Test
+        @DisplayName("when searching with no matches, then return empty result")
+        void getDatasetItemsByDatasetId__whenSearchingWithNoMatches__thenReturnEmptyResult() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var items = List.of(
+                    factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .data(Map.of("content", new TextNode("apple")))
+                            .build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .data(Map.of("content", new TextNode("banana")))
+                            .build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .data(Map.of("content", new TextNode("cherry")))
+                            .build());
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "nonexistent")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertDatasetItemPage(actualEntity, List.of(), Set.of(), 1);
+            }
+        }
+
+        @Test
+        @DisplayName("when searching with pagination, then return correct page")
+        void getDatasetItemsByDatasetId__whenSearchingWithPagination__thenReturnCorrectPage() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var items = IntStream.range(0, 10)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .data(Map.of(
+                                    "content", new TextNode("search term item " + i),
+                                    "index", new IntNode(i)))
+                            .build())
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "search term")
+                    .queryParam("page", 2)
+                    .queryParam("size", 3)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                List<DatasetItem> expectedContent = items.reversed().subList(3, 6);
+
+                assertDatasetItemPage(actualEntity, expectedContent, 10, columns, 2);
+            }
+        }
+
+        @Test
+        @DisplayName("when searching with special characters, then handle correctly")
+        void getDatasetItemsByDatasetId__whenSearchingWithSpecialCharacters__thenHandleCorrectly() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var itemWithSpecialChars = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("Email: user@example.com (test)!")))
+                    .build();
+
+            var normalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode("Normal text content")))
+                    .build();
+
+            var items = List.of(itemWithSpecialChars, normalItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .queryParam("search", "@example")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                List<DatasetItem> expectedContent = List.of(itemWithSpecialChars);
+
+                assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+            }
+        }
     }
 
     private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> expected, Set<Column> columns,
