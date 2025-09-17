@@ -612,24 +612,8 @@ public class TracesResource {
 
         log.info("Creating trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
-        if (payload.ids() == null || payload.ids().isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), "'ids' must not be empty"))
-                    .build();
-        }
-        if (payload.text() == null || payload.text().trim().isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), "'text' must not be blank"))
-                    .build();
-        }
-        if (payload.ids().size() > 10) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), "Batch size limit exceeded (max 10)"))
-                    .build();
-        }
-
         try {
-            commentService.createBatchForTraces(Set.copyOf(payload.ids()), payload.text())
+            commentService.createBatchForTraces(payload.ids(), payload.text())
                     .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                     .block();
         } catch (IllegalArgumentException e) {
