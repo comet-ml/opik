@@ -202,7 +202,7 @@ export const LoadableSelectBox = ({
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-gray-100"
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => {
                   if (multiselect) {
                     const newSelectedValues = isSelected(option.value)
