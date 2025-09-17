@@ -130,25 +130,36 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             LIMIT 1 BY id
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String FIND = """
             WITH queues_final AS
             (
                 SELECT
-                    *
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    instructions,
+                    scope,
+                    comments_enabled,
+                    feedback_definitions,
+                    created_by,
+                    created_at,
+                    last_updated_by,
+                    last_updated_at
                 FROM annotation_queues
                 WHERE workspace_id = :workspace_id
-                AND id = :id
+                <if(id)> AND id = :id <endif>
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
             ), queue_items_final AS
             (
-                SELECT DISTINCT
-                    queue_id,
-                    item_id
-                FROM annotation_queue_items
-                WHERE workspace_id = :workspace_id
-                AND project_id = (SELECT project_id FROM queues_final)
-                AND queue_id = :id
+                SELECT aqi.queue_id, aqi.item_id, q.feedback_definitions
+                FROM (
+                    SELECT DISTINCT queue_id, item_id
+                    FROM annotation_queue_items
+                    WHERE workspace_id = :workspace_id
+                ) AS aqi
+                INNER JOIN queues_final AS q ON aqi.queue_id = q.id
             ), queue_items_count AS (
                 SELECT queue_id, count(1) AS items_count
                 FROM queue_items_final
@@ -160,9 +171,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                        created_by
                 FROM feedback_scores FINAL
                 WHERE workspace_id = :workspace_id
-                    AND project_id = (SELECT project_id FROM queues_final)
+                    AND project_id IN (SELECT project_id FROM queues_final)
                     AND entity_id IN (SELECT item_id FROM queue_items_final)
-                    AND name in (SELECT arrayJoin(feedback_definitions) FROM queues_final)
                 UNION ALL
                 SELECT
                     entity_id,
@@ -171,9 +181,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     created_by
                 FROM authored_feedback_scores FINAL
                 WHERE workspace_id = :workspace_id
-                   AND project_id = (SELECT project_id FROM queues_final)
+                   AND project_id IN (SELECT project_id FROM queues_final)
                    AND entity_id IN (SELECT item_id FROM queue_items_final)
-                   AND name in (SELECT arrayJoin(feedback_definitions) FROM queues_final)
             ), feedback_scores_combined_grouped AS (
                 SELECT
                     entity_id,
@@ -199,30 +208,22 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         qi.queue_id,
                         fs.name,
                         avg(fs.value) AS avg_value
-                    FROM (
-                        SELECT
-                            queue_id,
-                            item_id
-                        FROM queue_items_final
-                    ) as qi
-                    LEFT JOIN (
-                        SELECT
-                            name,
-                            entity_id,
-                            value
-                        FROM feedback_scores_final
-                    ) fs ON fs.entity_id = qi.item_id
+                    FROM queue_items_final AS qi
+                    INNER JOIN feedback_scores_final AS fs
+                      ON fs.entity_id = qi.item_id
+                    WHERE length(fs.name) > 0
+                      AND has(qi.feedback_definitions, fs.name)  -- only names defined for this queue
                     GROUP BY qi.queue_id, fs.name
-                    HAVING length(fs.name) > 0
                 ) as fs_avg
                 GROUP BY queue_id
             ), feedback_scores_reviewers_grouped AS (
                 SELECT
                     entity_id,
                     created_by,
+                    name,
                     COUNT(1) AS cnt
                 FROM feedback_scores_combined
-                GROUP BY entity_id, created_by
+                GROUP BY entity_id, created_by, name
             ), feedback_scores_reviewers_agg AS (
                 SELECT
                     fsr_sum.queue_id,
@@ -235,19 +236,10 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         qi.queue_id,
                         fsr.created_by AS username,
                         sum(fsr.cnt) AS cnt
-                    FROM (
-                        SELECT
-                            queue_id,
-                            item_id
-                        FROM queue_items_final
-                    ) as qi
-                    JOIN (
-                        SELECT
-                            created_by,
-                            entity_id,
-                            cnt
-                        FROM feedback_scores_reviewers_grouped
-                    ) fsr ON fsr.entity_id = qi.item_id
+                    FROM queue_items_final AS qi
+                    INNER JOIN feedback_scores_reviewers_grouped AS fsr
+                     ON fsr.entity_id = qi.item_id
+                    WHERE has(qi.feedback_definitions, fsr.name)  -- only names defined for this queue
                     GROUP BY qi.queue_id, fsr.created_by
                 ) as fsr_sum
                 GROUP BY queue_id
@@ -345,8 +337,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {
+        var template = new ST(FIND);
+        template.add("id", id.toString());
+
         var statement = connection
-                .createStatement(SELECT_BY_ID)
+                .createStatement(template.render())
                 .bind("id", id);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
