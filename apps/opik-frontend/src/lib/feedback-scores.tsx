@@ -265,7 +265,10 @@ export const generateDeleteMutation =
 
         return feedbackScore;
       })
-      .filter((feedbackScore) => feedbackScore !== null);
+      .filter(
+        (feedbackScore): feedbackScore is TraceFeedbackScore =>
+          feedbackScore !== null,
+      );
   };
 
 export const categoryOptionLabelRenderer = (
