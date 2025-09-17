@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -80,6 +81,39 @@ public class AnnotationQueuesResourceClient {
 
             if (expectedStatus == 200) {
                 return response.readEntity(AnnotationQueue.class);
+            }
+            return null;
+        }
+    }
+
+    public AnnotationQueue.AnnotationQueuePage findAnnotationQueues(int page, int size, String name,
+            String filters, String sorting, String apiKey, String workspaceName, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", filters);
+        }
+
+        if (sorting != null) {
+            webTarget = webTarget.queryParam("sorting", sorting);
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 200) {
+                return response.readEntity(AnnotationQueue.AnnotationQueuePage.class);
             }
             return null;
         }

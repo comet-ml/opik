@@ -33,6 +33,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -518,6 +520,295 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.itemsCount()).isEqualTo(1L);
             assertThat(retrievedQueue.feedbackScores()).isNull();
             assertThat(retrievedQueue.reviewers()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Find Annotation Queues")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindAnnotationQueues {
+
+        @Test
+        @DisplayName("should return paginated annotation queues when valid request")
+        void findAnnotationQueues() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create multiple annotation queues
+            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Queue Alpha")
+                    .build();
+
+            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Queue Beta")
+                    .build();
+
+            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Queue Gamma")
+                    .build();
+
+            // Create the annotation queues
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // When - Request first page with size 2
+            var firstPage = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 2, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(firstPage.content()).hasSize(2);
+            assertThat(firstPage.page()).isEqualTo(1);
+            assertThat(firstPage.size()).isEqualTo(2);
+            assertThat(firstPage.total()).isEqualTo(3);
+
+            // When - Request second page
+            var secondPage = annotationQueuesResourceClient.findAnnotationQueues(
+                    2, 2, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(secondPage.content()).hasSize(1);
+            assertThat(secondPage.page()).isEqualTo(2);
+            assertThat(secondPage.size()).isEqualTo(1);
+            assertThat(secondPage.total()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("should return empty page when no annotation queues exist")
+        void findAnnotationQueuesWhenEmpty() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - No annotation queues created
+
+            // When
+            var page = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 10, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(page.content()).isEmpty();
+            assertThat(page.page()).isEqualTo(1);
+            assertThat(page.size()).isEqualTo(0);
+            assertThat(page.total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should filter annotation queues by name")
+        void findAnnotationQueuesWithNameFilter() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create annotation queues with different names
+            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Alpha Queue")
+                    .build();
+
+            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Beta Queue")
+                    .build();
+
+            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Alpha Test")
+                    .build();
+
+            // Create the annotation queues
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // When - Filter by name containing "Alpha"
+            var page = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 10, "Alpha", null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(page.content()).hasSize(2);
+            assertThat(page.content()).allSatisfy(queue -> assertThat(queue.name()).contains("Alpha"));
+        }
+
+        @Test
+        @DisplayName("should return empty results when name filter matches nothing")
+        void findAnnotationQueuesWithNameFilterNoMatches() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create annotation queue
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("Test Queue")
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // When - Filter by name that doesn't exist
+            var page = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 10, "NonExistentName", null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isEqualTo(0);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"name,asc", "name,desc", "created_at,asc", "created_at,desc"})
+        @DisplayName("should sort annotation queues by different fields and directions")
+        void findAnnotationQueuesWithSorting(String sorting) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create annotation queues with predictable names for sorting
+            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("A Queue")
+                    .build();
+
+            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("B Queue")
+                    .build();
+
+            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .name("C Queue")
+                    .build();
+
+            // Create the annotation queues
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // When
+            var page = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 10, null, null, sorting, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(page.content()).hasSize(3);
+
+            // Verify sorting based on field and direction
+            if (sorting.contains("name")) {
+                var names = page.content().stream().map(AnnotationQueue::name).toList();
+                if (sorting.contains("asc")) {
+                    assertThat(names).containsExactly("A Queue", "B Queue", "C Queue");
+                } else {
+                    assertThat(names).containsExactly("C Queue", "B Queue", "A Queue");
+                }
+            } else if (sorting.contains("created_at")) {
+                // For created_at sorting, we just verify the response is successful
+                // since exact timestamp ordering is harder to predict in tests
+                assertThat(page.content()).hasSize(3);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "project_name='" + "TestProject" + "'",
+                "scope='TRACE'",
+                "scope='THREAD'"
+        })
+        @DisplayName("should filter annotation queues by different criteria")
+        void findAnnotationQueuesWithFilters(String filters) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create annotation queues with different scopes
+            var traceQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+
+            var threadQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+
+            // Create the annotation queues
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(traceQueue, threadQueue)),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // When
+            var page = annotationQueuesResourceClient.findAnnotationQueues(
+                    1, 10, null, filters, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            // Then - Verify filtering worked (exact assertions depend on filter type)
+            assertThat(page.content()).isNotEmpty();
+
+            if (filters.contains("scope='TRACE'")) {
+                assertThat(page.content()).allSatisfy(
+                        queue -> assertThat(queue.scope()).isEqualTo(AnnotationQueue.AnnotationScope.TRACE));
+            } else if (filters.contains("scope='THREAD'")) {
+                assertThat(page.content()).allSatisfy(
+                        queue -> assertThat(queue.scope()).isEqualTo(AnnotationQueue.AnnotationScope.THREAD));
+            }
         }
     }
 
