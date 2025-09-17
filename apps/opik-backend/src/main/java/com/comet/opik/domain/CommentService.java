@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import java.util.List;
 
 import java.util.Set;
 import java.util.UUID;
@@ -95,25 +96,14 @@ class CommentServiceImpl implements CommentService {
             return Mono.just(0L);
         }
 
-        return transactionTemplateAsync
-                .nonTransaction(connection -> traceDAO.getTraceWorkspace(traceIds, connection))
-                .switchIfEmpty(Mono.just(java.util.List.of()))
-                .flatMap(list -> {
-                    java.util.Set<String> workspaces = list.stream().map(WorkspaceAndResourceId::workspaceId).collect(java.util.stream.Collectors.toSet());
-                    if (workspaces.size() > 1) {
-                        return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
-                    }
-                    java.util.List<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).toList();
-                    if (ids.isEmpty()) {
-                        return Mono.just(0L);
-                    }
-                    return traceDAO.getProjectIdFromTrace(ids.get(0))
-                            .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.get(0))))
-                            .flatMap(projectId -> {
-                                java.util.List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                                return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectId,
-                                        Comment.builder().text(text).build());
-                            });
+        List<UUID> ids = traceIds.stream().toList();
+
+        return traceDAO.getProjectIdFromTrace(ids.get(0))
+                .switchIfEmpty(Mono.error(failWithNotFound("Trace", ids.get(0))))
+                .flatMap(projectId -> {
+                    List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
+                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.TRACE, ids, generatedIds, projectId,
+                            Comment.builder().text(text).build());
                 });
     }
 
@@ -123,24 +113,14 @@ class CommentServiceImpl implements CommentService {
             return Mono.just(0L);
         }
 
-        return spanDAO.getSpanWorkspace(spanIds)
-                .switchIfEmpty(Mono.just(java.util.List.of()))
-                .flatMap(list -> {
-                    java.util.Set<String> workspaces = list.stream().map(WorkspaceAndResourceId::workspaceId).collect(java.util.stream.Collectors.toSet());
-                    if (workspaces.size() > 1) {
-                        return Mono.error(new IllegalArgumentException("All entities must belong to the same workspace"));
-                    }
-                    java.util.List<UUID> ids = list.stream().map(WorkspaceAndResourceId::resourceId).toList();
-                    if (ids.isEmpty()) {
-                        return Mono.just(0L);
-                    }
-                    return spanDAO.getProjectIdFromSpan(ids.get(0))
-                            .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.get(0))))
-                            .flatMap(projectId -> {
-                                java.util.List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
-                                return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectId,
-                                        Comment.builder().text(text).build());
-                            });
+        List<UUID> ids = spanIds.stream().toList();
+
+        return spanDAO.getProjectIdFromSpan(ids.get(0))
+                .switchIfEmpty(Mono.error(failWithNotFound("Span", ids.get(0))))
+                .flatMap(projectId -> {
+                    List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();
+                    return commentDAO.addCommentsBatch(CommentDAO.EntityType.SPAN, ids, generatedIds, projectId,
+                            Comment.builder().text(text).build());
                 });
     }
 }
