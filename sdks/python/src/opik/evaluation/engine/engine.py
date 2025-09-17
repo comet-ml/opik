@@ -191,7 +191,12 @@ class EvaluationEngine:
             ]
 
             test_results += evaluation_tasks_executor.execute(
-                evaluation_tasks, self._workers, self._verbose
+                evaluation_tasks,
+                self._workers,
+                self._verbose,
+                desc=f"Evaluation trial {trial_id}"
+                if trial_count > 1
+                else "Evaluation",
             )
 
         return test_results
