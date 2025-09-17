@@ -27,8 +27,4 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
 
     @classmethod
     def from_original_usage_dict(cls, usage: Dict[str, Any]) -> "GoogleGeminiUsage":
-        # Handle None values by converting them to 0 for candidates_token_count
-        if usage.get("candidates_token_count") is None:
-            usage = usage.copy()
-            usage["candidates_token_count"] = 0
         return cls(**usage)
