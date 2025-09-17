@@ -41,7 +41,7 @@ public interface CommentDAO {
 
     Mono<Long> addComment(UUID commentId, UUID entityId, EntityType entityType, UUID projectId, Comment comment);
 
-    Mono<Long> addCommentsBatch(EntityType entityType, List<UUID> entityIds, List<UUID> commentIds, UUID projectId, Comment comment);
+    Mono<Long> addCommentsBatch(EntityType entityType, List<UUID> entityIds, List<UUID> commentIds, List<UUID> projectIds, Comment comment);
 
     Mono<Comment> findById(UUID entityId, UUID commentId);
 
@@ -99,7 +99,7 @@ class CommentDAOImpl implements CommentDAO {
                     :id<item.index>,
                     :entity_id<item.index>,
                     :entity_type,
-                    :project_id,
+                    :project_id<item.index>,
                     :workspace_id,
                     :text,
                     :user_name,
@@ -175,19 +175,19 @@ class CommentDAOImpl implements CommentDAO {
 
     @Override
     public Mono<Long> addCommentsBatch(@NonNull EntityType entityType, @NonNull List<UUID> entityIds,
-            @NonNull List<UUID> commentIds, @NonNull UUID projectId, @NonNull Comment comment) {
+            @NonNull List<UUID> commentIds, @NonNull List<UUID> projectIds, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var items = TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
             var template = new ST(INSERT_COMMENTS_BATCH).add("items", items);
 
             var statement = connection.createStatement(template.render())
                     .bind("entity_type", entityType.getType())
-                    .bind("project_id", projectId)
                     .bind("text", comment.text());
 
             for (int i = 0; i < entityIds.size(); i++) {
                 statement.bind("id" + i, commentIds.get(i))
-                        .bind("entity_id" + i, entityIds.get(i));
+                        .bind("entity_id" + i, entityIds.get(i))
+                        .bind("project_id" + i, projectIds.get(i));
             }
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
