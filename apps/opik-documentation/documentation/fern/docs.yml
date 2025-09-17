@@ -22,6 +22,8 @@ css: ./styles.css
 analytics:
   segment:
     write-key: ${SEGMENT_WRITE_KEY}
+  gtm:
+    container-id: ${GTM_CONTAINER_ID}
 
 layout:
   searchbar-placement: header
