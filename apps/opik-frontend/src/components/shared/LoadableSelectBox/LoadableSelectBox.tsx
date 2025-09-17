@@ -1,6 +1,7 @@
 import React, { ReactElement, useCallback, useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
+import isArray from "lodash/isArray";
 import { Check, ChevronDown } from "lucide-react";
 
 import {
@@ -17,10 +18,8 @@ import { DropdownOption } from "@/types/shared";
 import NoOptions from "./NoOptions";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
-export type LoadableSelectBoxProps = {
-  value?: string;
+interface BaseLoadableSelectBoxProps {
   placeholder?: ReactElement | string;
-  onChange: (value: string) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   options: DropdownOption<string>[];
@@ -31,10 +30,25 @@ export type LoadableSelectBoxProps = {
   onLoadMore?: () => void;
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
-  renderTitle?: (option: DropdownOption<string>) => ReactElement;
   actionPanel?: ReactElement;
   minWidth?: number;
-};
+}
+
+interface SingleSelectProps extends BaseLoadableSelectBoxProps {
+  value?: string;
+  onChange: (value: string) => void;
+  multiselect?: false;
+  renderTitle?: (option: DropdownOption<string>) => ReactElement;
+}
+
+interface MultiSelectProps extends BaseLoadableSelectBoxProps {
+  value?: string[];
+  onChange: (value: string[]) => void;
+  multiselect: true;
+  renderTitle?: (option: DropdownOption<string>[]) => ReactElement;
+}
+
+export type LoadableSelectBoxProps = SingleSelectProps | MultiSelectProps;
 
 export const LoadableSelectBox = ({
   value = "",
@@ -52,6 +66,7 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
+  multiselect = false,
 }: LoadableSelectBoxProps) => {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -68,18 +83,45 @@ export const LoadableSelectBox = ({
       : "No search results"
     : "No data";
 
-  const renderTitle = () => {
-    const valueOption = options.find((o) => o.value === value);
+  const selectedValues = useMemo(() => {
+    return multiselect && isArray(value) ? value : [];
+  }, [multiselect, value]);
 
-    if (!valueOption) {
+  const isSelected = useCallback(
+    (optionValue: string) => {
+      return multiselect
+        ? selectedValues.includes(optionValue)
+        : value === optionValue;
+    },
+    [multiselect, selectedValues, value],
+  );
+
+  const renderTitle = () => {
+    const valueOptions = options.filter((o) => isSelected(o.value));
+
+    if (!valueOptions.length) {
       return <div className="truncate text-light-slate">{placeholder}</div>;
     }
 
     if (isFunction(parentRenderTitle)) {
-      return parentRenderTitle(valueOption);
+      return multiselect
+        ? (
+            parentRenderTitle as (
+              option: DropdownOption<string>[],
+            ) => ReactElement
+          )(valueOptions)
+        : (
+            parentRenderTitle as (
+              option: DropdownOption<string>,
+            ) => ReactElement
+          )(valueOptions[0]);
     }
 
-    return <div>{valueOption?.label}</div>;
+    return (
+      <div className="truncate">
+        {valueOptions.map((o) => o.label).join(", ")}
+      </div>
+    );
   };
 
   const filteredOptions = useMemo(() => {
@@ -162,12 +204,23 @@ export const LoadableSelectBox = ({
                 key={option.value}
                 className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => {
-                  onChange && onChange(option.value);
-                  openChangeHandler(false);
+                  if (multiselect) {
+                    const newSelectedValues = isSelected(option.value)
+                      ? selectedValues.filter((v) => v !== option.value)
+                      : [...selectedValues, option.value];
+                    onChange &&
+                      (onChange as (value: string[]) => void)(
+                        newSelectedValues,
+                      );
+                  } else {
+                    onChange &&
+                      (onChange as (value: string) => void)(option.value);
+                    openChangeHandler(false);
+                  }
                 }}
               >
                 <div className="min-w-4">
-                  {option.value === value && (
+                  {isSelected(option.value) && (
                     <Check className="size-3.5 shrink-0" strokeWidth="3" />
                   )}
                 </div>
@@ -184,7 +237,7 @@ export const LoadableSelectBox = ({
           <div className="sticky inset-x-0 bottom-0">
             {hasMoreSection && (
               <div className="flex items-center justify-between px-4">
-                <div className="comet-body-s text-muted-slate">
+                <div className="comet-body-s text-light-slate">
                   {`Showing first ${optionsCount} items.`}
                 </div>
                 <Button variant="link" onClick={onLoadMore}>

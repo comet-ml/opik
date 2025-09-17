@@ -66,7 +66,7 @@ export type ColumnData<T> = {
   id: string;
   label: string;
   disabled?: boolean;
-  accessorFn?: (row: T) => string | number | object | undefined;
+  accessorFn?: (row: T) => string | number | object | boolean | undefined;
   size?: number;
   type?: COLUMN_TYPE;
   customMeta?: object;
