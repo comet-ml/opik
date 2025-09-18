@@ -6,6 +6,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,12 +15,17 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
     Mono<Integer> createBatch(@NonNull AnnotationQueueBatch batch);
+
+    Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds);
+
+    Mono<Long> removeItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds);
 }
 
 @Singleton
@@ -45,6 +51,39 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    @WithSpan
+    @Override
+    public Mono<Long> addItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            log.debug("Item ids list is empty, returning");
+            return Mono.just(0L);
+        }
+
+        return annotationQueueDAO.findById(queueId)
+                .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId()))
+                .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
+                        addedCount, queueId))
+                .doOnError(error -> log.debug("Failed to add items to annotation queue with id '{}'", queueId, error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> removeItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            log.debug("Item ids list is empty, returning");
+            return Mono.just(0L);
+        }
+
+        return annotationQueueDAO.findById(queueId)
+                .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                .flatMap(queue -> annotationQueueDAO.removeItems(queueId, itemIds, queue.projectId()))
+                .doOnSuccess(removedCount -> log.debug(
+                        "Successfully removed '{}' items from annotation queue with id '{}'", removedCount, queueId))
+                .doOnError(error -> log.debug("Failed to remove items from annotation queue with id '{}'", queueId,
+                        error));
+    }
+
     private AnnotationQueue prepareAnnotationQueue(AnnotationQueue annotationQueue) {
         UUID id = annotationQueue.id() == null ? idGenerator.generateId() : annotationQueue.id();
         IdGenerator.validateVersion(id, "AnnotationQueue");
@@ -61,5 +100,11 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .build();
+    }
+
+    private NotFoundException createNotFoundError(UUID id) {
+        var message = "Annotation queue not found: '%s'".formatted(id);
+        log.info(message);
+        return new NotFoundException(message);
     }
 }

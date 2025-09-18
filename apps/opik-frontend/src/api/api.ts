@@ -21,6 +21,7 @@ export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
+export const ALERTS_REST_ENDPOINT = "/v1/private/alerts/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
 export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
@@ -28,6 +29,8 @@ export const WORKSPACES_REST_ENDPOINT = "/v1/private/workspaces/";
 export const WORKSPACE_CONFIG_REST_ENDPOINT =
   "/v1/private/workspaces/configurations/";
 export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
+export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
+  "/v1/private/playground/evaluations/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
@@ -35,6 +38,7 @@ export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
 export const THREADS_KEY = "threads";
 export const PROVIDERS_KEYS_KEY = "provider-keys";
+export const ALERTS_KEY = "alerts";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";
 export const PROJECT_STATISTICS_KEY = "project-statistics";

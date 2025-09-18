@@ -6,8 +6,8 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class TraceThreadUpdate(UniversalBaseModel):
-    tags: typing.Optional[typing.List[str]] = None
+class AnnotationQueueItemIds(UniversalBaseModel):
+    ids: typing.List[str]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

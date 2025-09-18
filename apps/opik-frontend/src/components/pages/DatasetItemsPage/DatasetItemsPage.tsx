@@ -294,6 +294,11 @@ const DatasetItemsPage = () => {
             {dataset?.name}
           </h1>
         </div>
+        {dataset?.description && (
+          <div className="-mt-3 mb-4 text-muted-slate">
+            {dataset.description}
+          </div>
+        )}
         {dataset?.created_at && (
           <div className="mb-2 flex gap-4 overflow-x-auto">
             <DateTag date={dataset?.created_at} />
@@ -310,8 +315,9 @@ const DatasetItemsPage = () => {
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel
             datasetItems={selectedRows}
+            datasetId={datasetId}
+            datasetName={dataset?.name ?? ""}
             columnsToExport={columnsToExport}
-            datasetName={dataset?.name || "dataset"}
             dynamicColumns={dynamicColumnsIds}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />

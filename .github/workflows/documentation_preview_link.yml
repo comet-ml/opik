@@ -41,7 +41,6 @@ jobs:
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "https://ai.google.dev/aistudio" \
                   --skip "chat.comet.com" \
-                  --skip "https://github.com" \
                   --skip "http://localhost" \
                   --skip "http://localhost:5173" \
                   --skip "insights/script.js" \

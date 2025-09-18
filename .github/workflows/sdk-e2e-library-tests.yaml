@@ -64,8 +64,8 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         shell: bash
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up -d --build
+          cd ${{ github.workspace }}
+          ./opik.sh --build
 
       - name: Check Opik server availability
         shell: bash
@@ -111,5 +111,5 @@ jobs:
 
       - name: Stop opik server
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          cd ${{ github.workspace }}
+          ./opik.sh --stop
