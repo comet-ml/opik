@@ -70,7 +70,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return null;
   }
 
-  if (!allWorkspaces) {
+  if (!allWorkspaces || !organizations) {
     return <Loader />;
   }
 
