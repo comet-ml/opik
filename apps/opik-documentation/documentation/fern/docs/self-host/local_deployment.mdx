@@ -139,27 +139,34 @@ scripts provides you with some additional options.
 
 ### Starting Opik with Docker Compose
 
-Instead of using the `opik.sh` or `opik.ps1` scripts, you can also run The
-`docker compose` command directly:
+Instead of using the `opik.sh` or `opik.ps1` scripts, you can also run the
+`docker compose` command directly with service profiles:
 
 ```bash
 # Navigate to the opik/deployment/docker-compose directory
 cd opik/deployment/docker-compose
 
-# Start, upgrade or restart the Opik platform
+# Start full Opik platform (equivalent to ./opik.sh)
+docker compose --profile opik up --detach
+
+# Start only infrastructure services (equivalent to ./opik.sh --infra)
 docker compose up --detach
+
+# Start infrastructure + backend services (equivalent to ./opik.sh --backend)
+docker compose --profile backend up --detach
 ```
 
 ### Uninstalling Opik
 
-To remove Opik, you will need to remove the Opik containers and volumes:
+To remove Opik, you can use the script or remove containers and volumes manually:
 
 ```bash
-# Navigate to docker compose folder
-cd deployment/docker-compose
+# Using the script (recommended)
+./opik.sh --stop
 
-# Remove the Opik containers and volumes
-docker compose down --volumes
+# Or manually remove containers and volumes
+cd deployment/docker-compose
+docker compose --profile opik down --volumes
 ```
 
 <Warning>
@@ -173,29 +180,31 @@ You can run a specific version of Opik by setting the `OPIK_VERSION` environment
 variable:
 
 ```bash
-OPIK_VERSION=latest docker compose up
+OPIK_VERSION=latest
+
+./opik.sh
 ```
 
 ### Building the Opik platform from source
 
-You can also build the Opik platform from source by running the following command:
+You can also build the Opik platform from source using the provided script:
 
 ```bash
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Navigate to the opik/deployment/docker-compose directory
-cd opik/deployment/docker-compose
+# Navigate to the opik directory
+cd opik
 
 # Build the Opik platform from source
-docker compose up --build
+./opik.sh --build
 ```
 
 This will build the Frontend and Backend Docker images and start the Opik platform.
 
 ## Troubleshooting
 
-If you get this error when running docker-compose
+If you get this error when running `docker compose`
 
 ```bash
 java.lang.Throwable: Code: 139. DB::Exception: No macro 'shard' in config while processing substitutions in '/clickhouse/tables/{shard}/opik/automation_rule_evaluator_logs' at '20' or macro is not supported here. (NO_ELEMENTS_IN_CONFIG) (version 24.3.6.48 (official build))

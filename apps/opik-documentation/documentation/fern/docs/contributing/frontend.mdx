@@ -43,17 +43,17 @@ For local development, the backend needs to allow Cross-Origin Resource Sharing 
   CORS: true # Add this line
   ```
 
-- If your backend services are already running via Docker Compose, you might need to restart them for this change to take effect: `docker compose down && docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d`
+- If your backend services are already running, you might need to restart them for this change to take effect: `./opik.sh --stop && ./opik.sh --backend --port-mapping`
 
 ### 4. Start Required Backend Services
 
-The frontend relies on various backend services. Run the following command from the root of the repository to start them (along with other necessary services like the database):
+The frontend relies on various backend services. Run the following command from the root of the repository to start them:
 
 ```bash
-# Optionally, you can force a pull of the latest images first
-# docker compose pull
+# From the root of the repository
 
-docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+# Start backend services with port mapping for frontend development
+./opik.sh --backend --port-mapping
 ```
 
 ### 5. Verify the Back-End is Running

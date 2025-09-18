@@ -48,9 +48,8 @@ jobs:
           env:
             OPIK_USAGE_REPORT_ENABLED: false
           run: |
-            cd deployment/docker-compose
-            export OPIK_FRONTEND_FLAVOR=guardrails
-            docker compose --profile guardrails up -d --build
+            cd ${{ github.workspace }}
+            ./opik.sh --build --guardrails
         
         - name: Check Opik server availability
           shell: bash
@@ -106,6 +105,6 @@ jobs:
         - name: Stop opik server
           if: always()
           run: |
-            cd ${{ github.workspace }}/deployment/docker-compose
-            docker compose down
+            cd ${{ github.workspace }}
+            ./opik.sh --stop --guardrails
 

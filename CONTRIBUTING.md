@@ -79,8 +79,9 @@ In addition, Opik relies on:
 
 #### Setting up the environment
 
-The local development environment is based on `docker-compose`. 
-Please see instructions in `deployment/docker-compose/README.md`
+The local development environment is based on `docker compose` with convenient scripts. 
+Use `./opik.sh` (Linux/Mac) or `.\opik.ps1` (Windows) for the best development experience.
+Please see instructions in [Docker Compose README](deployment/docker-compose/README.md) for advanced usage.
 
 ### Contributing to the documentation
 
@@ -136,7 +137,7 @@ The Python SDK reference documentation will be built and available at `http://12
 
 **Setting up your development environment:**
 
-In order to develop features in the Python SDK, you will need to have Opik running locally. You can follow the instructions in the [Docker Compose README](deployment/docker-compose/README.md) or use the provided script to start Opik:
+In order to develop features in the Python SDK, you will need to have Opik running locally. Use the provided scripts to start the appropriate services:
 
 On Linux or Mac:
 ```bash
@@ -262,10 +263,10 @@ If you want to run the front-end locally and see your changes instantly on savin
 - Run the following command to start the necessary services and expose the required ports:
 
   ```bash
-  # Optionally, you can force a pull of the latest images
-  docker compose pull
+  # From the root of the repository
   
-  docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+  # With port mapping
+  ./opik.sh --backend --port-mapping
   ```
 
 #### 4. Verify the Back-End is Running
@@ -327,15 +328,13 @@ If you want to run the front-end locally and see your changes instantly on savin
 
 ### Contributing to the backend
 
-In order to run the external services (Clickhouse, MySQL, Redis), you can use `docker-compose`:
+In order to run the external services (Clickhouse, MySQL, Redis), use the provided script:
 
 ```bash
-cd deployment/docker-compose
+# From the root of the repository
 
-# Optionally, you can force a pull of the latest images
-docker compose pull
-
-docker compose up clickhouse redis mysql -d
+# Start only infrastructure services for backend development
+./opik.sh --infra --port-mapping
 ```
 
 #### Running the backend

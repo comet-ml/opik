@@ -23,7 +23,7 @@ You simply need to run it from the repository base directory.
 These are the manual steps (not recommended), as alternative to the automatic script.
 In this case, it's also a pre-requirement to install the fern SDK.
 Steps:
-1. Run Opik locally using `docker-compose`. Please see instructions in `deployment/docker-compose/README.md`
+1. Run Opik locally using `./opik.sh`.
 2. Go to http://localhost:3003/ (URL for backend API specification)
 3. Download openapi specification file - `openapi.yaml`
 4. Put this file into `code_generation/fern/openapi/openapi.yaml` (overwrite it).<br>

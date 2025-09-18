@@ -12,15 +12,21 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $dockerComposeDir = Join-Path $scriptDir "deployment\docker-compose"
 
-$REQUIRED_CONTAINERS = @(
+$INFRA_CONTAINERS = @(
     "opik-clickhouse-1",
     "opik-mysql-1",
-    "opik-python-backend-1",
     "opik-redis-1",
-    "opik-frontend-1",
-    "opik-backend-1",
     "opik-minio-1",
     "opik-zookeeper-1"
+)
+
+$BACKEND_CONTAINERS = @(
+    "opik-python-backend-1",
+    "opik-backend-1"
+)
+
+$OPIK_CONTAINERS = @(
+    "opik-frontend-1"
 )
 
 $GUARDRAILS_CONTAINERS = @(
@@ -28,10 +34,22 @@ $GUARDRAILS_CONTAINERS = @(
 )
 
 function Get-Containers {
-    $containers = $REQUIRED_CONTAINERS
+    $containers = @()
+    
+    if ($INFRA) {
+        $containers = $INFRA_CONTAINERS
+    } elseif ($BACKEND) {
+        $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS
+    } else {
+        # Full Opik (default)
+        $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS + $OPIK_CONTAINERS
+    }
+    
+    # Add guardrails containers if enabled
     if ($GUARDRAILS_ENABLED) {
         $containers += $GUARDRAILS_CONTAINERS
     }
+    
     return $containers
 }
 
@@ -53,6 +71,8 @@ function Show-Usage {
     Write-Host '  --build           Build containers before starting (can be combined with other flags)'
     Write-Host '  --debug           Enable debug mode (verbose output) (can be combined with other flags)'
     Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
+    Write-Host '  --infra           Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)'
+    Write-Host '  --backend         Start only infrastructure + backend services (Backend, Python Backend etc.)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
@@ -210,6 +230,17 @@ function Start-MissingContainers {
         $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
     }
 
+    # Add profiles based on the selected mode (accumulative)
+    if ($INFRA) {
+        # No profile needed - infrastructure services start by default
+    } elseif ($BACKEND) {
+        $dockerArgs += "--profile", "backend"
+    } else {
+        # Full Opik (default) - includes all dependencies
+        $dockerArgs += "--profile", "opik"
+    }
+
+    # Always add guardrails profile if enabled
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
     }
@@ -283,6 +314,17 @@ function Stop-Containers {
         $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
     }
     
+    # Add profiles based on the selected mode (accumulative)
+    if ($INFRA) {
+        # No profile needed - infrastructure services start by default
+    } elseif ($BACKEND) {
+        $dockerArgs += "--profile", "backend"
+    } else {
+        # Full Opik (default) - includes all dependencies
+        $dockerArgs += "--profile", "opik"
+    }
+    
+    # Always add guardrails profile if enabled
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
     }
@@ -331,14 +373,25 @@ function Show-Banner {
     Write-Host '║                                                                 ║'
     Write-Host '╠═════════════════════════════════════════════════════════════════╣'
     Write-Host '║                                                                 ║'
-    Write-Host '║  ✅ All services started successfully!                          ║'
-    Write-Host '║                                                                 ║'
-    Write-Host '║  📊 Access the UI:                                              ║'
-    Write-Host "║     $uiUrl                                       ║"
-    Write-Host '║                                                                 ║'
-    Write-Host '║  🛠️  Install the Python SDK:                                     ║'
-    Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
-    Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
+    if ($GUARDRAILS_ENABLED) {
+        Write-Host '║  ✅ Guardrails services started successfully!                   ║'
+    }
+    if ($INFRA) {
+        Write-Host '║  ✅ Infrastructure services started successfully!               ║'
+        Write-Host '║                                                                 ║'
+    } elseif ($BACKEND) {
+        Write-Host '║  ✅ Backend services started successfully!                      ║'
+        Write-Host '║                                                                 ║'
+    } else {
+        Write-Host '║  ✅ All services started successfully!                          ║'
+        Write-Host '║                                                                 ║'
+        Write-Host '║  📊 Access the UI:                                              ║'
+        Write-Host "║     $uiUrl                                       ║"
+        Write-Host '║                                                                 ║'
+        Write-Host '║  🛠️  Install the Python SDK:                                     ║'
+        Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
+        Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
+    }
     Write-Host '║                                                                 ║'
     Write-Host '║  📚 Documentation: https://www.comet.com/docs/opik/             ║'
     Write-Host '║                                                                 ║'
@@ -348,10 +401,18 @@ function Show-Banner {
 }
 
 function Get-VerifyCommand {
-    if ($GUARDRAILS_ENABLED) {
-        return ".\opik.ps1 --guardrails --verify"
+    $cmd = ".\opik.ps1"
+    
+    if ($INFRA) {
+        $cmd += " --infra"
+    } elseif ($BACKEND) {
+        $cmd += " --backend"
     }
-    return ".\opik.ps1 --verify"
+    if ($GUARDRAILS_ENABLED) {
+        $cmd += " --guardrails"
+    }
+    
+    return "$cmd --verify"
 }
 
 $BUILD_MODE = $false
@@ -360,6 +421,9 @@ $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
+# Default: full opik (all profiles)
+$INFRA = $false
+$BACKEND = $false
 
 if ($options -contains '--build') {
     $BUILD_MODE = $true
@@ -389,11 +453,32 @@ if ($options -contains '--port-mapping') {
     $options = $options | Where-Object { $_ -ne '--port-mapping' }
 }
 
+# Check for profile flags
+if ($options -contains '--infra') {
+    $INFRA = $true
+    $options = $options | Where-Object { $_ -ne '--infra' }
+}
+
+if ($options -contains '--backend') {
+    $BACKEND = $true
+    $options = $options | Where-Object { $_ -ne '--backend' }
+}
+
 if ($options -contains '--guardrails') {
     $GUARDRAILS_ENABLED = $true
     $env:OPIK_FRONTEND_FLAVOR = "guardrails"
     $env:TOGGLE_GUARDRAILS_ENABLED = "true"
     $options = $options | Where-Object { $_ -ne '--guardrails' }
+}
+
+# Validate mutually exclusive profile flags
+if ($INFRA -and $BACKEND) {
+    Write-Host "❌ Error: --infra and --backend flags are mutually exclusive."
+    Write-Host "   Choose one of the following:"
+    Write-Host "   • .\opik.ps1 --infra      (infrastructure services only)"
+    Write-Host "   • .\opik.ps1 --backend    (infrastructure + backend services)"
+    Write-Host "   • .\opik.ps1              (full Opik suite - default)"
+    exit 1
 }
 
 # Get the first remaining option

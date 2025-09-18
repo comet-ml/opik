@@ -126,6 +126,25 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
+**開発用サービスプロファイル**
+
+Opikインストールスクリプトは、異なる開発シナリオ向けのサービスプロファイルをサポートしています：
+
+```bash
+# フルOpikスイート（デフォルト動作）
+./opik.sh
+
+# インフラストラクチャサービスのみ（データベース、キャッシュなど）
+./opik.sh --infra
+
+# インフラストラクチャ + バックエンドサービス
+./opik.sh --backend
+
+# 任意のプロファイルでガードレールを有効化
+./opik.sh --guardrails # フルOpikスイート + ガードレール
+./opik.sh --backend --guardrails # インフラストラクチャ + バックエンド + ガードレール
+```
+
 `--help` または `--info` オプションでトラブルシューティングが可能。Dockerfileは非rootユーザー実行を保証し、セキュリティを強化。起動後、ブラウザで [localhost:5173](http://localhost:5173) を開くだけです。詳細は [ローカルデプロイガイド](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik) をご覧ください。
 
 #### Kubernetes & Helmでのセルフホスト（大規模デプロイ向け）

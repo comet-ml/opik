@@ -124,6 +124,25 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
+**Service Profiles for Development**
+
+The Opik installation scripts now support service profiles for different development scenarios:
+
+```bash
+# Start full Opik suite (default behavior)
+./opik.sh
+
+# Start only infrastructure services (databases, caches etc.)
+./opik.sh --infra
+
+# Start infrastructure + backend services
+./opik.sh --backend
+
+# Enable guardrails with any profile
+./opik.sh --guardrails # Guardrails with full Opik suite
+./opik.sh --backend --guardrails # Guardrails with infrastructure + backend
+```
+
 Use the `--help` or `--info` options to troubleshoot issues. Dockerfiles now ensure containers run as non-root users for enhanced security. Once all is up and running, you can now visit [localhost:5173](http://localhost:5173) on your browser! For detailed instructions, see the [Local Deployment Guide](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik).
 
 #### Self-Hosting with Kubernetes & Helm (for Scalable Deployments)

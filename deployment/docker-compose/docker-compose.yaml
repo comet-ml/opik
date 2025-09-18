@@ -113,6 +113,9 @@ services:
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - backend
+      - opik
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -174,6 +177,9 @@ services:
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - backend
+      - opik
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -215,6 +221,8 @@ services:
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - opik
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -232,6 +240,8 @@ services:
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - opik
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile

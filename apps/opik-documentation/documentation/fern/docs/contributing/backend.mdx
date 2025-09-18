@@ -15,15 +15,13 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
 
 <Steps>
   ### 1. Run External Dependencies
-  The backend relies on Clickhouse, MySQL, and Redis. You can start these using Docker Compose from the `deployment/docker-compose` directory in the repository:
+  The backend relies on Clickhouse, MySQL, and Redis etc. You can start these by using the provided script from the repository root:
   
   ```bash
-  cd deployment/docker-compose
+  # From the root of the repository
   
-  # Optionally, force a pull of the latest images
-  # docker compose pull
-  
-  docker compose up clickhouse redis mysql -d
+  # Start only infrastructure services for backend development
+  ./opik.sh --infra --port-mapping
   ```
 
 ### 2. Install Prerequisites for Backend Development
