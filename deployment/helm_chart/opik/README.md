@@ -323,6 +323,7 @@ Call opik api on http://localhost:5173/api
 | minio.disableWebUI | bool | `true` |  |
 | minio.enabled | bool | `true` |  |
 | minio.fullnameOverride | string | `"opik-minio"` |  |
+| minio.image.repository | string | `"bitnamilegacy/minio"` |  |
 | minio.mode | string | `"standalone"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
@@ -333,6 +334,7 @@ Call opik api on http://localhost:5173/api
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
+| mysql.image.repository | string | `"bitnamilegacy/mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
