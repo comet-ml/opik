@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';  
 import { v4 as uuidv4 } from 'uuid';
-import { Sentry } from './sentry';
+import { captureException } from './sentry';
 
 // Create output channel for logging
 let outputChannel: vscode.OutputChannel;
@@ -60,7 +60,7 @@ export function readJsonFile(filePath: string): any {
       const fileContents = fs.readFileSync(filePath, 'utf-8');
       return JSON.parse(fileContents);
     } catch (error) {
-      Sentry.captureException(error);
+      captureException(error);
       console.error(`Error reading or parsing ${filePath}:`, error);
       return null;
     }

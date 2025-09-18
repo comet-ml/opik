@@ -4,12 +4,15 @@ import * as path from 'path';
 import * as os from 'os';
 import { getDefaultVSCodeUserDataPath, getOrCreateUUID, getOpikApiKey } from './utils';
 import { CursorService } from './cursor/cursorService';
-import { initializeSentry, Sentry } from './sentry';
+import { initializeSentry, captureException } from './sentry';
 import { MCPService } from './mcp/mcpService';
 
 export function activate(context: vscode.ExtensionContext) {
-  // Initialize Sentry first
-  initializeSentry(context);
+  // Get or create user UUID for tracking
+  const userId = getOrCreateUUID(context);
+
+  // Initialize Sentry with user context
+  initializeSentry(context, userId);
 
   try {
     console.log('Opik extension is now active!');
@@ -47,6 +50,13 @@ export function activate(context: vscode.ExtensionContext) {
     // Initial status bar update
     updateStatusBar();
 
+    // Track missing API key during extension initialization
+    const initialApiKey = getOpikApiKey();
+    if (!initialApiKey) {
+      const error = new Error("Extension initialized without API key configured");
+      captureException(error);
+    }
+
     // Listen for configuration changes
     const configChangeListener = vscode.workspace.onDidChangeConfiguration(async event => {
       try {
@@ -60,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       } catch (error) {
-        Sentry.captureException(error);
+        captureException(error);
         console.error('Error handling configuration change:', error);
       }
     });
@@ -82,7 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
               }
             }
           } catch (error) {
-            Sentry.captureException(error);
+            captureException(error);
             console.error('Error handling config file change:', error);
           }
         });
@@ -107,7 +117,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       VSInstallationPath = fs.existsSync(userDataPath) ? userDataPath : getDefaultVSCodeUserDataPath(context);
     } catch (error) {
-      Sentry.captureException(error);
+      captureException(error);
       vscode.window.showErrorMessage('Failed to get VSCode user data path. Please check your configuration.');
       return;
     }
@@ -123,10 +133,6 @@ export function activate(context: vscode.ExtensionContext) {
         const apiKey = getOpikApiKey();
 
         if (!apiKey && showAPIKeyWarning) {
-          // Track API key configuration issues
-          const error = new Error("No API key configured - cannot log traces to Opik");
-          Sentry.captureException(error);
-
           vscode.window.showErrorMessage(
             'To log your chat sessions to Opik you need an API Key. Configure it in VS Code settings or ~/.opik.config file.',
             'Open Settings'
@@ -150,7 +156,7 @@ export function activate(context: vscode.ExtensionContext) {
           try {
             await mcpService.registerServer(apiKey);
           } catch (error) {
-            Sentry.captureException(error);
+            captureException(error);
             console.error('Failed to register MCP server:', error);
           }
         }
@@ -160,7 +166,7 @@ export function activate(context: vscode.ExtensionContext) {
         console.log(`Number of Cursor traces logged: ${numberOfCursorTracesLogged}`);
         console.log('Finished loop');
       } catch (error) {
-        Sentry.captureException(error);
+        captureException(error);
         console.error('Error in main processing loop:', error);
       }
     }, 5000);
@@ -169,7 +175,7 @@ export function activate(context: vscode.ExtensionContext) {
       dispose: () => clearInterval(interval)
     });
   } catch (error) {
-    Sentry.captureException(error);
+    captureException(error);
     console.error('Error during extension activation:', error);
   }
 }

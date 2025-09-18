@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { TraceData } from './interface';
-import { Sentry } from './sentry';
+import { captureException } from './sentry';
 
 export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Promise<void> {
     if (traces.length === 0) return;
@@ -77,7 +77,7 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
         console.log(`🎉 All ${traces.length} traces processed successfully using Opik SDK!`);
         
     } catch (error) {
-        Sentry.captureException(error);
+        captureException(error);
         console.error('Error processing traces with Opik SDK:', error);
         throw error;
     }
