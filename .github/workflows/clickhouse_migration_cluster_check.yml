@@ -4,12 +4,12 @@ run-name: "ClickHouse Migration Cluster Check on ${{ github.ref_name }} by @${{ 
 on:
   pull_request:
     paths:
-      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**/*.sql"
   push:
     branches:
       - "main"
     paths:
-      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**/*.sql"
 
   workflow_dispatch:
 
