@@ -7,6 +7,7 @@ import {
   FlaskConical,
   LayoutGrid,
   SparklesIcon,
+  UserPen,
 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
@@ -23,6 +24,7 @@ export enum RESOURCE_TYPE {
   experiment,
   optimization,
   trial,
+  annotationQueue,
 }
 
 const RESOURCE_MAP = {
@@ -61,6 +63,12 @@ const RESOURCE_MAP = {
     icon: SparklesIcon,
     param: "datasetId",
     deleted: "Deleted optimization",
+  },
+  [RESOURCE_TYPE.annotationQueue]: {
+    url: "/$workspaceName/annotation-queues/$annotationQueueId",
+    icon: UserPen,
+    param: "annotationQueueId",
+    deleted: "Deleted annotation queue",
   },
 };
 

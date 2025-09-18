@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
-import { SquareArrowOutUpRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -36,9 +35,7 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
-import { useToast } from "@/components/ui/use-toast";
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
-import { ToastAction } from "@/components/ui/toast";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
 
@@ -104,8 +101,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const { mutate: createMutate } = useAnnotationQueueCreateMutation();
   const { mutate: updateMutate } = useAnnotationQueueUpdateMutation();
 
-  const { toast } = useToast();
-
   const isEdit = Boolean(defaultQueue);
   const title = isEdit
     ? "Edit annotation queue"
@@ -125,28 +120,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       if (onQueueCreated) {
         onQueueCreated(queue);
       }
-
-      // TODO Lala: Remove this
-      toast({
-        title: "Annotation queue created",
-        description: "SOME DESCRIPTION",
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Go to project"
-            key="Go to project"
-            onClick={() => {
-              console.log("some acction");
-            }}
-          >
-            Go to project
-          </ToastAction>,
-        ],
-      });
     },
-    [onQueueCreated, toast],
+    [onQueueCreated],
   );
 
   const createQueue = useCallback(() => {
@@ -325,15 +300,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   Share annotation queue
                 </div>
                 <Description>
-                  You must{" "}
-                  <Button variant="link" size="3xs" asChild>
-                    <a href="google.com" target="_blank" rel="noreferrer">
-                      invite annotators to your workspace
-                      <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
-                    </a>
-                  </Button>
-                  for them to review the items. After creating the queue,
-                  you&apos;ll get a direct link to share with them.
+                  You must invite annotators to your workspace for them to
+                  review the items. After creating the queue, you&apos;ll get a
+                  direct link to share with them.
                 </Description>
               </div>
             </form>
@@ -351,5 +320,5 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     </Dialog>
   );
 };
-// TODO lala invite ink, separate flow for selfhosted
+
 export default AddEditAnnotationQueueDialog;

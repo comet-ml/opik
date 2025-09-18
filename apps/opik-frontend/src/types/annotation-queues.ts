@@ -27,7 +27,7 @@ export interface AnnotationQueue {
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
-  last_scorred_at: string;
+  last_scored_at: string;
 }
 
 export type CreateAnnotationQueue = Omit<
@@ -41,7 +41,7 @@ export type CreateAnnotationQueue = Omit<
   | "created_by"
   | "last_updated_at"
   | "last_updated_by"
-  | "last_scorred_at"
+  | "last_scored_at"
 >;
 
 export type UpdateAnnotationQueue = Partial<
@@ -58,6 +58,6 @@ export type UpdateAnnotationQueue = Partial<
     | "created_by"
     | "last_updated_at"
     | "last_updated_by"
-    | "last_scorred_at"
+    | "last_scored_at"
   >
 >;
