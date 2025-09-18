@@ -1517,6 +1517,13 @@ class TracesResourceTest {
         var ids = traces.stream().limit(3).map(Trace::id).toList();
         var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
+
+        for (UUID id : ids) {
+            var trace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(trace.comments()).isNotNull();
+            assertThat(trace.comments().size()).isEqualTo(1);
+            assertThat(trace.comments().getFirst().text()).isEqualTo("hello");
+        }
     }
 
     @Test
@@ -1534,10 +1541,7 @@ class TracesResourceTest {
 
     @Test
     void createTraceCommentsBatch_OverLimit() {
-        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
-        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-
-        var ids = traces.stream().limit(11).map(Trace::id).toList();
+        var ids = java.util.stream.IntStream.range(0, 1001).mapToObj(i -> java.util.UUID.randomUUID()).toList();
         var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
     }
