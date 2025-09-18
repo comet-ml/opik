@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -35,8 +36,10 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -159,6 +162,33 @@ public class AnnotationQueuesResource {
                 items, workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Operation(operationId = "createAnnotationQueue", summary = "Create annotation queue", description = "Create annotation queue for human annotation workflows", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{annotationId}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response createAnnotationQueue(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueue.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueue request,
+            @Context UriInfo uriInfo) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating annotation queue with id '{}' on workspaceId '{}'",
+                request.id(), workspaceId);
+
+        var id = annotationQueueService.create(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Created annotation queue with id '{}' on workspaceId '{}'",
+                id, workspaceId);
+
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+
+        return Response.created(uri).build();
     }
 
     @POST

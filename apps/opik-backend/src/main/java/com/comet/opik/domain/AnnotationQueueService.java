@@ -28,6 +28,8 @@ import static com.comet.opik.domain.AnnotationQueueUtils.applyUpdate;
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
+    Mono<UUID> create(AnnotationQueue annotationQueue);
+
     Mono<Integer> createBatch(AnnotationQueueBatch batch);
 
     Mono<AnnotationQueue> findById(@NonNull UUID id);
@@ -51,6 +53,15 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
+
+    @Override
+    public Mono<UUID> create(AnnotationQueue annotationQueue) {
+        annotationQueue = prepareAnnotationQueue(annotationQueue);
+
+        return annotationQueueDAO.createBatch(List.of(annotationQueue))
+                .thenReturn(annotationQueue.id())
+                .subscribeOn(Schedulers.boundedElastic());
+    }
 
     @Override
     @WithSpan
