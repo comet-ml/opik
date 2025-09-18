@@ -3,6 +3,10 @@
 # Script to check ClickHouse migrations for proper ON CLUSTER clause usage
 # This script validates that all DDL operations in ClickHouse migrations include the ON CLUSTER '{cluster}' clause
 # Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl
+#
+# Usage:
+#   ./check_clickhouse_migrations_cluster.sh                    # Check all migration files
+#   ./check_clickhouse_migrations_cluster.sh file1.sql file2.sql # Check specific files
 
 set -euo pipefail
 
@@ -105,28 +109,57 @@ validate_migration_file() {
 main() {
     local total_errors=0
     local total_files=0
+    local migration_files=()
     
-    # Check if migration directory exists
-    if [[ ! -d "$MIGRATION_DIR" ]]; then
-        echo -e "${RED}❌ ERROR: Migration directory not found: $MIGRATION_DIR${NC}"
-        exit 1
+    # Check if specific files were provided as arguments
+    if [[ $# -gt 0 ]]; then
+        # Use provided file arguments
+        migration_files=("$@")
+        echo "🎯 Validating specific migration files provided as arguments..."
+        
+        # Validate that all provided files exist and are SQL files
+        for file in "${migration_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+                echo -e "${RED}❌ ERROR: File not found: $file${NC}"
+                exit 1
+            fi
+            
+            if [[ ! "$file" =~ \.sql$ ]]; then
+                echo -e "${YELLOW}⚠️  WARNING: Skipping non-SQL file: $file${NC}"
+                continue
+            fi
+        done
+    else
+        # Check if migration directory exists
+        if [[ ! -d "$MIGRATION_DIR" ]]; then
+            echo -e "${RED}❌ ERROR: Migration directory not found: $MIGRATION_DIR${NC}"
+            exit 1
+        fi
+        
+        # Find all SQL migration files in the directory
+        migration_files=($(find "$MIGRATION_DIR" -name "*.sql" | sort))
+        echo "📊 Validating all migration files in directory..."
     fi
     
-    # Find all SQL migration files
-    local migration_files
-    migration_files=($(find "$MIGRATION_DIR" -name "*.sql" | sort))
+    # Filter out non-SQL files and files that don't exist
+    local valid_files=()
+    for file in "${migration_files[@]}"; do
+        if [[ -f "$file" && "$file" =~ \.sql$ ]]; then
+            valid_files+=("$file")
+        fi
+    done
     
-    if [[ ${#migration_files[@]} -eq 0 ]]; then
-        echo -e "${YELLOW}⚠️  WARNING: No SQL migration files found in $MIGRATION_DIR${NC}"
+    if [[ ${#valid_files[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️  WARNING: No valid SQL migration files to check${NC}"
         exit 0
     fi
     
-    echo "📊 Found ${#migration_files[@]} migration file(s) to check"
+    echo "📊 Found ${#valid_files[@]} migration file(s) to check"
     echo "=" $(printf '=%.0s' {1..50})
     echo
     
     # Validate each migration file
-    for file in "${migration_files[@]}"; do
+    for file in "${valid_files[@]}"; do
         ((total_files++))
         
         if ! validate_migration_file "$file"; then
