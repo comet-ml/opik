@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Sentry } from '../sentry';
+import { captureException } from '../sentry';
 
 export class MCPService {
     private context: vscode.ExtensionContext;
@@ -57,7 +57,7 @@ export class MCPService {
             return true;
 
         } catch (error) {
-            Sentry.captureException(error);
+            captureException(error);
             console.error('❌ Failed to register Opik MCP server:', error);
 
             // Show error to user but don't block extension
@@ -81,7 +81,7 @@ export class MCPService {
             return true;
 
         } catch (error) {
-            Sentry.captureException(error);
+            captureException(error);
             console.error('❌ Failed to unregister Opik MCP server:', error);
             return false;
         }
