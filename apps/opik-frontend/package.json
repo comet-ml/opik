@@ -59,6 +59,7 @@
     "@types/diff": "^5.2.2",
     "@types/md5": "^2.3.5",
     "@types/segment-analytics": "^0.0.38",
+    "@uiw/codemirror-extensions-hyper-link": "^4.25.1",
     "@uiw/codemirror-theme-github": "^4.23.3",
     "@uiw/react-codemirror": "^4.23.10",
     "async": "^3.2.6",
