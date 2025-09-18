@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueReviewer;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
@@ -20,12 +21,16 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +39,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -45,17 +52,23 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Annotation Queues Resource Test")
@@ -363,7 +376,7 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.feedbackScores()).hasSize(2);
 
             var feedbackScoreMap = retrievedQueue.feedbackScores().stream()
-                    .collect(Collectors.toMap(
+                    .collect(toMap(
                             FeedbackScoreAverage::name,
                             FeedbackScoreAverage::value));
 
@@ -416,7 +429,7 @@ class AnnotationQueuesResourceTest {
                     projectId, project.name(), API_KEY, TEST_WORKSPACE, List.of(), List.of(), Map.of());
 
             var threadIdToModelId = threadsPage.content().stream()
-                    .collect(Collectors.toMap(
+                    .collect(toMap(
                             thread -> thread.id(),
                             thread -> thread.threadModelId()));
 
@@ -456,7 +469,7 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.feedbackScores()).hasSize(2);
 
             var feedbackScoreMap = retrievedQueue.feedbackScores().stream()
-                    .collect(Collectors.toMap(
+                    .collect(toMap(
                             FeedbackScoreAverage::name,
                             FeedbackScoreAverage::value));
 
@@ -541,52 +554,75 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            // Create multiple annotation queues
-            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Queue Alpha")
-                    .build();
+            int queueCount = 8;
 
-            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Queue Beta")
-                    .build();
+            var queues = IntStream.range(0, queueCount)
+                    .mapToObj(i -> {
+                        var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                                .toBuilder()
+                                .projectId(projectId)
+                                .projectName(project.name())
+                                .scope(AnnotationQueue.AnnotationScope.TRACE)
+                                .feedbackDefinitionNames(List.of("quality", "relevance"))
+                                .itemsCount(2L)                                      // will be used for assertion later
+                                .reviewers(List.of(AnnotationQueueReviewer.builder() // will be used for assertion later
+                                                .username(USER)
+                                                .status(4L)
+                                        .build()))
+                                .feedbackScores(List.of(                             // will be used for assertion later
+                                        FeedbackScoreAverage.builder()
+                                                .name("quality")
+                                                .value(new BigDecimal("0.75"))
+                                                .build(),
+                                        FeedbackScoreAverage.builder()
+                                                .name("relevance")
+                                                .value(new BigDecimal("0.875"))
+                                                .build()
+                                ))
+                                .build();
 
-            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Queue Gamma")
-                    .build();
+                        annotationQueuesResourceClient.createAnnotationQueueBatch(
+                                new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-            // Create the annotation queues
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
-                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                        // Create traces and add them to the queue
+                        var trace1 = createTrace(project.name());
+                        var trace2 = createTrace(project.name());
+                        var trace3 = createTrace(project.name()); // This trace won't be in the queue
+
+                        var itemIds = Set.of(trace1, trace2);
+                        annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                                annotationQueue.id(), itemIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+                        // Create feedback scores - some for traces in the queue, some for traces not in the queue
+                        createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), apiKey, workspaceName);
+
+                        // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
+                        createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name(), apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace3, "relevance", 0.6, project.name(), apiKey, workspaceName);
+
+                        // Feedback scores with different names (not in feedbackDefinitionNames) - should not be aggregated
+                        createFeedbackScoreForTrace(trace1, "other_metric", 0.3, project.name(), apiKey, workspaceName);
+
+                        return annotationQueue;
+                    })
+                    .toList();
 
             // When - Request first page with size 2
             var firstPage = annotationQueuesResourceClient.findAnnotationQueues(
-                    1, 2, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+                    1, 5, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
 
             // Then
-            assertThat(firstPage.content()).hasSize(2);
-            assertThat(firstPage.page()).isEqualTo(1);
-            assertThat(firstPage.size()).isEqualTo(2);
-            assertThat(firstPage.total()).isEqualTo(3);
+            assertPage(firstPage, queues.reversed().subList(0, 5), 1, queueCount);
 
             // When - Request second page
             var secondPage = annotationQueuesResourceClient.findAnnotationQueues(
-                    2, 2, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+                    2, 5, null, null, null, apiKey, workspaceName, HttpStatus.SC_OK);
 
             // Then
-            assertThat(secondPage.content()).hasSize(1);
-            assertThat(secondPage.page()).isEqualTo(2);
-            assertThat(secondPage.size()).isEqualTo(1);
-            assertThat(secondPage.total()).isEqualTo(3);
+            assertPage(secondPage, queues.reversed().subList(5, queueCount), 2, queueCount);
         }
 
         @Test
@@ -624,40 +660,21 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            // Create annotation queues with different names
-            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Alpha Queue")
-                    .build();
-
-            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Beta Queue")
-                    .build();
-
-            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("Alpha Test")
-                    .build();
+            var queues = IntStream.range(0, 5)
+                    .mapToObj(i -> prepareAnnotationQueue(project.name(), projectId))
+                    .toList();
 
             // Create the annotation queues
             annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
+                    new LinkedHashSet<>(queues),
                     apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
             // When - Filter by name containing "Alpha"
             var page = annotationQueuesResourceClient.findAnnotationQueues(
-                    1, 10, "Alpha", null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+                    1, 10, queues.getFirst().name().substring(0, 5), null, null, apiKey, workspaceName, HttpStatus.SC_OK);
 
             // Then
-            assertThat(page.content()).hasSize(2);
-            assertThat(page.content()).allSatisfy(queue -> assertThat(queue.name()).contains("Alpha"));
+            assertPage(page, queues.subList(0, 1), 1, 1);
         }
 
         @Test
@@ -695,9 +712,9 @@ class AnnotationQueuesResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"name,asc", "name,desc", "created_at,asc", "created_at,desc"})
+        @MethodSource("findAnnotationQueuesWithSorting")
         @DisplayName("should sort annotation queues by different fields and directions")
-        void findAnnotationQueuesWithSorting(String sorting) {
+        void findAnnotationQueuesWithSorting(Comparator<AnnotationQueue> comparator, SortingField sortingField) {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -708,53 +725,65 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            // Create annotation queues with predictable names for sorting
-            var annotationQueue1 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("A Queue")
-                    .build();
-
-            var annotationQueue2 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("B Queue")
-                    .build();
-
-            var annotationQueue3 = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .name("C Queue")
-                    .build();
+            // Create multiple annotation queues with different predictable values
+            var annotationQueues = IntStream.range(0, 5)
+                    .mapToObj(i -> prepareAnnotationQueue(project.name(), projectId))
+                    .collect(toList());
 
             // Create the annotation queues
             annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue1, annotationQueue2, annotationQueue3)),
+                    new LinkedHashSet<>(annotationQueues),
                     apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-            // When
+            // When - Get all queues with sorting
             var page = annotationQueuesResourceClient.findAnnotationQueues(
-                    1, 10, null, null, sorting, apiKey, workspaceName, HttpStatus.SC_OK);
+                    1, 10, null, null, toURLEncodedQueryParam(List.of(sortingField)),
+                    apiKey, workspaceName, HttpStatus.SC_OK);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
+            // Then - Verify sorting worked
+            assertThat(page.content()).hasSize(annotationQueues.size());
 
-            // Verify sorting based on field and direction
-            if (sorting.contains("name")) {
-                var names = page.content().stream().map(AnnotationQueue::name).toList();
-                if (sorting.contains("asc")) {
-                    assertThat(names).containsExactly("A Queue", "B Queue", "C Queue");
-                } else {
-                    assertThat(names).containsExactly("C Queue", "B Queue", "A Queue");
-                }
-            } else if (sorting.contains("created_at")) {
-                // For created_at sorting, we just verify the response is successful
-                // since exact timestamp ordering is harder to predict in tests
-                assertThat(page.content()).hasSize(3);
+            // Get the expected order by sorting with the comparator
+            var expectedOrder = annotationQueues.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            // Verify the API returned them in the expected order
+            for (int i = 0; i < expectedOrder.size(); i++) {
+                var expected = expectedOrder.get(i);
+                var actual = page.content().get(i);
+
+                // Compare by name which should be unique and predictable
+                assertThat(actual.name()).isEqualTo(expected.name());
             }
+        }
+
+        Stream<Arguments> findAnnotationQueuesWithSorting() {
+            return Stream.of(
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::name).reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::createdAt)
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::createdAt).reversed()
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::lastUpdatedAt)
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::lastUpdatedAt).reversed()
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @ParameterizedTest
@@ -832,14 +861,19 @@ class AnnotationQueuesResourceTest {
     }
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
-            String projectName) {
+                                             String projectName) {
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, API_KEY, TEST_WORKSPACE);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName, String apiKey, String workspaceName) {
         var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                 .id(traceId)
                 .name(scoreName)
                 .value(BigDecimal.valueOf(scoreValue))
                 .projectName(projectName)
                 .build();
-        traceResourceClient.feedbackScores(List.of(feedbackScore), API_KEY, TEST_WORKSPACE);
+        traceResourceClient.feedbackScores(List.of(feedbackScore), apiKey, workspaceName);
     }
 
     private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
@@ -861,6 +895,58 @@ class AnnotationQueuesResourceTest {
         assertThat(queue.reviewers()).hasSize(1);
         assertThat(queue.reviewers().getFirst().username()).isEqualTo(USER);
         assertThat(queue.reviewers().getFirst().status()).isEqualTo(expectedStatus);
+    }
+
+    private AnnotationQueue prepareAnnotationQueue(String projectName, UUID projectId) {
+        return factory.manufacturePojo(AnnotationQueue.class)
+                .toBuilder()
+                .projectId(projectId)
+                .projectName(projectName)
+                .itemsCount(null)
+                .feedbackScores(null)
+                .reviewers(null)
+                .build();
+    }
+
+    private void assertPage(AnnotationQueue.AnnotationQueuePage actualPage, List<AnnotationQueue> expectedQueues, int expectedPage, int expectedTotal) {
+        assertThat(actualPage.page()).isEqualTo(expectedPage);
+        assertThat(actualPage.size()).isEqualTo(expectedQueues.size());
+        assertThat(actualPage.total()).isEqualTo(expectedTotal);
+
+        assertThat(actualPage.content())
+                .usingRecursiveComparison(
+                        RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .build())
+                .ignoringFields(QUEUE_IGNORED_FIELDS)
+                .isEqualTo(expectedQueues);
+
+        // verify ignored field if present
+        for (int i = 0; i < expectedQueues.size(); i++) {
+            var expectedQueue = expectedQueues.get(i);
+            var actualQueue = actualPage.content().get(i);
+
+            if (expectedQueue.itemsCount() != null) {
+                assertThat(actualQueue.itemsCount()).isEqualTo(expectedQueue.itemsCount());
+            }
+
+            if (expectedQueue.reviewers() != null) {
+                assertThat(actualQueue.reviewers())
+                        .usingRecursiveComparison()
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedQueue.reviewers());
+            }
+
+            if (expectedQueue.feedbackScores() != null) {
+                assertThat(actualQueue.feedbackScores())
+                        .usingRecursiveComparison(
+                                RecursiveComparisonConfiguration.builder()
+                                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                        .build())
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedQueue.feedbackScores());
+            }
+        }
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {
