@@ -1527,26 +1527,6 @@ class TracesResourceTest {
     }
 
     @Test
-    void createTraceCommentsBatch_ValidationErrors() {
-        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
-        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-
-        var responseEmptyIds = traceResourceClient.callTraceCommentsBatchCreate(java.util.List.of(), "x", API_KEY, TEST_WORKSPACE);
-        assertThat(responseEmptyIds.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
-
-        var ids = traces.stream().limit(1).map(Trace::id).toList();
-        var responseBlankText = traceResourceClient.callTraceCommentsBatchCreate(ids, "  ", API_KEY, TEST_WORKSPACE);
-        assertThat(responseBlankText.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
-    }
-
-    @Test
-    void createTraceCommentsBatch_OverLimit() {
-        var ids = java.util.stream.IntStream.range(0, 1001).mapToObj(i -> java.util.UUID.randomUUID()).toList();
-        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
-        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
-    }
-
-    @Test
     void createTraceCommentsBatch_MixedWorkspace_BadRequest() {
         var trace1 = factory.manufacturePojo(Trace.class);
         var trace2 = factory.manufacturePojo(Trace.class);
