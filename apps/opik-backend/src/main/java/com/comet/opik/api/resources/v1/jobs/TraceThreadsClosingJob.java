@@ -143,7 +143,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     if (interrupted.get()) {
                         log.info("Closing trace threads process interrupted");
                     } else {
-                        log.info("Messages enqueued successfully in stream {}", traceThreadConfig.getStreamName());
+                        log.debug("Messages enqueued successfully in stream {}", traceThreadConfig.getStreamName());
                     }
                 })
                 .then();

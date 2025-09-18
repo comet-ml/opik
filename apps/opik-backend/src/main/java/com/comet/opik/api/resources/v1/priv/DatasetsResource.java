@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetExpansion;
+import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -19,6 +21,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetCriteria;
+import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
@@ -84,6 +87,7 @@ public class DatasetsResource {
 
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
+    private final @NonNull DatasetExpansionService expansionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
@@ -248,6 +252,23 @@ public class DatasetsResource {
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
 
         return Response.ok(dataset).build();
+    }
+
+    @POST
+    @Path("/{id}/expansions")
+    @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
+            @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
+    })
+    @RateLimited
+    public Response expandDataset(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExpansion.class))) @JsonView(DatasetExpansion.View.Write.class) @NotNull @Valid DatasetExpansion request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Expanding dataset with id '{}' on workspaceId '{}'", datasetId, workspaceId);
+        var response = expansionService.expandDataset(datasetId, request);
+        log.info("Expanded dataset with id '{}' on workspaceId '{}', total samples '{}'",
+                datasetId, workspaceId, response.totalGenerated());
+        return Response.ok(response).build();
     }
 
     // Dataset Item Resources
@@ -440,5 +461,4 @@ public class DatasetsResource {
 
         return Response.ok(columns).build();
     }
-
 }
