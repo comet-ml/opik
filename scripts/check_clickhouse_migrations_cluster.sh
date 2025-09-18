@@ -36,15 +36,13 @@ check_ddl_statement() {
         return 0
     fi
     
-    # Check if the DDL statement has ON CLUSTER clause 
-    # Both patterns are valid in ClickHouse:
-    # - ON CLUSTER '{cluster}' (with quotes)  
-    # - ON CLUSTER {cluster} (without quotes)
-    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+(['\"][^'\"]*['\"]|[{][^}]*[}])"; then
+    # Check if the DDL statement has ON CLUSTER clause with proper quotes
+    # Required pattern: ON CLUSTER '{cluster}' (with quotes around {cluster})
+    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+['\"][^'\"]*['\"]"; then
         echo -e "${RED}❌ ERROR: Missing ON CLUSTER clause${NC}"
         echo -e "   📄 File: ${file}"
         echo -e "   📍 Line ${line_num}: ${line}"
-        echo -e "   🔧 Expected: ${ddl_type} ... ON CLUSTER '{cluster}' or ON CLUSTER {cluster}"
+        echo -e "   🔧 Expected: ${ddl_type} ... ON CLUSTER '{cluster}'"
         echo
         return 1
     fi
