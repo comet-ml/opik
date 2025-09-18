@@ -23,10 +23,10 @@ EXIT_CODE=0
 # DDL patterns that require ON CLUSTER clause
 # Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl
 DDL_COMMANDS_REGEX="(CREATE|DROP|ALTER|RENAME)"
-# ClickHouse objects that support distributed DDL with ON CLUSTER
-CLUSTER_OBJECTS_REGEX="(TABLE|VIEW|MATERIALIZED VIEW|DATABASE|DICTIONARY|FUNCTION|USER|ROLE|QUOTA|SETTINGS PROFILE)"
 # Combined pattern for detecting DDL statements that need ON CLUSTER
 DDL_DETECTION_REGEX="^\s*${DDL_COMMANDS_REGEX}\s+"
+# Exact pattern for ON CLUSTER clause validation (project-specific)
+ON_CLUSTER_REGEX="ON\s+CLUSTER\s+['\"]\\{cluster\\}['\"]"
 
 echo "🔍 Checking ClickHouse migrations for ON CLUSTER clause usage..."
 echo "📁 Migration directory: ${MIGRATION_DIR}"
@@ -44,9 +44,9 @@ check_ddl_statement() {
         return 0
     fi
     
-    # Check if the DDL statement has ON CLUSTER clause with exact pattern
+    # Check if the DDL statement has ON CLUSTER clause using centralized regex
     # Required pattern: ON CLUSTER '{cluster}' (exact match for this project)
-    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+['\"]\\{cluster\\}['\"]"; then
+    if ! echo "$line" | grep -qiE "$ON_CLUSTER_REGEX"; then
         echo -e "${RED}❌ ERROR: Missing ON CLUSTER clause${NC}"
         echo -e "   📄 File: ${file}"
         echo -e "   📍 Line ${line_num}: ${line}"
