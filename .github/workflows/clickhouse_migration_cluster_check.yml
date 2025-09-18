@@ -1,0 +1,93 @@
+name: ClickHouse Migration Cluster Check
+
+on:
+  # Run on pull requests targeting main branch
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**'
+
+  # Run on pushes to main branch
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  validate-clickhouse-migrations:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch enough history for proper diff analysis
+          fetch-depth: 0
+
+      - name: Validate ClickHouse migrations have ON CLUSTER clause
+        run: |
+          echo "🔍 Validating ClickHouse migrations for proper ON CLUSTER clause usage..."
+          echo "📖 Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
+          echo
+          
+          # Run the validation script
+          if ./scripts/check_clickhouse_migrations_cluster.sh; then
+            echo "✅ All ClickHouse migrations are properly configured!"
+            echo "🎉 DDL operations will be executed distributively across the cluster."
+          else
+            echo "❌ ClickHouse migration validation failed!"
+            echo
+            echo "💡 What this means:"
+            echo "   - DDL operations without ON CLUSTER clause will only execute on a single node"
+            echo "   - This can cause inconsistencies in distributed ClickHouse deployments"
+            echo "   - All CREATE, DROP, ALTER, and RENAME statements must include ON CLUSTER '{cluster}'"
+            echo
+            echo "🔧 How to fix:"
+            echo "   1. Add 'ON CLUSTER '\"'\"'{cluster}'\"'\"'' to all DDL statements in your migration files"
+            echo "   2. Example: CREATE TABLE my_table ON CLUSTER '{cluster}' (...)"
+            echo "   3. Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
+            echo
+            exit 1
+          fi
+
+      - name: Check if this is a new migration file
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "🔍 Checking for new ClickHouse migration files in this PR..."
+          
+          # Get the list of new migration files in this PR
+          NEW_FILES=$(git diff --name-only --diff-filter=A origin/main...HEAD | grep "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\.sql$" || true)
+          
+          if [ -n "$NEW_FILES" ]; then
+            echo "📄 New ClickHouse migration files detected:"
+            echo "$NEW_FILES" | while read -r file; do
+              echo "   - $file"
+            done
+            echo
+            echo "✅ These files have been validated for proper ON CLUSTER clause usage."
+            echo "🚀 Ready for distributed ClickHouse deployment!"
+          else
+            echo "📋 No new ClickHouse migration files found in this PR."
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "=========================================="
+          echo "✅ ClickHouse Migration Validation PASSED"
+          echo "=========================================="
+          echo "✅ All DDL operations include proper ON CLUSTER clause"
+          echo "✅ Migrations are ready for distributed ClickHouse deployment"
+          echo "✅ No cluster inconsistencies will occur"
+          echo
+          echo "🎯 This check ensures that:"
+          echo "   • CREATE statements will create tables/indexes on all cluster nodes"
+          echo "   • DROP statements will remove objects from all cluster nodes"
+          echo "   • ALTER statements will modify schema on all cluster nodes"
+          echo "   • RENAME statements will rename objects on all cluster nodes"
+          echo
+          echo "📚 For more information about distributed DDL:"
+          echo "   https://clickhouse.com/docs/sql-reference/distributed-ddl"
