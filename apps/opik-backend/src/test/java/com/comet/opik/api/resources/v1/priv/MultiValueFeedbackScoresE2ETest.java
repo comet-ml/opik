@@ -50,6 +50,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -748,36 +749,42 @@ public class MultiValueFeedbackScoresE2ETest {
     void testScoreTraceBySingleAuthorInBothTables() {
         var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
         UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
-        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                .map(trace -> trace.toBuilder()
-                        .id(null)
-                        .projectName(projectName)
-                        .usage(null)
-                        .feedbackScores(null)
-                        .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
-                        .build())
-                .toList();
-        var traceId = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
 
         // mimic scoring the trace before this feature was implemented using the old table
         var legacyScore = factory.manufacturePojo(FeedbackScore.class);
-        traceResourceClient.feedbackScore(traceId, legacyScore, TEST_WORKSPACE, API_KEY1);
-        feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null);
+        feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER1)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
 
         // score the trace
-        var newScore = factory.manufacturePojo(FeedbackScore.class);
+        var newScore = legacyScore.toBuilder()
+                .value(factory.manufacturePojo(BigDecimal.class))
+                .categoryName(factory.manufacturePojo(String.class))
+                .build();
         traceResourceClient.feedbackScore(traceId, newScore, TEST_WORKSPACE, API_KEY1);
 
         var actual = traceResourceClient.getTraces(projectName, null, API_KEY2, TEST_WORKSPACE, null,
                 null, 5, Map.of());
 
         assertThat(actual.content()).hasSize(1);
-        var actualTrace1 = actual.content().stream().filter(trace -> trace.id().equals(traceId)).findFirst()
+        var actualTrace = actual.content().stream().filter(t -> t.id().equals(traceId)).findFirst()
                 .orElseThrow(() -> new AssertionError("Trace with id " + traceId + " not found"));
-        assertThat(actualTrace1.feedbackScores()).hasSize(1);
-        var actualScore = actualTrace1.feedbackScores().getFirst();
+        assertThat(actualTrace.feedbackScores()).hasSize(1);
 
         // assert trace values
+        var actualScore = actualTrace.feedbackScores().getFirst();
+        assertThat(actualScore.categoryName()).isEqualTo(newScore.categoryName());
+        assertThat(actualScore.value()).isEqualTo(newScore.value());
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
