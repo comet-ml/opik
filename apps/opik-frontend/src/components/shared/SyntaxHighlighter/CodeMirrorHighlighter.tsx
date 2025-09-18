@@ -10,6 +10,7 @@ import { EXTENSION_MAP } from "./constants";
 import { CodeOutput } from "./types";
 import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
 import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
+import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
 
 export interface CodeMirrorHighlighterProps {
   searchValue?: string;
@@ -82,6 +83,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           EditorView.contentAttributes.of({ tabindex: "0" }),
           searchPanelTheme,
           searchExtension,
+          hyperLink,
         ]}
         maxHeight="700px"
         onCreateEditor={handleCreateEditor}
