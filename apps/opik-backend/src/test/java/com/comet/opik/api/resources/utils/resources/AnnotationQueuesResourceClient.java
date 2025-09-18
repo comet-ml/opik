@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -63,6 +64,19 @@ public class AnnotationQueuesResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(AnnotationQueueItemIds.builder().ids(itemIds).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void deleteAnnotationQueueBatch(Set<UUID> queueIds, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(BatchDelete.builder().ids(queueIds).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }

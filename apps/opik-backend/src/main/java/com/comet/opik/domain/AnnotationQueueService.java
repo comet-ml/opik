@@ -36,6 +36,8 @@ public interface AnnotationQueueService {
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds);
+
+    Mono<Long> deleteBatch(Set<UUID> ids);
 }
 
 @Singleton
@@ -72,7 +74,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .switchIfEmpty(Mono.error(createNotFoundError(id)))
                 .flatMap(this::enhanceWithProjectName)
                 .doOnSuccess(queue -> log.debug("Found annotation queue with id '{}'", id))
-                .doOnError(error -> log.debug("Annotation queue not found with id '{}'", id));
+                .doOnError(error -> log.info("Annotation queue not found with id '{}'", id));
     }
 
     @Override
@@ -84,7 +86,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         return annotationQueueDAO.find(page, size, searchCriteria)
                 .flatMap(this::enhancePageWithProjectNames)
                 .doOnSuccess(result -> log.debug("Found annotation queues by '{}', count '{}', page '{}', size '{}'",
-                        searchCriteria, result.content().size(), page, size));
+                        searchCriteria, result.content().size(), page, size))
+                .doOnError(error -> log.info("Failed to find annotation queues by '{}'", searchCriteria, error));
     }
 
     @WithSpan
@@ -100,7 +103,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId()))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
-                .doOnError(error -> log.debug("Failed to add items to annotation queue with id '{}'", queueId, error));
+                .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
     }
 
     @Override
@@ -116,8 +119,24 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .flatMap(queue -> annotationQueueDAO.removeItems(queueId, itemIds, queue.projectId()))
                 .doOnSuccess(removedCount -> log.debug(
                         "Successfully removed '{}' items from annotation queue with id '{}'", removedCount, queueId))
-                .doOnError(error -> log.debug("Failed to remove items from annotation queue with id '{}'", queueId,
+                .doOnError(error -> log.info("Failed to remove items from annotation queue with id '{}'", queueId,
                         error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteBatch(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.debug("Annotation queue ids list is empty, returning");
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting annotation queue batch with '{}' items", ids.size());
+
+        return annotationQueueDAO.deleteBatch(ids)
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
+                .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
     }
 
     private Mono<AnnotationQueue> enhanceWithProjectName(AnnotationQueue annotationQueue) {

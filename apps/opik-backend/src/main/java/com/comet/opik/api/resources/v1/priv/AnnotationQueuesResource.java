@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
@@ -130,6 +131,29 @@ public class AnnotationQueuesResource {
 
         log.info("Created annotation queue batch with '{}' items, workspaceId '{}'",
                 items, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteAnnotationQueueBatch", summary = "Delete annotation queue batch", description = "Delete multiple annotation queues by their IDs", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response deleteAnnotationQueueBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting annotation queue batch with '{}' items, workspaceId '{}'",
+                batch.ids().size(), workspaceId);
+
+        var deletedCount = annotationQueueService.deleteBatch(batch.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted annotation queue batch with '{}' items deleted, workspaceId '{}'",
+                deletedCount, workspaceId);
 
         return Response.noContent().build();
     }

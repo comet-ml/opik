@@ -68,6 +68,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -535,6 +536,139 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.itemsCount()).isEqualTo(1L);
             assertThat(retrievedQueue.feedbackScores()).isNull();
             assertThat(retrievedQueue.reviewers()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Annotation Queue Batch")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteAnnotationQueueBatch {
+
+        @Test
+        @DisplayName("should delete annotation queue batch when valid request")
+        void deleteAnnotationQueueBatch() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create multiple annotation queues
+            var annotationQueues = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(AnnotationQueue.class)
+                            .toBuilder()
+                            .projectId(projectId)
+                            .projectName(project.name())
+                            .scope(AnnotationQueue.AnnotationScope.TRACE)
+                            .build())
+                    .toList();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(annotationQueues), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var idsToDelete = annotationQueues.subList(0, 3).stream()
+                    .map(AnnotationQueue::id)
+                    .collect(toSet());
+            var notDeletedIds = annotationQueues.subList(3, annotationQueues.size()).stream()
+                    .map(AnnotationQueue::id)
+                    .collect(toSet());
+
+            // When - Delete batch of annotation queues
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    idsToDelete, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Then - Verify that deleted queues are no longer available
+            for (UUID deletedId : idsToDelete) {
+                annotationQueuesResourceClient.getAnnotationQueueById(
+                        deletedId, apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
+            }
+
+            // Verify that non-deleted queues are still available
+            for (UUID notDeletedId : notDeletedIds) {
+                var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                        notDeletedId, apiKey, workspaceName, HttpStatus.SC_OK);
+                assertThat(retrievedQueue).isNotNull();
+                assertThat(retrievedQueue.id()).isEqualTo(notDeletedId);
+            }
+        }
+
+        @Test
+        @DisplayName("should handle empty batch delete request")
+        void deleteAnnotationQueueBatchWhenEmptySet() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Empty set of IDs
+            var emptyIds = Set.<UUID>of();
+
+            // When & Then - Should return 204 No Content even for empty set
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    emptyIds, apiKey, workspaceName, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should handle non-existent annotation queue IDs gracefully")
+        void deleteAnnotationQueueBatchWhenNonExistentIds() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Non-existent queue IDs
+            var nonExistentIds = Set.of(
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID());
+
+            // When & Then - Should return 204 No Content (idempotent operation)
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    nonExistentIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should handle mixed valid and non-existent annotation queue IDs")
+        void deleteAnnotationQueueBatchWhenMixedIds() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project and annotation queue
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Mix valid and non-existent IDs
+            var mixedIds = Set.of(
+                    annotationQueue.id(), // Valid ID
+                    UUID.randomUUID(), // Non-existent ID
+                    UUID.randomUUID()); // Non-existent ID
+
+            // When - Delete batch with mixed IDs
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    mixedIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Then - Valid queue should be deleted
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
         }
     }
 
