@@ -28,6 +28,7 @@ jobs:
     with:
       version: ""
       is_release: false
+      build_guardrails: false
       ref: ${{ github.event.pull_request.head.ref }}
 
   trigger_deployment:
