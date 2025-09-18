@@ -27,6 +27,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -39,6 +40,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +104,7 @@ public interface DatasetService {
 class DatasetServiceImpl implements DatasetService {
 
     private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
+    private static final String DATASET_DESCRIPTION_TOO_LONG = "Description cannot exceed 255 characters";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -144,6 +147,16 @@ class DatasetServiceImpl implements DatasetService {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(DATASET_ALREADY_EXISTS);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                } else if (e.getCause() instanceof SQLException sqlException) {
+                    // Handle data length validation errors (MySQL error code 1406: Data too long for column)
+                    if (sqlException.getMessage() != null &&
+                        (sqlException.getMessage().contains("Data too long for column 'description'") ||
+                         sqlException.getErrorCode() == 1406)) {
+                        log.warn("Dataset description exceeds maximum length: '{}'", dataset.name(), e);
+                        throw new BadRequestException(DATASET_DESCRIPTION_TOO_LONG);
+                    }
+                    log.error("Database error while creating dataset: '{}'", dataset.name(), e);
+                    throw e;
                 } else {
                     throw e;
                 }
@@ -224,6 +237,16 @@ class DatasetServiceImpl implements DatasetService {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(DATASET_ALREADY_EXISTS);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                } else if (e.getCause() instanceof SQLException sqlException) {
+                    // Handle data length validation errors (MySQL error code 1406: Data too long for column)
+                    if (sqlException.getMessage() != null &&
+                        (sqlException.getMessage().contains("Data too long for column 'description'") ||
+                         sqlException.getErrorCode() == 1406)) {
+                        log.warn("Dataset description exceeds maximum length during update: '{}'", id, e);
+                        throw new BadRequestException(DATASET_DESCRIPTION_TOO_LONG);
+                    }
+                    log.error("Database error while updating dataset: '{}'", id, e);
+                    throw e;
                 } else {
                     throw e;
                 }
