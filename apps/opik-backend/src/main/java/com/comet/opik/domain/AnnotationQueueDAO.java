@@ -55,6 +55,8 @@ public interface AnnotationQueueDAO {
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
+
+    Mono<Long> deleteBatch(Set<UUID> ids);
 }
 
 @Singleton
@@ -124,6 +126,12 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND project_id = :project_id
             AND queue_id = :queue_id
             AND item_id IN :item_ids
+            """;
+
+    private static final String DELETE_BATCH = """
+            DELETE FROM annotation_queues
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
             """;
 
     private static final String SELECT_QUEUE_INFO_BY_ID = """
@@ -359,6 +367,23 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                             .bind("project_id", projectId.toString())
                             .bind("queue_id", queueId.toString())
                             .bind("item_ids", itemIds.toArray(UUID[]::new));
+
+                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                })
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Mono<Long> deleteBatch(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(DELETE_BATCH)
+                            .bind("ids", ids.toArray(UUID[]::new));
 
                     return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                 })

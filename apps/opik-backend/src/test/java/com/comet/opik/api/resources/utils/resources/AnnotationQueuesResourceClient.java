@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
+import com.comet.opik.api.AnnotationQueueUpdate;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -68,6 +70,19 @@ public class AnnotationQueuesResourceClient {
         }
     }
 
+    public void deleteAnnotationQueueBatch(Set<UUID> queueIds, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(BatchDelete.builder().ids(queueIds).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
     public AnnotationQueue getAnnotationQueueById(UUID queueId, String apiKey,
             String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -83,6 +98,19 @@ public class AnnotationQueuesResourceClient {
                 return response.readEntity(AnnotationQueue.class);
             }
             return null;
+        }
+    }
+
+    public void updateAnnotationQueue(UUID queueId, AnnotationQueueUpdate updateRequest, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(queueId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(updateRequest))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
