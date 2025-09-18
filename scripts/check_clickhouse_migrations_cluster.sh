@@ -27,6 +27,10 @@ DDL_COMMANDS_REGEX="(CREATE|DROP|ALTER|RENAME)"
 DDL_DETECTION_REGEX="^\s*${DDL_COMMANDS_REGEX}\s+"
 # Exact pattern for ON CLUSTER clause validation (project-specific)
 ON_CLUSTER_REGEX="ON\s+CLUSTER\s+['\"]\\{cluster\\}['\"]"
+# Pattern for detecting rollback comments in migration files
+ROLLBACK_COMMENT_REGEX="^[[:space:]]*--[[:space:]]*rollback[[:space:]]+"
+# Pattern for extracting DDL from rollback comments (for sed substitution)
+ROLLBACK_EXTRACT_REGEX="s/^[[:space:]]*--[[:space:]]*rollback[[:space:]]+//i"
 
 echo "🔍 Checking ClickHouse migrations for ON CLUSTER clause usage..."
 echo "📁 Migration directory: ${MIGRATION_DIR}"
@@ -80,9 +84,9 @@ validate_migration_file() {
         fi
         
         # Handle rollback statements specially
-        if echo "$line" | grep -qiE "^[[:space:]]*--[[:space:]]*rollback[[:space:]]+"; then
+        if echo "$line" | grep -qiE "$ROLLBACK_COMMENT_REGEX"; then
             # Extract the DDL statement from the rollback comment
-            local rollback_ddl=$(echo "$line" | sed -E 's/^[[:space:]]*--[[:space:]]*rollback[[:space:]]+//i')
+            local rollback_ddl=$(echo "$line" | sed -E "$ROLLBACK_EXTRACT_REGEX")
             
             # Check if the rollback contains DDL statements using centralized regex
             if echo "$rollback_ddl" | grep -qiE "$DDL_DETECTION_REGEX"; then
