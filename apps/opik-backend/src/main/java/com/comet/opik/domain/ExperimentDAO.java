@@ -342,7 +342,7 @@ class ExperimentDAO {
             SELECT count(id) as count
             FROM
             (
-                SELECT id
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
