@@ -37,6 +37,7 @@ class Trace:
         tags: Optional[List[Any]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        prompt_version_id: Optional[str] = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -53,6 +54,7 @@ class Trace:
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
+            prompt_version_id: The ID of the prompt version used in this trace.
 
         Returns:
             None
@@ -69,6 +71,7 @@ class Trace:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            prompt_version_id=prompt_version_id,
         )
 
     def update(
@@ -80,6 +83,7 @@ class Trace:
         tags: Optional[List[Any]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        prompt_version_id: Optional[str] = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -93,6 +97,7 @@ class Trace:
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
+            prompt_version_id: The ID of the prompt version used in this trace.
 
         Returns:
             None
@@ -107,6 +112,7 @@ class Trace:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            prompt_version_id=prompt_version_id,
         )
         self._streamer.put(update_trace_message)
 

@@ -48,6 +48,7 @@ class TraceData:
     created_by: Optional[CreatedByType] = None
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
+    prompt_version_id: Optional[str] = None
     attachments: Optional[List[attachment.Attachment]] = None
 
     def create_child_span_data(
@@ -184,5 +185,6 @@ class TraceData:
             "project_name": self.project_name,
             "error_info": self.error_info,
             "thread_id": self.thread_id,
+            "prompt_version_id": self.prompt_version_id,
             "attachments": self.attachments,
         }

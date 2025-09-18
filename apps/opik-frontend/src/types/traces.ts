@@ -59,6 +59,7 @@ export interface Trace extends BaseTraceData {
   span_count?: number;
   llm_span_count?: number;
   thread_id?: string;
+  prompt_version_id?: string;
   project_id: string;
   workspace_name?: string;
   visibility_mode?: TRACE_VISIBILITY_MODE;

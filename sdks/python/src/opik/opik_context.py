@@ -4,6 +4,11 @@ from typing import Any, Dict, List, Optional, Union, Iterator
 import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace, opik_client
 from opik.api_objects.attachment import Attachment
+
+# Import for type hints
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from opik.api_objects import prompt
 from opik.types import (
     DistributedTraceHeadersDict,
     FeedbackScoreDict,
@@ -159,6 +164,42 @@ def update_current_trace(
     current_trace_data.update(**new_params)
 
 
+def add_prompt_to_current_trace(prompt: "prompt.Prompt") -> None:
+    """
+    Add a prompt version to the current trace. This method analyzes the prompt object
+    and automatically extracts the appropriate version ID to link the trace to the prompt.
+    
+    This method is usually called within a tracked function to associate the trace
+    with a specific prompt version for better traceability and experimentation.
+    
+    Args:
+        prompt: The Prompt object to associate with the current trace. The function
+            will automatically extract the version ID from the prompt object.
+            
+    Raises:
+        OpikException: If there is no trace in the current context.
+        ValueError: If the prompt object doesn't have a valid version ID.
+    """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+        
+    current_trace_data = context_storage.get_trace_data()
+    if current_trace_data is None:
+        raise exceptions.OpikException("There is no trace in the context.")
+    
+    # Analyze the prompt object to extract the version ID
+    # The prompt object has an internal version ID that we can use
+    if not hasattr(prompt, '__internal_api__version_id__'):
+        raise ValueError("Prompt object does not have a valid version ID.")
+    
+    prompt_version_id = getattr(prompt, '__internal_api__version_id__')
+    if prompt_version_id is None:
+        raise ValueError("Prompt version ID cannot be None.")
+    
+    # Update the trace data with the prompt version ID
+    current_trace_data.prompt_version_id = str(prompt_version_id)
+
+
 @contextlib.contextmanager
 def trace_context(
     trace_data: trace.TraceData,
@@ -218,6 +259,7 @@ __all__ = [
     "get_current_trace_data",
     "update_current_span",
     "update_current_trace",
+    "add_prompt_to_current_trace",
     "get_distributed_trace_headers",
     "trace_context",
 ]

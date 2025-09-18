@@ -6974,6 +6974,10 @@ components:
           readOnly: true
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          format: uuid
+          description: "ID of the prompt version used in this trace"
         visibility_mode:
           type: string
           readOnly: true
@@ -9960,6 +9964,10 @@ components:
           readOnly: true
         thread_id:
           type: string
+        prompt_version_id:
+          type: string
+          format: uuid
+          description: "ID of the prompt version used in this trace"
         visibility_mode:
           type: string
           readOnly: true
