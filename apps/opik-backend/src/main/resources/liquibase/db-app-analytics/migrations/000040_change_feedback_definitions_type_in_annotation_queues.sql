@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset borystkachenko:000039_change_feedback_definitions_type_in_annotation_queues
+--changeset borystkachenko:000040_change_feedback_definitions_type_in_annotation_queues
 --comment: Change feedback_definitions column type from Array(FixedString(36)) to Array(String) to support name-based references
 
 -- Change feedback_definitions column type to support string-based feedback definition names
