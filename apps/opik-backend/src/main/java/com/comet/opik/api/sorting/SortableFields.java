@@ -40,4 +40,6 @@ public class SortableFields {
     public static final String NUMBER_OF_MESSAGES = "number_of_messages";
     public static final String STATUS = "status";
     public static final String VERSION_COUNT = "version_count";
+    public static final String PROJECT_ID = "project_id";
+    public static final String INSTRUCTIONS = "instructions";
 }

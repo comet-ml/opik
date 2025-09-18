@@ -205,6 +205,29 @@ Then, uninstall the opik:
 helm uninstall opik -n opik
 ```
 
+# Version Compatibility
+
+It's important to ensure that your Python SDK version matches your Kubernetes deployment version to avoid compatibility issues.
+
+## Check your current versions
+
+### Check Opik UI version
+You can check your current Opik deployment version in the UI by clicking on the user menu in the top right corner.
+
+### Check Python SDK version
+You can check your installed Python SDK version by running:
+
+```bash
+pip show opik
+```
+
+## Ensure version compatibility
+
+Make sure both versions match. If they don't match:
+
+1. **To update your Python SDK**: Run `pip install --upgrade opik==<VERSION>` where `<VERSION>` matches your Kubernetes deployment
+2. **To update your Kubernetes deployment**: Update the VERSION variable in the helm installation command to match your Python SDK version
+
 # Troubleshooting
 
 If you get this error when running helm
