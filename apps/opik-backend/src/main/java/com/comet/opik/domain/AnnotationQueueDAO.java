@@ -158,7 +158,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 <if(id)> AND id = :id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND (<filters>) <endif>
-                ORDER BY last_updated_at DESC
+                ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), queue_items_final AS
             (
@@ -273,7 +273,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             LEFT JOIN queue_items_count AS qic ON q.id = qic.queue_id
             LEFT JOIN feedback_scores_agg AS fs ON q.id = fs.queue_id
             LEFT JOIN feedback_scores_reviewers_agg AS fsra ON q.id = fsra.queue_id
-            <if(sort_fields)> ORDER BY <sort_fields> <endif>
+            ORDER BY <if(sort_fields)><sort_fields>,<endif> q.id DESC
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>
             """;

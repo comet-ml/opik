@@ -64,7 +64,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -564,12 +563,12 @@ class AnnotationQueuesResourceTest {
                                 .projectName(project.name())
                                 .scope(AnnotationQueue.AnnotationScope.TRACE)
                                 .feedbackDefinitionNames(List.of("quality", "relevance"))
-                                .itemsCount(2L)                                      // will be used for assertion later
+                                .itemsCount(2L) // will be used for assertion later
                                 .reviewers(List.of(AnnotationQueueReviewer.builder() // will be used for assertion later
-                                                .username(USER)
-                                                .status(4L)
+                                        .username(USER)
+                                        .status(4L)
                                         .build()))
-                                .feedbackScores(List.of(                             // will be used for assertion later
+                                .feedbackScores(List.of( // will be used for assertion later
                                         FeedbackScoreAverage.builder()
                                                 .name("quality")
                                                 .value(new BigDecimal("0.75"))
@@ -577,12 +576,12 @@ class AnnotationQueuesResourceTest {
                                         FeedbackScoreAverage.builder()
                                                 .name("relevance")
                                                 .value(new BigDecimal("0.875"))
-                                                .build()
-                                ))
+                                                .build()))
                                 .build();
 
                         annotationQueuesResourceClient.createAnnotationQueueBatch(
-                                new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                                new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName,
+                                HttpStatus.SC_NO_CONTENT);
 
                         // Create traces and add them to the queue
                         var trace1 = createTrace(project.name());
@@ -671,7 +670,8 @@ class AnnotationQueuesResourceTest {
 
             // When - Filter by name containing "Alpha"
             var page = annotationQueuesResourceClient.findAnnotationQueues(
-                    1, 10, queues.getFirst().name().substring(0, 5), null, null, apiKey, workspaceName, HttpStatus.SC_OK);
+                    1, 10, queues.getFirst().name().substring(0, 5), null, null, apiKey, workspaceName,
+                    HttpStatus.SC_OK);
 
             // Then
             assertPage(page, queues.subList(0, 1), 1, 1);
@@ -727,35 +727,28 @@ class AnnotationQueuesResourceTest {
 
             // Create multiple annotation queues with different predictable values
             var annotationQueues = IntStream.range(0, 5)
-                    .mapToObj(i -> prepareAnnotationQueue(project.name(), projectId))
-                    .collect(toList());
+                    .mapToObj(i -> {
+                        var queue = prepareAnnotationQueue(project.name(), projectId);
 
-            // Create the annotation queues
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(annotationQueues),
-                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                        annotationQueuesResourceClient.createAnnotationQueueBatch(
+                                new LinkedHashSet<>(List.of(queue)),
+                                apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+                        return queue;
+                    })
+                    .toList();
 
             // When - Get all queues with sorting
             var page = annotationQueuesResourceClient.findAnnotationQueues(
                     1, 10, null, null, toURLEncodedQueryParam(List.of(sortingField)),
                     apiKey, workspaceName, HttpStatus.SC_OK);
 
-            // Then - Verify sorting worked
-            assertThat(page.content()).hasSize(annotationQueues.size());
-
             // Get the expected order by sorting with the comparator
             var expectedOrder = annotationQueues.stream()
                     .sorted(comparator)
                     .toList();
 
-            // Verify the API returned them in the expected order
-            for (int i = 0; i < expectedOrder.size(); i++) {
-                var expected = expectedOrder.get(i);
-                var actual = page.content().get(i);
-
-                // Compare by name which should be unique and predictable
-                assertThat(actual.name()).isEqualTo(expected.name());
-            }
+            assertPage(page, expectedOrder, 1, expectedOrder.size());
         }
 
         Stream<Arguments> findAnnotationQueuesWithSorting() {
@@ -766,6 +759,48 @@ class AnnotationQueuesResourceTest {
                     arguments(
                             Comparator.comparing(AnnotationQueue::name).reversed(),
                             SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::id),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::id).reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::projectId)
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.PROJECT_ID).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::projectId).reversed()
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.PROJECT_ID).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::description),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::description).reversed(),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::instructions),
+                            SortingField.builder().field(SortableFields.INSTRUCTIONS).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::instructions).reversed(),
+                            SortingField.builder().field(SortableFields.INSTRUCTIONS).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::createdBy)
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::createdBy).reversed()
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::lastUpdatedBy)
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(AnnotationQueue::lastUpdatedBy).reversed()
+                                    .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC).build()),
                     arguments(
                             Comparator.comparing(AnnotationQueue::createdAt)
                                     .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
@@ -861,7 +896,7 @@ class AnnotationQueuesResourceTest {
     }
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
-                                             String projectName) {
+            String projectName) {
         createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, API_KEY, TEST_WORKSPACE);
     }
 
@@ -905,10 +940,13 @@ class AnnotationQueuesResourceTest {
                 .itemsCount(null)
                 .feedbackScores(null)
                 .reviewers(null)
+                .createdBy(USER)
+                .lastUpdatedBy(USER)
                 .build();
     }
 
-    private void assertPage(AnnotationQueue.AnnotationQueuePage actualPage, List<AnnotationQueue> expectedQueues, int expectedPage, int expectedTotal) {
+    private void assertPage(AnnotationQueue.AnnotationQueuePage actualPage, List<AnnotationQueue> expectedQueues,
+            int expectedPage, int expectedTotal) {
         assertThat(actualPage.page()).isEqualTo(expectedPage);
         assertThat(actualPage.size()).isEqualTo(expectedQueues.size());
         assertThat(actualPage.total()).isEqualTo(expectedTotal);
