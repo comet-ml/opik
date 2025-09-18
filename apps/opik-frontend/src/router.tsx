@@ -33,6 +33,7 @@ import ConfigurationPage from "@/components/pages/ConfigurationPage/Configuratio
 import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/AnnotationQueuePage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
@@ -379,7 +380,21 @@ const annotationQueuesRoute = createRoute({
   staticData: {
     title: "Annotation queues",
   },
+});
+
+const annotationQueuesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => annotationQueuesRoute,
+  component: AnnotationQueuesPage,
+});
+
+const annotationQueueDetailsRoute = createRoute({
+  path: "/$annotationQueueId",
+  getParentRoute: () => annotationQueuesRoute,
   component: AnnotationQueuePage,
+  staticData: {
+    param: "annotationQueueId",
+  },
 });
 
 // ----------- Automation logs
@@ -432,7 +447,10 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
-      annotationQueuesRoute,
+      annotationQueuesRoute.addChildren([
+        annotationQueuesListRoute,
+        annotationQueueDetailsRoute,
+      ]),
     ]),
   ]),
 ]);
