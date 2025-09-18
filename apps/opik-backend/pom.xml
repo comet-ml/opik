@@ -112,6 +112,11 @@
             <artifactId>s3</artifactId>
         </dependency>
         <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
             <version>2.6.0</version>
