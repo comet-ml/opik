@@ -1,40 +1,42 @@
-name: ClickHouse Migration Cluster Check
+name: "ClickHouse Migration Cluster Check"
+run-name: "ClickHouse Migration Cluster Check on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
-  # Run on pull requests targeting main branch
   pull_request:
-    branches: [ main ]
     paths:
-      - 'apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**'
-
-  # Run on pushes to main branch
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
   push:
-    branches: [ main ]
+    branches:
+      - "main"
     paths:
-      - 'apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**'
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
 
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
   validate-clickhouse-migrations:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
         with:
-          # Fetch enough history for proper diff analysis
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Get changed ClickHouse migration files
         id: changed-files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🔍 Detecting ClickHouse migration files that were added or modified..."
           
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # For PRs, compare against the base branch
-            CHANGED_FILES=$(git diff --name-only --diff-filter=AM ${{ github.event.pull_request.base.sha }}...${{ github.sha }} | grep "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\.sql$" || true)
+            # For PRs, use GitHub's built-in files API (since fetch-depth=1 limits git history)
+            gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
+              --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            CHANGED_FILES=$(cat changed_files.txt || echo "")
+            rm -f changed_files.txt
           else
             # For pushes to main, check the last commit
             CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1..HEAD | grep "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\.sql$" || true)
@@ -42,13 +44,15 @@ jobs:
           
           if [ -n "$CHANGED_FILES" ]; then
             echo "📄 Found ClickHouse migration files to validate:"
-            echo "$CHANGED_FILES" | while read -r file; do
-              echo "   - $file"
+            printf '%s\n' $CHANGED_FILES | while read -r file; do
+              [ -n "$file" ] && echo "   - $file"
             done
             
             # Save the files to environment variable for next step
             echo "MIGRATION_FILES<<EOF" >> $GITHUB_ENV
-            echo "$CHANGED_FILES" >> $GITHUB_ENV
+            printf '%s\n' $CHANGED_FILES | while read -r file; do
+              [ -n "$file" ] && echo "$file" >> $GITHUB_ENV
+            done
             echo "EOF" >> $GITHUB_ENV
             echo "HAS_MIGRATION_FILES=true" >> $GITHUB_ENV
           else
