@@ -21,6 +21,7 @@ from . import (
     error_info_collector,
     generator_wrappers,
     inspect_helpers,
+    opik_args,
     span_creation_handler,
     tracing_runtime_config,
 )
@@ -172,6 +173,39 @@ class BaseTrackDecorator(abc.ABC):
             track_options=track_options,
         )
 
+    def _prepare_start_span_arguments(
+        self,
+        func: Callable,
+        track_options: arguments_helpers.TrackOptions,
+        args: Tuple,
+        kwargs: Dict[str, Any],
+    ) -> Optional[arguments_helpers.StartSpanParameters]:
+        try:
+            opik_args_, kwargs = opik_args.extract_opik_args(kwargs, func)
+
+            start_span_arguments = self._start_span_inputs_preprocessor(
+                func=func,
+                track_options=track_options,
+                args=args,
+                kwargs=kwargs,
+            )
+
+            # Apply opik_args to start span arguments
+            return opik_args.apply_opik_args_to_start_span_params(
+                params=start_span_arguments,
+                opik_args=opik_args_,
+            )
+        except Exception as exception:
+            LOGGER.error(
+                logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
+                inspect_helpers.get_function_name(func),
+                (args, kwargs),
+                str(exception),
+                exc_info=True,
+            )
+
+        return None
+
     def _tracked_sync_generator(
         self, func: Callable, track_options: arguments_helpers.TrackOptions
     ) -> Callable:
@@ -179,27 +213,19 @@ class BaseTrackDecorator(abc.ABC):
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
             if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
+
+            start_span_arguments = self._prepare_start_span_arguments(
+                func=func,
+                track_options=track_options,
+                args=args,
+                kwargs=kwargs,
+            )
+
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
                 ] = kwargs.pop("opik_distributed_trace_headers", None)
 
-                start_span_arguments = self._start_span_inputs_preprocessor(
-                    func=func,
-                    track_options=track_options,
-                    args=args,
-                    kwargs=kwargs,
-                )
-            except Exception as exception:
-                LOGGER.error(
-                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    inspect_helpers.get_function_name(func),
-                    (args, kwargs),
-                    str(exception),
-                    exc_info=True,
-                )
-
-            try:
                 result = generator_wrappers.SyncTrackedGenerator(
                     func(*args, **kwargs),
                     start_span_arguments=start_span_arguments,
@@ -229,27 +255,19 @@ class BaseTrackDecorator(abc.ABC):
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
             if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
+
+            start_span_arguments = self._prepare_start_span_arguments(
+                func=func,
+                track_options=track_options,
+                args=args,
+                kwargs=kwargs,
+            )
+
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
                 ] = kwargs.pop("opik_distributed_trace_headers", None)
 
-                start_span_arguments = self._start_span_inputs_preprocessor(
-                    func=func,
-                    track_options=track_options,
-                    args=args,
-                    kwargs=kwargs,
-                )
-            except Exception as exception:
-                LOGGER.error(
-                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
-                    inspect_helpers.get_function_name(func),
-                    (args, kwargs),
-                    str(exception),
-                    exc_info=True,
-                )
-
-            try:
                 result = generator_wrappers.AsyncTrackedGenerator(
                     func(*args, **kwargs),
                     start_span_arguments=start_span_arguments,
@@ -409,17 +427,25 @@ class BaseTrackDecorator(abc.ABC):
         kwargs: Dict[str, Any],
     ) -> None:
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
+        opik_args_values: Optional[opik_args.OpikArgs] = None
 
         try:
             opik_distributed_trace_headers = kwargs.pop(
                 "opik_distributed_trace_headers", None
             )
 
+            opik_args_values, kwargs = opik_args.extract_opik_args(kwargs, func)
+
             start_span_arguments = self._start_span_inputs_preprocessor(
                 func=func,
                 track_options=track_options,
                 args=args,
                 kwargs=kwargs,
+            )
+
+            # Apply opik_args to start span arguments
+            start_span_arguments = opik_args.apply_opik_args_to_start_span_params(
+                params=start_span_arguments, opik_args=opik_args_values
             )
         except Exception as exception:
             LOGGER.error(
@@ -455,6 +481,11 @@ class BaseTrackDecorator(abc.ABC):
         if created_trace_data is not None:
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
+
+            # Handle thread_id and trace updates after span/trace creation
+            opik_args.apply_opik_args_to_trace(
+                opik_args=opik_args_values, trace_data=created_trace_data
+            )
 
             if (
                 client.config.log_start_trace_span
