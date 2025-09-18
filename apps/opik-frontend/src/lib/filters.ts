@@ -89,7 +89,7 @@ export const generateProjectFilters = (projectId?: string) => {
       id: uniqid(),
       field: "project_id",
       type: COLUMN_TYPE.string,
-      operator: "contains",
+      operator: "=",
       key: "",
       value: projectId,
     },

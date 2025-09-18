@@ -231,7 +231,7 @@ export const LoadableSelectBox = ({
                 <div className="flex-1">
                   <div className="comet-body-s truncate">{option.label}</div>
                   {option.description && (
-                    <div className="comet-body-xs text-muted-foreground truncate">
+                    <div className="comet-body-xs truncate text-muted-foreground">
                       {option.description}
                     </div>
                   )}
