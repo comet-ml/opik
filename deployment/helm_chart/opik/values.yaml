@@ -277,6 +277,8 @@ component:
 
 mysql:
   enabled: true
+  image:
+    repository: bitnamilegacy/mysql
   fullnameOverride: opik-mysql
   auth:
     rootPassword: "opik"
@@ -289,6 +291,8 @@ mysql:
 
 minio:
   enabled: true
+  image:
+    repository: bitnamilegacy/minio
   mode: standalone
   disableWebUI: true
   persistence:
