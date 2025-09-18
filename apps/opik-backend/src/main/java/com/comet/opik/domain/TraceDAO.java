@@ -516,7 +516,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH feedback_scores_combined AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -552,6 +552,32 @@ class TraceDAOImpl implements TraceDAO {
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+             ),
+             feedback_scores_with_ranking AS (
+                 SELECT workspace_id,
+                        *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                 FROM feedback_scores_combined_raw
+             ),
+             feedback_scores_combined AS (
+                 SELECT workspace_id,
+                     project_id,
+                     entity_id,
+                     name,
+                     category_name,
+                     value,
+                     reason,
+                     source,
+                     created_by,
+                     last_updated_by,
+                     created_at,
+                     last_updated_at,
+                     author
+                 FROM feedback_scores_with_ranking
+                 WHERE rn = 1
              ),
              feedback_scores_combined_grouped AS (
                  SELECT
