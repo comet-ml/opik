@@ -20,6 +20,14 @@ NC='\033[0m' # No Color
 MIGRATION_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations"
 EXIT_CODE=0
 
+# DDL patterns that require ON CLUSTER clause
+# Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl
+DDL_COMMANDS_REGEX="(CREATE|DROP|ALTER|RENAME)"
+# ClickHouse objects that support distributed DDL with ON CLUSTER
+CLUSTER_OBJECTS_REGEX="(TABLE|VIEW|MATERIALIZED VIEW|DATABASE|DICTIONARY|FUNCTION|USER|ROLE|QUOTA|SETTINGS PROFILE)"
+# Combined pattern for detecting DDL statements that need ON CLUSTER
+DDL_DETECTION_REGEX="^\s*${DDL_COMMANDS_REGEX}\s+"
+
 echo "🔍 Checking ClickHouse migrations for ON CLUSTER clause usage..."
 echo "📁 Migration directory: ${MIGRATION_DIR}"
 echo
@@ -76,10 +84,10 @@ validate_migration_file() {
             # Extract the DDL statement from the rollback comment
             local rollback_ddl=$(echo "$line" | sed -E 's/^[[:space:]]*--[[:space:]]*rollback[[:space:]]+//i')
             
-            # Check if the rollback contains DDL statements
-            if echo "$rollback_ddl" | grep -qiE "^\s*(CREATE|DROP|ALTER|RENAME)\s+(TABLE|INDEX)"; then
-                # Extract DDL type
-                local ddl_type=$(echo "$rollback_ddl" | sed -nE 's/^\s*(CREATE|DROP|ALTER|RENAME)\s+.*/\1/Ip')
+            # Check if the rollback contains DDL statements using centralized regex
+            if echo "$rollback_ddl" | grep -qiE "$DDL_DETECTION_REGEX"; then
+                # Extract DDL type using centralized regex
+                local ddl_type=$(echo "$rollback_ddl" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
                 
                 if ! check_ddl_statement "$file" "$line_num" "$rollback_ddl" "$ddl_type"; then
                     ((file_errors++))
@@ -93,10 +101,10 @@ validate_migration_file() {
             continue
         fi
         
-        # Check for DDL statements (case insensitive)
-        if echo "$line" | grep -qiE "^\s*(CREATE|DROP|ALTER|RENAME)\s+(TABLE|INDEX)"; then
-            # Extract DDL type
-            local ddl_type=$(echo "$line" | sed -nE 's/^\s*(CREATE|DROP|ALTER|RENAME)\s+.*/\1/Ip')
+        # Check for DDL statements using centralized regex (case insensitive)
+        if echo "$line" | grep -qiE "$DDL_DETECTION_REGEX"; then
+            # Extract DDL type using centralized regex
+            local ddl_type=$(echo "$line" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
             
             if ! check_ddl_statement "$file" "$line_num" "$line" "$ddl_type"; then
                 ((file_errors++))
