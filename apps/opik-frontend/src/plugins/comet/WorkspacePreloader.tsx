@@ -19,10 +19,25 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { usePostHog } from "posthog-js/react";
 import useOrganizations from "./useOrganizations";
-import { ORGANIZATION_ROLE_TYPE } from "./types";
+import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
+};
+
+const hasWorkspaceAccess = (
+  workspace: Workspace,
+  organizations: Organization[]
+): boolean => {
+  const workspaceOrganization = organizations?.find(
+    (organization) => organization.id === workspace.organizationId,
+  );
+
+  return workspaceOrganization?.role !== ORGANIZATION_ROLE_TYPE.emAndMPMOnly;
+};
+
+const redirectToEM = () => {
+  window.location.href = buildUrl("");
 };
 
 const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
@@ -81,12 +96,8 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     : null;
 
   if (workspace) {
-    const workspaceOrganization = organizations?.find(
-      (organization) => organization.id === workspace.organizationId,
-    );
-
-    if (workspaceOrganization?.role === ORGANIZATION_ROLE_TYPE.emAndMPMOnly) {
-      window.location.href = buildUrl(workspace.workspaceName);
+    if (organizations && !hasWorkspaceAccess(workspace, organizations)) {
+      redirectToEM();
       return null;
     }
 
@@ -97,12 +108,8 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
       allWorkspaces?.[0];
 
     if (defaultWorkspace) {
-      const workspaceOrganization = organizations?.find(
-        (organization) => organization.id === defaultWorkspace.organizationId,
-      );
-
-      if (workspaceOrganization?.role === ORGANIZATION_ROLE_TYPE.emAndMPMOnly) {
-        window.location.href = buildUrl(defaultWorkspace.workspaceName);
+      if (organizations && !hasWorkspaceAccess(defaultWorkspace, organizations)) {
+        redirectToEM();
         return null;
       }
 
