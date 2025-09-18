@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -16,6 +17,7 @@ import java.util.SequencedSet;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.apache.hc.core5.http.HttpStatus.SC_CREATED;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
@@ -37,6 +39,25 @@ public class AnnotationQueuesResourceClient {
                 .post(Entity.json(AnnotationQueueBatch.builder().annotationQueues(annotationQueues).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public UUID createAnnotationQueue(AnnotationQueue queue, String apiKey,
+            String workspaceName,
+            int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(queue))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == SC_CREATED) {
+                return TestUtils.getIdFromLocation(response.getLocation());
+            }
+
+            return null;
         }
     }
 

@@ -148,6 +148,43 @@ class AnnotationQueuesResourceTest {
     }
 
     @Nested
+    @DisplayName("Create Annotation Queue Batch")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateAnnotationQueueBatch {
+
+        @Test
+        @DisplayName("should create annotation queue batch when valid request")
+        void createAnnotationQueueBatch() {
+            // Given - Create a project first for the annotation queue
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .id(null) // Will be generated
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should reject request when project_id is null")
+        void createAnnotationQueueBatchWhenProjectIdNullShouldReject() {
+            // Given
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(null) // Invalid
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+                    API_KEY, TEST_WORKSPACE,
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
     @DisplayName("Create Annotation Queue")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateAnnotationQueue {
@@ -165,8 +202,10 @@ class AnnotationQueuesResourceTest {
                     .projectId(projectId)
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            var id = annotationQueuesResourceClient.createAnnotationQueue(
+                    annotationQueue, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            assertThat(id.version()).isEqualTo(7);
         }
 
         @Test
@@ -178,7 +217,7 @@ class AnnotationQueuesResourceTest {
                     .projectId(null) // Invalid
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
                     API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
