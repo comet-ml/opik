@@ -73,8 +73,30 @@ validate_migration_file() {
         line="${line#"${line%%[![:space:]]*}"}"  # Remove leading whitespace
         line="${line%"${line##*[![:space:]]}"}"  # Remove trailing whitespace
         
-        # Skip empty lines and comments
-        if [[ -z "$line" || "$line" =~ ^[[:space:]]*-- ]]; then
+        # Skip empty lines and regular comments (but not rollback statements)
+        if [[ -z "$line" ]]; then
+            continue
+        fi
+        
+        # Handle rollback statements specially
+        if echo "$line" | grep -qiE "^[[:space:]]*--[[:space:]]*rollback[[:space:]]+"; then
+            # Extract the DDL statement from the rollback comment
+            local rollback_ddl=$(echo "$line" | sed -E 's/^[[:space:]]*--[[:space:]]*rollback[[:space:]]+//i')
+            
+            # Check if the rollback contains DDL statements
+            if echo "$rollback_ddl" | grep -qiE "^\s*(CREATE|DROP|ALTER|RENAME)\s+(TABLE|INDEX)"; then
+                # Extract DDL type
+                local ddl_type=$(echo "$rollback_ddl" | sed -nE 's/^\s*(CREATE|DROP|ALTER|RENAME)\s+.*/\1/Ip')
+                
+                if ! check_ddl_statement "$file" "$line_num" "$rollback_ddl" "$ddl_type"; then
+                    ((file_errors++))
+                fi
+            fi
+            continue
+        fi
+        
+        # Skip other comments
+        if [[ "$line" =~ ^[[:space:]]*-- ]]; then
             continue
         fi
         
