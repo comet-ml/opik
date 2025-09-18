@@ -101,7 +101,7 @@ public class AnnotationQueuesResourceClient {
         }
     }
 
-    public AnnotationQueue updateAnnotationQueue(UUID queueId, AnnotationQueueUpdate updateRequest, String apiKey,
+    public void updateAnnotationQueue(UUID queueId, AnnotationQueueUpdate updateRequest, String apiKey,
             String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(queueId.toString())
@@ -111,11 +111,6 @@ public class AnnotationQueuesResourceClient {
                 .method("PATCH", Entity.json(updateRequest))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-            if (expectedStatus == 200) {
-                return response.readEntity(AnnotationQueue.class);
-            }
-            return null;
         }
     }
 

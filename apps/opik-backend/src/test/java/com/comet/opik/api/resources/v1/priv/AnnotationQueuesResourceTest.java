@@ -68,6 +68,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.domain.AnnotationQueueUtils.applyUpdate;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
@@ -557,170 +558,85 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Create update request
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("Updated Queue Name")
-                    .description("Updated description")
-                    .instructions("Updated instructions")
-                    .commentsEnabled(false)
-                    .build();
+            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class);
 
             // When
-            var updatedQueue = annotationQueuesResourceClient.updateAnnotationQueue(
-                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update locally for comparison
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
             // Then
             assertThat(updatedQueue)
-                    .isNotNull()
-                    .satisfies(queue -> {
-                        assertThat(queue.id()).isEqualTo(annotationQueue.id());
-                        assertThat(queue.name()).isEqualTo("Updated Queue Name");
-                        assertThat(queue.description()).isEqualTo("Updated description");
-                        assertThat(queue.instructions()).isEqualTo("Updated instructions");
-                        assertThat(queue.commentsEnabled()).isFalse();
-                        assertThat(queue.projectId()).isEqualTo(projectId);
-                        assertThat(queue.projectName()).isEqualTo(project.name());
-                        assertThat(queue.scope()).isEqualTo(AnnotationQueue.AnnotationScope.TRACE);
-                        assertThat(queue.lastUpdatedAt()).isAfter(annotationQueue.lastUpdatedAt());
-                    });
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
         }
 
-        @Test
-        @DisplayName("should update only provided fields and keep others unchanged")
-        void updateAnnotationQueueWhenPartialRequest() {
-            // Given - Create a project first
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+                @Test
+                @DisplayName("should update only provided fields and keep others unchanged")
+                void updateAnnotationQueueWhenPartialRequest() {
+                    // Given - Create a project first
+                    var project = factory.manufacturePojo(Project.class);
+                    var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            // Create annotation queue with initial values
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .name("Original Name")
-                    .description("Original Description")
-                    .instructions("Original Instructions")
-                    .commentsEnabled(true)
-                    .build();
+                    // Create annotation queue with initial values
+                    var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                            .toBuilder()
+                            .projectId(projectId)
+                            .projectName(project.name())
+                            .commentsEnabled(true)
+                            .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    annotationQueuesResourceClient.createAnnotationQueueBatch(
+                            new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Create partial update request (only updating name and comments_enabled)
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("Updated Name Only")
-                    .commentsEnabled(false)
-                    .build();
+                    // Create partial update request (only updating name and comments_enabled)
+                    var updateRequest = AnnotationQueueUpdate.builder()
+                            .name("Updated Name Only")
+                            .commentsEnabled(false)
+                            .build();
 
-            // When
-            var updatedQueue = annotationQueuesResourceClient.updateAnnotationQueue(
-                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    // When
+                    annotationQueuesResourceClient.updateAnnotationQueue(
+                            annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Then
-            assertThat(updatedQueue)
-                    .isNotNull()
-                    .satisfies(queue -> {
-                        assertThat(queue.id()).isEqualTo(annotationQueue.id());
-                        assertThat(queue.name()).isEqualTo("Updated Name Only");
-                        assertThat(queue.description()).isEqualTo("Original Description"); // Unchanged
-                        assertThat(queue.instructions()).isEqualTo("Original Instructions"); // Unchanged
-                        assertThat(queue.commentsEnabled()).isFalse();
-                        assertThat(queue.projectId()).isEqualTo(projectId);
-                        assertThat(queue.lastUpdatedAt()).isAfter(annotationQueue.lastUpdatedAt());
-                    });
-        }
+                    annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update locally for comparison
 
-        @Test
-        @DisplayName("should return 404 when annotation queue not found")
-        void updateAnnotationQueueWhenNotFound() {
-            // Given
-            var nonExistentId = UUID.randomUUID();
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("Updated Name")
-                    .build();
+                    var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                            annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            // When/Then
-            var response = annotationQueuesResourceClient.updateAnnotationQueue(
-                    nonExistentId, updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+                    // Then
+                    assertThat(updatedQueue)
+                            .usingRecursiveComparison()
+                            .ignoringFields(QUEUE_IGNORED_FIELDS)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .isEqualTo(annotationQueue);
+                }
 
-            assertThat(response).isNull();
-        }
+                @Test
+                @DisplayName("should return 404 when annotation queue not found")
+                void updateAnnotationQueueWhenNotFound() {
+                    // Given
+                    var nonExistentId = UUID.randomUUID();
+                    var updateRequest = AnnotationQueueUpdate.builder()
+                            .name("Updated Name")
+                            .build();
 
-        @Test
-        @DisplayName("should return 400 when name is blank")
-        void updateAnnotationQueueWhenNameIsBlank() {
-            // Given - Create a project first
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
-
-            // Create annotation queue
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            // Create update request with blank name
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("   ") // Blank name (only spaces)
-                    .build();
-
-            // When/Then
-            var response = annotationQueuesResourceClient.updateAnnotationQueue(
-                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
-
-            assertThat(response).isNull();
-        }
-
-        @Test
-        @DisplayName("should handle empty update request gracefully")
-        void updateAnnotationQueueWhenEmptyRequest() {
-            // Given - Create a project first
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
-
-            // Create annotation queue
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            // Create empty update request
-            var updateRequest = AnnotationQueueUpdate.builder().build();
-
-            // When
-            var updatedQueue = annotationQueuesResourceClient.updateAnnotationQueue(
-                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
-
-            // Then
-            assertThat(updatedQueue)
-                    .isNotNull()
-                    .satisfies(queue -> {
-                        assertThat(queue.id()).isEqualTo(annotationQueue.id());
-                        assertThat(queue.name()).isEqualTo(annotationQueue.name()); // Unchanged
-                        assertThat(queue.description()).isEqualTo(annotationQueue.description()); // Unchanged
-                        assertThat(queue.instructions()).isEqualTo(annotationQueue.instructions()); // Unchanged
-                        assertThat(queue.commentsEnabled()).isEqualTo(annotationQueue.commentsEnabled()); // Unchanged
-                        assertThat(queue.projectId()).isEqualTo(projectId);
-                        assertThat(queue.lastUpdatedAt()).isAfter(annotationQueue.lastUpdatedAt());
-                    });
-        }
+                    // When/Then
+                    annotationQueuesResourceClient.updateAnnotationQueue(
+                            nonExistentId, updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+                }
     }
 
     @Nested

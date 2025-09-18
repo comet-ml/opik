@@ -57,8 +57,6 @@ public interface AnnotationQueueDAO {
     Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 
     Mono<Long> deleteBatch(Set<UUID> ids);
-
-    Mono<Void> update(AnnotationQueue annotationQueue);
 }
 
 @Singleton
@@ -134,19 +132,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             DELETE FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id IN :ids
-            """;
-
-    private static final String UPDATE_ANNOTATION_QUEUE = """
-            ALTER TABLE annotation_queues UPDATE
-                name = :name,
-                description = :description,
-                instructions = :instructions,
-                comments_enabled = :comments_enabled,
-                feedback_definitions = :feedback_definitions,
-                last_updated_by = :user_name,
-                last_updated_at = :last_updated_at
-            WHERE workspace_id = :workspace_id
-            AND id = :id
             """;
 
     private static final String SELECT_QUEUE_INFO_BY_ID = """
@@ -404,29 +389,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 })
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
-    }
-
-    @Override
-    public Mono<Void> update(@NonNull AnnotationQueue annotationQueue) {
-        log.debug("Updating annotation queue with id '{}'", annotationQueue.id());
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(UPDATE_ANNOTATION_QUEUE)
-                            .bind("id", annotationQueue.id())
-                            .bind("name", annotationQueue.name())
-                            .bind("description", annotationQueue.description() != null ? annotationQueue.description() : "")
-                            .bind("instructions", annotationQueue.instructions() != null ? annotationQueue.instructions() : "")
-                            .bind("comments_enabled", annotationQueue.commentsEnabled() ? 1 : 0)
-                            .bind("feedback_definitions", 
-                                    annotationQueue.feedbackDefinitionNames() != null
-                                            ? annotationQueue.feedbackDefinitionNames().toArray(String[]::new)
-                                            : new String[]{})
-                            .bind("last_updated_at", annotationQueue.lastUpdatedAt());
-
-                    return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement));
-                })
-                .then();
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {

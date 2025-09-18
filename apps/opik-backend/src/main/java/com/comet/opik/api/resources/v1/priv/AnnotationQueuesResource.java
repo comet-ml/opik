@@ -115,11 +115,10 @@ public class AnnotationQueuesResource {
     @PATCH
     @Path("/{id}")
     @Operation(operationId = "updateAnnotationQueue", summary = "Update annotation queue", description = "Update annotation queue by id", responses = {
-            @ApiResponse(responseCode = "200", description = "Annotation queue updated successfully", content = @Content(schema = @Schema(implementation = AnnotationQueue.class))),
+            @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @JsonView(AnnotationQueue.View.Public.class)
     public Response updateAnnotationQueue(
             @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueUpdate.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueueUpdate request) {
@@ -128,13 +127,13 @@ public class AnnotationQueuesResource {
 
         log.info("Updating annotation queue with id '{}' on workspaceId '{}'", id, workspaceId);
 
-        var annotationQueue = annotationQueueService.update(id, request)
+        annotationQueueService.update(id, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Updated annotation queue with id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(annotationQueue).build();
+        return Response.noContent().build();
     }
 
     @POST
