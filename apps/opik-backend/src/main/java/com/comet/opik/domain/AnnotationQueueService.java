@@ -3,8 +3,11 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.domain.FeedbackDefinitionDAO;
+import com.comet.opik.domain.FeedbackDefinitionModel;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -16,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,12 +28,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
     Mono<Integer> createBatch(AnnotationQueueBatch batch);
 
     Mono<AnnotationQueue> findById(@NonNull UUID id);
+
+    Mono<AnnotationQueue> update(@NonNull UUID id, @NonNull AnnotationQueueUpdate updateRequest);
 
     Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 
@@ -48,7 +56,9 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
+    private final @NonNull FeedbackDefinitionService feedbackDefinitionService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
     @WithSpan
@@ -75,6 +85,22 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .flatMap(this::enhanceWithProjectName)
                 .doOnSuccess(queue -> log.debug("Found annotation queue with id '{}'", id))
                 .doOnError(error -> log.info("Annotation queue not found with id '{}'", id));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<AnnotationQueue> update(@NonNull UUID id, @NonNull AnnotationQueueUpdate updateRequest) {
+        log.info("Updating annotation queue with id '{}'", id);
+
+        return annotationQueueDAO.findById(id)
+                .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                .flatMap(existingQueue -> convertFeedbackDefinitionUuidsToNames(updateRequest)
+                        .map(feedbackDefinitionNames -> buildUpdatedAnnotationQueue(existingQueue, updateRequest, feedbackDefinitionNames)))
+                .flatMap(updatedQueue -> annotationQueueDAO.update(updatedQueue)
+                        .thenReturn(updatedQueue))
+                .flatMap(this::enhanceWithProjectName)
+                .doOnSuccess(queue -> log.debug("Updated annotation queue with id '{}'", id))
+                .doOnError(error -> log.info("Failed to update annotation queue with id '{}'", id, error));
     }
 
     @Override
@@ -137,6 +163,50 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
                 .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
+    }
+
+    private Mono<List<String>> convertFeedbackDefinitionUuidsToNames(AnnotationQueueUpdate updateRequest) {
+        if (updateRequest.feedbackDefinitions() == null || updateRequest.feedbackDefinitions().isEmpty()) {
+            return Mono.just(null);
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            
+            List<String> feedbackDefinitionNames = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(FeedbackDefinitionDAO.class);
+                return dao.findByIds(Set.copyOf(updateRequest.feedbackDefinitions()), workspaceId)
+                        .stream()
+                        .map(FeedbackDefinitionModel::name)
+                        .collect(Collectors.toList());
+            });
+            
+            return Mono.just(feedbackDefinitionNames);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private AnnotationQueue buildUpdatedAnnotationQueue(AnnotationQueue existingQueue, 
+            AnnotationQueueUpdate updateRequest, List<String> feedbackDefinitionNames) {
+        var builder = existingQueue.toBuilder()
+                .lastUpdatedAt(Instant.now());
+
+        if (updateRequest.name() != null) {
+            builder.name(updateRequest.name());
+        }
+        if (updateRequest.description() != null) {
+            builder.description(updateRequest.description());
+        }
+        if (updateRequest.instructions() != null) {
+            builder.instructions(updateRequest.instructions());
+        }
+        if (updateRequest.commentsEnabled() != null) {
+            builder.commentsEnabled(updateRequest.commentsEnabled());
+        }
+        if (feedbackDefinitionNames != null) {
+            builder.feedbackDefinitionNames(feedbackDefinitionNames);
+        }
+
+        return builder.build();
     }
 
     private Mono<AnnotationQueue> enhanceWithProjectName(AnnotationQueue annotationQueue) {

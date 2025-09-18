@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueItemIds;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
+import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -28,6 +29,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -106,6 +108,31 @@ public class AnnotationQueuesResource {
                 .block();
 
         log.info("Found annotation queue by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(annotationQueue).build();
+    }
+
+    @PATCH
+    @Path("/{id}")
+    @Operation(operationId = "updateAnnotationQueue", summary = "Update annotation queue", description = "Update annotation queue by id", responses = {
+            @ApiResponse(responseCode = "200", description = "Annotation queue updated successfully", content = @Content(schema = @Schema(implementation = AnnotationQueue.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView(AnnotationQueue.View.Public.class)
+    public Response updateAnnotationQueue(
+            @PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueUpdate.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueueUpdate request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating annotation queue with id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var annotationQueue = annotationQueueService.update(id, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated annotation queue with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.ok().entity(annotationQueue).build();
     }
