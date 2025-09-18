@@ -227,9 +227,9 @@ class TestOpikArgs:
             mock_logger.warning.assert_called_once()
 
     def test_opik_args_from_dict__valid_span_only(self):
-        """Test OpikConfig.from_dict with a valid span configuration."""
-        config_dict = {"span": {"tags": ["tag1", "tag2"], "metadata": {"key": "value"}}}
-        result = opik_args.OpikArgs.from_dict(config_dict)
+        """Test OpikConfig.from_dict with a valid span args."""
+        args_dict = {"span": {"tags": ["tag1", "tag2"], "metadata": {"key": "value"}}}
+        result = opik_args.OpikArgs.from_dict(args_dict)
 
         assert result is not None
         assert result.span_args is not None
@@ -238,15 +238,15 @@ class TestOpikArgs:
         assert result.trace_args is None
 
     def test_opik_args_from_dict__valid_trace_only(self):
-        """Test OpikConfig.from_dict with a valid trace configuration."""
-        config_dict = {
+        """Test OpikConfig.from_dict with a valid trace args."""
+        args_dict = {
             "trace": {
                 "thread_id": "conversation-1",
                 "tags": ["trace_tag"],
                 "metadata": {"trace_key": "trace_value"},
             }
         }
-        result = opik_args.OpikArgs.from_dict(config_dict)
+        result = opik_args.OpikArgs.from_dict(args_dict)
 
         assert result is not None
         assert result.trace_args is not None
@@ -256,8 +256,8 @@ class TestOpikArgs:
         assert result.span_args is None
 
     def test_opik_args_from_dict__both_span_and_trace__happy_flow(self):
-        """Test OpikConfig.from_dict with both span and trace configuration."""
-        config_dict = {
+        """Test OpikConfig.from_dict with both span and trace args."""
+        args_dict = {
             "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
             "trace": {
                 "thread_id": "conversation-2",
@@ -265,7 +265,7 @@ class TestOpikArgs:
                 "metadata": {"trace_key": "trace_value"},
             },
         }
-        result = opik_args.OpikArgs.from_dict(config_dict)
+        result = opik_args.OpikArgs.from_dict(args_dict)
 
         assert result is not None
         assert result.span_args is not None
@@ -277,19 +277,19 @@ class TestOpikArgs:
         assert result.trace_args.metadata == {"trace_key": "trace_value"}
 
     def test_opik_args_from_dict_invalid__span_type_type__warning_logged(self):
-        """Test OpikConfig.from_dict with invalid span type."""
-        config_dict = {"span": "invalid"}
+        """Test OpikConfig.from_dict with an invalid span type."""
+        args_dict = {"span": "invalid"}
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
-            result = opik_args.OpikArgs.from_dict(config_dict)
+            result = opik_args.OpikArgs.from_dict(args_dict)
             assert result is not None
             assert result.span_args is None
             mock_logger.warning.assert_called_once()
 
     def test_opik_args_from_dict__invalid_trace_args_type__warning_logged(self):
-        """Test OpikConfig.from_dict with invalid trace type."""
-        config_dict = {"trace": "invalid"}
+        """Test OpikConfig.from_dict with an invalid trace type."""
+        args_dict = {"trace": "invalid"}
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
-            result = opik_args.OpikArgs.from_dict(config_dict)
+            result = opik_args.OpikArgs.from_dict(args_dict)
             assert result is not None
             assert result.trace_args is None
             mock_logger.warning.assert_called_once()
@@ -306,31 +306,31 @@ class TestOpikArgs:
         assert result == params
 
     def test_apply_opik_args_to_start_span_params__no_span_args(self):
-        """Test applying opik_args with no span configuration."""
+        """Test applying opik_args with no span args."""
         params = arguments_helpers.StartSpanParameters(
             name="test",
             type="general",
             tags=["original_tag"],
             metadata={"original": "value"},
         )
-        config = opik_args.OpikArgs(span_args=None, trace_args=None)
-        result = opik_args.apply_opik_args_to_start_span_params(params, config)
+        args = opik_args.OpikArgs(span_args=None, trace_args=None)
+        result = opik_args.apply_opik_args_to_start_span_params(params, args)
         assert result == params
 
     def test_apply_opik_args_to_start_span_params__with_span_args(self):
-        """Test applying opik_args with span configuration."""
+        """Test applying opik_args with span args."""
         params = arguments_helpers.StartSpanParameters(
             name="test",
             type="general",
             tags=["original_tag"],
             metadata={"original": "value"},
         )
-        span_config = opik_args.api_classes.OpikArgsSpan(
+        span_args = opik_args.api_classes.OpikArgsSpan(
             tags=["new_tag"], metadata={"new": "value"}
         )
-        config = opik_args.OpikArgs(span_args=span_config, trace_args=None)
+        args = opik_args.OpikArgs(span_args=span_args, trace_args=None)
 
-        result = opik_args.apply_opik_args_to_start_span_params(params, config)
+        result = opik_args.apply_opik_args_to_start_span_params(params, args)
 
         assert result.name == params.name
         assert result.type == params.type
@@ -349,13 +349,13 @@ class TestOpikArgs:
         def mock_func(arg1, arg2):
             pass
 
-        config, cleaned_kwargs = opik_args.extract_opik_args(kwargs, mock_func)
+        args = opik_args.extract_opik_args(kwargs, mock_func)
 
-        assert config is not None
-        assert config.span_args is not None
-        assert config.span_args.tags == ["test_tag"]
-        assert "opik_args" not in cleaned_kwargs
-        assert cleaned_kwargs == {"arg1": "value1", "arg2": "value2"}
+        assert args is not None
+        assert args.span_args is not None
+        assert args.span_args.tags == ["test_tag"]
+        assert "opik_args" not in kwargs
+        assert kwargs == {"arg1": "value1", "arg2": "value2"}
 
     def test_extract_opik_args__no_data__none_returned(self):
         """Test extracting opik_args when it's not present."""
@@ -367,10 +367,10 @@ class TestOpikArgs:
         def mock_func(arg1, arg2):
             pass
 
-        config, cleaned_kwargs = extract_opik_args(kwargs, mock_func)
+        args = extract_opik_args(kwargs, mock_func)
 
-        assert config is None
-        assert cleaned_kwargs == {"arg1": "value1", "arg2": "value2"}
+        assert args is None
+        assert kwargs == {"arg1": "value1", "arg2": "value2"}
 
     def test_extract_opik_args__function_with_explicit_opik_args(self):
         """Test that opik_args is NOT popped when function has explicit opik_args parameter."""
@@ -384,23 +384,21 @@ class TestOpikArgs:
         def mock_func_with_opik_args(arg1, arg2, opik_args=None):
             pass
 
-        config, cleaned_kwargs = opik_args.extract_opik_args(
-            kwargs, mock_func_with_opik_args
-        )
+        args = opik_args.extract_opik_args(kwargs, mock_func_with_opik_args)
 
-        assert config is not None
-        assert config.span_args is not None
-        assert config.span_args.tags == ["test_tag"]
+        assert args is not None
+        assert args.span_args is not None
+        assert args.span_args.tags == ["test_tag"]
         # opik_args should remain in kwargs when function has the parameter
-        assert "opik_args" in cleaned_kwargs
-        assert cleaned_kwargs == {
+        assert "opik_args" in kwargs
+        assert kwargs == {
             "arg1": "value1",
             "opik_args": {"span": {"tags": ["test_tag"]}},
             "arg2": "value2",
         }
 
     def test_extract_opik_args__function_without_explicit_opik_args(self):
-        """Test that opik_args IS popped when function has no opik_args parameter."""
+        """Test that opik_args IS popped when the function has no opik_args parameter."""
         kwargs = {
             "arg1": "value1",
             "opik_args": {"span": {"tags": ["test_tag"]}},
@@ -411,16 +409,14 @@ class TestOpikArgs:
         def mock_func_without_opik_args(arg1, arg2):
             pass
 
-        config, cleaned_kwargs = opik_args.extract_opik_args(
-            kwargs, mock_func_without_opik_args
-        )
+        args = opik_args.extract_opik_args(kwargs, mock_func_without_opik_args)
 
-        assert config is not None
-        assert config.span_args is not None
-        assert config.span_args.tags == ["test_tag"]
-        # opik_args should be removed from kwargs when function doesn't have the parameter
-        assert "opik_args" not in cleaned_kwargs
-        assert cleaned_kwargs == {"arg1": "value1", "arg2": "value2"}
+        assert args is not None
+        assert args.span_args is not None
+        assert args.span_args.tags == ["test_tag"]
+        # opik_args should be removed from kwargs when the function doesn't have the parameter
+        assert "opik_args" not in kwargs
+        assert kwargs == {"arg1": "value1", "arg2": "value2"}
 
 
 class TestApplyOpikArgsToTrace:
@@ -433,54 +429,54 @@ class TestApplyOpikArgsToTrace:
 
     def test_apply_opik_args_to_trace__no_trace_args(self):
         """Test apply_opik_args_to_trace with no trace_args."""
-        config = opik_args.OpikArgs(span_args=None, trace_args=None)
+        args = opik_args.OpikArgs(span_args=None, trace_args=None)
 
         # Should not raise any exceptions
-        opik_args.apply_opik_args_to_trace(config, None)
+        opik_args.apply_opik_args_to_trace(args, None)
 
     def test_apply_opik_args_to_trace__no_thread_id(self):
         """Test apply_opik_args_to_trace with no thread_id."""
-        trace_config = opik_args.api_classes.OpikArgsTrace(
+        trace_args = opik_args.api_classes.OpikArgsTrace(
             thread_id=None, tags=["test_tag"]
         )
-        config = opik_args.OpikArgs(span_args=None, trace_args=trace_config)
+        args = opik_args.OpikArgs(span_args=None, trace_args=trace_args)
 
         # Should not raise any exceptions
-        opik_args.apply_opik_args_to_trace(config, None)
+        opik_args.apply_opik_args_to_trace(args, None)
 
     def test_apply_opik_args_to_trace__no_trace(self):
         """Test apply_opik_args_to_trace when no trace_data is provided."""
-        trace_config = opik_args.api_classes.OpikArgsTrace(thread_id="test-thread")
-        config = opik_args.OpikArgs(span_args=None, trace_args=trace_config)
+        trace_args = opik_args.api_classes.OpikArgsTrace(thread_id="test-thread")
+        args = opik_args.OpikArgs(span_args=None, trace_args=trace_args)
 
         # Should not raise any exceptions when current_trace_data is None
-        opik_args.apply_opik_args_to_trace(config, None)
+        opik_args.apply_opik_args_to_trace(args, None)
 
     def test_apply_opik_args_to_trace__thread_id_exists__no_changes__warning_logged(
         self,
     ):
         """Test apply_opik_args_to_trace with thread_id conflict."""
-        trace_config = opik_args.api_classes.OpikArgsTrace(thread_id="new-thread")
-        config = opik_args.OpikArgs(span_args=None, trace_args=trace_config)
+        trace_args = opik_args.api_classes.OpikArgsTrace(thread_id="new-thread")
+        args = opik_args.OpikArgs(span_args=None, trace_args=trace_args)
 
         # existing trace data with different thread_id
         trace = trace_data.TraceData()
         trace.thread_id = "existing-thread"
 
         with patch("opik.decorator.opik_args.helpers.LOGGER") as mock_logger:
-            opik_args.apply_opik_args_to_trace(config, trace)
+            opik_args.apply_opik_args_to_trace(args, trace)
             mock_logger.warning.assert_called_once()
             # Thread ID should not be changed
             assert trace.thread_id == "existing-thread"
 
     def test_apply_opik_args_to_trace__happy_flow(self):
         """Test apply_opik_args_to_trace successful application."""
-        trace_config = opik_args.api_classes.OpikArgsTrace(
+        trace_args = opik_args.api_classes.OpikArgsTrace(
             thread_id="new-thread",
             tags=["trace_tag"],
             metadata={"trace_key": "trace_value"},
         )
-        config = opik_args.OpikArgs(span_args=None, trace_args=trace_config)
+        args = opik_args.OpikArgs(span_args=None, trace_args=trace_args)
 
         # existing trace data with no thread_id
         trace = trace_data.TraceData()
@@ -488,7 +484,7 @@ class TestApplyOpikArgsToTrace:
         trace.tags = ["existing_tag"]
         trace.metadata = {"existing": "value"}
 
-        opik_args.apply_opik_args_to_trace(config, trace)
+        opik_args.apply_opik_args_to_trace(args, trace)
 
         # Verify thread_id was set
         assert trace.thread_id == "new-thread"
@@ -502,15 +498,15 @@ class TestApplyOpikArgsToTrace:
 
     def test_apply_opik_args_to_trace__same_thread_id__warning_logged(self):
         """Test apply_opik_args_to_trace with the same thread_id (no conflict)."""
-        trace_config = opik_args.api_classes.OpikArgsTrace(thread_id="same-thread")
-        config = opik_args.OpikArgs(span_args=None, trace_args=trace_config)
+        trace_args = opik_args.api_classes.OpikArgsTrace(thread_id="same-thread")
+        args = opik_args.OpikArgs(span_args=None, trace_args=trace_args)
 
         # existing trace data with the same thread_id
         trace = trace_data.TraceData()
         trace.thread_id = "same-thread"
 
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
-            opik_args.apply_opik_args_to_trace(config, trace)
+            opik_args.apply_opik_args_to_trace(args, trace)
             # No warning should be logged for the same thread_id
             mock_logger.warning.assert_not_called()
             # Thread ID should remain the same

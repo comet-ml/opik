@@ -40,9 +40,6 @@ class OpikArgs(pydantic.BaseModel):
     @classmethod
     def from_dict(cls, config_dict: Optional[Dict[str, Any]]) -> Optional["OpikArgs"]:
         """Create OpikArgs from dictionary, with validation."""
-        if config_dict is None:
-            return None
-
         if not isinstance(config_dict, dict):
             LOGGER.warning("opik_args must be a dictionary, got %s", type(config_dict))
             return None

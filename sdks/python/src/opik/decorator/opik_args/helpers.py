@@ -1,6 +1,6 @@
 import inspect
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Dict, List, Optional, Callable
 
 from .. import arguments_helpers
 from ...api_objects import trace
@@ -11,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 def extract_opik_args(
     kwargs: Dict[str, Any], func: Callable
-) -> Tuple[Optional[api_classes.OpikArgs], Dict[str, Any]]:
+) -> Optional[api_classes.OpikArgs]:
     """
     Extract opik_args from kwargs and return both the config and cleaned kwargs.
 
@@ -23,7 +23,7 @@ def extract_opik_args(
         func: The function being decorated
 
     Returns:
-        Tuple of (opik_args, cleaned_kwargs)
+        opik_args if found, None otherwise
     """
 
     # Check if a function has opik_args in its signature
@@ -37,14 +37,14 @@ def extract_opik_args(
     # If function explicitly has opik_args parameter, just get it without popping
     if has_opik_args_param:
         opik_args_dict = kwargs.get("opik_args", None)
-        cleaned_kwargs = kwargs  # Don't modify kwargs
     else:
         # If function doesn't have opik_args parameter, pop it from kwargs
         opik_args_dict = kwargs.pop("opik_args", None)
-        cleaned_kwargs = kwargs  # kwargs already modified by pop
 
-    opik_args = api_classes.OpikArgs.from_dict(opik_args_dict)
-    return opik_args, cleaned_kwargs
+    if opik_args_dict is None:
+        return None
+
+    return api_classes.OpikArgs.from_dict(opik_args_dict)
 
 
 def apply_opik_args_to_trace(
