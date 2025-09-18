@@ -156,9 +156,6 @@ navigation:
               - page: AIsuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
-              - page: Agent Development Kit
-                path: docs/tracing/integrations/adk.mdx
-                slug: adk
               - page: Agno
                 path: docs/tracing/integrations/agno.mdx
                 slug: agno
@@ -210,6 +207,9 @@ navigation:
               - page: Groq
                 path: docs/tracing/integrations/groq.mdx
                 slug: groq
+              - page: Google Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
