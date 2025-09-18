@@ -18,6 +18,35 @@ Use this matrix to determine which template to use:
 | **LiteLLM Integration** | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
 | **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md` | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python |
 
+## 📝 Page Title and Description Standards
+
+### Frontmatter Requirements
+
+All integration documentation pages must include the following frontmatter:
+
+```yaml
+---
+title: Observability for [Integration Name] with Opik
+description: Start here to integrate Opik into your [INTEGRATION NAME]-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+```
+
+### Language Specification Rules
+
+- **Include language specification** `(Python)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the title **only if** there are multiple language integrations for the same service
+- **Single language integrations** should not include language specification in the title
+- **Examples:**
+  - `title: Observability for OpenAI with Opik` (Python only)
+  - `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version)
+  - `title: Observability for Spring AI (Java) with Opik` (Java only)
+  - `title: Observability for Semantic Kernel (.NET) with Opik` (.NET only)
+
+### Content Structure
+
+- **No H1 markdown titles** - the page title is defined in frontmatter only
+- **Start content directly** after the frontmatter with the integration description
+- **Maintain all existing content** when updating titles and descriptions
+
 ## 🔧 Code Integration Requirements
 
 ### Minimum Required Sections
