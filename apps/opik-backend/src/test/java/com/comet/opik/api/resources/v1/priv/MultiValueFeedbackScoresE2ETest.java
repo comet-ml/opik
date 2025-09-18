@@ -46,6 +46,8 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -136,9 +138,10 @@ public class MultiValueFeedbackScoresE2ETest {
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
+    private FeedbackScoreDAO feedbackScoreDAO;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, FeedbackScoreDAO feedbackScoreDAO) {
 
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
@@ -152,6 +155,7 @@ public class MultiValueFeedbackScoresE2ETest {
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
+        this.feedbackScoreDAO = feedbackScoreDAO;
     }
 
     @AfterAll
@@ -737,6 +741,43 @@ public class MultiValueFeedbackScoresE2ETest {
         var foundScore = foundOptimization.feedbackScores().getFirst();
         assertThat(foundScore.name()).isEqualTo(scoreName);
         assertAverageScore(foundScore.value(), user1Score, user2Score);
+    }
+
+    @Test
+    @DisplayName("test score trace by a single author in both tables")
+    void testScoreTraceBySingleAuthorInBothTables() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> trace.toBuilder()
+                        .id(null)
+                        .projectName(projectName)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                        .build())
+                .toList();
+        var traceId = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
+
+        // mimic scoring the trace before this feature was implemented using the old table
+        var legacyScore = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.feedbackScore(traceId, legacyScore, TEST_WORKSPACE, API_KEY1);
+        feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null);
+
+        // score the trace
+        var newScore = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.feedbackScore(traceId, newScore, TEST_WORKSPACE, API_KEY1);
+
+        var actual = traceResourceClient.getTraces(projectName, null, API_KEY2, TEST_WORKSPACE, null,
+                null, 5, Map.of());
+
+        assertThat(actual.content()).hasSize(1);
+        var actualTrace1 = actual.content().stream().filter(trace -> trace.id().equals(traceId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Trace with id " + traceId + " not found"));
+        assertThat(actualTrace1.feedbackScores()).hasSize(1);
+        var actualScore = actualTrace1.feedbackScores().getFirst();
+
+        // assert trace values
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
