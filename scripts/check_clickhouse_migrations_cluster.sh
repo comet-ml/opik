@@ -31,13 +31,8 @@ check_ddl_statement() {
     local line="$3"
     local ddl_type="$4"
     
-    # Skip if line is a comment or rollback statement
+    # Skip if line is a comment (but rollback DDL should already be extracted by the caller)
     if echo "$line" | grep -qE "^\s*--"; then
-        return 0
-    fi
-    
-    # Skip if this is part of a rollback section
-    if echo "$line" | grep -qiE "rollback.*${ddl_type}"; then
         return 0
     fi
     
