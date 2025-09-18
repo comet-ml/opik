@@ -52,9 +52,7 @@ class _ExampleFlow(Flow):
 
 
 def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
-    project_name = "crewai-flows-test"
-
-    track_crewai(project_name=project_name)
+    track_crewai(project_name=constants.PROJECT_NAME)
 
     flow = _ExampleFlow()
     _ = flow.kickoff()
@@ -67,7 +65,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
         metadata={"created_from": "crewai"},
         name="Flow.kickoff_async",
         output=ANY_DICT,
-        project_name=project_name,
+        project_name=constants.PROJECT_NAME,
         start_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
         tags=["crewai"],
@@ -79,7 +77,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                 metadata={"created_from": "crewai"},
                 name="Flow.kickoff_async",  # Updated name format
                 output=ANY_DICT,
-                project_name=project_name,
+                project_name=constants.PROJECT_NAME,
                 start_time=ANY_BUT_NONE,
                 tags=["crewai"],
                 type="general",
@@ -92,7 +90,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                         metadata={"created_from": "crewai"},
                         name="generate_city",
                         output=ANY_DICT,
-                        project_name=project_name,
+                        project_name=constants.PROJECT_NAME,
                         start_time=ANY_BUT_NONE,
                         tags=["crewai"],
                         spans=[
@@ -105,7 +103,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                         "created_from": "litellm",
                                     }
                                 ),
-                                project_name=project_name,
+                                project_name=constants.PROJECT_NAME,
                                 model=ANY_STRING,
                                 name="completion",
                                 output=ANY_DICT,
@@ -126,7 +124,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                         metadata={"created_from": "crewai"},
                         name="generate_fun_fact",
                         output=ANY_DICT,
-                        project_name=project_name,
+                        project_name=constants.PROJECT_NAME,
                         start_time=ANY_BUT_NONE,
                         tags=["crewai"],
                         spans=[
@@ -139,7 +137,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                         "created_from": "litellm",
                                     }
                                 ),
-                                project_name=project_name,
+                                project_name=constants.PROJECT_NAME,
                                 model=ANY_STRING,
                                 name="completion",
                                 output=ANY_DICT,

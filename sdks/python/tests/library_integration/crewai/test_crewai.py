@@ -15,9 +15,7 @@ from . import constants
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
     fake_backend,
 ):
-    project_name = "crewai-test"
-
-    track_crewai(project_name=project_name)
+    track_crewai(project_name=constants.PROJECT_NAME)
 
     researcher = Agent(
         role="Test Researcher",
@@ -70,7 +68,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         metadata={"created_from": "crewai"},
         name="kickoff",
         output=ANY_DICT,
-        project_name=project_name,
+        project_name=constants.PROJECT_NAME,
         start_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
         tags=["crewai"],
@@ -82,7 +80,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                 metadata={"created_from": "crewai"},
                 name="kickoff",
                 output=ANY_DICT,
-                project_name=project_name,
+                project_name=constants.PROJECT_NAME,
                 start_time=ANY_BUT_NONE,
                 tags=["crewai"],
                 type="general",
@@ -95,7 +93,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                         metadata={"created_from": "crewai"},
                         name="Task: simple_research_task",
                         output=ANY_DICT,
-                        project_name=project_name,
+                        project_name=constants.PROJECT_NAME,
                         start_time=ANY_BUT_NONE,
                         tags=["crewai"],
                         spans=[
@@ -106,7 +104,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                 metadata={"created_from": "crewai"},
                                 name="Test Researcher",
                                 output=ANY_DICT,
-                                project_name=project_name,
+                                project_name=constants.PROJECT_NAME,
                                 start_time=ANY_BUT_NONE,
                                 tags=["crewai"],
                                 spans=[
@@ -122,7 +120,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         model=ANY_STRING,
                                         name="completion",
                                         output=ANY_DICT,
-                                        project_name=project_name,
+                                        project_name=constants.PROJECT_NAME,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
                                         tags=["litellm"],
@@ -142,7 +140,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                         metadata={"created_from": "crewai"},
                         name="Task: summary_task",
                         output=ANY_DICT,
-                        project_name=project_name,
+                        project_name=constants.PROJECT_NAME,
                         start_time=ANY_BUT_NONE,
                         tags=["crewai"],
                         spans=[
@@ -153,7 +151,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                 metadata={"created_from": "crewai"},
                                 name="Test Writer",
                                 output=ANY_DICT,
-                                project_name=project_name,
+                                project_name=constants.PROJECT_NAME,
                                 start_time=ANY_BUT_NONE,
                                 tags=["crewai"],
                                 spans=[
@@ -169,7 +167,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         model=ANY_STRING,
                                         name="completion",
                                         output=ANY_DICT,
-                                        project_name=project_name,
+                                        project_name=constants.PROJECT_NAME,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
                                         tags=["litellm"],
