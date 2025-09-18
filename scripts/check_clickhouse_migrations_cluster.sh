@@ -41,24 +41,17 @@ check_ddl_statement() {
         return 0
     fi
     
-    # Check if the DDL statement has ON CLUSTER clause with proper quotes
-    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+['\"][^'\"]*['\"]"; then
-        # Check if it has ON CLUSTER but without quotes (incorrect syntax)
-        if echo "$line" | grep -qiE "ON\s+CLUSTER\s+[{][^}]*[}]"; then
-            echo -e "${RED}❌ ERROR: ON CLUSTER clause missing quotes${NC}"
-            echo -e "   📄 File: ${file}"
-            echo -e "   📍 Line ${line_num}: ${line}"
-            echo -e "   🔧 Expected: ${ddl_type} ... ON CLUSTER '{cluster}' (with quotes around {cluster})"
-            echo
-            return 1
-        else
-            echo -e "${RED}❌ ERROR: Missing ON CLUSTER clause${NC}"
-            echo -e "   📄 File: ${file}"
-            echo -e "   📍 Line ${line_num}: ${line}"
-            echo -e "   🔧 Expected: ${ddl_type} ... ON CLUSTER '{cluster}' ..."
-            echo
-            return 1
-        fi
+    # Check if the DDL statement has ON CLUSTER clause 
+    # Both patterns are valid in ClickHouse:
+    # - ON CLUSTER '{cluster}' (with quotes)  
+    # - ON CLUSTER {cluster} (without quotes)
+    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+(['\"][^'\"]*['\"]|[{][^}]*[}])"; then
+        echo -e "${RED}❌ ERROR: Missing ON CLUSTER clause${NC}"
+        echo -e "   📄 File: ${file}"
+        echo -e "   📍 Line ${line_num}: ${line}"
+        echo -e "   🔧 Expected: ${ddl_type} ... ON CLUSTER '{cluster}' or ON CLUSTER {cluster}"
+        echo
+        return 1
     fi
     
     return 0
@@ -76,8 +69,9 @@ validate_migration_file() {
     while IFS= read -r line; do
         ((line_num++))
         
-        # Remove leading/trailing whitespace
-        line=$(echo "$line" | xargs)
+        # Remove leading/trailing whitespace (but preserve quotes)
+        line="${line#"${line%%[![:space:]]*}"}"  # Remove leading whitespace
+        line="${line%"${line##*[![:space:]]}"}"  # Remove trailing whitespace
         
         # Skip empty lines and comments
         if [[ -z "$line" || "$line" =~ ^[[:space:]]*-- ]]; then
