@@ -78,6 +78,8 @@ public class FilterQueryBuilder {
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
+    public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
+    public static final String SKOPE_DB = "scope";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -273,6 +275,8 @@ public class FilterQueryBuilder {
                     .put(AnnotationQueueField.NAME, NAME_DB)
                     .put(AnnotationQueueField.DESCRIPTION, DESCRIPTION_DB)
                     .put(AnnotationQueueField.INSTRUCTIONS, INSTRUCTIONS_DB)
+                    .put(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES, FEEDBACK_DEFINITIONS_DB)
+                    .put(AnnotationQueueField.SCOPE, SKOPE_DB)
                     .put(AnnotationQueueField.CREATED_AT, CREATED_AT_DB)
                     .put(AnnotationQueueField.CREATED_BY, CREATED_BY_DB)
                     .put(AnnotationQueueField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
@@ -374,6 +378,8 @@ public class FilterQueryBuilder {
                     .add(AnnotationQueueField.NAME)
                     .add(AnnotationQueueField.DESCRIPTION)
                     .add(AnnotationQueueField.INSTRUCTIONS)
+                    .add(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES)
+                    .add(AnnotationQueueField.SCOPE)
                     .add(AnnotationQueueField.CREATED_AT)
                     .add(AnnotationQueueField.CREATED_BY)
                     .add(AnnotationQueueField.LAST_UPDATED_AT)

@@ -11,7 +11,7 @@ public enum AnnotationQueueField implements Field {
     NAME(NAME_QUERY_PARAM, FieldType.STRING),
     DESCRIPTION(DESCRIPTION_QUERY_PARAM, FieldType.STRING),
     INSTRUCTIONS("instructions", FieldType.STRING),
-    SCOPE("scope", FieldType.STRING),
+    SCOPE("scope", FieldType.ENUM),
     FEEDBACK_DEFINITION_NAMES("feedback_definition_names", FieldType.LIST),
     CREATED_AT(CREATED_AT_QUERY_PARAM, FieldType.DATE_TIME),
     CREATED_BY(CREATED_BY_QUERY_PARAM, FieldType.STRING),

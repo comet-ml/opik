@@ -8,6 +8,9 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
+import com.comet.opik.api.filter.AnnotationQueueField;
+import com.comet.opik.api.filter.AnnotationQueueFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -41,7 +44,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -58,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -784,7 +787,8 @@ class AnnotationQueuesResourceTest {
                             SortingField.builder().field(SortableFields.INSTRUCTIONS).direction(Direction.ASC).build()),
                     arguments(
                             Comparator.comparing(AnnotationQueue::instructions).reversed(),
-                            SortingField.builder().field(SortableFields.INSTRUCTIONS).direction(Direction.DESC).build()),
+                            SortingField.builder().field(SortableFields.INSTRUCTIONS).direction(Direction.DESC)
+                                    .build()),
                     arguments(
                             Comparator.comparing(AnnotationQueue::createdBy)
                                     .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
@@ -796,11 +800,13 @@ class AnnotationQueuesResourceTest {
                     arguments(
                             Comparator.comparing(AnnotationQueue::lastUpdatedBy)
                                     .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
-                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC).build()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
                     arguments(
                             Comparator.comparing(AnnotationQueue::lastUpdatedBy).reversed()
                                     .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
-                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC).build()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                                    .build()),
                     arguments(
                             Comparator.comparing(AnnotationQueue::createdAt)
                                     .thenComparing(Comparator.comparing(AnnotationQueue::id).reversed()),
@@ -822,13 +828,10 @@ class AnnotationQueuesResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {
-                "project_name='" + "TestProject" + "'",
-                "scope='TRACE'",
-                "scope='THREAD'"
-        })
+        @MethodSource("getValidFilters")
         @DisplayName("should filter annotation queues by different criteria")
-        void findAnnotationQueuesWithFilters(String filters) {
+        void findAnnotationQueuesWithFilters(Function<List<AnnotationQueue>, AnnotationQueueFilter> getFilter,
+                Function<List<AnnotationQueue>, List<AnnotationQueue>> getExpectedQueues) {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -839,40 +842,139 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            // Create annotation queues with different scopes
-            var traceQueue = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .build();
+            // Create multiple annotation queues with different predictable values
+            var annotationQueues = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        var queue = prepareAnnotationQueue(project.name(), projectId);
+                        annotationQueuesResourceClient.createAnnotationQueueBatch(
+                                new LinkedHashSet<>(List.of(queue)),
+                                apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                        return queue;
+                    })
+                    .toList();
 
-            var threadQueue = factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .projectName(project.name())
-                    .scope(AnnotationQueue.AnnotationScope.THREAD)
-                    .build();
-
-            // Create the annotation queues
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(traceQueue, threadQueue)),
-                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
-
-            // When
+            // When - Get queues with filtering
+            var filter = getFilter.apply(annotationQueues);
+            var filters = List.of(filter);
             var page = annotationQueuesResourceClient.findAnnotationQueues(
-                    1, 10, null, filters, null, apiKey, workspaceName, HttpStatus.SC_OK);
+                    1, 10, null, toURLEncodedQueryParam(filters), null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
 
-            // Then - Verify filtering worked (exact assertions depend on filter type)
-            assertThat(page.content()).isNotEmpty();
+            // Then - Verify filtering worked
+            var expectedQueues = getExpectedQueues.apply(annotationQueues);
+            assertPage(page, expectedQueues.reversed(), 1, expectedQueues.size());
+        }
 
-            if (filters.contains("scope='TRACE'")) {
-                assertThat(page.content()).allSatisfy(
-                        queue -> assertThat(queue.scope()).isEqualTo(AnnotationQueue.AnnotationScope.TRACE));
-            } else if (filters.contains("scope='THREAD'")) {
-                assertThat(page.content()).allSatisfy(
-                        queue -> assertThat(queue.scope()).isEqualTo(AnnotationQueue.AnnotationScope.THREAD));
-            }
+        Stream<Arguments> getValidFilters() {
+            return Stream.of(
+                    // Filter by ID - EQUAL
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(queues.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> List
+                                    .of(queues.getFirst())),
+
+                    // Filter by PROJECT_ID - EQUAL
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.PROJECT_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(queues.getFirst().projectId().toString())
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues),
+
+                    // Filter by NAME - EQUAL
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.NAME)
+                                    .operator(Operator.EQUAL)
+                                    .value(queues.getFirst().name())
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> List
+                                    .of(queues.getFirst())),
+
+                    // Filter by NAME - STARTS_WITH
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.NAME)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value("Alpha")
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues.stream()
+                                    .filter(q -> q.name().startsWith("Alpha"))
+                                    .toList()),
+
+                    // Filter by DESCRIPTION - CONTAINS
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.DESCRIPTION)
+                                    .operator(Operator.CONTAINS)
+                                    .value("Beta")
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues.stream()
+                                    .filter(q -> q.description().contains("Beta"))
+                                    .toList()),
+
+                    // Filter by INSTRUCTIONS - EQUAL
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.INSTRUCTIONS)
+                                    .operator(Operator.EQUAL)
+                                    .value(queues.get(1).instructions())
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> List.of(queues.get(1))),
+
+                    // Filter by SCOPE - EQUAL (TRACE)
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.SCOPE)
+                                    .operator(Operator.EQUAL)
+                                    .value("trace")
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues.stream()
+                                    .filter(q -> q.scope() == AnnotationQueue.AnnotationScope.TRACE)
+                                    .toList()),
+
+                    // Filter by FEEDBACK_DEFINITION_NAMES
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES)
+                                    .operator(Operator.CONTAINS)
+                                    .value(queues.getFirst().feedbackDefinitionNames().getFirst())
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> List
+                                    .of(queues.getFirst())),
+
+                    // Filter by CREATED_BY - EQUAL
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues),
+
+                    // Filter by LAST_UPDATED_BY - CONTAINS
+                    arguments(
+                            (Function<List<AnnotationQueue>, AnnotationQueueFilter>) queues -> AnnotationQueueFilter
+                                    .builder()
+                                    .field(AnnotationQueueField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues));
         }
     }
 
