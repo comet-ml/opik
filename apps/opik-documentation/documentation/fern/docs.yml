@@ -22,6 +22,8 @@ css: ./styles.css
 analytics:
   segment:
     write-key: ${SEGMENT_WRITE_KEY}
+  gtm:
+    container-id: ${GTM_CONTAINER_ID}
 
 layout:
   searchbar-placement: header
@@ -106,6 +108,9 @@ navigation:
       - section: Observability
         slug: /tracing
         contents:
+          - page: Concepts
+            path: docs/tracing/concepts.mdx
+            slug: concepts
           - page: 🕵️ Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces

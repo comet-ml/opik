@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { findAndReturnNewTraces } from './sessionManager';
 import { logTracesToOpik } from '../opik';
 import { getSessionInfo, updateSessionInfo } from '../state';
-import { Sentry } from '../sentry';
+import { captureException } from '../sentry';
 
 export class CursorService {
   private context: vscode.ExtensionContext;
@@ -48,7 +48,7 @@ export class CursorService {
         // Log to Sentry if we have invalid traces
         if (invalidTraces.length > 0) {
           const error = new Error(`Found ${invalidTraces.length} invalid traces out of ${tracesData.length} total traces`);
-          Sentry.captureException(error);
+          captureException(error);
           console.warn(`⚠️ Found ${invalidTraces.length} invalid traces - these will be skipped`);
         }
         
@@ -78,7 +78,7 @@ export class CursorService {
                 sessionInfo[sessionId].lastUploadTime = sessionData.lastMessageTime;
               }
             } catch (sessionError) {
-              Sentry.captureException(sessionError);
+              captureException(sessionError);
               console.error(`Error updating session ${sessionId}:`, sessionError);
               // Continue with other sessions even if one fails
             }
@@ -102,7 +102,7 @@ export class CursorService {
         }, 0);
       } else {
         const error = new Error("No cursor data returned from findAndReturnNewTraces");
-        Sentry.captureException(error);
+        captureException(error);
         console.log(`⚠️ No cursor data returned`);
       }
     } catch (error) {
@@ -112,7 +112,7 @@ export class CursorService {
         installationPath: !!vsInstallationPath
       };
 
-      Sentry.captureException(error);
+      captureException(error);
       console.error('Error processing cursor traces:', error);
       
       throw error; // Re-throw to let the caller handle it
