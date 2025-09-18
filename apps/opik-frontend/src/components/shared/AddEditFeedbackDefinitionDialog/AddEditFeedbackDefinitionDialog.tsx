@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { MessageCircleWarning } from "lucide-react";
 
 import useFeedbackDefinitionCreateMutation from "@/api/feedback-definitions/useFeedbackDefinitionCreateMutation";
 import useFeedbackDefinitionUpdateMutation from "@/api/feedback-definitions/useFeedbackDefinitionUpdateMutation";
@@ -22,6 +23,8 @@ import {
   FeedbackDefinition,
 } from "@/types/feedback-definitions";
 import FeedbackDefinitionDetails from "./FeedbackDefinitionDetails";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const TYPE_OPTIONS = [
   {
@@ -125,6 +128,14 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {isEdit && (
+          <ExplainerCallout
+            Icon={MessageCircleWarning}
+            className="mb-2"
+            isDismissable={false}
+            {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition]}
+          />
+        )}
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="feedbackDefinitionName">Name</Label>
           <Input
