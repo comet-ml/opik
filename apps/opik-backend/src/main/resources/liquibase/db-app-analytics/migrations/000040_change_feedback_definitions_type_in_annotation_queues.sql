@@ -7,4 +7,5 @@
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}'
     MODIFY COLUMN feedback_definitions Array(String);
 
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}' MODIFY COLUMN feedback_definitions Array(FixedString(36));
 
