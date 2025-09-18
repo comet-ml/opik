@@ -133,7 +133,9 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
             Icon={MessageCircleWarning}
             className="mb-2"
             isDismissable={false}
-            {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition]}
+            {...EXPLAINERS_MAP[
+              EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition
+            ]}
           />
         )}
         <div className="flex flex-col gap-2 pb-4">

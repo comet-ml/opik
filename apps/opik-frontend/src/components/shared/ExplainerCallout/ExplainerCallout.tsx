@@ -33,9 +33,9 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   if (!isShown) return null;
 
   return (
-    <Alert 
-      variant="callout" 
-      size="sm" 
+    <Alert
+      variant="callout"
+      size="sm"
       className={cn(isDismissable ? "pr-10" : "pr-4", className)}
     >
       <Icon />
