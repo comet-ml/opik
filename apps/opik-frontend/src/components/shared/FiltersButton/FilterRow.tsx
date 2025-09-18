@@ -14,7 +14,6 @@ import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
 import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
 import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
-import { createFilter } from "@/lib/filters";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -93,8 +92,7 @@ export const FilterRow = <TColumnData,>({
             field={filter.field}
             onSelect={(column) =>
               onChange({
-                ...createFilter(),
-                id: filter.id,
+                ...filter,
                 field: column.id,
                 type: column.type as COLUMN_TYPE,
                 operator:
