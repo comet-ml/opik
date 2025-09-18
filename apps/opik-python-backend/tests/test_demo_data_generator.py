@@ -84,26 +84,6 @@ def test_create_demo_data_structure(httpserver):
         "created_at": "2024-01-01T00:00:00Z"
     })
 
-    httpserver.expect_request("/v1/private/traces/threads/retrieve", method="POST").respond_with_json({
-        "id": str(uuid6.uuid7()),
-        "projectId": str(uuid6.uuid7()),
-        "workspaceId": "default",
-        "threadModelId": str(uuid6.uuid7()),
-        "startTime": "2024-01-01T00:00:00Z",
-        "endTime": "2024-01-01T00:00:00Z",
-        "duration": 0,
-        "firstMessage": {
-            "role": "user",
-            "content": "What is the best LLM evaluation tool?"
-        },
-        "lastMessage": {
-            "role": "assistant",
-            "content": "Comet"
-        },
-        "feedbackScores": [],
-        "status": "inactive"
-    })
-
     # Mock specific optimization ID update (for the PUT request with specific ID)
     httpserver.expect_request(re.compile(r"/v1/private/optimizations/.*"), method="PUT").respond_with_data(status=204)
 

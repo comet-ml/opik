@@ -7,7 +7,6 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanWriteType } from "./SpanWriteType";
 import { JsonListStringWrite } from "./JsonListStringWrite";
-import { JsonNodeWrite } from "./JsonNodeWrite";
 import { ErrorInfoWrite } from "./ErrorInfoWrite";
 
 export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Raw, OpikApi.SpanWrite> =
@@ -22,7 +21,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListStringWrite.optional(),
         output: JsonListStringWrite.optional(),
-        metadata: JsonNodeWrite.optional(),
+        metadata: JsonListStringWrite.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -48,7 +47,7 @@ export declare namespace SpanWrite {
         end_time?: string | null;
         input?: JsonListStringWrite.Raw | null;
         output?: JsonListStringWrite.Raw | null;
-        metadata?: JsonNodeWrite.Raw | null;
+        metadata?: JsonListStringWrite.Raw | null;
         model?: string | null;
         provider?: string | null;
         tags?: string[] | null;

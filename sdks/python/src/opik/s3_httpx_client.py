@@ -3,6 +3,8 @@ import functools
 import httpx
 import tenacity
 
+from opik import hooks
+
 KEEPALIVE_EXPIRY_SECONDS = 10
 CONNECT_TIMEOUT_SECONDS = 20
 READ_TIMEOUT_SECONDS = 100
@@ -27,7 +29,18 @@ def get() -> httpx.Client:
         pool=POOL_TIMEOUT_SECONDS,
     )
 
-    return httpx.Client(limits=limits, timeout=timeout)
+    # build HTTPX client arguments
+    kwargs = {
+        "limits": limits,
+        "timeout": timeout,
+    }
+    kwargs = hooks.httpx_client_hook.build_init_arguments(kwargs)
+
+    client = httpx.Client(**kwargs)
+
+    hooks.httpx_client_hook.apply_httpx_client_hooks(client)
+
+    return client
 
 
 def _allowed_to_retry(exception: Exception) -> bool:

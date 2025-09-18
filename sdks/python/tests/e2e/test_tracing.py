@@ -473,7 +473,7 @@ def test_search_traces__happyflow(opik_client):
     )
 
 
-def test_search_spans__happyflow(opik_client):
+def test_search_spans__happyflow(opik_client: opik.Opik):
     # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]

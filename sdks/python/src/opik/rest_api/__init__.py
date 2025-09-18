@@ -4,6 +4,12 @@
 
 from .types import (
     AggregationData,
+    AnnotationQueue,
+    AnnotationQueueBatch,
+    AnnotationQueueItemIds,
+    AnnotationQueueScope,
+    AnnotationQueueWrite,
+    AnnotationQueueWriteScope,
     AssistantMessage,
     AssistantMessageRole,
     Attachment,
@@ -192,7 +198,6 @@ from .types import (
     JsonListStringWrite,
     JsonNode,
     JsonNodeDetail,
-    JsonNodeExperimentItemBulkWriteView,
     JsonNodePublic,
     JsonNodeWrite,
     JsonSchema,
@@ -320,7 +325,6 @@ from .types import (
     TraceThreadLlmAsJudgeCodeWrite,
     TraceThreadPage,
     TraceThreadStatus,
-    TraceThreadUpdate,
     TraceThreadUserDefinedMetricPythonCode,
     TraceThreadUserDefinedMetricPythonCodePublic,
     TraceThreadUserDefinedMetricPythonCodeWrite,
@@ -357,6 +361,7 @@ from .errors import (
     UnprocessableEntityError,
 )
 from . import (
+    annotation_queues,
     attachments,
     automation_rule_evaluators,
     chat_completions,
@@ -407,6 +412,12 @@ from .spans import (
 
 __all__ = [
     "AggregationData",
+    "AnnotationQueue",
+    "AnnotationQueueBatch",
+    "AnnotationQueueItemIds",
+    "AnnotationQueueScope",
+    "AnnotationQueueWrite",
+    "AnnotationQueueWriteScope",
     "AssistantMessage",
     "AssistantMessageRole",
     "AsyncOpikApi",
@@ -608,7 +619,6 @@ __all__ = [
     "JsonListStringWrite",
     "JsonNode",
     "JsonNodeDetail",
-    "JsonNodeExperimentItemBulkWriteView",
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
@@ -750,7 +760,6 @@ __all__ = [
     "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
     "TraceThreadStatus",
-    "TraceThreadUpdate",
     "TraceThreadUserDefinedMetricPythonCode",
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
@@ -779,6 +788,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "annotation_queues",
     "attachments",
     "automation_rule_evaluators",
     "chat_completions",

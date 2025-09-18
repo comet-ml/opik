@@ -46,7 +46,7 @@ Opik will be available at `http://localhost:5173`.
 
 # Configuration
 
-You can find a full list the configuration options in the [helm chart documentation](https://comet-ml.github.io/opik/).
+You can find a full list of the configuration options in the [helm chart documentation](https://comet-ml.github.io/opik/).
 
 # Advanced deployment options
 
@@ -193,7 +193,7 @@ clickhouse:
 
 # Delete your installation 
 
-Before deleting opik installation with helm, make sure to remove finilizer on the clickhouse resource:
+Before deleting opik installation with helm, make sure to remove finalizer on the clickhouse resource:
 
 ```bash
 kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
