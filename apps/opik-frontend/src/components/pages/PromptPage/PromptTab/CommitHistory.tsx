@@ -36,7 +36,6 @@ const CommitHistory = ({
   return (
     <>
       <ul className="max-h-[500px] overflow-y-auto rounded border bg-background p-1">
-        <h2 className="comet-title-s">Commit history</h2>
         {versions?.map((version) => {
           return (
             <li

@@ -38,7 +38,7 @@ const useRestorePromptVersionMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: async ({ versionId }: UseRestorePromptVersionMutationParams) => {
+    onSuccess: async (_, { versionId }) => {
       toast({
         description: `Version ${versionId} has been restored successfully`,
       });

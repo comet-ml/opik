@@ -31,12 +31,18 @@ const RestoreVersionDialog: React.FunctionComponent<
       return;
     }
 
-    restorePromptVersionMutation.mutate({
-      promptId: versionToRestore.prompt_id,
-      versionId: versionToRestore.id,
-    });
-    setOpen(false);
-    onSetActiveVersionId(versionToRestore.id);
+    restorePromptVersionMutation.mutate(
+      {
+        promptId: versionToRestore.prompt_id,
+        versionId: versionToRestore.id,
+      },
+      {
+        onSuccess(data) {
+          setOpen(false);
+          onSetActiveVersionId(data.versionId);
+        },
+      },
+    );
   };
 
   return (
