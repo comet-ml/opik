@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 from unittest.mock import patch
 
@@ -17,6 +18,16 @@ from ...testlib import (
 class TestOpikArgsWithTrackDecorator:
     """Test the opik_args parameter functionality with the OpikTrackDecorator."""
 
+    def setup_method(self):
+        self.opik_args_dict = {
+            "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+            "trace": {
+                "thread_id": "conversation-2",
+                "tags": ["trace_tag"],
+                "metadata": {"trace_key": "trace_value"},
+            },
+        }
+
     def test_track__one_nested_function__implicit_opik_args(self, fake_backend):
         # test that the implicit opik_args can be used
         @tracker.track
@@ -28,19 +39,132 @@ class TestOpikArgsWithTrackDecorator:
             f_inner("inner-input")
             return "outer-output"
 
-        opik_args_dict = {
-            "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
-            "trace": {
-                "thread_id": "conversation-2",
-                "tags": ["trace_tag"],
-                "metadata": {"trace_key": "trace_value"},
-            },
-        }
-
-        f_outer("outer-input", opik_args=opik_args_dict)
+        f_outer("outer-input", opik_args=self.opik_args_dict)
         tracker.flush_tracker()
 
-        expected_trace_tree = TraceModel(
+        expected_trace_tree = self._get_implicit_opik_args_expected_trace_tree()
+
+        assert len(fake_backend.trace_trees) == 1
+
+        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
+
+    def test_track__one_nested_function__explicit_opik_args(self, fake_backend):
+        # tests that explicit opik_args is properly propagated to nested functions
+        @tracker.track
+        def f_inner(x: str, opik_args: Any = None):
+            return "inner-output"
+
+        @tracker.track
+        def f_outer(x: str, opik_args: Any = None):
+            f_inner("inner-input", opik_args=opik_args)
+            return "outer-output"
+
+        f_outer("outer-input", opik_args=self.opik_args_dict)
+        tracker.flush_tracker()
+
+        expected_trace_tree = self._get_explicit_opik_args_expected_trace_tree()
+
+        assert len(fake_backend.trace_trees) == 1
+
+        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
+
+    @pytest.mark.asyncio
+    async def test_track__nested_async_function__implicit_opik_args(self, fake_backend):
+        # test that the implicit opik_args can be used in async functions
+        @tracker.track
+        async def f_inner(x):
+            await asyncio.sleep(0.01)
+            return "inner-output"
+
+        @tracker.track
+        async def f_outer(x):
+            await f_inner("inner-input")
+            return "outer-output"
+
+        await f_outer("outer-input", opik_args=self.opik_args_dict)
+
+        tracker.flush_tracker()
+
+        expected_trace_tree = self._get_implicit_opik_args_expected_trace_tree()
+
+        assert len(fake_backend.trace_trees) == 1
+
+        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
+
+    @pytest.mark.asyncio
+    async def test_track__nested_async_function__explicit_opik_args(self, fake_backend):
+        # tests that explicit opik_args is properly propagated to nested functions in async functions
+        @tracker.track
+        async def f_inner(x: str, opik_args: Any = None):
+            await asyncio.sleep(0.01)
+            return "inner-output"
+
+        @tracker.track
+        async def f_outer(x: str, opik_args: Any = None):
+            await f_inner("inner-input", opik_args=opik_args)
+            return "outer-output"
+
+        await f_outer("outer-input", opik_args=self.opik_args_dict)
+
+        tracker.flush_tracker()
+
+        expected_trace_tree = self._get_explicit_opik_args_expected_trace_tree()
+
+        assert len(fake_backend.trace_trees) == 1
+
+        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
+
+    def _get_explicit_opik_args_expected_trace_tree(self):
+        return TraceModel(
+            id=ANY_BUT_NONE,
+            start_time=ANY_BUT_NONE,
+            name="f_outer",
+            project_name="Default Project",
+            input={"x": "outer-input", "opik_args": self.opik_args_dict},
+            output={"output": "outer-output"},
+            tags=["span_tag", "trace_tag"],
+            metadata={"span_key": "span_value", "trace_key": "trace_value"},
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    start_time=ANY_BUT_NONE,
+                    name="f_outer",
+                    input={"x": "outer-input", "opik_args": self.opik_args_dict},
+                    output={"output": "outer-output"},
+                    tags=["span_tag"],
+                    metadata={"span_key": "span_value"},
+                    type="general",
+                    end_time=ANY_BUT_NONE,
+                    project_name="Default Project",
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            name="f_inner",
+                            input={
+                                "x": "inner-input",
+                                "opik_args": self.opik_args_dict,
+                            },
+                            output={"output": "inner-output"},
+                            tags=["span_tag"],
+                            metadata={"span_key": "span_value"},
+                            type="general",
+                            end_time=ANY_BUT_NONE,
+                            project_name="Default Project",
+                            last_updated_at=ANY_BUT_NONE,
+                        )
+                    ],
+                    last_updated_at=ANY_BUT_NONE,
+                )
+            ],
+            thread_id="conversation-2",
+            last_updated_at=ANY_BUT_NONE,
+        )
+
+    @staticmethod
+    def _get_implicit_opik_args_expected_trace_tree():
+        return TraceModel(
             id=ANY_BUT_NONE,
             start_time=ANY_BUT_NONE,
             name="f_outer",
@@ -81,81 +205,6 @@ class TestOpikArgsWithTrackDecorator:
             thread_id="conversation-2",
             last_updated_at=ANY_BUT_NONE,
         )
-
-        assert len(fake_backend.trace_trees) == 1
-
-        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
-
-    def test_track__one_nested_function__explicit_opik_args(self, fake_backend):
-        # tests that explicit opik_args is properly propagated to nested functions
-        @tracker.track
-        def f_inner(x: str, opik_args: Any = None):
-            return "inner-output"
-
-        @tracker.track
-        def f_outer(x: str, opik_args: Any = None):
-            f_inner("inner-input", opik_args=opik_args)
-            return "outer-output"
-
-        opik_args_dict = {
-            "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
-            "trace": {
-                "thread_id": "conversation-2",
-                "tags": ["trace_tag"],
-                "metadata": {"trace_key": "trace_value"},
-            },
-        }
-
-        f_outer("outer-input", opik_args=opik_args_dict)
-        tracker.flush_tracker()
-
-        expected_trace_tree = TraceModel(
-            id=ANY_BUT_NONE,
-            start_time=ANY_BUT_NONE,
-            name="f_outer",
-            project_name="Default Project",
-            input={"x": "outer-input", "opik_args": opik_args_dict},
-            output={"output": "outer-output"},
-            tags=["span_tag", "trace_tag"],
-            metadata={"span_key": "span_value", "trace_key": "trace_value"},
-            end_time=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    start_time=ANY_BUT_NONE,
-                    name="f_outer",
-                    input={"x": "outer-input", "opik_args": opik_args_dict},
-                    output={"output": "outer-output"},
-                    tags=["span_tag"],
-                    metadata={"span_key": "span_value"},
-                    type="general",
-                    end_time=ANY_BUT_NONE,
-                    project_name="Default Project",
-                    spans=[
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            start_time=ANY_BUT_NONE,
-                            name="f_inner",
-                            input={"x": "inner-input", "opik_args": opik_args_dict},
-                            output={"output": "inner-output"},
-                            tags=["span_tag"],
-                            metadata={"span_key": "span_value"},
-                            type="general",
-                            end_time=ANY_BUT_NONE,
-                            project_name="Default Project",
-                            last_updated_at=ANY_BUT_NONE,
-                        )
-                    ],
-                    last_updated_at=ANY_BUT_NONE,
-                )
-            ],
-            thread_id="conversation-2",
-            last_updated_at=ANY_BUT_NONE,
-        )
-
-        assert len(fake_backend.trace_trees) == 1
-
-        assert_equal(expected=expected_trace_tree, actual=fake_backend.trace_trees[0])
 
 
 class TestOpikArgs:
@@ -287,72 +336,6 @@ class TestOpikArgs:
         assert result.type == params.type
         assert result.tags == ["original_tag", "new_tag"]
         assert result.metadata == {"original": "value", "new": "value"}
-
-    def test_tracked_function_with_opik_args_span(self):
-        """Test tracked function with opik_args span parameters."""
-
-        @self.decorator.track()
-        def test_function(x, y, opik_args=None):
-            return x + y
-
-        with patch(
-            "opik.decorator.tracing_runtime_config.is_tracing_active", return_value=True
-        ):
-            with patch.object(self.decorator, "_before_call") as mock_before:
-                with patch.object(self.decorator, "_after_call") as mock_after:
-                    result = test_function(
-                        1,
-                        2,
-                        opik_args={
-                            "span": {
-                                "tags": ["custom_tag"],
-                                "metadata": {"custom_key": "custom_value"},
-                            }
-                        },
-                    )
-
-                    assert result == 3
-                    mock_before.assert_called_once()
-                    mock_after.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_tracked_async_function_with_opik_args(self):
-        """Test tracked async function with opik_args parameters."""
-
-        @self.decorator.track()
-        async def async_test_function(x, y, opik_args=None):
-            return x + y
-
-        with patch(
-            "opik.decorator.tracing_runtime_config.is_tracing_active", return_value=True
-        ):
-            with patch.object(self.decorator, "_before_call") as mock_before:
-                with patch.object(self.decorator, "_after_call") as mock_after:
-                    result = await async_test_function(
-                        1, 2, opik_args={"span": {"tags": ["async_tag"]}}
-                    )
-
-                    assert result == 3
-                    mock_before.assert_called_once()
-                    mock_after.assert_called_once()
-
-    def test_tracked_function_without_opik_args(self):
-        """Test tracked function without opik_args parameter."""
-
-        @self.decorator.track()
-        def test_function(x, y):
-            return x + y
-
-        with patch(
-            "opik.decorator.tracing_runtime_config.is_tracing_active", return_value=True
-        ):
-            with patch.object(self.decorator, "_before_call") as mock_before:
-                with patch.object(self.decorator, "_after_call") as mock_after:
-                    result = test_function(1, 2)
-
-                    assert result == 3
-                    mock_before.assert_called_once()
-                    mock_after.assert_called_once()
 
     def test_extract_opik_args__happy_path(self):
         """Test that opik_args is properly extracted from kwargs."""
