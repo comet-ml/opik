@@ -293,6 +293,10 @@ minio:
   enabled: true
   image:
     repository: bitnamilegacy/minio
+  defaultInitContainers:
+    volumePermissions:
+      image:
+        repository: bitnamilegacy/os-shell
   mode: standalone
   disableWebUI: true
   persistence:
@@ -303,8 +307,6 @@ minio:
     rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
   provisioning:
     enabled: true
-    image:
-      repository: bitnamilegacy/os-shell
     extraCommands:
       - mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4
       - mc mb --ignore-existing s3/public
