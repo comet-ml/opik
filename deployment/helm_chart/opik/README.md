@@ -323,6 +323,7 @@ Call opik api on http://localhost:5173/api
 | minio.disableWebUI | bool | `true` |  |
 | minio.enabled | bool | `true` |  |
 | minio.fullnameOverride | string | `"opik-minio"` |  |
+| minio.image.repository | string | `"bitnamilegacy/minio"` |  |
 | minio.mode | string | `"standalone"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
@@ -330,9 +331,11 @@ Call opik api on http://localhost:5173/api
 | minio.provisioning.extraCommands[0] | string | `"mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4"` |  |
 | minio.provisioning.extraCommands[1] | string | `"mc mb --ignore-existing s3/public"` |  |
 | minio.provisioning.extraCommands[2] | string | `"mc anonymous set download s3/public/"` |  |
+| minio.provisioning.image.repository | string | `"bitnamilegacy/os-shell"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
+| mysql.image.repository | string | `"bitnamilegacy/mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
