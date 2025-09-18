@@ -108,6 +108,9 @@ navigation:
       - section: Observability
         slug: /tracing
         contents:
+          - page: Concepts
+            path: docs/tracing/concepts.mdx
+            slug: concepts
           - page: 🕵️ Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
