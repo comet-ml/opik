@@ -42,10 +42,6 @@ A **trace** represents a complete execution path for a single interaction with a
 - **Cost Tracking**: Monitor token usage and associated costs for each interaction
 - **Quality Assurance**: Review traces to ensure your application is behaving as expected
 
-<Frame>
-  <img src="/img/tracing/trace_example.png" alt="Example trace showing input, output, and timing information" />
-</Frame>
-
 ## Spans
 
 A **span** represents an individual operation or step within a trace. While a trace shows the complete picture, spans break down the execution into granular, measurable components. This hierarchical structure allows you to understand both the high-level flow and the detailed operations within your LLM application.
@@ -80,10 +76,6 @@ Trace: "Customer Support Chat"
 └── Span: "Log Interaction"
 ```
 
-<Frame>
-  <img src="/img/tracing/span_hierarchy.png" alt="Example span hierarchy showing nested operations" />
-</Frame>
-
 ## Threads
 
 A **thread** is a collection of related traces that form a coherent conversation or workflow. Threads are essential for understanding multi-turn interactions and maintaining context across multiple LLM calls. They provide a way to group related traces together, making it easier to analyze conversational patterns and user journeys.
@@ -111,10 +103,6 @@ Threads are created by defining a `thread_id` and referencing it in your traces.
 - **Debug Conversations**: Understand how a conversation evolved over time
 - **Analyze Patterns**: Identify common conversation flows and user behaviors
 - **Optimize Performance**: Find bottlenecks in multi-turn interactions
-
-<Frame>
-  <img src="/img/tracing/thread_example.png" alt="Example thread showing multiple related traces" />
-</Frame>
 
 ## Metrics
 
