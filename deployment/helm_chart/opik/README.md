@@ -320,6 +320,7 @@ Call opik api on http://localhost:5173/api
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | minio.auth.rootUser | string | `"THAAIOSFODNN7EXAMPLE"` |  |
+| minio.defaultInitContainers.volumePermissions.image.repository | string | `"bitnamilegacy/os-shell"` |  |
 | minio.disableWebUI | bool | `true` |  |
 | minio.enabled | bool | `true` |  |
 | minio.fullnameOverride | string | `"opik-minio"` |  |
@@ -331,7 +332,6 @@ Call opik api on http://localhost:5173/api
 | minio.provisioning.extraCommands[0] | string | `"mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4"` |  |
 | minio.provisioning.extraCommands[1] | string | `"mc mb --ignore-existing s3/public"` |  |
 | minio.provisioning.extraCommands[2] | string | `"mc anonymous set download s3/public/"` |  |
-| minio.provisioning.image.repository | string | `"bitnamilegacy/os-shell"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
