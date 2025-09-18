@@ -34,6 +34,10 @@ on:
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
+      OPIK_FE_POSTHOG_KEY:
+        required: false
+      OPIK_FE_POSTHOG_HOST:
+        required: false
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
@@ -92,8 +96,13 @@ jobs:
               OPIK_VERSION=${{inputs.version}}
               SENTRY_ENABLED=true
               SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
+              POSTHOG_ENABLED=true
+              POSTHOG_KEY=${{secrets.OPIK_FE_POSTHOG_KEY}}
+              POSTHOG_HOST=${{secrets.OPIK_FE_POSTHOG_HOST}}
             secrets: |
               OPIK_FE_SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
+              OPIK_FE_POSTHOG_KEY=${{secrets.OPIK_FE_POSTHOG_KEY}}
+              OPIK_FE_POSTHOG_HOST=${{secrets.OPIK_FE_POSTHOG_HOST}}
               GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
         - name: Write Build Summary

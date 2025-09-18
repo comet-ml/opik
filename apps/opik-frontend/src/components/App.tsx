@@ -8,6 +8,9 @@ import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 import SentryErrorBoundary from "@/components/layout/SentryErrorBoundary/SentryErrorBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import posthog from "posthog-js";
+import { PostHogProvider } from "posthog-js/react";
+import { IS_POSTHOG_ENABLED, POSTHOG_HOST, POSTHOG_KEY } from "@/config";
 
 const TOOLTIP_DELAY_DURATION = 500;
 const TOOLTIP_SKIP__DELAY_DURATION = 0;
@@ -20,24 +23,35 @@ const queryClient = new QueryClient({
   },
 });
 
+if (IS_POSTHOG_ENABLED) {
+  posthog.init(POSTHOG_KEY, {
+    api_host: POSTHOG_HOST,
+    capture_pageview: false,
+    capture_pageleave: true,
+    defaults: "2025-05-24",
+  });
+}
+
 function App() {
   useCustomScrollbarClass();
 
   return (
     <SentryErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <QueryParamProvider adapter={WindowHistoryAdapter}>
-          <ThemeProvider>
-            <TooltipProvider
-              delayDuration={TOOLTIP_DELAY_DURATION}
-              skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
-            >
-              <RouterProvider router={router} />
-            </TooltipProvider>
-            <Toaster />
-          </ThemeProvider>
-        </QueryParamProvider>
-      </QueryClientProvider>
+      <PostHogProvider client={posthog}>
+        <QueryClientProvider client={queryClient}>
+          <QueryParamProvider adapter={WindowHistoryAdapter}>
+            <ThemeProvider>
+              <TooltipProvider
+                delayDuration={TOOLTIP_DELAY_DURATION}
+                skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
+              >
+                <RouterProvider router={router} />
+              </TooltipProvider>
+              <Toaster />
+            </ThemeProvider>
+          </QueryParamProvider>
+        </QueryClientProvider>
+      </PostHogProvider>
     </SentryErrorBoundary>
   );
 }
