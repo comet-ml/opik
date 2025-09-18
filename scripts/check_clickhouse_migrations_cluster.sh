@@ -44,9 +44,9 @@ check_ddl_statement() {
         return 0
     fi
     
-    # Check if the DDL statement has ON CLUSTER clause with proper quotes
-    # Required pattern: ON CLUSTER '{cluster}' (with quotes around {cluster})
-    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+['\"][^'\"]*['\"]"; then
+    # Check if the DDL statement has ON CLUSTER clause with exact pattern
+    # Required pattern: ON CLUSTER '{cluster}' (exact match for this project)
+    if ! echo "$line" | grep -qiE "ON\s+CLUSTER\s+['\"]\\{cluster\\}['\"]"; then
         echo -e "${RED}❌ ERROR: Missing ON CLUSTER clause${NC}"
         echo -e "   📄 File: ${file}"
         echo -e "   📍 Line ${line_num}: ${line}"
