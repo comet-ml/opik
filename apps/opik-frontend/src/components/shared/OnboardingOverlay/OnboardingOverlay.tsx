@@ -24,14 +24,14 @@ const OnboardingContent: React.FC = () => {
 
   return (
     <div className="absolute inset-0 z-50 overflow-auto bg-soft-background">
-      <div className="mx-auto flex min-h-full max-w-[1360px] py-[60px] lg:px-10 lg:py-[120px]">
+      <div className="mx-auto flex min-h-full max-w-[1640px] py-[60px] lg:px-10 lg:py-[120px]">
         <RenderStep />
         {stepImage && (
           <div className="hidden flex-1 items-center lg:block">
             <img
               src={stepImage}
               alt="Onboarding illustration"
-              className="h-auto max-h-[600px] max-w-full object-contain"
+              className="h-auto max-w-full object-contain"
             />
           </div>
         )}
