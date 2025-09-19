@@ -169,7 +169,7 @@ public class DatasetExpansionService {
             var chatRequest = ChatCompletionRequest.builder()
                     .model(request.model())
                     .addUserMessage(prompt)
-                    .temperature(0.8) // Higher temperature for more variety
+                    .temperature(1.0) // Set temperature to 1.0 for consistent output
                     .maxCompletionTokens(4000)
                     .build();
 
