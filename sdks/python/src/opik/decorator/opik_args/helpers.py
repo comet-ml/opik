@@ -1,10 +1,11 @@
 import inspect
 import logging
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, Optional, Callable
 
 from .. import arguments_helpers
-from ...api_objects import trace
+from ...api_objects import trace, data_helpers
 from . import api_classes
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,13 +81,13 @@ def apply_opik_args_to_trace(
     # Apply trace tags if specified
     if opik_args.trace_args.tags:
         existing_tags = trace_data.tags or []
-        merged_tags = merge_tags(existing_tags, opik_args.trace_args.tags)
+        merged_tags = data_helpers.merge_tags(existing_tags, opik_args.trace_args.tags)
         trace_data.tags = merged_tags
 
     # Apply trace metadata if specified
     if opik_args.trace_args.metadata:
         existing_metadata = trace_data.metadata or {}
-        merged_metadata = merge_metadata(
+        merged_metadata = data_helpers.merge_metadata(
             existing_metadata, opik_args.trace_args.metadata
         )
         trace_data.metadata = merged_metadata
@@ -103,8 +104,8 @@ def apply_opik_args_to_start_span_params(
     span_config = opik_args.span_args
 
     # Merge tags and metadata
-    merged_tags = merge_tags(params.tags, span_config.tags)
-    merged_metadata = merge_metadata(params.metadata, span_config.metadata)
+    merged_tags = data_helpers.merge_tags(params.tags, span_config.tags)
+    merged_metadata = data_helpers.merge_metadata(params.metadata, span_config.metadata)
 
     # Create updated parameters
     return arguments_helpers.StartSpanParameters(
@@ -117,33 +118,3 @@ def apply_opik_args_to_start_span_params(
         model=params.model,
         provider=params.provider,
     )
-
-
-def merge_tags(
-    existing_tags: Optional[List[str]], new_tags: Optional[List[str]]
-) -> Optional[List[str]]:
-    """Merge tag lists, preserving existing tags and adding new ones."""
-    if existing_tags is None and new_tags is None:
-        return None
-
-    result = list(existing_tags or [])
-    if new_tags:
-        for tag in new_tags:
-            if tag not in result:
-                result.append(tag)
-
-    return result if result else None
-
-
-def merge_metadata(
-    existing_metadata: Optional[Dict[str, Any]], new_metadata: Optional[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
-    """Merge metadata dictionaries, with new values taking precedence."""
-    if existing_metadata is None and new_metadata is None:
-        return None
-
-    result = dict(existing_metadata or {})
-    if new_metadata:
-        result.update(new_metadata)
-
-    return result if result else None
