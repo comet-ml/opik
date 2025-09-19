@@ -42,8 +42,8 @@ jobs:
           else
             # For pushes to main, use GitHub API to get commit files
             # This works reliably regardless of fetch-depth
-            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/files \
-              --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }} \
+              --jq '.files[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
           fi
