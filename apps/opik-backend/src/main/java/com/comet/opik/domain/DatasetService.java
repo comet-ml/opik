@@ -27,7 +27,6 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -40,7 +39,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
@@ -104,9 +102,6 @@ public interface DatasetService {
 class DatasetServiceImpl implements DatasetService {
 
     private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
-    private static final String DATASET_DESCRIPTION_TOO_LONG = "Description cannot exceed 255 characters";
-    private static final int MYSQL_ERROR_DATA_TOO_LONG = 1406;
-    private static final String MYSQL_DESCRIPTION_COLUMN_ERROR_PATTERN = "Data too long for column 'description'";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -146,7 +141,12 @@ class DatasetServiceImpl implements DatasetService {
                 dao.save(newDataset, workspaceId);
                 return dao.findById(newDataset.id(), workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
-                throw handleDatabaseException(e, dataset.name());
+                if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                    log.info(DATASET_ALREADY_EXISTS);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                } else {
+                    throw e;
+                }
             }
         });
     }
@@ -221,7 +221,12 @@ class DatasetServiceImpl implements DatasetService {
                     throw newNotFoundException();
                 }
             } catch (UnableToExecuteStatementException e) {
-                throw handleDatabaseException(e, id.toString());
+                if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                    log.info(DATASET_ALREADY_EXISTS);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                } else {
+                    throw e;
+                }
             }
 
             return null;
@@ -667,34 +672,4 @@ class DatasetServiceImpl implements DatasetService {
         return Mono.error(throwable);
     }
 
-    /**
-     * Handle database exceptions and convert them to appropriate business exceptions.
-     * This method always throws an exception and never returns normally.
-     *
-     * @param e the UnableToExecuteStatementException from JDBI
-     * @param entityIdentifier the identifier of the entity (dataset name or ID) for logging
-     * @return RuntimeException that should be thrown (method never returns normally)
-     */
-    private RuntimeException handleDatabaseException(UnableToExecuteStatementException e, String entityIdentifier) {
-        if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-            log.info(DATASET_ALREADY_EXISTS);
-            return new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
-        } else if (e.getCause() instanceof SQLException sqlException) {
-            // Handle data length validation errors - check for description column specifically first
-            if (sqlException.getMessage() != null &&
-                    sqlException.getMessage().contains(MYSQL_DESCRIPTION_COLUMN_ERROR_PATTERN)) {
-                log.warn("Dataset description exceeds maximum length: '{}'", entityIdentifier, e);
-                return new BadRequestException(DATASET_DESCRIPTION_TOO_LONG);
-            }
-            // Handle other MySQL 1406 errors (other columns) with generic message
-            if (sqlException.getErrorCode() == MYSQL_ERROR_DATA_TOO_LONG) {
-                log.warn("Data too long for column in dataset: '{}'", entityIdentifier, e);
-                return new BadRequestException("One or more fields exceed their maximum allowed length");
-            }
-            log.error("Database error while processing dataset: '{}'", entityIdentifier, e);
-            return e;
-        } else {
-            return e;
-        }
-    }
 }
