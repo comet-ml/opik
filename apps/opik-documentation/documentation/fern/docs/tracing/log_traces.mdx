@@ -296,6 +296,90 @@ def llm_chain(input_text):
 
 You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
 
+#### Logging additional data using opik_args parameter
+
+The `opik_args` parameter allows you to pass additional configuration to traced functions, including span tags, metadata, and trace-level settings like `thread_id`. This parameter can be used in two ways:
+
+##### Implicit opik_args (functions without opik_args parameter)
+
+When your function doesn't explicitly declare an `opik_args` parameter, you can still pass opik_args when calling the function. The decorator will handle it internally:
+
+```python
+import opik
+
+@opik.track
+def llm_chain(text):
+    return f"Processed: {text}"
+
+# Call with opik_args - it won't be passed to the function
+result = llm_chain(
+    "hello world",
+    opik_args={
+        "span": {
+            "tags": ["llm", "agent"],
+            "metadata": {"version": "1.0", "method": "simple"}
+        },
+        "trace": {
+            "thread_id": "conversation-123",
+            "tags": ["user-session"],
+            "metadata": {"user_id": "user-456"}
+        }
+    }
+)
+```
+
+##### Explicit opik_args (functions with opik_args parameter)
+
+When your function explicitly declares an `opik_args` parameter, it will receive the opik_args value directly. This is useful for propagating configuration through nested function calls:
+
+```python
+import opik
+
+@opik.track
+def child_function(data, opik_args=None):
+    # This function can access opik_args directly if needed.
+    # All configuration options will be applied to the current span and trace
+    return f"Child processed: {data}"
+
+@opik.track
+def parent_function(text, opik_args=None):
+    # Propagate opik_args to a child function.
+    # All configuration options will be applied to the current span and trace.
+    intermediate = child_function(text, opik_args=opik_args)
+    return f"Parent: {intermediate}"
+
+# Both functions will receive the same opik_args and apply the same configuration
+# to the current span and trace of each function.
+result = parent_function(
+    "hello",
+    opik_args={
+        "span": {"tags": ["parent-child"]},
+        "trace": {"thread_id": "workflow-789"}
+    }
+)
+```
+
+##### The opik_args structure
+
+The `opik_args` parameter accepts a dictionary with the following structure:
+
+```python
+opik_args = {
+    "span": {
+        "tags": ["tag1", "tag2"],              # List of tags for the span
+        "metadata": {"key": "value"}           # Dictionary of metadata for the span
+    },
+    "trace": {
+        "thread_id": "conversation-id",        # Thread ID for grouping related traces
+        "tags": ["trace-tag"],                 # List of tags for the trace
+        "metadata": {"trace-key": "value"}     # Dictionary of metadata for the trace
+    }
+}
+```
+
+Both `"span"` and `"trace"` sections are optional - you can include either or both as needed.
+
+
 #### Configuring the project name
 
 You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
