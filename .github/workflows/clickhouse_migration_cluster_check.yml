@@ -74,11 +74,10 @@ jobs:
           echo "📖 Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
           echo
           
-          # Convert the multiline environment variable to an array
-          mapfile -t FILES <<< "$MIGRATION_FILES"
-          
-          # Run the validation script with specific files
-          if ./scripts/check_clickhouse_migrations_cluster.sh "${FILES[@]}"; then
+          # Run the validation script with the migration files
+          # Use xargs with -0 flag and tr to handle newline-separated list safely
+          # This approach correctly handles filenames with spaces across different platforms
+          if echo "$MIGRATION_FILES" | tr '\n' '\0' | xargs -0 ./scripts/check_clickhouse_migrations_cluster.sh; then
             echo "✅ All modified ClickHouse migrations are properly configured!"
             echo "🎉 DDL operations will be executed distributively across the cluster."
           else
