@@ -34,14 +34,18 @@ jobs:
           echo "🔍 Detecting ClickHouse migration files that were added or modified..."
           
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # For PRs, use GitHub's built-in files API (since fetch-depth=1 limits git history)
+            # For PRs, use GitHub's built-in files API
             gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
               --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
           else
-            # For pushes to main, check the last commit
-            CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1..HEAD | grep "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\.sql$" || true)
+            # For pushes to main, use GitHub API to get commit files
+            # This works reliably regardless of fetch-depth
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/files \
+              --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            CHANGED_FILES=$(cat changed_files.txt || echo "")
+            rm -f changed_files.txt
           fi
           
           if [ -n "$CHANGED_FILES" ]; then
