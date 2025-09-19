@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { UserPen } from "lucide-react";
+import { UserPen, MessageCircleWarning } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Thread, Trace } from "@/types/traces";
+import { ThreadStatus } from "@/types/thread";
 import useAppStore from "@/store/AppStore";
 import {
   Dialog,
@@ -20,7 +21,8 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -46,7 +48,6 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const { toast } = useToast();
 
   const { mutate } = useAnnotationQueueAddItemsMutation();
 
@@ -85,15 +86,27 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const queues = data?.content ?? [];
   const total = data?.total ?? 0;
 
+  const validRows = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          !isObjectThread(r) || (r as Thread).status === ThreadStatus.INACTIVE,
+      ),
+    [rows],
+  );
+
+  const noValidRows = validRows.length === 0;
+  const partialValid = validRows.length !== rows.length;
+
   const addToQueueHandler = useCallback(
     (queue: AnnotationQueue) => {
       setOpen(false);
       mutate({
         annotationQueueId: queue.id,
-        ids: rows.map(getAnnotationQueueItemId),
+        ids: validRows.map(getAnnotationQueueItemId),
       });
     },
-    [setOpen, mutate, rows],
+    [setOpen, mutate, validRows],
   );
 
   const onQueueCreated = useCallback(
@@ -113,7 +126,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
     if (queues.length === 0) {
       const text = search
         ? "No search results"
-        : "There are no annotation queues yet";
+        : "There are no annotation queues in this project yet";
 
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
@@ -125,22 +138,57 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
     return queues.map((q) => (
       <div
         key={q.id}
-        className="flex cursor-pointer flex-col rounded-sm px-4 py-2.5 hover:bg-muted"
-        onClick={() => addToQueueHandler(q)}
+        className={cn(
+          "rounded-sm px-4 py-2.5 flex flex-col",
+          noValidRows ? "cursor-default" : "cursor-pointer hover:bg-muted",
+        )}
+        onClick={() => !noValidRows && addToQueueHandler(q)}
       >
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <UserPen className="size-4 shrink-0 text-muted-slate" />
-            <span className="comet-body-s-accented w-full truncate text-muted-gray">
+            <UserPen
+              className={cn(
+                "size-4 shrink-0",
+                noValidRows ? "text-muted-gray" : "text-muted-slate",
+              )}
+            />
+            <span
+              className={cn(
+                "comet-body-s-accented truncate w-full",
+                noValidRows && "text-muted-gray",
+              )}
+            >
               {q.name}
             </span>
           </div>
-          <div className="comet-body-s whitespace-pre-line break-words pl-6 text-light-slate">
+          <div
+            className={cn(
+              "comet-body-s pl-6 whitespace-pre-line break-words",
+              noValidRows ? "text-muted-gray" : "text-light-slate",
+            )}
+          >
             {q.instructions}
           </div>
         </div>
       </div>
     ));
+  };
+
+  const renderAlert = () => {
+    const text = noValidRows
+      ? "There are no rows that can be added to annotation queues. Only traces and inactive threads can be added."
+      : "Only traces and inactive threads will be added to annotation queues. Active threads will be excluded.";
+
+    if (noValidRows || partialValid) {
+      return (
+        <Alert className="mt-4">
+          <MessageCircleWarning />
+          <AlertDescription>{text}</AlertDescription>
+        </Alert>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -166,10 +214,12 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
                   setOpen(false);
                   setOpenDialog(true);
                 }}
+                disabled={noValidRows}
               >
                 Create new annotation queue
               </Button>
             </div>
+            {renderAlert()}
             <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
             </div>
@@ -191,6 +241,8 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         open={openDialog}
         setOpen={setOpenDialog}
         onQueueCreated={onQueueCreated}
+        projectId={projectId}
+        scope={scope}
       />
     </>
   );

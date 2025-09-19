@@ -33,8 +33,9 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
   const handleCopySMELink = useCallback(() => {
     copy(generateSMEURL(workspaceName, queue.id));
     toast({
-      title: "Copied",
-      description: "SME link copied to clipboard",
+      title: "Annotation queue link copied to clipboard",
+      description:
+        "Share this queue with your annotators so they can start annotating and provide feedback to improve the evaluation of your LLM application.",
     });
   }, [queue.id, toast, workspaceName]);
 
@@ -84,7 +85,7 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem onClick={handleCopySMELink}>
             <Copy className="mr-2 size-4" />
-            Copy SME link
+            Copy sharing link
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleEdit}>
             <Pencil className="mr-2 size-4" />

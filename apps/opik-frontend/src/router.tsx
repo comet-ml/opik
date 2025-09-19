@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy } from "react";
 import {
   createRootRoute,
   createRoute,
@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
+import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
@@ -70,6 +71,12 @@ const workspaceGuardPartialLayoutRoute = createRoute({
   id: "workspaceGuardPartialLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={PartialPageLayout} />,
+});
+
+const workspaceGuardSMELayoutRoute = createRoute({
+  id: "workspaceGuardSMELayout",
+  getParentRoute: () => rootRoute,
+  component: () => <WorkspaceGuard Layout={SMEPageLayout} />,
 });
 
 const workspaceGuardEmptyLayoutRoute = createRoute({
@@ -330,15 +337,10 @@ const redirectDatasetsRoute = createRoute({
 });
 
 // ----------- SME flow
-const smeRoute = createRoute({
-  path: "/sme",
-  getParentRoute: () => workspaceRoute,
-});
-
 const homeSMERoute = createRoute({
-  path: "/",
-  getParentRoute: () => smeRoute,
-  component: () => <div>SME FLOW</div>, // TODO lala fix
+  path: "/$workspaceName/sme",
+  getParentRoute: () => workspaceGuardSMELayoutRoute,
+  component: lazy(() => import("@/components/pages/SMEFlowPage/SMEFlowPage")),
 });
 
 // --------- playground
@@ -411,6 +413,7 @@ const routeTree = rootRoute.addChildren([
     quickstartRoute,
     getStartedRoute,
   ]),
+  workspaceGuardSMELayoutRoute.addChildren([homeSMERoute]),
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
@@ -443,7 +446,6 @@ const routeTree = rootRoute.addChildren([
         redirectProjectsRoute,
         redirectDatasetsRoute,
       ]),
-      smeRoute.addChildren([homeSMERoute]),
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,

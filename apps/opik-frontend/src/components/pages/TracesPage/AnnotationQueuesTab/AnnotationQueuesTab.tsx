@@ -70,8 +70,7 @@ import {
   AnnotationQueue,
   ANNOTATION_QUEUE_SCOPE,
 } from "@/types/annotation-queues";
-
-const REFETCH_INTERVAL = 30000;
+import { capitalizeFirstLetter } from "@/lib/utils";
 
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
@@ -91,7 +90,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     label: "Scope",
     type: COLUMN_TYPE.category,
     cell: TagCell as never,
-    accessorFn: (row) => row.scope,
+    accessorFn: (row) => capitalizeFirstLetter(row.scope),
   },
   {
     id: "created_at",
@@ -266,8 +265,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchOnMount: false,
-      refetchInterval: REFETCH_INTERVAL,
     },
   );
 

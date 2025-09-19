@@ -29,9 +29,9 @@ const EditAnnotationQueueButton: React.FunctionComponent<
         projectId={annotationQueue.project_id}
         scope={annotationQueue.scope}
       />
-      <Button size="sm" onClick={handleOpenEditDialog}>
+      <Button size="sm" variant="outline" onClick={handleOpenEditDialog}>
         <Pencil className="mr-1.5 size-3.5" />
-        Edit annotation queue
+        Edit queue
       </Button>
     </>
   );

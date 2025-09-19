@@ -6,6 +6,8 @@ import api, {
   ANNOTATION_QUEUES_REST_ENDPOINT,
   ANNOTATION_QUEUES_KEY,
   ANNOTATION_QUEUE_KEY,
+  TRACES_KEY,
+  THREADS_KEY,
 } from "@/api/api";
 
 type UseAnnotationQueueAddItemsMutationParams = {
@@ -59,6 +61,8 @@ const useAnnotationQueueAddItemsMutation = () => {
             { annotationQueueId: variables.annotationQueueId },
           ],
         }),
+        queryClient.invalidateQueries({ queryKey: [TRACES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [THREADS_KEY] }),
       ]);
     },
   });

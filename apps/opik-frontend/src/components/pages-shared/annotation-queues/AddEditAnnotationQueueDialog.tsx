@@ -38,6 +38,8 @@ import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotat
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const SCOPE_OPTIONS = [
   {
@@ -105,7 +107,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const title = isEdit
     ? "Edit annotation queue"
     : "Create a new annotation queue";
-  const submitText = isEdit ? "Update rule" : "Create rule";
+  const submitText = isEdit
+    ? "Update annotation queue"
+    : "Create annotation queue";
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
@@ -220,14 +224,22 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   name="scope"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Scope</FormLabel>
+                      <FormLabel>
+                        Scope{" "}
+                        <ExplainerIcon
+                          className="inline"
+                          {...EXPLAINERS_MAP[
+                            EXPLAINER_ID.how_to_choose_annotation_queue_type
+                          ]}
+                        />
+                      </FormLabel>
                       <FormControl>
                         <SelectBox
                           placeholder="Trace"
                           value={field.value}
                           onChange={field.onChange}
                           options={SCOPE_OPTIONS}
-                          disabled={isEdit}
+                          disabled={isEdit || Boolean(scope)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -275,7 +287,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
                     return (
                       <FormItem>
-                        <FormLabel>Available feedback scores</FormLabel>
+                        <FormLabel>
+                          Available feedback scores{" "}
+                          <ExplainerIcon
+                            className="inline"
+                            {...EXPLAINERS_MAP[EXPLAINER_ID.visible_scores]}
+                          />
+                        </FormLabel>
                         <FormControl>
                           <FeedbackDefinitionsSelectBox
                             value={field.value}
