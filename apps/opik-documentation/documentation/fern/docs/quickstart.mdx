@@ -443,9 +443,49 @@ Your LlamaIndex calls from that point forward will be logged to Opik. You can le
 
 <Tab value="AI Vercel SDK (JS / TS)" title="AI Vercel SDK (JS / TS)">
 
-We are currently working on a AI Vercel SDK integration, stay tuned!
+If you are using the [Vercel AI SDK](https://sdk.vercel.ai/), you can integrate Opik using the `OpikExporter` which works through OpenTelemetry:
 
-Feel free to [open an issue](https://github.com/comet-ml/opik/issues) if you have any specific requests or suggestions
+```bash
+npm install opik ai @ai-sdk/openai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
+```
+
+Set up your environment variables:
+
+```bash
+export OPIK_API_KEY="<your-api-key>"
+export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Cloud version
+export OPIK_PROJECT_NAME="<your-project-name>"
+export OPIK_WORKSPACE="<your-workspace>"
+export OPENAI_API_KEY="<your-openai-api-key>"
+```
+
+Initialize the OpikExporter with your AI SDK:
+
+```ts
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OpikExporter } from "opik/vercel";
+
+// Set up OpenTelemetry with Opik
+const sdk = new NodeSDK({
+  traceExporter: new OpikExporter(),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+sdk.start();
+
+// Your AI SDK calls with telemetry enabled
+const result = await generateText({
+  model: openai("gpt-4o"),
+  prompt: "What is love?",
+  experimental_telemetry: { isEnabled: true },
+});
+
+console.log(result.text);
+```
+
+All AI SDK calls with `experimental_telemetry: { isEnabled: true }` will now be logged to Opik. You can learn more about the Vercel AI SDK integration in the [Vercel AI SDK integration docs](/tracing/integrations/vercel-ai-sdk).
 
 </Tab>
 
