@@ -77,7 +77,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="items">
-              Queue Items
+              Queue items
             </TabsTrigger>
             <TabsTrigger variant="underline" value="configuration">
               Configuration

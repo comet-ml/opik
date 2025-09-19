@@ -15,13 +15,20 @@ import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDia
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
 
+// scope property is needed only in case when we have TOGGLE_HUMAN_ANNOTATION_ENABLED,
+// to be able to hide this button in case we are on the thread page or sidebar
+// all this functionality should be deleted when the feature flag is be deleted
+type AddToDropdownScope = "trace" | "span" | "thread";
+
 export type AddToDropdownProps = {
   rows: Array<Trace | Span | Thread>;
+  scope?: AddToDropdownScope[];
   disabled?: boolean;
 };
 
 const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
   rows,
+  scope,
   disabled = false,
 }) => {
   const resetKeyRef = useRef(0);
@@ -35,6 +42,10 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
   const isSpan = isObjectSpan(rows[0]);
   const showAddToDataset = !isThread;
   const showAddToQueue = (isThread || !isSpan) && annotationQueuesEnabled;
+
+  const isOnlyAnnotationScope = scope?.length === 1 && scope[0] === "thread";
+
+  if (!showAddToQueue && isOnlyAnnotationScope) return null;
 
   return (
     <>
@@ -83,7 +94,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
               disabled={disabled}
             >
               <UserPen className="mr-2 size-4" />
-              Add to Annotation Queue
+              Add to annotation queue
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

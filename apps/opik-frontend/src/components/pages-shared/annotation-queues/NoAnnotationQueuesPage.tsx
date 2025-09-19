@@ -1,6 +1,6 @@
 import React from "react";
 import { Book, Plus } from "lucide-react";
-import noDataQueuesImageUrl from "/images/no-data-traces.png"; // TODO lala relpace image
+import noDataQueuesImageUrl from "/images/no-data-annotation-queues.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 

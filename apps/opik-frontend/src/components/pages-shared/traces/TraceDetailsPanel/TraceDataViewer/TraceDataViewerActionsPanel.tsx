@@ -26,7 +26,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
 
   return (
     <>
-      <AddToDropdown rows={rows} />
+      <AddToDropdown rows={rows} scope={["trace", "span"]} />
 
       <DetailsActionSectionToggle
         activeSection={activeSection}

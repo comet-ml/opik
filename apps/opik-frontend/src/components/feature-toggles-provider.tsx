@@ -4,8 +4,6 @@ import { OnChangeFn } from "@/types/shared";
 import useFeatureToggle from "@/api/feature-toggle/useFeatureToggle";
 import useAppStore from "@/store/AppStore";
 
-// TODO lala test add to button when feature is off
-
 type FeatureTogglesProps = {
   children: React.ReactNode;
 };
@@ -41,11 +39,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data)
-      setFeatures({
-        ...data,
-        [FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED]: true,
-      });
+    if (data) setFeatures(data);
   }, [data]);
 
   const value = useMemo(() => {
