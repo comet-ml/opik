@@ -129,12 +129,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 AND experiment_id IN (SELECT id FROM experiments_final)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ), feedback_scores_combined AS (
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
                        name,
-                       value
+                       value,
+                       last_updated_at,
+                       last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
@@ -144,11 +146,34 @@ class OptimizationDAOImpl implements OptimizationDAO {
                        project_id,
                        entity_id,
                        name,
-                       value
+                       value,
+                       last_updated_at,
+                       author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,

@@ -82,13 +82,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             TimeInterval.HOURLY, "toIntervalHour(1)");
 
     private static final String TRACE_FILTERED_PREFIX = """
-            WITH feedback_scores_combined AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
                        name,
                        value,
-                       last_updated_at
+                       last_updated_at,
+                       last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
@@ -99,11 +100,37 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        entity_id,
                        name,
                        value,
-                       last_updated_at
+                       last_updated_at,
+                       author
                  FROM authored_feedback_scores FINAL
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+             ),
+             feedback_scores_with_ranking AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                 FROM feedback_scores_combined_raw
+             ),
+             feedback_scores_combined AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author
+                 FROM feedback_scores_with_ranking
+                 WHERE rn = 1
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -218,14 +245,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
-            ), feedback_scores_combined AS (
+            ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
                     value,
-                    last_updated_at
+                    last_updated_at,
+                    last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
@@ -237,12 +265,38 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        entity_id,
                        name,
                        value,
-                       last_updated_at
+                       last_updated_at,
+                       author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+            ),
+            feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ),
+            feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
