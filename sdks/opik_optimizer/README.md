@@ -127,7 +127,7 @@ python scripts/litellm_metaprompt_context7_mcp_example.py
 python scripts/litellm_metaprompt_browser_mcp_example.py
 ```
 
-Each script connects to the server, runs a `MetaPromptOptimizer` pass to improve the MCP tool description, follows up with a `FewShotBayesianOptimizer` sweep, and persists the tuned tool signature to `artifacts/`.
+Each script connects to the server, runs a `MetaPromptOptimizer` pass to improve the MCP tool description, and persists the tuned tool signature to `artifacts/`.
 
 Underlying utilities live in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`, and datasets in `src/opik_optimizer/data/`. These building blocks will be used for a fuller optimiser integration after the proof of concept.
 
