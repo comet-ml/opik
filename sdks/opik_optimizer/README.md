@@ -123,11 +123,11 @@ This repository now includes utilities and examples for tuning MCP tool signatur
 Run the example scripts after updating the in-file `MCP_MANIFEST` constants to point at your MCP servers:
 
 ```bash
-python scripts/litellm_fewshot_context7_mcp_example.py
-python scripts/litellm_fewshot_browser_mcp_example.py
+python scripts/litellm_metaprompt_context7_mcp_example.py
+python scripts/litellm_metaprompt_browser_mcp_example.py
 ```
 
-Each script connects to the server, evaluates the baseline description on a synthetic dataset, applies a simple heuristic rewrite, and persists the best description to `artifacts/`.
+Each script connects to the server, runs a `MetaPromptOptimizer` pass to improve the MCP tool description, follows up with a `FewShotBayesianOptimizer` sweep, and persists the tuned tool signature to `artifacts/`.
 
 Underlying utilities live in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`, and datasets in `src/opik_optimizer/data/`. These building blocks will be used for a fuller optimiser integration after the proof of concept.
 
