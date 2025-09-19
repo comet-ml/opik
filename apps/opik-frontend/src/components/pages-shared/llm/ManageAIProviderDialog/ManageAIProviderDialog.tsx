@@ -93,6 +93,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   }, [configuredProvidersList, provider]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
+  const isEdit = Boolean(providerKey || calculatedProviderKey);
+  const title = isEdit
+    ? "Edit provider configuration"
+    : "Add provider configuration";
 
   const buttonText = provider
     ? providerKey || calculatedProviderKey
@@ -182,7 +186,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Provider configuration</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
           <ExplainerDescription
@@ -239,6 +243,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               {(isConfiguredProvider || providerKey) && (
                 <ExplainerCallout
                   Icon={MessageCircleWarning}
+                  isDismissable={false}
                   {...EXPLAINERS_MAP[
                     EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
                   ]}
