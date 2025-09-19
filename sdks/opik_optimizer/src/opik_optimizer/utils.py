@@ -22,6 +22,8 @@ import string
 import urllib.parse
 from types import TracebackType
 
+import requests
+
 import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
@@ -383,8 +385,6 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
     """
     Fallback Wikipedia search using the Wikipedia API.
     """
-    import requests
-
     try:
         # First, search for pages using the search API
         search_params: Dict[str, str | int] = {
