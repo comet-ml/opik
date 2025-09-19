@@ -1,0 +1,3 @@
+{"id": "ctx-001", "user_query": "How do I authenticate with the SDK?", "expected_tool": "doc_lookup", "arguments": {"query": "authentication"}, "expected_answer_contains": "authentication"}
+{"id": "ctx-002", "user_query": "List the supported webhook events.", "expected_tool": "doc_lookup", "arguments": {"query": "webhook events"}, "expected_answer_contains": "webhook"}
+{"id": "ctx-003", "user_query": "Show me how to paginate results.", "expected_tool": "doc_lookup", "arguments": {"query": "pagination"}, "expected_answer_contains": "pagination"}
