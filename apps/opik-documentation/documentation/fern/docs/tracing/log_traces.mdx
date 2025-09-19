@@ -308,7 +308,9 @@ When your function doesn't explicitly declare an `opik_args` parameter, you can 
 import opik
 
 @opik.track
-def llm_chain(text):
+def llm_chain(text: str) -> str:
+    # LLM chain code
+    # ...
     return f"Processed: {text}"
 
 # Call with opik_args - it won't be passed to the function
@@ -333,16 +335,18 @@ result = llm_chain(
 When your function explicitly declares an `opik_args` parameter, it will receive the opik_args value directly. This is useful for propagating configuration through nested function calls:
 
 ```python
+from typing import Optional, Dict, Any
 import opik
 
+
 @opik.track
-def child_function(data, opik_args=None):
+def child_function(data: str, opik_args: Optional[Dict[str, Any]]=None) -> str:
     # This function can access opik_args directly if needed.
     # All configuration options will be applied to the current span and trace
     return f"Child processed: {data}"
 
 @opik.track
-def parent_function(text, opik_args=None):
+def parent_function(text: str, opik_args: Optional[Dict[str, Any]]=None) -> str:
     # Propagate opik_args to a child function.
     # All configuration options will be applied to the current span and trace.
     intermediate = child_function(text, opik_args=opik_args)
