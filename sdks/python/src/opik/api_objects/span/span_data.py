@@ -120,6 +120,9 @@ class SpanData:
             elif key == "attachments":
                 self._update_attachments(value)
                 continue
+            elif key == "tags":
+                self.tags = data_helpers.merge_tags(self.tags, new_tags=value)
+                continue
 
             self.__dict__[key] = value
 
