@@ -10,6 +10,7 @@ import useLocalStorageState from "use-local-storage-state";
 type ExplainerCalloutProps = {
   className?: string;
   Icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  isDismissable?: boolean;
 } & Explainer;
 
 const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
@@ -20,6 +21,7 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   docHash,
   className,
   Icon = Info,
+  isDismissable = true,
 }) => {
   const [isShown, setIsShown] = useLocalStorageState<boolean>(
     `explainer-callout-${id}`,
@@ -31,7 +33,11 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   if (!isShown) return null;
 
   return (
-    <Alert variant="callout" size="sm" className={cn("pr-10", className)}>
+    <Alert
+      variant="callout"
+      size="sm"
+      className={cn(isDismissable ? "pr-10" : "pr-4", className)}
+    >
       <Icon />
       {title && <AlertTitle size="sm">{title}</AlertTitle>}
       <AlertDescription size="sm">
@@ -49,14 +55,16 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
           </Button>
         )}
       </AlertDescription>
-      <Button
-        variant="minimal"
-        size="icon-sm"
-        onClick={() => setIsShown(false)}
-        className="absolute right-1 top-1 !p-0"
-      >
-        <X />
-      </Button>
+      {isDismissable && (
+        <Button
+          variant="minimal"
+          size="icon-sm"
+          onClick={() => setIsShown(false)}
+          className="absolute right-1 top-1 !p-0"
+        >
+          <X />
+        </Button>
+      )}
     </Alert>
   );
 };

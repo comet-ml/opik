@@ -10,13 +10,16 @@ import * as OpikApi from "../index";
 export interface AnnotationQueue {
     id?: string;
     projectId: string;
+    projectName?: string;
     name: string;
     description?: string;
     instructions?: string;
     scope: OpikApi.AnnotationQueueScope;
     commentsEnabled?: boolean;
-    feedbackDefinitions?: string[];
-    workspaceId?: string;
+    feedbackDefinitionNames?: string[];
+    reviewers?: OpikApi.AnnotationQueueReviewer[];
+    feedbackScores?: OpikApi.FeedbackScoreAverage[];
+    itemsCount?: number;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

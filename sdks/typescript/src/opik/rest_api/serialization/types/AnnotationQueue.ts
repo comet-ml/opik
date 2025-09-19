@@ -6,6 +6,8 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { AnnotationQueueScope } from "./AnnotationQueueScope";
+import { AnnotationQueueReviewer } from "./AnnotationQueueReviewer";
+import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 
 export const AnnotationQueue: core.serialization.ObjectSchema<
     serializers.AnnotationQueue.Raw,
@@ -13,16 +15,22 @@ export const AnnotationQueue: core.serialization.ObjectSchema<
 > = core.serialization.object({
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     description: core.serialization.string().optional(),
     instructions: core.serialization.string().optional(),
     scope: AnnotationQueueScope,
     commentsEnabled: core.serialization.property("comments_enabled", core.serialization.boolean().optional()),
-    feedbackDefinitions: core.serialization.property(
-        "feedback_definitions",
+    feedbackDefinitionNames: core.serialization.property(
+        "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
-    workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
+    reviewers: core.serialization.list(AnnotationQueueReviewer).optional(),
+    feedbackScores: core.serialization.property(
+        "feedback_scores",
+        core.serialization.list(FeedbackScoreAverage).optional(),
+    ),
+    itemsCount: core.serialization.property("items_count", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -33,13 +41,16 @@ export declare namespace AnnotationQueue {
     export interface Raw {
         id?: string | null;
         project_id: string;
+        project_name?: string | null;
         name: string;
         description?: string | null;
         instructions?: string | null;
         scope: AnnotationQueueScope.Raw;
         comments_enabled?: boolean | null;
-        feedback_definitions?: string[] | null;
-        workspace_id?: string | null;
+        feedback_definition_names?: string[] | null;
+        reviewers?: AnnotationQueueReviewer.Raw[] | null;
+        feedback_scores?: FeedbackScoreAverage.Raw[] | null;
+        items_count?: number | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;
