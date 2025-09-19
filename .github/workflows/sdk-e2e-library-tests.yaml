@@ -96,6 +96,9 @@ jobs:
           python_version: ${{ matrix.python_version }}
           library_name: adk
 
+      # This workflow is used to test the external LiteLLM integration that lives in litellm repository.
+      # However, there is another, internal, integration with LiteLLM that lives in opik.integrations.litellm, it's being tested
+      # in a separate workflow: .github/workflows/lib-litellm-tests.yml
       - name: LiteLLM Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["litellm", "all"]'), env.LIBS)
         env:

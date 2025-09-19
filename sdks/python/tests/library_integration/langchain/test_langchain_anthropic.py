@@ -157,6 +157,8 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
         max_tokens=100,
         model_name=MODEL_FOR_TESTS_FULL,
         name="custom-anthropic-llm-name",
+        streaming=True,
+        stream_usage=True,
     )
 
     template = (
