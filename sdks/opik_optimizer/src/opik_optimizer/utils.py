@@ -387,7 +387,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
 
     try:
         # First, search for pages using the search API
-        search_params = {
+        search_params: Dict[str, str | int] = {
             "action": "query",
             "format": "json",
             "list": "search",
