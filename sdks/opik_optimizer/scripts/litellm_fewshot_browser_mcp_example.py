@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.browser_eval import load_browser_dataset
 from opik_optimizer.utils.mcp import (
     MCPManifest,
     call_tool_from_manifest,
-    list_tools_from_manifest,
+    dump_mcp_signature,
+    extract_description_from_system,
+    load_tool_signature_from_manifest,
     response_to_text,
+    system_prompt_from_tool,
 )
 
 
@@ -40,46 +44,42 @@ def browser_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult
 
 dataset = load_browser_dataset()
 
-tool = next(tool for tool in list_tools_from_manifest(MCP_MANIFEST) if tool.name == TOOL_NAME)
-tool_description = getattr(tool, "description", "") or ""
-tool_parameters = getattr(tool, "input_schema", {}) or {}
-
-system_prompt = """
-You browse the web to answer factual developer questions. When URLs are
-provided or implied, call the MCP tool `browser_open` to fetch the page
-and incorporate the result into your answer.
-"""
+signature = load_tool_signature_from_manifest(MCP_MANIFEST, TOOL_NAME)
+system_prompt = system_prompt_from_tool(signature)
 
 prompt = ChatPrompt(
     system=system_prompt,
     user="{user_query}",
-    tools=[
-        {
-            "type": "function",
-            "function": {
-                "name": TOOL_NAME,
-                "description": tool_description,
-                "parameters": tool_parameters,
-            },
-        }
-    ],
+    tools=[signature.to_tool_entry()],
     function_map={TOOL_NAME: browser_open},
 )
 
-optimizer = FewShotBayesianOptimizer(
+meta_optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
-    min_examples=1,
-    max_examples=4,
-    n_threads=2,
-    seed=7,
+    max_rounds=2,
+    num_prompts_per_round=3,
+    improvement_threshold=0.01,
+    temperature=0.3,
+    n_threads=1,
+    subsample_size=min(5, len(dataset.get_items())),
 )
 
-result = optimizer.optimize_prompt(
+meta_result = meta_optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=browser_metric,
-    n_trials=5,
     n_samples=len(dataset.get_items()),
 )
 
-result.display()
+optimized_prompt = meta_result.best_prompt or prompt
+
+maybe_description = extract_description_from_system(optimized_prompt.system or "")
+if maybe_description:
+    signature.description = maybe_description
+    optimized_prompt.tools = [signature.to_tool_entry()]
+
+meta_result.display()
+
+output_signature_path = Path("artifacts/browser_tuned_signature.json")
+output_signature_path.parent.mkdir(parents=True, exist_ok=True)
+dump_mcp_signature([signature], output_signature_path)

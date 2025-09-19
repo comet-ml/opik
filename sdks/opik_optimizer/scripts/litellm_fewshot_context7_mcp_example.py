@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.utils.mcp import (
     MCPManifest,
     call_tool_from_manifest,
-    list_tools_from_manifest,
+    dump_mcp_signature,
+    extract_description_from_system,
+    load_tool_signature_from_manifest,
     response_to_text,
+    system_prompt_from_tool,
 )
 
 
@@ -42,47 +46,42 @@ def context7_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResul
 
 dataset = load_context7_dataset()
 
-# Pull the baseline tool metadata from the MCP server.
-tool = next(tool for tool in list_tools_from_manifest(MCP_MANIFEST) if tool.name == TOOL_NAME)
-tool_description = getattr(tool, "description", "") or ""
-tool_parameters = getattr(tool, "input_schema", {}) or {}
-
-system_prompt = """
-You answer questions about the context7 SDK. Always consider whether the
-MCP tool `doc_lookup` can help and call it when you need concrete
-documentation snippets to answer the question.
-"""
+signature = load_tool_signature_from_manifest(MCP_MANIFEST, TOOL_NAME)
+system_prompt = system_prompt_from_tool(signature)
 
 prompt = ChatPrompt(
     system=system_prompt,
     user="{user_query}",
-    tools=[
-        {
-            "type": "function",
-            "function": {
-                "name": TOOL_NAME,
-                "description": tool_description,
-                "parameters": tool_parameters,
-            },
-        }
-    ],
+    tools=[signature.to_tool_entry()],
     function_map={TOOL_NAME: doc_lookup},
 )
 
-optimizer = FewShotBayesianOptimizer(
+meta_optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
-    min_examples=1,
-    max_examples=4,
-    n_threads=2,
-    seed=42,
+    max_rounds=2,
+    num_prompts_per_round=3,
+    improvement_threshold=0.01,
+    temperature=0.2,
+    n_threads=1,
+    subsample_size=min(5, len(dataset.get_items())),
 )
 
-result = optimizer.optimize_prompt(
+meta_result = meta_optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=context7_metric,
-    n_trials=5,
     n_samples=len(dataset.get_items()),
 )
 
-result.display()
+optimized_prompt = meta_result.best_prompt or prompt
+
+meta_result.display()
+
+maybe_description = extract_description_from_system(optimized_prompt.system or "")
+if maybe_description:
+    signature.description = maybe_description
+    optimized_prompt.tools = [signature.to_tool_entry()]
+
+output_signature_path = Path("artifacts/context7_tuned_signature.json")
+output_signature_path.parent.mkdir(parents=True, exist_ok=True)
+dump_mcp_signature([signature], output_signature_path)
