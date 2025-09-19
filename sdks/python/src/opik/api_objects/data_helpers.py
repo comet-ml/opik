@@ -1,4 +1,6 @@
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
+
+import pydantic
 
 from opik import dict_utils
 
@@ -22,44 +24,51 @@ def merge_tags(
 
 
 def merge_metadata(
-    existing_metadata: Optional[Dict[str, Any]], new_metadata: Optional[Dict[str, Any]]
+    existing_metadata: Optional[Dict[str, Any]],
+    new_metadata: Optional[Union[Dict[str, Any], pydantic.BaseModel]],
 ) -> Optional[Dict[str, Any]]:
-    """Merge metadata dictionaries, with new values taking precedence.
+    """Merge the existing metadata dictionary with new data, with new values taking precedence.
 
     If both existing_metadata and new_metadata are None or empty, return None.
     """
-    return _merge_dictionaries(existing_metadata, new_dict=new_metadata)
+    return _merge_dictionary_with_data(existing_metadata, new_data=new_metadata)
 
 
 def merge_inputs(
-    existing_inputs: Optional[Dict[str, Any]], new_inputs: Optional[Dict[str, Any]]
+    existing_inputs: Optional[Dict[str, Any]],
+    new_inputs: Optional[Union[Dict[str, Any], pydantic.BaseModel]],
 ) -> Optional[Dict[str, Any]]:
-    """Merge input dictionaries, with new values taking precedence.
+    """Merge the existing input dictionary with new data, with new values taking precedence.
 
     If both existing_inputs and new_inputs are None or empty, return None."""
-    return _merge_dictionaries(existing_inputs, new_dict=new_inputs)
+    return _merge_dictionary_with_data(existing_inputs, new_data=new_inputs)
 
 
 def merge_outputs(
-    existing_outputs: Optional[Dict[str, Any]], new_outputs: Optional[Dict[str, Any]]
+    existing_outputs: Optional[Dict[str, Any]],
+    new_outputs: Optional[Union[Dict[str, Any], pydantic.BaseModel]],
 ) -> Optional[Dict[str, Any]]:
-    """Merge output dictionaries, with new values taking precedence.
+    """Merge the existing output dictionary with new data, with new values taking precedence.
 
     If both existing_outputs and new_outputs are None or empty, return None."""
-    return _merge_dictionaries(existing_outputs, new_dict=new_outputs)
+    return _merge_dictionary_with_data(existing_outputs, new_data=new_outputs)
 
 
-def _merge_dictionaries(
-    existing_dict: Optional[Dict[str, Any]], new_dict: Optional[Dict[str, Any]]
+def _merge_dictionary_with_data(
+    existing_dict: Optional[Dict[str, Any]],
+    new_data: Optional[Union[Dict[str, Any], pydantic.BaseModel]],
 ) -> Optional[Dict[str, Any]]:
-    """Merge two dictionaries, with new values taking precedence.
+    """Merge the dictionary with new data, with new values taking precedence.
 
-    If both existing_dict and new_dict are None or empty, return None."""
-    if existing_dict is None and new_dict is None:
+    If both existing_dict and new_data are None or empty, return None."""
+    if existing_dict is None and new_data is None:
         return None
 
+    if isinstance(new_data, pydantic.BaseModel):
+        new_data = new_data.model_dump()
+
     result = dict(existing_dict or {})
-    if new_dict:
-        result = dict_utils.deepmerge(result, new_dict)
+    if new_data:
+        result = dict_utils.deepmerge(result, new_data)
 
     return result if result else None

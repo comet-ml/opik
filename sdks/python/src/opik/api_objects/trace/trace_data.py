@@ -104,13 +104,15 @@ class TraceData:
                 continue
 
             if key == "metadata":
-                self.metadata = data_helpers.merge_metadata(self.metadata, value)
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=value
+                )
                 continue
             elif key == "output":
-                self.output = data_helpers.merge_outputs(self.output, value)
+                self.output = data_helpers.merge_outputs(self.output, new_outputs=value)
                 continue
             elif key == "input":
-                self.input = data_helpers.merge_inputs(self.input, value)
+                self.input = data_helpers.merge_inputs(self.input, new_inputs=value)
                 continue
             elif key == "attachments":
                 self._update_attachments(value)
