@@ -239,7 +239,9 @@ from openai import OpenAI
 client = OpenAI()
 client = track_openai(client)
 ```
-
+</Info>
+<Info>
+    You can also specify custom `tags`, `metadata`, and/or a `thread_id` for each trace and/or span logged for the decorated function. For more information, see [Logging additional data using the opik_args parameter](#logging-additional-data-using-opik_args-parameter)
 </Info>
 
 #### Scoring traces
