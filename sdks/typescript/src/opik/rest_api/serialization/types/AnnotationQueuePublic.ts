@@ -5,13 +5,13 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { AnnotationQueueScope } from "./AnnotationQueueScope";
-import { AnnotationQueueReviewer } from "./AnnotationQueueReviewer";
-import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
+import { AnnotationQueuePublicScope } from "./AnnotationQueuePublicScope";
+import { AnnotationQueueReviewerPublic } from "./AnnotationQueueReviewerPublic";
+import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
 
-export const AnnotationQueue: core.serialization.ObjectSchema<
-    serializers.AnnotationQueue.Raw,
-    OpikApi.AnnotationQueue
+export const AnnotationQueuePublic: core.serialization.ObjectSchema<
+    serializers.AnnotationQueuePublic.Raw,
+    OpikApi.AnnotationQueuePublic
 > = core.serialization.object({
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string()),
@@ -19,16 +19,16 @@ export const AnnotationQueue: core.serialization.ObjectSchema<
     name: core.serialization.string(),
     description: core.serialization.string().optional(),
     instructions: core.serialization.string().optional(),
-    scope: AnnotationQueueScope,
+    scope: AnnotationQueuePublicScope,
     commentsEnabled: core.serialization.property("comments_enabled", core.serialization.boolean().optional()),
     feedbackDefinitionNames: core.serialization.property(
         "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
-    reviewers: core.serialization.list(AnnotationQueueReviewer).optional(),
+    reviewers: core.serialization.list(AnnotationQueueReviewerPublic).optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
-        core.serialization.list(FeedbackScoreAverage).optional(),
+        core.serialization.list(FeedbackScoreAveragePublic).optional(),
     ),
     itemsCount: core.serialization.property("items_count", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -37,7 +37,7 @@ export const AnnotationQueue: core.serialization.ObjectSchema<
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
 });
 
-export declare namespace AnnotationQueue {
+export declare namespace AnnotationQueuePublic {
     export interface Raw {
         id?: string | null;
         project_id: string;
@@ -45,11 +45,11 @@ export declare namespace AnnotationQueue {
         name: string;
         description?: string | null;
         instructions?: string | null;
-        scope: AnnotationQueueScope.Raw;
+        scope: AnnotationQueuePublicScope.Raw;
         comments_enabled?: boolean | null;
         feedback_definition_names?: string[] | null;
-        reviewers?: AnnotationQueueReviewer.Raw[] | null;
-        feedback_scores?: FeedbackScoreAverage.Raw[] | null;
+        reviewers?: AnnotationQueueReviewerPublic.Raw[] | null;
+        feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         items_count?: number | null;
         created_at?: string | null;
         created_by?: string | null;

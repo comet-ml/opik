@@ -4,21 +4,18 @@
 
 import * as OpikApi from "../index";
 
-/**
- * List of annotation queues to create
- */
-export interface AnnotationQueue {
+export interface AnnotationQueuePublic {
     id?: string;
     projectId: string;
     projectName?: string;
     name: string;
     description?: string;
     instructions?: string;
-    scope: OpikApi.AnnotationQueueScope;
+    scope: OpikApi.AnnotationQueuePublicScope;
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
-    reviewers?: OpikApi.AnnotationQueueReviewer[];
-    feedbackScores?: OpikApi.FeedbackScoreAverage[];
+    reviewers?: OpikApi.AnnotationQueueReviewerPublic[];
+    feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     itemsCount?: number;
     createdAt?: Date;
     createdBy?: string;

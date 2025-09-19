@@ -15,5 +15,5 @@ export interface AnnotationQueueWrite {
     instructions?: string;
     scope: OpikApi.AnnotationQueueWriteScope;
     commentsEnabled?: boolean;
-    feedbackDefinitions?: string[];
+    feedbackDefinitionNames?: string[];
 }

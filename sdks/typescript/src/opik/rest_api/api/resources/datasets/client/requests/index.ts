@@ -4,6 +4,7 @@ export { type DatasetItemBatchWrite } from "./DatasetItemBatchWrite";
 export { type DatasetUpdate } from "./DatasetUpdate";
 export { type DatasetIdentifier } from "./DatasetIdentifier";
 export { type DatasetItemsDelete } from "./DatasetItemsDelete";
+export { type DatasetExpansionWrite } from "./DatasetExpansionWrite";
 export { type FindDatasetItemsWithExperimentItemsRequest } from "./FindDatasetItemsWithExperimentItemsRequest";
 export { type DatasetIdentifierPublic } from "./DatasetIdentifierPublic";
 export { type GetDatasetItemsRequest } from "./GetDatasetItemsRequest";
