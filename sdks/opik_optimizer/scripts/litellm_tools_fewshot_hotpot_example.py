@@ -85,8 +85,9 @@ class LiteLLMAgent(OptimizableAgent):
         # Step 2:
         # We swap in the system prompt and updated tool prompt
         # to actually to the evaluation:
-        tool_prompt = prompt.messages[0]["content"]
-        self.prompt = make_chat_prompt(system_prompt, tool_prompt)
+        if prompt.messages:
+            tool_prompt = prompt.messages[0]["content"]
+            self.prompt = make_chat_prompt(system_prompt, tool_prompt)
         # ---------------------------------------
 
 
