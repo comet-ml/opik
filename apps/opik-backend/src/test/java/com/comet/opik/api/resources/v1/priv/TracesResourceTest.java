@@ -8744,6 +8744,73 @@ class TracesResourceTest {
             var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
+
+        @Test
+        @DisplayName("delete trace feedback score with author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
+            // Create a trace
+            var trace = createTrace();
+            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author (since the bug is in the delete operation)
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score")
+                    .value(BigDecimal.valueOf(0.85))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITH an author (this is where the bug occurs)
+            // When writeToAuthored is disabled, this should still work
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score")
+                    .author(USER)  // This is the key part - including author in the delete request
+                    .build();
+
+            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was actually deleted
+            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(traceAfterDeletion.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete trace feedback score without author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
+            // Create a trace
+            var trace = createTrace();
+            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score-2")
+                    .value(BigDecimal.valueOf(0.75))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITHOUT an author (this should work before and after the fix)
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score-2")
+                    // No author specified
+                    .build();
+
+            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was deleted
+            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(traceAfterDeletion.feedbackScores()).isNull();
+        }
     }
 
     @Nested
@@ -10499,99 +10566,6 @@ class TracesResourceTest {
                         // Verify manual scores have been deleted, but automatic scores remain
                         TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
                     });
-        }
-    }
-
-    @DisplayName("Feedback Score Deletion with Author Bug Tests:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @Nested
-    class FeedbackScoreDeletionWithAuthorTests {
-        
-        @Test
-        @DisplayName("delete trace feedback score with author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // Create a trace
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            // Create a feedback score
-            var score = FeedbackScore.builder()
-                    .name("test_score")
-                    .value(BigDecimal.valueOf(0.8))
-                    .source(ScoreSource.UI)
-                    .build();
-            traceResourceClient.feedbackScore(traceId, score, workspaceName, apiKey);
-
-            // Verify the score was created
-            var traceWithScore = traceResourceClient.getById(traceId, workspaceName, apiKey);
-            assertThat(traceWithScore.feedbackScores()).hasSize(1);
-            assertThat(traceWithScore.feedbackScores().getFirst().name()).isEqualTo("test_score");
-
-            // Try to delete the score WITH an author (this is where the bug occurs)
-            // When writeToAuthored is disabled, this should still work
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test_score")
-                    .author(USER)  // This is the key part - including author in the delete request
-                    .build();
-
-            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, apiKey, workspaceName);
-
-            // Verify the score was actually deleted
-            var traceAfterDeletion = traceResourceClient.getById(traceId, workspaceName, apiKey);
-            assertThat(traceAfterDeletion.feedbackScores()).isNull();
-        }
-
-        @Test
-        @DisplayName("delete trace feedback score without author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // Create a trace
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            // Create a feedback score
-            var score = FeedbackScore.builder()
-                    .name("test_score_2")
-                    .value(BigDecimal.valueOf(0.9))
-                    .source(ScoreSource.UI)
-                    .build();
-            traceResourceClient.feedbackScore(traceId, score, workspaceName, apiKey);
-
-            // Verify the score was created
-            var traceWithScore = traceResourceClient.getById(traceId, workspaceName, apiKey);
-            assertThat(traceWithScore.feedbackScores()).hasSize(1);
-            assertThat(traceWithScore.feedbackScores().getFirst().name()).isEqualTo("test_score_2");
-
-            // Try to delete the score WITHOUT an author (this should work before and after the fix)
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test_score_2")
-                    // No author specified
-                    .build();
-
-            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, apiKey, workspaceName);
-
-            // Verify the score was deleted
-            var traceAfterDeletion = traceResourceClient.getById(traceId, workspaceName, apiKey);
-            assertThat(traceAfterDeletion.feedbackScores()).isNull();
         }
     }
 
