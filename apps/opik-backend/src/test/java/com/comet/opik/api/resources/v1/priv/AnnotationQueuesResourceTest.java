@@ -68,7 +68,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static com.comet.opik.domain.AnnotationQueueUtils.applyUpdate;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
@@ -609,7 +608,7 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.updateAnnotationQueue(
                     annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update locally for comparison
+            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update for comparison
 
             var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -642,7 +641,8 @@ class AnnotationQueuesResourceTest {
 
             // Create partial update request (only updating name and comments_enabled)
             var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("Updated Name Only")
+                    .description("Updated description Only")
+                    .instructions("")
                     .commentsEnabled(false)
                     .build();
 
@@ -650,7 +650,7 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.updateAnnotationQueue(
                     annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update locally for comparison
+            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update for comparison
 
             var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
                     annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -664,17 +664,31 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should return 404 when annotation queue not found")
-        void updateAnnotationQueueWhenNotFound() {
-            // Given
-            var nonExistentId = UUID.randomUUID();
-            var updateRequest = AnnotationQueueUpdate.builder()
-                    .name("Updated Name")
+        @DisplayName("should fail update when provided blank name")
+        void updateAnnotationQueueFailsWhenBlankName() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue with initial values
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
                     .build();
 
-            // When/Then
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create partial update request (only updating name and comments_enabled)
+            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class)
+                    .toBuilder()
+                    .name("")
+                    .build();
+
+            // When
             annotationQueuesResourceClient.updateAnnotationQueue(
-                    nonExistentId, updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 
@@ -1360,6 +1374,23 @@ class AnnotationQueuesResourceTest {
                         .isEqualTo(expectedQueue.feedbackScores());
             }
         }
+    }
+
+    private AnnotationQueue applyUpdate(AnnotationQueueUpdate updateRequest, AnnotationQueue existingQueue) {
+        return existingQueue.toBuilder()
+                .name(updateRequest.name() != null ? updateRequest.name() : existingQueue.name())
+                .description(
+                        updateRequest.description() != null ? updateRequest.description() : existingQueue.description())
+                .instructions(updateRequest.instructions() != null
+                        ? updateRequest.instructions()
+                        : existingQueue.instructions())
+                .commentsEnabled(updateRequest.commentsEnabled() != null
+                        ? updateRequest.commentsEnabled()
+                        : existingQueue.commentsEnabled())
+                .feedbackDefinitionNames(updateRequest.feedbackDefinitionNames() != null
+                        ? updateRequest.feedbackDefinitionNames()
+                        : existingQueue.feedbackDefinitionNames())
+                .build();
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {

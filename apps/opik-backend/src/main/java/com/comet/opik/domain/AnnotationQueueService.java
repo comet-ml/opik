@@ -23,8 +23,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.domain.AnnotationQueueUtils.applyUpdate;
-
 @ImplementedBy(AnnotationQueueServiceImpl.class)
 public interface AnnotationQueueService {
 
@@ -90,17 +88,12 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .doOnError(error -> log.info("Annotation queue not found with id '{}'", id));
     }
 
-    @Override
-    @WithSpan
     public Mono<Void> update(@NonNull UUID id, @NonNull AnnotationQueueUpdate updateRequest) {
         log.info("Updating annotation queue with id '{}'", id);
 
-        return annotationQueueDAO.findById(id)
-                .switchIfEmpty(Mono.error(createNotFoundError(id)))
-                .map(existingQueue -> applyUpdate(updateRequest, existingQueue))
-                .flatMap(queue -> annotationQueueDAO.createBatch(List.of(queue)))
-                .doOnSuccess(queue -> log.debug("Updated annotation queue with id '{}'", id))
-                .doOnError(error -> log.info("Failed to update annotation queue with id '{}'", id, error));
+        return IdGenerator
+                .validateVersionAsync(id, "AnnotationQueue")
+                .then(annotationQueueDAO.update(id, updateRequest));
     }
 
     @Override
