@@ -18,8 +18,8 @@ export const AnnotationQueueWrite: core.serialization.ObjectSchema<
     instructions: core.serialization.string().optional(),
     scope: AnnotationQueueWriteScope,
     commentsEnabled: core.serialization.property("comments_enabled", core.serialization.boolean().optional()),
-    feedbackDefinitions: core.serialization.property(
-        "feedback_definitions",
+    feedbackDefinitionNames: core.serialization.property(
+        "feedback_definition_names",
         core.serialization.list(core.serialization.string()).optional(),
     ),
 });
@@ -33,6 +33,6 @@ export declare namespace AnnotationQueueWrite {
         instructions?: string | null;
         scope: AnnotationQueueWriteScope.Raw;
         comments_enabled?: boolean | null;
-        feedback_definitions?: string[] | null;
+        feedback_definition_names?: string[] | null;
     }
 }

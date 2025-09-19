@@ -5,27 +5,23 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .annotation_queue_reviewer import AnnotationQueueReviewer
-from .annotation_queue_scope import AnnotationQueueScope
-from .feedback_score_average import FeedbackScoreAverage
+from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
+from .feedback_score_average_public import FeedbackScoreAveragePublic
 
 
-class AnnotationQueue(UniversalBaseModel):
-    """
-    List of annotation queues to create
-    """
-
+class AnnotationQueuePublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     project_id: str
     project_name: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
     instructions: typing.Optional[str] = None
-    scope: AnnotationQueueScope
+    scope: AnnotationQueuePublicScope
     comments_enabled: typing.Optional[bool] = None
     feedback_definition_names: typing.Optional[typing.List[str]] = None
-    reviewers: typing.Optional[typing.List[AnnotationQueueReviewer]] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
+    reviewers: typing.Optional[typing.List[AnnotationQueueReviewerPublic]] = None
+    feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
     items_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
