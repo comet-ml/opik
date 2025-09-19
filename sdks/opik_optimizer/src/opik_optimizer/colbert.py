@@ -94,7 +94,7 @@ def colbertv2_get_request(
     # Application-level retry for server connection errors
     for attempt in range(max_retries):
         try:
-            res = session.get(url, params=payload, timeout=10)
+            res = session.get(url, params=payload, timeout=5)
             response_data = res.json()
 
             # Check for application-level errors (server connection issues, etc.)
@@ -152,7 +152,7 @@ def colbertv2_post_request(
     # Application-level retry for server connection errors
     for attempt in range(max_retries):
         try:
-            res = session.post(url, json=payload, headers=headers, timeout=10)
+            res = session.post(url, json=payload, headers=headers, timeout=5)
             response_data = res.json()
 
             # Check for application-level errors (server connection issues, etc.)

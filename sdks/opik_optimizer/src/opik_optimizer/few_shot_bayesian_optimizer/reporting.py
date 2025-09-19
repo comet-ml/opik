@@ -46,9 +46,16 @@ def display_evaluation(
                 yield Reporter()
             finally:
                 if verbose >= 1:
-                    console.print(
-                        Text(f"\r  Baseline score was: {score:.4f}.\n", style="green")
-                    )
+                    if score is not None:
+                        console.print(
+                            Text(
+                                f"\r  Baseline score was: {score:.4f}.\n", style="green"
+                            )
+                        )
+                    else:
+                        console.print(
+                            Text("\r  Baseline score was: None\n", style="red")
+                        )
 
 
 @contextmanager
