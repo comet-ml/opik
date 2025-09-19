@@ -13,6 +13,7 @@ import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -443,6 +444,19 @@ public class ExperimentService {
         }
         log.error("Unexpected exception creating experiment with id '{}'", id);
         return Mono.error(throwable);
+    }
+
+    @WithSpan
+    public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
+        log.info("Updating experiment with id '{}'", id);
+        return experimentDAO.getById(id)
+                .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
+                .then(experimentDAO.update(id, experimentUpdate))
+                .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
+                .onErrorResume(throwable -> {
+                    log.error("Failed to update experiment with id '{}'", id, throwable);
+                    return Mono.error(throwable);
+                });
     }
 
     private NotFoundException newNotFoundException(String message) {
