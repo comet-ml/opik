@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import importlib
 import inspect
 import json
-import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
@@ -293,6 +293,61 @@ def response_to_text(response: object) -> str:
     if hasattr(response, "output"):
         return str(getattr(response, "output"))
     return str(response)
+
+
+PROMPT_TOOL_HEADER = "<<TOOL_DESCRIPTION>>"
+PROMPT_TOOL_FOOTER = "<<END_TOOL_DESCRIPTION>>"
+
+
+def system_prompt_from_tool(signature: ToolSignature) -> str:
+    parameters = signature.parameters or {}
+    parameter_lines = []
+    for name, schema in parameters.get("properties", {}).items():
+        type_hint = schema.get("type", "any")
+        desc = schema.get("description", "")
+        parameter_lines.append(f"- {name} ({type_hint}): {desc}")
+    parameter_section = "\n".join(parameter_lines) if parameter_lines else "- No structured parameters."
+
+    return (
+        "You are an assistant that answers developer questions using the available MCP tool.\n"
+        "Always decide whether the tool is required before answering.\n"
+        "\n"
+        "Tool description:\n"
+        f"{PROMPT_TOOL_HEADER}\n{signature.description}\n{PROMPT_TOOL_FOOTER}\n"
+        "\n"
+        "Tool parameters:\n"
+        f"{parameter_section}\n"
+        "When you call the tool, read its response carefully before replying."
+    )
+
+
+def extract_description_from_system(system_prompt: str) -> Optional[str]:
+    if PROMPT_TOOL_HEADER not in system_prompt or PROMPT_TOOL_FOOTER not in system_prompt:
+        return None
+    start = system_prompt.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
+    end = system_prompt.index(PROMPT_TOOL_FOOTER)
+    return system_prompt[start:end].strip()
+
+
+def load_tool_signature_from_manifest(manifest: MCPManifest, tool_name: str) -> ToolSignature:
+    tools = list_tools_from_manifest(manifest)
+    tool = next((tool for tool in tools if tool.name == tool_name), None)
+    if tool is None:
+        raise ValueError(f"Tool '{tool_name}' not found")
+    function_block = getattr(tool, "to_dict", lambda: tool)()
+    if isinstance(function_block, dict) and "function" in function_block:
+        return ToolSignature.from_tool_entry(function_block)
+    # Some SDKs expose attributes instead of dicts
+    entry = {
+        "type": "function",
+        "function": {
+            "name": getattr(tool, "name", tool_name),
+            "description": getattr(tool, "description", ""),
+            "parameters": getattr(tool, "input_schema", {}),
+            "examples": getattr(tool, "examples", None),
+        },
+    }
+    return ToolSignature.from_tool_entry(entry)
 
 
 def score_query_tool(
