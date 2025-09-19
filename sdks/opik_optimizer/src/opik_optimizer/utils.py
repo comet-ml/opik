@@ -429,4 +429,4 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
         return results if results else [f"No Wikipedia results found for: {query}"]
 
     except Exception as e:
-        raise Exception(f"Wikipedia API request failed: {e}")
+        raise Exception(f"Wikipedia API request failed: {e}") from e
