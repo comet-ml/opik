@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
@@ -45,6 +46,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -133,6 +135,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -266,6 +269,7 @@ class TracesResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private ThreadCommentResourceClient threadCommentResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -282,6 +286,7 @@ class TracesResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -2057,6 +2062,76 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(),
                     filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterAnnotationQueueIdContains__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(project.name())
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build());
+
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            // Create annotation queue with items
+            var queue1 = prepareAnnotationQueue(projectId);
+            var queue2 = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue1.id(), Set.of(traces.getFirst().id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue2.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(queue1.id().toString())
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        private AnnotationQueue prepareAnnotationQueue(UUID projectId) {
+            return factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
         }
 
         @ParameterizedTest
