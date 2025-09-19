@@ -1,7 +1,7 @@
 --liquibase formatted sql
 --changeset borystkachenko:000039_fix_annotation_queue_items_table
 
-DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
+DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback --rollback empty -- Cannot rollback drop table operation
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items  ON CLUSTER '{cluster}'

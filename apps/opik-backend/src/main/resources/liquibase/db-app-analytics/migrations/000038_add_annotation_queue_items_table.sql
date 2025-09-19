@@ -1,8 +1,8 @@
 --liquibase formatted sql
 --changeset borystkachenko:000038_add_annotation_queue_items_table
---comment: Create annotation_queue_items table for human annotation workflows
+--comment: Create annotation_queue_items table for human annotation workflows - updated for OPIK-2414 testing
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '{cluster}'
 (
     workspace_id        String,
     project_id          FixedString(36),
