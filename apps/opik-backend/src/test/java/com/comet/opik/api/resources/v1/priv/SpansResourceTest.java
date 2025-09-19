@@ -7255,4 +7255,117 @@ class SpansResourceTest {
 
         return currentSpanType;
     }
+
+    @DisplayName("Feedback Score Deletion with Author Bug Tests:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @Nested
+    class FeedbackScoreDeletionWithAuthorTests {
+        
+        @Test
+        @DisplayName("delete span feedback score with author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a trace first
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(null)
+                    .traceId(traceId)
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            // Create a feedback score for the span
+            var score = FeedbackScore.builder()
+                    .name("test_score")
+                    .value(BigDecimal.valueOf(0.8))
+                    .source(ScoreSource.UI)
+                    .build();
+            spanResourceClient.feedbackScore(spanId, score, workspaceName, apiKey);
+
+            // Verify the score was created
+            var spanWithScore = spanResourceClient.getById(spanId, workspaceName, apiKey);
+            assertThat(spanWithScore.feedbackScores()).hasSize(1);
+            assertThat(spanWithScore.feedbackScores().getFirst().name()).isEqualTo("test_score");
+
+            // Try to delete the score WITH an author (this is where the bug occurs)
+            // When writeToAuthored is disabled, this should still work
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test_score")
+                    .author(USER)  // This is the key part - including author in the delete request
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, apiKey, workspaceName);
+
+            // Verify the score was actually deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, workspaceName, apiKey);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete span feedback score without author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a trace first
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(null)
+                    .traceId(traceId)
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            // Create a feedback score for the span
+            var score = FeedbackScore.builder()
+                    .name("test_score_2")
+                    .value(BigDecimal.valueOf(0.9))
+                    .source(ScoreSource.UI)
+                    .build();
+            spanResourceClient.feedbackScore(spanId, score, workspaceName, apiKey);
+
+            // Verify the score was created
+            var spanWithScore = spanResourceClient.getById(spanId, workspaceName, apiKey);
+            assertThat(spanWithScore.feedbackScores()).hasSize(1);
+            assertThat(spanWithScore.feedbackScores().getFirst().name()).isEqualTo("test_score_2");
+
+            // Try to delete the score WITHOUT an author (this should work before and after the fix)
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test_score_2")
+                    // No author specified
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, apiKey, workspaceName);
+
+            // Verify the score was deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, workspaceName, apiKey);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
+        }
+    }
 }
