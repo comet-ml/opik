@@ -220,14 +220,14 @@ class TestOpikArgs:
         assert result is None
 
     def test_opik_args_from_dict__invalid_opik_args_type__warning_logged(self):
-        """Test OpikConfig.from_dict with an invalid input type."""
+        """Test OpikArgs.from_dict with an invalid input type."""
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
             result = opik_args.OpikArgs.from_dict("invalid")
             assert result is None
             mock_logger.warning.assert_called_once()
 
     def test_opik_args_from_dict__valid_span_only(self):
-        """Test OpikConfig.from_dict with a valid span args."""
+        """Test OpikArgs.from_dict with a valid span args."""
         args_dict = {"span": {"tags": ["tag1", "tag2"], "metadata": {"key": "value"}}}
         result = opik_args.OpikArgs.from_dict(args_dict)
 
@@ -238,7 +238,7 @@ class TestOpikArgs:
         assert result.trace_args is None
 
     def test_opik_args_from_dict__valid_trace_only(self):
-        """Test OpikConfig.from_dict with a valid trace args."""
+        """Test OpikArgs.from_dict with a valid trace args."""
         args_dict = {
             "trace": {
                 "thread_id": "conversation-1",
@@ -256,7 +256,7 @@ class TestOpikArgs:
         assert result.span_args is None
 
     def test_opik_args_from_dict__both_span_and_trace__happy_flow(self):
-        """Test OpikConfig.from_dict with both span and trace args."""
+        """Test OpikArgs.from_dict with both span and trace args."""
         args_dict = {
             "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
             "trace": {
@@ -277,7 +277,7 @@ class TestOpikArgs:
         assert result.trace_args.metadata == {"trace_key": "trace_value"}
 
     def test_opik_args_from_dict_invalid__span_type_type__warning_logged(self):
-        """Test OpikConfig.from_dict with an invalid span type."""
+        """Test OpikArgs.from_dict with an invalid span type."""
         args_dict = {"span": "invalid"}
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
             result = opik_args.OpikArgs.from_dict(args_dict)
@@ -286,7 +286,7 @@ class TestOpikArgs:
             mock_logger.warning.assert_called_once()
 
     def test_opik_args_from_dict__invalid_trace_args_type__warning_logged(self):
-        """Test OpikConfig.from_dict with an invalid trace type."""
+        """Test OpikArgs.from_dict with an invalid trace type."""
         args_dict = {"trace": "invalid"}
         with patch("opik.decorator.opik_args.api_classes.LOGGER") as mock_logger:
             result = opik_args.OpikArgs.from_dict(args_dict)

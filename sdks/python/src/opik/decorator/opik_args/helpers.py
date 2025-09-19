@@ -13,17 +13,17 @@ def extract_opik_args(
     kwargs: Dict[str, Any], func: Callable
 ) -> Optional[api_classes.OpikArgs]:
     """
-    Extract opik_args from kwargs and return both the config and cleaned kwargs.
+    Extracts opik_args from kwargs and returns the parsed OpikArgs or None.
 
-    Only pops opik_args from kwargs if the function doesn't explicitly declare
-    opik_args as a parameter.
+    Mutates kwargs in place by removing "opik_args" if the function does not explicitly
+    declare opik_args as a parameter.
 
     Args:
         kwargs: Function keyword arguments
         func: The function being decorated
 
     Returns:
-        opik_args if found, None otherwise
+        opik_args if found, otherwise None.
     """
 
     # Check if a function has opik_args in its signature
