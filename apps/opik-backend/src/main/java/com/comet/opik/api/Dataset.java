@@ -28,7 +28,7 @@ public record Dataset(
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Set<String> tags,
         @JsonView({Dataset.View.Public.class,
-                Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "Description cannot exceed 255 characters") String description,
+                Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "cannot exceed 255 characters") String description,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

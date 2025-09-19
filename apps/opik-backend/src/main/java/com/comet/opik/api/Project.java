@@ -28,7 +28,7 @@ public record Project(
         @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
         @JsonView({Project.View.Public.class, View.Write.class}) Visibility visibility,
         @JsonView({Project.View.Public.class,
-                View.Write.class}) @Size(max = 255, message = "Description cannot exceed 255 characters") String description,
+                View.Write.class}) @Size(max = 255, message = "cannot exceed 255 characters") String description,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

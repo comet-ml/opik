@@ -31,7 +31,7 @@ public record Prompt(
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class,
-                Prompt.View.Updatable.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "Description cannot exceed 255 characters") String description,
+                Prompt.View.Updatable.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "cannot exceed 255 characters") String description,
         @JsonView({
                 Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Nullable String template,
         @JsonView({Prompt.View.Write.class}) @Nullable JsonNode metadata,
