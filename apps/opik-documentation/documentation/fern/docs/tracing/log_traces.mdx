@@ -338,7 +338,6 @@ When your function explicitly declares an `opik_args` parameter, it will receive
 from typing import Optional, Dict, Any
 import opik
 
-
 @opik.track
 def child_function(data: str, opik_args: Optional[Dict[str, Any]]=None) -> str:
     # This function can access opik_args directly if needed.
