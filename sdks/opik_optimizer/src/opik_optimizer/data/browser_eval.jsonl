@@ -1,0 +1,3 @@
+{"id": "br-001", "user_query": "Open the latest YC news.", "expected_tool": "browser_open", "arguments": {"url": "https://news.ycombinator.com/"}, "expected_answer_contains": "Hacker News"}
+{"id": "br-002", "user_query": "Find a Wikipedia summary for GPT-4.", "expected_tool": "browser_open", "arguments": {"url": "https://en.wikipedia.org/wiki/GPT-4"}, "expected_answer_contains": "GPT-4"}
+{"id": "br-003", "user_query": "Navigate to the YC request for startups page.", "expected_tool": "browser_open", "arguments": {"url": "https://www.ycombinator.com/rfs"}, "expected_answer_contains": "Request for Startups"}
