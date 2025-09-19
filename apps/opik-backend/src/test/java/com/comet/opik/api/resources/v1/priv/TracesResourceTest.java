@@ -8769,7 +8769,7 @@ class TracesResourceTest {
             // When writeToAuthored is disabled, this should still work
             var deleteRequest = DeleteFeedbackScore.builder()
                     .name("test-score")
-                    .author(USER)  // This is the key part - including author in the delete request
+                    .author(USER) // This is the key part - including author in the delete request
                     .build();
 
             traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);

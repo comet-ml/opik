@@ -6593,14 +6593,15 @@ class SpansResourceTest {
             createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
 
             // Verify the feedback score was created
-            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY, TEST_WORKSPACE);
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
             assertThat(actualSpan.feedbackScores()).hasSize(1);
 
             // Try to delete the score WITH an author (this is where the bug occurs)
             // When writeToAuthored is disabled, this should still work
             var deleteRequest = DeleteFeedbackScore.builder()
                     .name("test-score")
-                    .author(USER)  // This is the key part - including author in the delete request
+                    .author(USER) // This is the key part - including author in the delete request
                     .build();
 
             spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
@@ -6627,7 +6628,8 @@ class SpansResourceTest {
             createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
 
             // Verify the feedback score was created
-            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY, TEST_WORKSPACE);
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
             assertThat(actualSpan.feedbackScores()).hasSize(1);
 
             // Try to delete the score WITHOUT an author (this should work before and after the fix)
