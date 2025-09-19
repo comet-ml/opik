@@ -174,7 +174,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 FROM queue_items_final
                 GROUP BY queue_id
             ), feedback_scores_combined_raw AS (
-                SELECT entity_id,
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
                        name,
                        value,
                        created_by,
@@ -186,6 +188,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     AND entity_id IN (SELECT item_id FROM queue_items_final)
                 UNION ALL
                 SELECT
+                    workspace_id,
+                    project_id,
                     entity_id,
                     name,
                     value,
@@ -197,14 +201,16 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                    AND project_id IN (SELECT project_id FROM queues_final)
                    AND entity_id IN (SELECT item_id FROM queue_items_final)
             ), feedback_scores_with_ranking AS (
-                SELECT entity_id,
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
                        name,
                        value,
                        created_by,
                        last_updated_at,
                        author,
                        ROW_NUMBER() OVER (
-                           PARTITION BY entity_id, name, author
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
                            ORDER BY last_updated_at DESC
                        ) as rn
                 FROM feedback_scores_combined_raw
