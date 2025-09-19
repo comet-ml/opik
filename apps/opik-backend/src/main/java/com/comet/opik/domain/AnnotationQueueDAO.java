@@ -173,25 +173,54 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 SELECT queue_id, count(1) AS items_count
                 FROM queue_items_final
                 GROUP BY queue_id
-            ), feedback_scores_combined AS (
-                SELECT entity_id,
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
                        name,
                        value,
-                       created_by
+                       created_by,
+                       last_updated_at,
+                       created_by AS author
                 FROM feedback_scores FINAL
                 WHERE workspace_id = :workspace_id
                     AND project_id IN (SELECT project_id FROM queues_final)
                     AND entity_id IN (SELECT item_id FROM queue_items_final)
                 UNION ALL
                 SELECT
+                    workspace_id,
+                    project_id,
                     entity_id,
                     name,
                     value,
-                    created_by
+                    created_by,
+                    last_updated_at,
+                    author
                 FROM authored_feedback_scores FINAL
                 WHERE workspace_id = :workspace_id
                    AND project_id IN (SELECT project_id FROM queues_final)
                    AND entity_id IN (SELECT item_id FROM queue_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       created_by,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT entity_id,
+                       name,
+                       value,
+                       created_by
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_combined_grouped AS (
                 SELECT
                     entity_id,

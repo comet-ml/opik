@@ -237,13 +237,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * Counts dataset items only if there's a matching experiment item.
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
-            WITH feedback_scores_combined AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
                        name,
                        value,
-                       last_updated_at
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
@@ -253,10 +254,35 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                        entity_id,
                        name,
                        value,
-                       last_updated_at
+                       last_updated_at,
+                       author
                  FROM authored_feedback_scores FINAL
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
+             ),
+             feedback_scores_with_ranking AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                 FROM feedback_scores_combined_raw
+             ),
+             feedback_scores_combined AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at
+                 FROM feedback_scores_with_ranking
+                 WHERE rn = 1
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -394,7 +420,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             	AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
             	ORDER BY id DESC, last_updated_at DESC
             	LIMIT 1 BY id
-            ), feedback_scores_combined AS (
+            ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -432,6 +458,43 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 WHERE entity_type = :entityType
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+            ),
+            feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ),
+            feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
