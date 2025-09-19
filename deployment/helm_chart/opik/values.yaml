@@ -2,6 +2,10 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+global:
+  security:
+    allowInsecureImages: true
+
 nameOverride: "opik"
 fullnameOverride: ""
 
@@ -293,10 +297,9 @@ minio:
   enabled: true
   image:
     repository: bitnamilegacy/minio
-  defaultInitContainers:
-    volumePermissions:
-      image:
-        repository: bitnamilegacy/os-shell
+  volumePermissions:
+    image:
+      repository: bitnamilegacy/os-shell
   mode: standalone
   disableWebUI: true
   persistence:
