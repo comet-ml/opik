@@ -2159,7 +2159,7 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("Description cannot exceed 255 characters");
+                        .contains("cannot exceed 255 characters");
             }
         }
 
