@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  BarChart3,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -97,6 +98,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Database,
         label: "Datasets",
         count: "datasets",
+      },
+      {
+        id: "model_comparisons",
+        path: "/$workspaceName/model-comparisons",
+        type: MENU_ITEM_TYPE.router,
+        icon: BarChart3,
+        label: "Model Comparisons",
       },
     ],
   },

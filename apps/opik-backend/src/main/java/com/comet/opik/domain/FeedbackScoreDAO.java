@@ -740,4 +740,26 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
+
+    @Override
+    public Mono<List<FeedbackScore>> findFeedbackScoresForModelComparison(
+            List<String> modelIds,
+            List<String> datasetNames,
+            Map<String, Object> filters
+    ) {
+        return databaseClient
+                .sql("""
+                    SELECT fs.* FROM feedback_scores fs
+                    JOIN spans s ON fs.span_id = s.id
+                    JOIN traces t ON s.trace_id = t.id
+                    WHERE s.model_name IN (:modelIds)
+                    AND (:datasetNames IS NULL OR t.dataset_name IN (:datasetNames))
+                    """)
+                .bind("modelIds", modelIds)
+                .bind("datasetNames", datasetNames.isEmpty() ? null : datasetNames)
+                .map(this::mapFeedbackScore)
+                .all()
+                .collectList();
+    }
+
 }

@@ -3092,4 +3092,25 @@ class TraceDAOImpl implements TraceDAO {
                     endSegment(segment);
                 });
     }
+
+    /**
+     * Find traces for model comparison analysis
+     */
+    public Flux<Trace> findTracesForModelComparison(
+            List<String> modelIds,
+            List<String> datasetNames,
+            Map<String, Object> filters
+    ) {
+        return databaseClient
+                .sql("""
+                    SELECT DISTINCT t.* FROM traces t
+                    JOIN spans s ON t.id = s.trace_id
+                    WHERE s.model_name IN (:modelIds)
+                    AND (:datasetNames IS NULL OR t.dataset_name IN (:datasetNames))
+                    """)
+                .bind("modelIds", modelIds)
+                .bind("datasetNames", datasetNames.isEmpty() ? null : datasetNames)
+                .map(this::mapTrace)
+                .all();
+    }
 }

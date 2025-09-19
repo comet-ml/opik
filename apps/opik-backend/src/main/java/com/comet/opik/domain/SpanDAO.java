@@ -2027,4 +2027,25 @@ class SpanDAO {
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
     }
+
+    /**
+     * Find spans for model comparison analysis
+     */
+    public Flux<Span> findSpansForModelComparison(
+            List<String> modelIds,
+            List<String> datasetNames,
+            Map<String, Object> filters
+    ) {
+        return databaseClient
+                .sql("""
+                    SELECT s.* FROM spans s
+                    JOIN traces t ON s.trace_id = t.id
+                    WHERE s.model_name IN (:modelIds)
+                    AND (:datasetNames IS NULL OR t.dataset_name IN (:datasetNames))
+                    """)
+                .bind("modelIds", modelIds)
+                .bind("datasetNames", datasetNames.isEmpty() ? null : datasetNames)
+                .map(this::mapSpan)
+                .all();
+    }
 }

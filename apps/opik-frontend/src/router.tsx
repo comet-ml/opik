@@ -37,6 +37,7 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import ModelComparisonAdminPage from "@/components/pages/ModelComparisonAdminPage/ModelComparisonAdminPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -360,6 +361,31 @@ const onlineEvaluationRoute = createRoute({
   component: OnlineEvaluationPage,
 });
 
+// --------- model comparisons
+
+const modelComparisonsRoute = createRoute({
+  path: "/model-comparisons",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Model Comparisons",
+  },
+});
+
+const modelComparisonsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => modelComparisonsRoute,
+  component: ModelComparisonAdminPage,
+});
+
+const modelComparisonRoute = createRoute({
+  path: "/$id",
+  getParentRoute: () => modelComparisonsRoute,
+  component: ModelComparisonAdminPage,
+  staticData: {
+    param: "id",
+  },
+});
+
 // ----------- Automation logs
 
 const automationLogsRoute = createRoute({
@@ -409,6 +435,10 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
+      modelComparisonsRoute.addChildren([
+        modelComparisonsListRoute,
+        modelComparisonRoute,
+      ]),
     ]),
   ]),
 ]);
