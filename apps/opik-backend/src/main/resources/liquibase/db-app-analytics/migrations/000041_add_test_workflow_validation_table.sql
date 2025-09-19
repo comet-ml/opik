@@ -6,6 +6,8 @@
 CREATE TABLE IF NOT EXISTS test_workflow_validation ON CLUSTER '{cluster}' (
     id              FixedString(36),
     test_name       String,
+    test_status     Enum8('pending' = 0, 'running' = 1, 'completed' = 2, 'failed' = 3),
+    test_data       String,
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     created_by      String DEFAULT 'workflow-test',
     last_updated_at DateTime64(6, 'UTC') DEFAULT now64(6),
@@ -14,9 +16,13 @@ CREATE TABLE IF NOT EXISTS test_workflow_validation ON CLUSTER '{cluster}' (
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/test_workflow_validation', '{replica}', last_updated_at)
 ORDER BY (test_name, id);
 
--- Index for test queries
+-- Index for test queries (optimized for status filtering)
 ALTER TABLE test_workflow_validation ON CLUSTER '{cluster}' 
 ADD INDEX idx_test_name test_name TYPE bloom_filter GRANULARITY 1;
+
+-- Index for status-based queries
+ALTER TABLE test_workflow_validation ON CLUSTER '{cluster}' 
+ADD INDEX idx_test_status test_status TYPE set(0) GRANULARITY 1;
 
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.test_workflow_validation ON CLUSTER '{cluster}';
 
