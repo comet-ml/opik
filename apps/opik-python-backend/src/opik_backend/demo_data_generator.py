@@ -428,52 +428,22 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
                 logger.warning("Skipping thread scoring because thread_id is None")
                 return
 
-            threads_data = demo_thread_feedback_scores.get(thread, [])
             done = False
             max_attempts = 10
             attempts = 0
 
             while not done and attempts < max_attempts:
                 try:
-                    thread_data = client.rest_client.traces.get_trace_thread(thread_id=thread, project_name=project_name)
-                    if thread_data.status == "inactive":
-                        done = True
-                    else:
-                        client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                    client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                    done = True
+                    attempts = 0
                 except Exception as e:
                     logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
                     attempts += 1
                     time.sleep(0.5)
 
-            if len(threads_data) == 0:
-                logger.info("No feedback scores for thread %s", thread)
-                return
-
-            done = False
-            attempts = 0
-            while not done and attempts < max_attempts:
-                try:
-                    client.rest_client.traces.score_batch_of_threads(
-                        scores = [
-                            opik.rest_api.types.FeedbackScoreBatchItemThread(
-                                thread_id=thread,
-                                project_name=project_name,
-                                name=item['name'],
-                                category_name=item.get('category_name'),
-                                value=item['value'],
-                                reason=item.get('reason'),
-                                source=item.get('source', 'sdk')
-                            ) for item in threads_data
-                        ]
-                    )
-                    done = True
-                except Exception as e:
-                    logger.error(f"Error scoring thread {thread} attempt {attempts}: {e}")
-                    attempts += 1
-                    time.sleep(0.5)
-
         # Process all threads concurrently using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(len(threads), 10)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(threads), 4)) as executor:
             # Submit all thread processing tasks
             future_to_thread = {executor.submit(process_thread, thread): thread for thread in threads}
 
@@ -485,6 +455,41 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
                 except Exception as exc:
                     logger.error(f"Thread processing failed for thread {thread}: {exc}")
 
+        all_scores = []
+
+        for thread, items in demo_thread_feedback_scores.items():
+            if not items:  # skip empty lists
+                logger.info("No feedback scores for thread %s", thread)
+                continue
+
+            all_scores.extend(
+                opik.rest_api.types.FeedbackScoreBatchItemThread(
+                    thread_id=thread,
+                    project_name=project_name,
+                    name=item['name'],
+                    category_name=item.get('category_name'),
+                    value=item['value'],
+                    reason=item.get('reason'),
+                    source=item.get('source', 'sdk')
+                )
+                for item in items
+            )
+
+        if all_scores:
+            done = False
+            max_attempts = 10
+            attempts = 0
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.score_batch_of_threads(scores=all_scores)
+                    done = True
+                    attempts = 0
+                except Exception as e:
+                    logger.error(f"Error scoring batch of threads attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
+            if not done:
+                logger.error("Failed to score batch of threads after %d attempts", max_attempts)
     except Exception as e:
         logger.error(e)
     finally:

@@ -24,7 +24,7 @@ from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import 
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
-from ..types.json_node_write import JsonNodeWrite
+from ..types.json_list_string_write import JsonListStringWrite
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .types.experiment_write_type import ExperimentWriteType
 
@@ -133,7 +133,7 @@ class RawExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
@@ -151,7 +151,7 @@ class RawExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -175,7 +175,9 @@ class RawExperimentsClient:
                 "id": id,
                 "dataset_name": dataset_name,
                 "name": name,
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "type": type,
                 "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(
@@ -905,7 +907,7 @@ class AsyncRawExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
@@ -923,7 +925,7 @@ class AsyncRawExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -947,7 +949,9 @@ class AsyncRawExperimentsClient:
                 "id": id,
                 "dataset_name": dataset_name,
                 "name": name,
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "type": type,
                 "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(

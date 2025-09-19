@@ -5,3 +5,4 @@ export { DeleteTraceThreads } from "./DeleteTraceThreads";
 export { FeedbackScoreBatchThread } from "./FeedbackScoreBatchThread";
 export { TraceThreadSearchStreamRequest } from "./TraceThreadSearchStreamRequest";
 export { TraceSearchStreamRequestPublic } from "./TraceSearchStreamRequestPublic";
+export { TraceThreadUpdate } from "./TraceThreadUpdate";

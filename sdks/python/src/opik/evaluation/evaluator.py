@@ -7,10 +7,18 @@ from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
 from ..api_objects.prompt import prompt_template
-from . import asyncio_support, engine, evaluation_result, report, rest_operations
+from . import (
+    asyncio_support,
+    engine,
+    evaluation_result,
+    report,
+    rest_operations,
+    samplers,
+)
 from .metrics import base_metric
 from .models import base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
+from .. import url_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +37,8 @@ def evaluate(
     prompts: Optional[List[Prompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
+    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -73,6 +83,11 @@ def evaluate(
             `{"input": "user_question"}` to map the "user_question" key to "input".
 
         dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
+
+        dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
+            If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to run the task and evaluate the task output for every dataset item.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -103,6 +118,8 @@ def evaluate(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+        trial_count=trial_count,
     )
 
 
@@ -119,6 +136,8 @@ def _evaluate_task(
     task_threads: int,
     scoring_key_mapping: Optional[ScoringKeyMappingType],
     dataset_item_ids: Optional[List[str]],
+    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+    trial_count: int,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -137,6 +156,8 @@ def _evaluate_task(
             task=task,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
+            dataset_sampler=dataset_sampler,
+            trial_count=trial_count,
         )
 
     total_time = time.time() - start_time
@@ -144,11 +165,13 @@ def _evaluate_task(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -157,6 +180,8 @@ def _evaluate_task(
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=trial_count,
     )
 
     return evaluation_result_
@@ -170,7 +195,7 @@ def evaluate_experiment(
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
-    """Update existing experiment with new evaluation metrics.
+    """Update the existing experiment with new evaluation metrics.
 
     Args:
         experiment_name: The name of the experiment to update.
@@ -186,9 +211,11 @@ def evaluate_experiment(
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
 
         scoring_key_mapping: A dictionary that allows you to rename keys present in either the dataset item or the task output
-            so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
+            so that they match the keys expected by the scoring metrics. For example, if you have a dataset item with the following content:
             {"user_question": "What is Opik ?"} and a scoring metric that expects a key "input", you can use scoring_key_mapping
             `{"input": "user_question"}` to map the "user_question" key to "input".
+
+        experiment_id: The ID of the experiment to evaluate. If not provided, the experiment will be evaluated based on the experiment name.
     """
     start_time = time.time()
 
@@ -234,17 +261,21 @@ def evaluate_experiment(
             experiment.dataset_name, total_time, test_results
         )
 
-    report.display_experiment_link(
-        dataset_id=experiment.dataset_id,
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=1,
     )
 
     return evaluation_result_
@@ -290,6 +321,8 @@ def evaluate_prompt(
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
     dataset_item_ids: Optional[List[str]] = None,
+    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -319,6 +352,11 @@ def evaluate_prompt(
         prompt: Prompt object to link with experiment.
 
         dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
+
+        dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
+            If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
@@ -365,6 +403,8 @@ def evaluate_prompt(
             task=_build_prompt_evaluation_task(model=model, messages=messages),
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
+            dataset_sampler=dataset_sampler,
+            trial_count=trial_count,
         )
 
     total_time = time.time() - start_time
@@ -372,11 +412,13 @@ def evaluate_prompt(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -385,6 +427,8 @@ def evaluate_prompt(
         dataset_id=dataset.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=trial_count,
     )
 
     return evaluation_result_
@@ -405,6 +449,8 @@ def evaluate_optimization_trial(
     prompts: Optional[List[Prompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
+    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -451,6 +497,11 @@ def evaluate_optimization_trial(
             `{"input": "user_question"}` to map the "user_question" key to "input".
 
         dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
+
+        dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
+            If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -483,4 +534,6 @@ def evaluate_optimization_trial(
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
         dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+        trial_count=trial_count,
     )

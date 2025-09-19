@@ -19,6 +19,16 @@ Opik provides different ways to log your LLM calls and traces to the platform:
 3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
 4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
 
+## Logging chat conversations
+
+In addition to logging LLM calls to the platform, you can also log chat conversations. You can learn more about this in the [Logging conversations](/tracing/log_chat_conversations) guide,
+the short of it is that you can use the `thread_id` parameter when using either the low level SDK, the `@track` decorator or our integrations to indicate
+that the traces belong to the same conversation.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations.png" />
+</Frame>
+
 ## Logging with the Python SDK
 
 In order to use the Opik Python SDK, you will need to install it and configure it:
@@ -160,7 +170,7 @@ query_engine.query("What is LlamaIndex used for?")
   [Github](https://github.com/comet-ml/opik) repository.
 </Tip>
 
-If you are using a framework that Opik does not integrate with, we recommed you use the `opik.track` function decorator.
+If you are using a framework that Opik does not integrate with, we recommend you use the `opik.track` function decorator.
 
 ### Using function decorators
 
@@ -339,7 +349,7 @@ You can then use the `opik_context` module to manually log the trace and span at
 
 #### Disable all tracing
 
-You can disable the logging of traces and spans using the enviornment variable `OPIK_TRACK_DISABLE`, this will turn off the logging for all function decorators:
+You can disable the logging of traces and spans using the environment variable `OPIK_TRACK_DISABLE`, this will turn off the logging for all function decorators:
 
 ```python
 import os

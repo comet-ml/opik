@@ -115,8 +115,7 @@ export function validateConfig(config: OpikConfig) {
   }
 
   if (
-    isCloudHost &&
-    (!config.workspaceName || config.workspaceName === "default")
+    isCloudHost && (!config.workspaceName)
   ) {
     throw new Error("OPIK_WORKSPACE is not set");
   }
