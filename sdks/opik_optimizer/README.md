@@ -116,6 +116,21 @@ result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
 
+## MCP Tool Tuning (POC)
+
+This repository now includes utilities and examples for tuning MCP tool signatures without rewriting entire prompt templates. The proof of concept uses the official MCP Python SDK to launch servers from `mcp.json` manifests, retrieve tool metadata, and run evaluation loops.
+
+Run the example scripts after updating the in-file `MCP_MANIFEST` constants to point at your MCP servers:
+
+```bash
+python scripts/litellm_fewshot_context7_mcp_example.py
+python scripts/litellm_fewshot_browser_mcp_example.py
+```
+
+Each script connects to the server, evaluates the baseline description on a synthetic dataset, applies a simple heuristic rewrite, and persists the best description to `artifacts/`.
+
+Underlying utilities live in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`, and datasets in `src/opik_optimizer/data/`. These building blocks will be used for a fuller optimiser integration after the proof of concept.
+
 ## Development
 
 To contribute or use the Opik Optimizer from source:
