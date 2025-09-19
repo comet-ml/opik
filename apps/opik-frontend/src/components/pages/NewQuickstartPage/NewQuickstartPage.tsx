@@ -6,7 +6,7 @@ import useAppStore from "@/store/AppStore";
 import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingOverlay from "@/components/shared/OnboardingOverlay/OnboardingOverlay";
 import {
-  ONBARDING_STEP_FINISHED,
+  ONBOARDING_STEP_FINISHED,
   ONBOARDING_STEP_KEY,
 } from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
 import useLocalStorageState from "use-local-storage-state";
@@ -15,7 +15,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
 
-  if (currentOnboardingStep !== ONBARDING_STEP_FINISHED) {
+  if (currentOnboardingStep !== ONBOARDING_STEP_FINISHED) {
     return <OnboardingOverlay />;
   }
 

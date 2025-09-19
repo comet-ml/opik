@@ -3,8 +3,8 @@ import useLocalStorageState from "use-local-storage-state";
 import { STEP_IDENTIFIERS } from "./constants";
 import useSubmitOnboardingAnswerMutation from "./useSubmitOnboardingAnswerMutation";
 
-export const ONBARDING_STEP_FINISHED = "done";
-type OnboardingStep = null | 1 | 2 | 3 | typeof ONBARDING_STEP_FINISHED;
+export const ONBOARDING_STEP_FINISHED = "done";
+type OnboardingStep = null | 1 | 2 | 3 | typeof ONBOARDING_STEP_FINISHED;
 
 interface OnboardingContextValue {
   currentStep: OnboardingStep;
@@ -42,7 +42,7 @@ export const OnboardingProvider: React.FunctionComponent<
   const submitAnswer = useSubmitOnboardingAnswerMutation();
 
   const handleAnswer = (answer: string) => {
-    if (!currentStep || currentStep === ONBARDING_STEP_FINISHED) return;
+    if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
 
     const stepKey = STEP_IDENTIFIERS[currentStep];
 
@@ -50,13 +50,13 @@ export const OnboardingProvider: React.FunctionComponent<
 
     const nextStep =
       currentStep === 3
-        ? ONBARDING_STEP_FINISHED
+        ? ONBOARDING_STEP_FINISHED
         : ((currentStep + 1) as 1 | 2 | 3);
     setStep(nextStep);
   };
 
   const handleSkip = () => {
-    if (!currentStep || currentStep === ONBARDING_STEP_FINISHED) return;
+    if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
 
     const stepKey = STEP_IDENTIFIERS[currentStep];
 
@@ -64,7 +64,7 @@ export const OnboardingProvider: React.FunctionComponent<
 
     const nextStep =
       currentStep === 3
-        ? ONBARDING_STEP_FINISHED
+        ? ONBOARDING_STEP_FINISHED
         : ((currentStep + 1) as 1 | 2 | 3);
     setStep(nextStep);
   };
@@ -73,7 +73,7 @@ export const OnboardingProvider: React.FunctionComponent<
     if (
       !currentStep ||
       currentStep === 1 ||
-      currentStep === ONBARDING_STEP_FINISHED
+      currentStep === ONBOARDING_STEP_FINISHED
     )
       return;
     setStep((currentStep - 1) as 1 | 2);
@@ -86,7 +86,7 @@ export const OnboardingProvider: React.FunctionComponent<
     handleBack,
   };
 
-  if (currentStep === ONBARDING_STEP_FINISHED) {
+  if (currentStep === ONBOARDING_STEP_FINISHED) {
     return null;
   }
 
