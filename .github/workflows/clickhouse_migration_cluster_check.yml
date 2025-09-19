@@ -75,8 +75,8 @@ jobs:
           echo
           
           # Run the validation script with the migration files
-          # MIGRATION_FILES contains the file path as a single string
-          if ./scripts/check_clickhouse_migrations_cluster.sh $MIGRATION_FILES; then
+          # Use xargs to handle newline-separated file list and pass as individual arguments
+          if echo "$MIGRATION_FILES" | xargs ./scripts/check_clickhouse_migrations_cluster.sh; then
             echo "✅ All modified ClickHouse migrations are properly configured!"
             echo "🎉 DDL operations will be executed distributively across the cluster."
           else
