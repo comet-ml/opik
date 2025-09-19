@@ -75,8 +75,9 @@ jobs:
           echo
           
           # Run the validation script with the migration files
-          # Use xargs to handle newline-separated file list and pass as individual arguments
-          if echo "$MIGRATION_FILES" | xargs ./scripts/check_clickhouse_migrations_cluster.sh; then
+          # Use xargs with -0 flag and tr to handle newline-separated list safely
+          # This approach correctly handles filenames with spaces across different platforms
+          if echo "$MIGRATION_FILES" | tr '\n' '\0' | xargs -0 ./scripts/check_clickhouse_migrations_cluster.sh; then
             echo "✅ All modified ClickHouse migrations are properly configured!"
             echo "🎉 DDL operations will be executed distributively across the cluster."
           else
