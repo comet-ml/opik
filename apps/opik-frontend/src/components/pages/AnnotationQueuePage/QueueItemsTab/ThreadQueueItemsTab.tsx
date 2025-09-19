@@ -60,8 +60,8 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/shared/CopySMELinkButton";
-import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/shared/EditAnnotationQueueButton";
+import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
+import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import useThreadsList from "@/api/traces/useThreadsList";

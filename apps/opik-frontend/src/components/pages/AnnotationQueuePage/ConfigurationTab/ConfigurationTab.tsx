@@ -4,8 +4,8 @@ import Loader from "@/components/shared/Loader/Loader";
 import InstructionsSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/InstructionsSection";
 import ScoresSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ScoresSection";
 import ReviewersSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ReviewersSection";
-import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/shared/CopySMELinkButton";
-import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/shared/EditAnnotationQueueButton";
+import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
+import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 
 interface ConfigurationTabProps {
