@@ -165,12 +165,13 @@ public class DatasetExpansionService {
     private List<DatasetItem> generateSamples(
             String prompt, DatasetExpansion request, UUID datasetId, String workspaceId) {
         try {
-            // Create chat completion request
+            // Create chat completion request, request should handle most models including reasoning models like GPT-5, Sonnet, etc.
             var chatRequest = ChatCompletionRequest.builder()
                     .model(request.model())
                     .addUserMessage(prompt)
-                    .temperature(0.8) // Higher temperature for more variety
+                    .temperature(1.0) // Set temperature to 1.0 for consistent output
                     .maxCompletionTokens(4000)
+                    .stream(false) // Non-streaming request for dataset expansion
                     .build();
 
             // Call LLM
