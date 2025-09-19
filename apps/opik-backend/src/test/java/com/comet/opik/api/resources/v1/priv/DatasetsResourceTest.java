@@ -1378,7 +1378,7 @@ class DatasetsResourceTest {
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name("").build(),
                             "name must not be blank"),
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().description("a".repeat(256)).build(),
-                            "cannot exceed 255 characters"));
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest
@@ -2931,7 +2931,7 @@ class DatasetsResourceTest {
                     arguments(
                             factory.manufacturePojo(DatasetUpdate.class).toBuilder().description("a".repeat(256))
                                     .build(),
-                            "cannot exceed 255 characters"));
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest

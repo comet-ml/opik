@@ -948,7 +948,7 @@ class PromptResourceTest {
                             ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("a".repeat(256)).build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            new ErrorMessage(List.of("cannot exceed 255 characters")),
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
                             ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
@@ -1097,7 +1097,7 @@ class PromptResourceTest {
                             ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("a".repeat(256)).build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            new ErrorMessage(List.of("cannot exceed 255 characters")),
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
                             ErrorMessage.class));
         }
     }
