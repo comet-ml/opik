@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueReviewer;
+import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
@@ -68,6 +69,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -145,6 +147,43 @@ class AnnotationQueuesResourceTest {
     }
 
     @Nested
+    @DisplayName("Create Annotation Queue Batch")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateAnnotationQueueBatch {
+
+        @Test
+        @DisplayName("should create annotation queue batch when valid request")
+        void createAnnotationQueueBatch() {
+            // Given - Create a project first for the annotation queue
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .id(null) // Will be generated
+                    .projectId(projectId)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should reject request when project_id is null")
+        void createAnnotationQueueBatchWhenProjectIdNullShouldReject() {
+            // Given
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(null) // Invalid
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+                    API_KEY, TEST_WORKSPACE,
+                    SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
     @DisplayName("Create Annotation Queue")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateAnnotationQueue {
@@ -162,8 +201,10 @@ class AnnotationQueuesResourceTest {
                     .projectId(projectId)
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            var id = annotationQueuesResourceClient.createAnnotationQueue(
+                    annotationQueue, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            assertThat(id.version()).isEqualTo(7);
         }
 
         @Test
@@ -175,7 +216,7 @@ class AnnotationQueuesResourceTest {
                     .projectId(null) // Invalid
                     .build();
 
-            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(annotationQueue)),
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
                     API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
@@ -535,6 +576,252 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.itemsCount()).isEqualTo(1L);
             assertThat(retrievedQueue.feedbackScores()).isNull();
             assertThat(retrievedQueue.reviewers()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Annotation Queue")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdateAnnotationQueue {
+
+        @Test
+        @DisplayName("should update annotation queue when valid request")
+        void updateAnnotationQueueWhenValidRequest() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create update request
+            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class);
+
+            // When
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update for comparison
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+        }
+
+        @Test
+        @DisplayName("should update only provided fields and keep others unchanged")
+        void updateAnnotationQueueWhenPartialRequest() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue with initial values
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .commentsEnabled(true)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create partial update request (only updating name and comments_enabled)
+            var updateRequest = AnnotationQueueUpdate.builder()
+                    .description("Updated description Only")
+                    .instructions("")
+                    .commentsEnabled(false)
+                    .build();
+
+            // When
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueue = applyUpdate(updateRequest, annotationQueue); // Apply update for comparison
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+        }
+
+        @Test
+        @DisplayName("should fail update when provided blank name")
+        void updateAnnotationQueueFailsWhenBlankName() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue with initial values
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create partial update request (only updating name and comments_enabled)
+            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class)
+                    .toBuilder()
+                    .name("")
+                    .build();
+
+            // When
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Annotation Queue Batch")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteAnnotationQueueBatch {
+
+        @Test
+        @DisplayName("should delete annotation queue batch when valid request")
+        void deleteAnnotationQueueBatch() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create multiple annotation queues
+            var annotationQueues = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(AnnotationQueue.class)
+                            .toBuilder()
+                            .projectId(projectId)
+                            .projectName(project.name())
+                            .scope(AnnotationQueue.AnnotationScope.TRACE)
+                            .build())
+                    .toList();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(annotationQueues), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var idsToDelete = annotationQueues.subList(0, 3).stream()
+                    .map(AnnotationQueue::id)
+                    .collect(toSet());
+            var notDeletedIds = annotationQueues.subList(3, annotationQueues.size()).stream()
+                    .map(AnnotationQueue::id)
+                    .collect(toSet());
+
+            // When - Delete batch of annotation queues
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    idsToDelete, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Then - Verify that deleted queues are no longer available
+            for (UUID deletedId : idsToDelete) {
+                annotationQueuesResourceClient.getAnnotationQueueById(
+                        deletedId, apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
+            }
+
+            // Verify that non-deleted queues are still available
+            for (UUID notDeletedId : notDeletedIds) {
+                var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                        notDeletedId, apiKey, workspaceName, HttpStatus.SC_OK);
+                assertThat(retrievedQueue).isNotNull();
+                assertThat(retrievedQueue.id()).isEqualTo(notDeletedId);
+            }
+        }
+
+        @Test
+        @DisplayName("should handle empty batch delete request")
+        void deleteAnnotationQueueBatchWhenEmptySet() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Empty set of IDs
+            var emptyIds = Set.<UUID>of();
+
+            // When & Then - Should return 204 No Content even for empty set
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    emptyIds, apiKey, workspaceName, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should handle non-existent annotation queue IDs gracefully")
+        void deleteAnnotationQueueBatchWhenNonExistentIds() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Non-existent queue IDs
+            var nonExistentIds = Set.of(
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID());
+
+            // When & Then - Should return 204 No Content (idempotent operation)
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    nonExistentIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should handle mixed valid and non-existent annotation queue IDs")
+        void deleteAnnotationQueueBatchWhenMixedIds() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Given - Create a project and annotation queue
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Mix valid and non-existent IDs
+            var mixedIds = Set.of(
+                    annotationQueue.id(), // Valid ID
+                    UUID.randomUUID(), // Non-existent ID
+                    UUID.randomUUID()); // Non-existent ID
+
+            // When - Delete batch with mixed IDs
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    mixedIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            // Then - Valid queue should be deleted
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
         }
     }
 
@@ -1087,6 +1374,23 @@ class AnnotationQueuesResourceTest {
                         .isEqualTo(expectedQueue.feedbackScores());
             }
         }
+    }
+
+    private AnnotationQueue applyUpdate(AnnotationQueueUpdate updateRequest, AnnotationQueue existingQueue) {
+        return existingQueue.toBuilder()
+                .name(updateRequest.name() != null ? updateRequest.name() : existingQueue.name())
+                .description(
+                        updateRequest.description() != null ? updateRequest.description() : existingQueue.description())
+                .instructions(updateRequest.instructions() != null
+                        ? updateRequest.instructions()
+                        : existingQueue.instructions())
+                .commentsEnabled(updateRequest.commentsEnabled() != null
+                        ? updateRequest.commentsEnabled()
+                        : existingQueue.commentsEnabled())
+                .feedbackDefinitionNames(updateRequest.feedbackDefinitionNames() != null
+                        ? updateRequest.feedbackDefinitionNames()
+                        : existingQueue.feedbackDefinitionNames())
+                .build();
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {

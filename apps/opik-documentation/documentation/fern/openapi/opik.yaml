@@ -220,6 +220,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues:
+    get:
+      tags:
+      - Annotation Queues
+      summary: Find annotation queues
+      description: Find annotation queues with filtering and sorting
+      operationId: findAnnotationQueues
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Annotation queues page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationQueuePage_Public"
+  /v1/private/annotation-queues/{id}:
+    get:
+      tags:
+      - Annotation Queues
+      summary: Get annotation queue by id
+      description: Get annotation queue by id
+      operationId: getAnnotationQueueById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Annotation queue resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationQueue_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/annotation-queues/{id}/items/delete:
     post:
       tags:
@@ -949,6 +1017,33 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{id}/expansions:
+    post:
+      tags:
+      - Datasets
+      summary: Expand dataset with synthetic samples
+      description: Generate synthetic dataset samples using LLM based on existing
+        data patterns
+      operationId: expandDataset
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetExpansion_Write"
+      responses:
+        "200":
+          description: Generated synthetic samples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExpansionResponse"
   /v1/private/datasets/{id}/items/experiments/items:
     get:
       tags:
@@ -4201,6 +4296,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          readOnly: true
         name:
           minLength: 1
           type: string
@@ -4215,13 +4313,23 @@ components:
           - thread
         comments_enabled:
           type: boolean
-        feedback_definitions:
+        feedback_definition_names:
           type: array
           items:
             type: string
-            format: uuid
-        workspace_id:
-          type: string
+        reviewers:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReviewer"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        items_count:
+          type: integer
+          format: int64
           readOnly: true
         created_at:
           type: string
@@ -4252,6 +4360,26 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue"
       description: Batch of annotation queues to create
+    AnnotationQueueReviewer:
+      type: object
+      properties:
+        username:
+          type: string
+        status:
+          type: integer
+          format: int64
+      readOnly: true
+    FeedbackScoreAverage:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     AnnotationQueueBatch_Write:
       required:
       - annotation_queues
@@ -4293,12 +4421,124 @@ components:
           - thread
         comments_enabled:
           type: boolean
-        feedback_definitions:
+        feedback_definition_names:
           type: array
           items:
             type: string
-            format: uuid
       description: List of annotation queues to create
+    AnnotationQueuePage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationQueue_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    AnnotationQueueReviewer_Public:
+      type: object
+      properties:
+        username:
+          type: string
+        status:
+          type: integer
+          format: int64
+      readOnly: true
+    AnnotationQueue_Public:
+      required:
+      - name
+      - project_id
+      - scope
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+          readOnly: true
+        name:
+          minLength: 1
+          type: string
+        description:
+          type: string
+        instructions:
+          type: string
+        scope:
+          type: string
+          enum:
+          - trace
+          - thread
+        comments_enabled:
+          type: boolean
+        feedback_definition_names:
+          type: array
+          items:
+            type: string
+        reviewers:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReviewer_Public"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage_Public"
+        items_count:
+          type: integer
+          format: int64
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    FeedbackScoreAverage_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+      readOnly: true
+    ErrorMessage_Public:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
     Attachment:
       required:
       - file_name
@@ -5948,6 +6188,98 @@ components:
           items:
             type: string
             format: uuid
+    DatasetExpansionResponse:
+      type: object
+      properties:
+        generated_samples:
+          type: array
+          description: List of generated synthetic dataset items
+          items:
+            $ref: "#/components/schemas/DatasetItem"
+        model:
+          type: string
+          description: Model used for generation
+          example: gpt-4
+        total_generated:
+          type: integer
+          description: Total number of samples generated
+          format: int32
+          example: 10
+        generation_time:
+          type: string
+          description: Generation timestamp
+          format: date-time
+          readOnly: true
+    DatasetExpansion:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+          description: The model to use for synthetic data generation
+          example: gpt-4
+        sample_count:
+          maximum: 200
+          minimum: 1
+          type: integer
+          description: Number of synthetic samples to generate
+          format: int32
+          example: 10
+        preserve_fields:
+          type: array
+          description: Fields to preserve patterns from original data
+          example:
+          - input
+          - expected_output
+          items:
+            type: string
+            description: Fields to preserve patterns from original data
+            example: "[\"input\",\"expected_output\"]"
+        variation_instructions:
+          type: string
+          description: Additional instructions for data variation
+          example: Create variations that test edge cases
+        custom_prompt:
+          type: string
+          description: Custom prompt to use for generation instead of auto-generated
+            one
+    DatasetExpansion_Write:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+          description: The model to use for synthetic data generation
+          example: gpt-4
+        sample_count:
+          maximum: 200
+          minimum: 1
+          type: integer
+          description: Number of synthetic samples to generate
+          format: int32
+          example: 10
+        preserve_fields:
+          type: array
+          description: Fields to preserve patterns from original data
+          example:
+          - input
+          - expected_output
+          items:
+            type: string
+            description: Fields to preserve patterns from original data
+            example: "[\"input\",\"expected_output\"]"
+        variation_instructions:
+          type: string
+          description: Additional instructions for data variation
+          example: Create variations that test edge cases
+        custom_prompt:
+          type: string
+          description: Custom prompt to use for generation instead of auto-generated
+            one
     Column_Compare:
       type: object
       properties:
@@ -6586,17 +6918,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
-    FeedbackScoreAverage:
-      required:
-      - name
-      - value
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        value:
-          type: number
     PercentageValues:
       type: object
       properties:
@@ -7341,18 +7662,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Public"
-    FeedbackScoreAverage_Public:
-      required:
-      - name
-      - value
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        value:
-          type: number
-      readOnly: true
     JsonListString_Public:
       type: object
       anyOf:
@@ -7385,16 +7694,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-    ErrorMessage_Public:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
     ExperimentGroupResponse:
       type: object
       properties:

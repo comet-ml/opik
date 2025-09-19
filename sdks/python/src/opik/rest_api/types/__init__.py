@@ -6,6 +6,11 @@ from .aggregation_data import AggregationData
 from .annotation_queue import AnnotationQueue
 from .annotation_queue_batch import AnnotationQueueBatch
 from .annotation_queue_item_ids import AnnotationQueueItemIds
+from .annotation_queue_page_public import AnnotationQueuePagePublic
+from .annotation_queue_public import AnnotationQueuePublic
+from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reviewer import AnnotationQueueReviewer
+from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
 from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
@@ -125,6 +130,8 @@ from .count_value_stat_public import CountValueStatPublic
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
+from .dataset_expansion import DatasetExpansion
+from .dataset_expansion_response import DatasetExpansionResponse
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
 from .dataset_item_compare import DatasetItemCompare
@@ -381,6 +388,11 @@ __all__ = [
     "AnnotationQueue",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
+    "AnnotationQueuePagePublic",
+    "AnnotationQueuePublic",
+    "AnnotationQueuePublicScope",
+    "AnnotationQueueReviewer",
+    "AnnotationQueueReviewerPublic",
     "AnnotationQueueScope",
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
@@ -472,6 +484,8 @@ __all__ = [
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
+    "DatasetExpansion",
+    "DatasetExpansionResponse",
     "DatasetItem",
     "DatasetItemBatch",
     "DatasetItemCompare",

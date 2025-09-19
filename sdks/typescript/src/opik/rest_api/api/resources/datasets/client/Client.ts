@@ -797,6 +797,97 @@ export class Datasets {
     }
 
     /**
+     * Generate synthetic dataset samples using LLM based on existing data patterns
+     *
+     * @param {string} id
+     * @param {OpikApi.DatasetExpansionWrite} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.expandDataset("id", {
+     *         model: "gpt-4"
+     *     })
+     */
+    public expandDataset(
+        id: string,
+        request: OpikApi.DatasetExpansionWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetExpansionResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__expandDataset(id, request, requestOptions));
+    }
+
+    private async __expandDataset(
+        id: string,
+        request: OpikApi.DatasetExpansionWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetExpansionResponse>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/expansions`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DatasetExpansionWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetExpansionResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/datasets/{id}/expansions.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Find dataset items with experiment items
      *
      * @param {string} id
