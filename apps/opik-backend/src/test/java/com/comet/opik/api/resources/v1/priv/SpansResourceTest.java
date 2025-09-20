@@ -165,6 +165,50 @@ class SpansResourceTest {
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
             .newClickHouseContainer(zookeeperContainer);
     private final GenericContainer<?> minIOContainer = MinIOContainerUtils.newMinIOContainer();
+    public static final Map<Span.SpanField, Function<Span, Span>> EXCLUDE_FUNCTIONS = new EnumMap<>(
+            Span.SpanField.class);
+
+    static {
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.NAME, it -> it.toBuilder().name(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TYPE, it -> it.toBuilder().type(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.START_TIME, it -> it.toBuilder().startTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.END_TIME, it -> it.toBuilder().endTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.INPUT, it -> it.toBuilder().input(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.OUTPUT, it -> it.toBuilder().output(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.METADATA, it -> it.toBuilder().metadata(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.MODEL, it -> it.toBuilder().model(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.PROVIDER, it -> it.toBuilder().provider(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TAGS, it -> it.toBuilder().tags(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.USAGE, it -> it.toBuilder().usage(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.COMMENTS, it -> it.toBuilder().comments(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST,
+                it -> it.toBuilder().totalEstimatedCost(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
+                it -> it.toBuilder().totalEstimatedCostVersion(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+    }
+
+    @Test
+    void createSpanCommentsBatch_Success() {
+        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
+
+        var ids = spans.stream().limit(3).map(Span::id).toList();
+        var response = spanResourceClient.callSpanCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
+
+        for (UUID id : ids) {
+            var span = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(span.comments()).isNotNull();
+            assertThat(span.comments().size()).isEqualTo(1);
+            assertThat(span.comments().getFirst().text()).isEqualTo("hello");
+        }
+    }
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp

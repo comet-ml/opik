@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
@@ -229,6 +230,16 @@ public class SpanResourceClient extends BaseCommentResourceClient {
             assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
         }
+    }
+
+    public Response callSpanCommentsBatchCreate(java.util.List<UUID> ids, String text, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(CommentsBatchCreate.builder().ids(Set.copyOf(ids)).text(text).build()));
     }
 
     public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {
