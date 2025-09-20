@@ -19,15 +19,28 @@ export enum TRACE_VISIBILITY_MODE {
   hidden = "hidden",
 }
 
-export interface TraceFeedbackScore {
+export type FeedbackScoreValueByAuthorMap = Record<
+  string,
+  {
+    value: number;
+    reason?: string;
+    category_name?: string;
+    source: FEEDBACK_SCORE_TYPE;
+    last_updated_at: string;
+  }
+>;
+
+export type TraceFeedbackScore = {
   category_name?: string;
   reason?: string;
   name: string;
   source: FEEDBACK_SCORE_TYPE;
-  value: number;
+  created_by?: string;
   last_updated_by?: string;
   last_updated_at?: string;
-}
+  value: number;
+  value_by_author?: FeedbackScoreValueByAuthorMap;
+};
 
 export interface BaseTraceDataErrorInfo {
   exception_type: string;

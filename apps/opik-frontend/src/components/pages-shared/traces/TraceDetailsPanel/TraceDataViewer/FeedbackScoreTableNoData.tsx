@@ -6,11 +6,13 @@ import { buildDocsUrl } from "@/lib/utils";
 const entityCopy = {
   thread: "threads",
   trace: "traces/LLM calls",
+  experiment: "experiments",
+  span: "traces/LLM calls",
 };
 
 type FeedbackScoreTableNoDataProps = {
   onAddHumanReview: () => void;
-  entityType: "trace" | "thread";
+  entityType: "trace" | "thread" | "span" | "experiment";
 };
 const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
   onAddHumanReview,
