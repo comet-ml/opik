@@ -3,18 +3,22 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -51,8 +55,11 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
@@ -659,6 +666,53 @@ class ExperimentDAO {
             GROUP BY workspace_id, created_by
             ;
             """;
+    private static final String UPDATE_BY_ID = """
+            ALTER TABLE experiments
+            UPDATE
+                name = :name,
+                metadata = :metadata,
+                last_updated_by = :last_updated_by
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String UPDATE = """
+            INSERT INTO experiments (
+                workspace_id,
+                dataset_id,
+                id,
+                name,
+                created_at,
+                last_updated_by,
+                created_by,
+                metadata,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                optimization_id,
+                type
+            )
+            SELECT
+                workspace_id,
+                dataset_id,
+                id,
+                <if(name)> :name <else> name <endif> as name,
+                created_at,
+                :user_name as last_updated_by,   -- correct position
+                created_by,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                optimization_id,
+                type
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1
+            """;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -1205,4 +1259,50 @@ class ExperimentDAO {
                     .build();
         });
     }
+
+    @WithSpan
+    public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
+            Experiment existingExperiment) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> update(id, experimentUpdate, existingExperiment, connection))
+                .then();
+    }
+
+    private Flux<Result> update(UUID id, ExperimentUpdate experimentUpdate, Experiment existingExperiment,
+            Connection connection) {
+
+        var template = newUpdateTemplate(experimentUpdate, UPDATE);
+        var statement = connection.createStatement(template.render());
+        statement.bind("id", id);
+
+        bindUpdateParams(experimentUpdate, statement);
+
+        Segment segment = startSegment("spans", "Clickhouse", "update");
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                .doFinally(signalType -> endSegment(segment));
+    }
+
+    private ST newUpdateTemplate(ExperimentUpdate experimentUpdate, String sql) {
+        var template = new ST(sql);
+
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            template.add("name", experimentUpdate.name());
+        }
+
+        Optional.ofNullable(experimentUpdate.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+
+        return template;
+    }
+
+    private void bindUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            statement.bind("name", experimentUpdate.name());
+        }
+
+        Optional.ofNullable(experimentUpdate.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+    }
+
 }
