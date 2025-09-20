@@ -104,6 +104,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
+        sortable: true,
       },
       {
         id: "duration.p90",
@@ -111,6 +112,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
         cell: DurationCell as never,
+        sortable: true,
       },
       {
         id: "duration.p99",
@@ -118,23 +120,27 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
         cell: DurationCell as never,
+        sortable: true,
       },
       {
         id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
+        sortable: true,
       },
       {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
+        sortable: true,
       },
       {
         id: "error_count",
         label: "Errors",
         type: COLUMN_TYPE.errors,
         cell: ErrorsCountCell as never,
+        sortable: true,
         customMeta: {
           onZoomIn: (row: ProjectWithStatistic) => {
             navigate({
@@ -165,6 +171,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           row.usage && isNumber(row.usage.total_tokens)
             ? formatNumericData(row.usage.total_tokens)
             : "-",
+        sortable: true,
       },
       {
         id: "usage.prompt_tokens",
@@ -174,6 +181,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           row.usage && isNumber(row.usage.prompt_tokens)
             ? formatNumericData(row.usage.prompt_tokens)
             : "-",
+        sortable: true,
       },
       {
         id: "usage.completion_tokens",
@@ -183,6 +191,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           row.usage && isNumber(row.usage.completion_tokens)
             ? formatNumericData(row.usage.completion_tokens)
             : "-",
+        sortable: true,
       },
       {
         id: "feedback_scores",
@@ -194,6 +203,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             value: formatNumericData(score.value),
           })),
         cell: FeedbackScoreListCell as never,
+        sortable: true,
         customMeta: {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
           isAverageScores: true,
@@ -235,6 +245,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: "created_by",
         label: "Created by",
         type: COLUMN_TYPE.string,
+        sortable: true,
       },
       {
         id: "description",
