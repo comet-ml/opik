@@ -204,18 +204,22 @@ public class StatsMapper {
         Long recentErrorCount = (Long) projectStats.get(RECENT_ERROR_COUNT);
         Long partPeriodErrorCount = (Long) projectStats.get(PAST_PERIOD_ERROR_COUNT);
 
-        long recentErrorTotal = recentErrorCount + partPeriodErrorCount;
+        // Handle null values for projects with no traces
+        long recentErrorCountSafe = recentErrorCount != null ? recentErrorCount : 0L;
+        long partPeriodErrorCountSafe = partPeriodErrorCount != null ? partPeriodErrorCount : 0L;
+        long recentErrorTotal = recentErrorCountSafe + partPeriodErrorCountSafe;
 
         Long deviationPercentage = null;
-        if (partPeriodErrorCount > 0) {
+        if (partPeriodErrorCountSafe > 0) {
             // Calculate the percentage change between recent errors and historical errors
             deviationPercentage = Long
-                    .valueOf(Math.round(((recentErrorTotal - partPeriodErrorCount) / partPeriodErrorCount) * 100));
+                    .valueOf(Math.round(
+                            ((recentErrorTotal - partPeriodErrorCountSafe) / (double) partPeriodErrorCountSafe) * 100));
         }
 
         return ErrorCountWithDeviation.builder()
                 .count(recentErrorTotal)
-                .deviation(recentErrorCount)
+                .deviation(recentErrorCountSafe)
                 .deviationPercentage(deviationPercentage)
                 .build();
     }

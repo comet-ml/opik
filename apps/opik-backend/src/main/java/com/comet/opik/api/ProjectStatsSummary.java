@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,13 +13,26 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ProjectStatsSummary(List<ProjectStatsSummaryItem> content) {
+public record ProjectStatsSummary(
+        List<ProjectStatsSummaryItem> content,
+        int page,
+        int size,
+        long total,
+        List<String> sortableBy) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ProjectStatsSummaryItem(
-            UUID projectId,
+            @com.fasterxml.jackson.annotation.JsonProperty("id") UUID projectId,
+            String name,
+            Visibility visibility,
+            String description,
+            Instant createdAt,
+            String createdBy,
+            Instant lastUpdatedAt,
+            String lastUpdatedBy,
+            Instant lastUpdatedTraceAt,
             List<FeedbackScoreAverage> feedbackScores,
             PercentageValues duration,
             Double totalEstimatedCost,

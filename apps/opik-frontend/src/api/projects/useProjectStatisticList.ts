@@ -19,22 +19,17 @@ type UseProjectStatisticsListParams = {
 type UseProjectStatisticsListResponse = {
   content: ProjectStatistic[];
   total: number;
+  page: number;
+  size: number;
 };
 
 const getProjectStatisticsList = async (
   { signal }: QueryFunctionContext,
-  {
-    workspaceName,
-    search,
-    sorting,
-    size,
-    page,
-  }: UseProjectStatisticsListParams,
+  { search, sorting, size, page }: UseProjectStatisticsListParams,
 ) => {
   const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
     signal,
     params: {
-      workspace_name: workspaceName,
       ...processSorting(sorting),
       ...(search && { name: search }),
       size,
