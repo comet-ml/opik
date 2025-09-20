@@ -39,6 +39,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -250,19 +251,135 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        List<UUID> projectIds = find(page, size, criteria, sortingFields)
-                .content()
-                .stream()
-                .map(Project::id)
-                .toList();
+        // Check if sorting is by metrics fields (from ClickHouse) or database fields (from MySQL)
+        boolean hasMetricsSorting = sortingFields.stream()
+                .anyMatch(field -> field.field().startsWith("duration")
+                        || field.field().equals("total_estimated_cost_sum")
+                        || field.field().equals("trace_count")
+                        || field.field().equals("error_count")
+                        || field.field().startsWith("usage.")
+                        || field.field().startsWith("feedback_scores"));
+
+        if (hasMetricsSorting) {
+            // Use database-level sorting for metrics (proper pagination)
+            return getStatsWithMetricsSorting(page, size, criteria, sortingFields, workspaceId);
+        } else {
+            // Use existing MySQL-based sorting
+            return getStatsWithBasicSorting(page, size, criteria, sortingFields, workspaceId);
+        }
+    }
+
+    private ProjectStatsSummary getStatsWithBasicSorting(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields, String workspaceId) {
+
+        List<Project> projects = find(page, size, criteria, sortingFields).content();
+        List<UUID> projectIds = projects.stream().map(Project::id).toList();
 
         Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
 
+        List<ProjectStatsSummaryItem> items = projects.stream()
+                .map(project -> getStats(project, projectStats.get(project.id())))
+                .toList();
+
+        // Get total count for pagination
+        int total = countByProjectCriteria(criteria);
+
         return ProjectStatsSummary.builder()
-                .content(
-                        projectIds.stream()
-                                .map(projectId -> getStats(projectId, projectStats.get(projectId)))
-                                .toList())
+                .content(items)
+                .page(page)
+                .size(size)
+                .total(total)
+                .sortableBy(List.of("name", "created_by", "created_at", "last_updated_at", "total_estimated_cost_sum",
+                        "duration.p50", "duration.p90", "duration.p99", "trace_count", "error_count",
+                        "usage.total_tokens", "usage.prompt_tokens", "usage.completion_tokens", "feedback_scores"))
+                .build();
+    }
+
+    private ProjectStatsSummary getStatsWithMetricsSorting(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields, String workspaceId) {
+
+        // Step 1: Get ALL projects that match criteria (no pagination yet)
+        List<Project> allProjects = getAllProjectsByCriteria(criteria, workspaceId);
+
+        if (allProjects.isEmpty()) {
+            return ProjectStatsSummary.builder()
+                    .content(List.of())
+                    .page(page)
+                    .size(size)
+                    .total(0)
+                    .sortableBy(List.of("name", "created_by", "created_at", "last_updated_at",
+                            "total_estimated_cost_sum",
+                            "duration.p50", "duration.p90", "duration.p99", "trace_count", "error_count",
+                            "usage.total_tokens", "usage.prompt_tokens", "usage.completion_tokens", "feedback_scores"))
+                    .build();
+        }
+
+        // Step 2: Get metrics for ALL projects
+        List<UUID> allProjectIds = allProjects.stream().map(Project::id).toList();
+        Map<UUID, Map<String, Object>> allProjectStats = getProjectStats(allProjectIds, workspaceId);
+
+        // Handle null case for allProjectStats
+        final Map<UUID, Map<String, Object>> finalProjectStats = allProjectStats != null ? allProjectStats : Map.of();
+
+        // Step 3: Convert to list and sort by metrics
+        // Include ALL projects, even those without traces (they'll have empty stats)
+        List<ProjectStatsSummaryItem> allItems = allProjects.stream()
+                .map(project -> {
+                    Map<String, Object> projectStats = finalProjectStats.get(project.id());
+                    // Use empty map if no stats available for this project
+                    if (projectStats == null) {
+                        projectStats = Map.of();
+                    }
+                    return getStats(project, projectStats); // Use Project object to get name
+                })
+                .collect(Collectors.toList());
+
+        // Step 4: Apply database-level equivalent sorting
+        SortingField metricSortField = sortingFields.stream()
+                .filter(field -> field.field().startsWith("duration")
+                        || field.field().equals("total_estimated_cost_sum")
+                        || field.field().equals("trace_count")
+                        || field.field().equals("error_count")
+                        || field.field().startsWith("usage.")
+                        || field.field().startsWith("feedback_scores"))
+                .findFirst()
+                .orElse(null);
+
+        if (metricSortField != null) {
+            String fieldName = metricSortField.field();
+            Direction direction = metricSortField.direction();
+
+            allItems.sort((item1, item2) -> {
+                Double value1 = getMetricValue(item1, fieldName);
+                Double value2 = getMetricValue(item2, fieldName);
+
+                // Handle null values (put them last in both ASC and DESC)
+                if (value1 == null && value2 == null) return 0;
+                if (value1 == null) return 1;
+                if (value2 == null) return -1;
+
+                int comparison = Double.compare(value1, value2);
+                return direction == Direction.DESC ? -comparison : comparison;
+            });
+        }
+
+        // Step 5: Apply pagination to the sorted results
+        int total = allItems.size();
+        int fromIndex = (page - 1) * size; // Convert from 1-based to 0-based indexing
+        int toIndex = Math.min(fromIndex + size, total);
+
+        List<ProjectStatsSummaryItem> paginatedItems = fromIndex < total
+                ? allItems.subList(fromIndex, toIndex)
+                : List.of();
+
+        return ProjectStatsSummary.builder()
+                .content(paginatedItems)
+                .page(page)
+                .size(size)
+                .total(total)
+                .sortableBy(List.of("name", "created_by", "created_at", "last_updated_at", "total_estimated_cost_sum",
+                        "duration.p50", "duration.p90", "duration.p99", "trace_count", "error_count",
+                        "usage.total_tokens", "usage.prompt_tokens", "usage.completion_tokens", "feedback_scores"))
                 .build();
     }
 
@@ -274,9 +391,17 @@ class ProjectServiceImpl implements ProjectService {
         Project project = get(projectId);
     }
 
-    private ProjectStatsSummaryItem getStats(UUID projectId, Map<String, Object> projectStats) {
+    private ProjectStatsSummaryItem getStats(Project project, Map<String, Object> projectStats) {
         return ProjectStatsSummaryItem.builder()
-                .projectId(projectId)
+                .projectId(project.id())
+                .name(project.name())
+                .visibility(project.visibility())
+                .description(project.description())
+                .createdAt(project.createdAt())
+                .createdBy(project.createdBy())
+                .lastUpdatedAt(project.lastUpdatedAt())
+                .lastUpdatedBy(project.lastUpdatedBy())
+                .lastUpdatedTraceAt(project.lastUpdatedTraceAt())
                 .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats))
                 .duration(StatsMapper.getStatsDuration(projectStats))
                 .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
@@ -286,6 +411,91 @@ class ProjectServiceImpl implements ProjectService {
                 .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
                 .errorCount(StatsMapper.getStatsErrorCount(projectStats))
                 .build();
+    }
+
+    private List<Project> getAllProjectsByCriteria(@NonNull ProjectCriteria criteria, String workspaceId) {
+        Visibility visibility = requestContext.get().getVisibility();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName(), visibility)
+                    .stream()
+                    .map(projectIdLastUpdated -> {
+                        try {
+                            return repository.fetch(projectIdLastUpdated.id(), workspaceId).orElse(null);
+                        } catch (Exception e) {
+                            // Log error but continue processing other projects
+                            log.warn("Failed to fetch project with id: {}", projectIdLastUpdated.id(), e);
+                            return null;
+                        }
+                    })
+                    .filter(project -> project != null) // Filter out any null projects
+                    .toList();
+        });
+    }
+
+    private int countByProjectCriteria(@NonNull ProjectCriteria criteria) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+            return (int) repository.findCount(workspaceId, criteria.projectName(), visibility);
+        });
+    }
+
+    private Double getMetricValue(ProjectStatsSummaryItem item, String fieldName) {
+        return switch (fieldName) {
+            case "total_estimated_cost_sum" -> item.totalEstimatedCostSum();
+            case "duration.p50" -> item.duration() != null && item.duration().p50() != null
+                    ? item.duration().p50().doubleValue()
+                    : null;
+            case "duration.p90" -> item.duration() != null && item.duration().p90() != null
+                    ? item.duration().p90().doubleValue()
+                    : null;
+            case "duration.p99" -> item.duration() != null && item.duration().p99() != null
+                    ? item.duration().p99().doubleValue()
+                    : null;
+            case "trace_count" -> item.traceCount() != null ? item.traceCount().doubleValue() : null;
+            case "error_count" -> item.errorCount() != null ? (double) item.errorCount().count() : null;
+            case "usage.total_tokens" -> getUsageValue(item, "total_tokens");
+            case "usage.prompt_tokens" -> getUsageValue(item, "prompt_tokens");
+            case "usage.completion_tokens" -> getUsageValue(item, "completion_tokens");
+            case "feedback_scores" -> getAverageFeedbackScoreValue(item);
+            default -> {
+                // Handle feedback_scores.* pattern
+                if (fieldName.startsWith("feedback_scores.")) {
+                    String scoreName = fieldName.substring("feedback_scores.".length());
+                    yield getFeedbackScoreValue(item, scoreName);
+                }
+                yield null;
+            }
+        };
+    }
+
+    private Double getUsageValue(ProjectStatsSummaryItem item, String tokenType) {
+        if (item.usage() == null) return null;
+        Object value = item.usage().get(tokenType);
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private Double getFeedbackScoreValue(ProjectStatsSummaryItem item, String scoreName) {
+        if (item.feedbackScores() == null) return null;
+        return item.feedbackScores().stream()
+                .filter(score -> score.name().equals(scoreName))
+                .map(score -> score.value().doubleValue())
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Double getAverageFeedbackScoreValue(ProjectStatsSummaryItem item) {
+        if (item.feedbackScores() == null || item.feedbackScores().isEmpty()) return null;
+
+        // Calculate average of all feedback scores for this project
+        return item.feedbackScores().stream()
+                .mapToDouble(score -> score.value().doubleValue())
+                .average()
+                .orElse(0.0);
     }
 
     @Override
@@ -337,6 +547,55 @@ class ProjectServiceImpl implements ProjectService {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
         }
 
+        // Check if sorting is by metrics fields (from ClickHouse) or database fields (from MySQL)
+        boolean hasMetricsSorting = sortingFields.stream()
+                .anyMatch(field -> field.field().startsWith("duration")
+                        || field.field().equals("total_estimated_cost_sum")
+                        || field.field().equals("trace_count")
+                        || field.field().equals("error_count")
+                        || field.field().startsWith("usage.")
+                        || field.field().startsWith("feedback_scores"));
+
+        // If metrics sorting is requested, delegate to getStats() method which handles this properly
+        if (hasMetricsSorting) {
+            ProjectStatsSummary stats = getStats(page, size, criteria, sortingFields);
+
+            // Convert ProjectStatsSummaryItem to Project
+            // ProjectStatsSummaryItem includes all Project fields plus stats
+            // The JSON serialization will include all fields
+            List<Project> projects = stats.content().stream()
+                    .map(item -> Project.builder()
+                            .id(item.projectId())
+                            .name(item.name())
+                            .visibility(item.visibility())
+                            .description(item.description())
+                            .createdAt(item.createdAt())
+                            .createdBy(item.createdBy())
+                            .lastUpdatedAt(item.lastUpdatedAt())
+                            .lastUpdatedBy(item.lastUpdatedBy())
+                            .lastUpdatedTraceAt(item.lastUpdatedTraceAt())
+                            .feedbackScores(item.feedbackScores())
+                            .duration(item.duration())
+                            .totalEstimatedCost(item.totalEstimatedCost())
+                            .totalEstimatedCostSum(item.totalEstimatedCostSum())
+                            .usage(item.usage())
+                            .traceCount(item.traceCount())
+                            .guardrailsFailedCount(item.guardrailsFailedCount())
+                            .errorCount(item.errorCount())
+                            .build())
+                    .toList();
+
+            return new ProjectPage(
+                    stats.page(),
+                    projects.size(),
+                    stats.total(),
+                    projects,
+                    sortingFactory.getSortableFields());
+        }
+
+        // Create final sorting fields for use in lambda
+        final List<SortingField> finalSortingFields = sortingFields;
+
         ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
 
             ProjectDAO repository = handle.attach(ProjectDAO.class);
@@ -345,7 +604,7 @@ class ProjectServiceImpl implements ProjectService {
 
             return new ProjectRecordSet(
                     repository.find(size, offset, workspaceId, criteria.projectName(), visibility,
-                            sortingQueryBuilder.toOrderBySql(sortingFields)),
+                            sortingQueryBuilder.toOrderBySql(finalSortingFields)),
                     repository.findCount(workspaceId, criteria.projectName(), visibility));
         });
 
@@ -359,12 +618,32 @@ class ProjectServiceImpl implements ProjectService {
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection))
                 .block();
 
+        // Get project stats from ClickHouse
+        Map<UUID, Map<String, Object>> projectStatsMap = getProjectStats(projectIds.stream().toList(), workspaceId);
+
         List<Project> projects = projectRecordSet.content()
                 .stream()
                 .map(project -> {
                     Instant lastUpdatedTraceAt = projectLastUpdatedTraceAtMap.get(project.id());
+                    Map<String, Object> projectStats = projectStatsMap.get(project.id());
+
+                    // Build project with stats
                     return project.toBuilder()
                             .lastUpdatedTraceAt(lastUpdatedTraceAt)
+                            .feedbackScores(
+                                    projectStats != null ? StatsMapper.getStatsFeedbackScores(projectStats) : null)
+                            .duration(projectStats != null ? StatsMapper.getStatsDuration(projectStats) : null)
+                            .totalEstimatedCost(
+                                    projectStats != null ? StatsMapper.getStatsTotalEstimatedCost(projectStats) : null)
+                            .totalEstimatedCostSum(projectStats != null
+                                    ? StatsMapper.getStatsTotalEstimatedCostSum(projectStats)
+                                    : null)
+                            .usage(projectStats != null ? StatsMapper.getStatsUsage(projectStats) : null)
+                            .traceCount(projectStats != null ? StatsMapper.getStatsTraceCount(projectStats) : null)
+                            .guardrailsFailedCount(projectStats != null
+                                    ? StatsMapper.getStatsGuardrailsFailedCount(projectStats)
+                                    : null)
+                            .errorCount(projectStats != null ? StatsMapper.getStatsErrorCount(projectStats) : null)
                             .build();
                 })
                 .toList();
@@ -374,17 +653,49 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId) {
-        return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
-                .map(stats -> stats.entrySet().stream()
-                        .map(entry -> {
-                            Map<String, Object> statsMap = entry.getValue().stats()
-                                    .stream()
-                                    .collect(toMap(ProjectStatItem::getName, ProjectStatItem::getValue));
+        // Batch project IDs to avoid query size limits (max 1000 per batch)
+        final int BATCH_SIZE = 1000;
 
-                            return Map.entry(entry.getKey(), statsMap);
-                        })
-                        .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
-                .block();
+        if (projectIds.size() <= BATCH_SIZE) {
+            // Small list - process directly
+            return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
+                    .map(stats -> stats.entrySet().stream()
+                            .map(entry -> {
+                                Map<String, Object> statsMap = entry.getValue().stats()
+                                        .stream()
+                                        .collect(toMap(ProjectStatItem::getName, ProjectStatItem::getValue));
+
+                                return Map.entry(entry.getKey(), statsMap);
+                            })
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                    .block();
+        }
+
+        // Large list - batch and merge results
+        Map<UUID, Map<String, Object>> allStats = new HashMap<>();
+
+        for (int i = 0; i < projectIds.size(); i += BATCH_SIZE) {
+            int endIndex = Math.min(i + BATCH_SIZE, projectIds.size());
+            List<UUID> batch = projectIds.subList(i, endIndex);
+
+            Map<UUID, Map<String, Object>> batchStats = traceDAO.getStatsByProjectIds(batch, workspaceId)
+                    .map(stats -> stats.entrySet().stream()
+                            .map(entry -> {
+                                Map<String, Object> statsMap = entry.getValue().stats()
+                                        .stream()
+                                        .collect(toMap(ProjectStatItem::getName, ProjectStatItem::getValue));
+
+                                return Map.entry(entry.getKey(), statsMap);
+                            })
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                    .block();
+
+            if (batchStats != null) {
+                allStats.putAll(batchStats);
+            }
+        }
+
+        return allStats;
     }
 
     @Override
