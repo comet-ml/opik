@@ -2418,6 +2418,82 @@ class PromptResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Restore Prompt Version")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RestorePromptVersionTests {
+
+        @Test
+        @DisplayName("Success: should restore a prompt version and create a new version from it")
+        void shouldRestorePromptVersion() {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create first version to restore from
+            var promptVersion1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(promptId)
+                    .commit(null)
+                    .createdBy(USER)
+                    .variables(null)
+                    .template("Original template content")
+                    .changeDescription("First version")
+                    .build();
+
+            var createdV1 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion1), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Create second version
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .commit(null)
+                    .createdBy(USER)
+                    .template("Modified template content")
+                    .changeDescription("Second version")
+                    .build();
+
+            var createdV2 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion2), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Now restore the first version
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
+                    .formatted(promptId, createdV1.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(""))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var restoredVersion = actualResponse.readEntity(PromptVersion.class);
+
+                // Use helper to validate restored content matches original content where applicable
+                var expectedFromV1 = createdV1.toBuilder()
+                        .id(null)
+                        .commit(null)
+                        .createdAt(createdV1.createdAt())
+                        .build();
+
+                assertPromptVersion(restoredVersion, expectedFromV1, promptId);
+
+                // Additional checks specific to restore semantics
+                assertThat(restoredVersion.changeDescription())
+                        .isEqualTo("Restored from version " + createdV1.commit());
+                assertThat(restoredVersion.id()).isNotEqualTo(createdV1.id());
+                assertThat(restoredVersion.id()).isNotEqualTo(createdV2.id());
+                assertThat(restoredVersion.commit()).isNotEqualTo(createdV1.commit());
+                assertThat(restoredVersion.commit()).isNotEqualTo(createdV2.commit());
+            }
+        }
+    }
+
     private void retrievePromptVersionAndAssert(PromptVersionRetrieve retrieveRequest,
             PromptVersion expectedPromptVersion, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
