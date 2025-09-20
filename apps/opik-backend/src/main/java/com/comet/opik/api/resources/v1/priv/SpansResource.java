@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -541,6 +542,29 @@ public class SpansResource {
                 .block();
 
         log.info("Deleted span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/comments/batch")
+    @Operation(operationId = "createSpanCommentsBatch", summary = "Create comments for multiple spans", description = "Create the same comment text for multiple span IDs (max 1K per request)", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response createSpanCommentsBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = CommentsBatchCreate.class))) @NotNull @Valid CommentsBatchCreate payload) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating span comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
+
+        commentService.createBatchForSpans(payload.ids(), payload.text())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Created span comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
