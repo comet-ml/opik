@@ -1,5 +1,6 @@
 package com.comet.opik.api.evaluators;
 
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -14,6 +15,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,14 +39,17 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "code", "createdAt",
+    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "filters", "code",
+            "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, @NotNull UUID projectId, String projectName,
-            @NotBlank String name, float samplingRate, boolean enabled, @NotNull UserDefinedMetricPythonCode code,
+            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt,
                 lastUpdatedBy);
     }
 

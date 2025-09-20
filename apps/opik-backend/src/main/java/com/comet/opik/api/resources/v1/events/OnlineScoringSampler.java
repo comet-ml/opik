@@ -10,6 +10,7 @@ import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -42,6 +43,7 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 public class OnlineScoringSampler {
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
+    private final TraceFilterEvaluationService filterEvaluationService;
     private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
@@ -51,8 +53,10 @@ public class OnlineScoringSampler {
     public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
+            @NonNull TraceFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
+        this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         secureRandom = SecureRandom.getInstanceStrong();
@@ -125,6 +129,17 @@ public class OnlineScoringSampler {
             try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(
                         "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
+                        trace.id(), evaluator.getName());
+            }
+            return false;
+        }
+
+        // Check if trace matches all filters
+        if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
+            // Important to set the workspaceId for logging purposes
+            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
+                userFacingLogger.info(
+                        "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
                         trace.id(), evaluator.getName());
             }
             return false;

@@ -169,8 +169,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
+                String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled());
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
