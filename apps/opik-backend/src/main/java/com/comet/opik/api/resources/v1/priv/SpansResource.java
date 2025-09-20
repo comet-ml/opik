@@ -535,13 +535,13 @@ public class SpansResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Delete span comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         commentService.delete(batchDelete)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted span comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
