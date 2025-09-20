@@ -101,3 +101,57 @@ class DatasetItemsPage:
             items.extend(self.get_all_dataset_items_on_current_page())
 
         return items
+
+    def search_dataset_items(self, search_term: str):
+        """Search for dataset items using the search input."""
+        search_input = self.page.get_by_placeholder("Search")
+        search_input.clear()
+        search_input.fill(search_term)
+        # Wait for search results to load
+        self.page.wait_for_timeout(500)
+
+    def clear_search(self):
+        """Clear the search input."""
+        search_input = self.page.get_by_placeholder("Search")
+        search_input.clear()
+        # Wait for results to refresh
+        self.page.wait_for_timeout(500)
+
+    def get_search_results_count(self):
+        """Get the number of items currently visible after search."""
+        try:
+            # Look for the pagination text to get total count
+            pagination_text = self.page.locator("div").filter(has_text=re.compile(r"^Showing (\d+)-(\d+) of (\d+)")).text_content()
+            if pagination_text:
+                # Extract total count from "Showing 1-5 of 10" format
+                match = re.search(r"of (\d+)", pagination_text)
+                if match:
+                    return int(match.group(1))
+            # If no pagination text, count visible rows
+            rows = self.page.locator("tbody tr").count()
+            return rows
+        except:
+            # Fallback: count visible rows
+            return self.page.locator("tbody tr").count()
+
+    def verify_search_results_contain_term(self, search_term: str):
+        """Verify that all visible items contain the search term."""
+        self.remove_default_columns()
+        
+        rows = self.page.locator("tbody tr").all()
+        if not rows:
+            return False
+            
+        for row in rows:
+            cells = row.locator("td").all()
+            row_text = ""
+            # Concatenate all cell text content
+            for cell in cells[1:-1]:  # Skip first and last columns (checkbox and actions)
+                cell_content = cell.text_content() or ""
+                row_text += cell_content.lower() + " "
+            
+            # Check if search term is found in row text
+            if search_term.lower() not in row_text:
+                return False
+                
+        return True
