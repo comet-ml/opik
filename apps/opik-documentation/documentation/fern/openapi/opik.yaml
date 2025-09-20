@@ -5894,6 +5894,7 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+          maxLength: 255
     Comment:
       required:
       - text
@@ -6831,6 +6832,7 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+          maxLength: 255
         visibility:
           type: string
           enum:
