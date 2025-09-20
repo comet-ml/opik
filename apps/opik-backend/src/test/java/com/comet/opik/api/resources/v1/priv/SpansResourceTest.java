@@ -216,6 +216,23 @@ class SpansResourceTest {
         EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
     }
 
+    @Test
+    void createSpanCommentsBatch_Success() {
+        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
+
+        var ids = spans.stream().limit(3).map(Span::id).toList();
+        var response = spanResourceClient.callSpanCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
+
+        for (UUID id : ids) {
+            var span = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(span.comments()).isNotNull();
+            assertThat(span.comments().size()).isEqualTo(1);
+            assertThat(span.comments().getFirst().text()).isEqualTo("hello");
+        }
+    }
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
