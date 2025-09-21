@@ -70,12 +70,13 @@ jobs:
           with:
             context: apps/${{ inputs.image }}/
             platforms: ${{ (inputs.is_release && inputs.image != 'opik-guardrails-backend') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
-            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:latest
+            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:${{ inputs.is_release && 'latest' || 'main' }}
             provenance: false
             push: true
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               OPIK_VERSION=${{inputs.version}}
 
@@ -85,12 +86,13 @@ jobs:
           with:
             context: apps/${{ inputs.image }}/
             platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
-            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}-comet:latest
+            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}-comet:${{ inputs.is_release && 'latest' || 'main' }}
             provenance: false
             push: true
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}-comet:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               ${{inputs.comet_build_args}}
               OPIK_VERSION=${{inputs.version}}
