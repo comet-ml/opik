@@ -4,6 +4,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.infrastructure.FeedbackScoresConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -300,6 +301,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull FeedbackScoresConfig feedbackScoresConfig;
 
     @Override
     @WithSpan
@@ -378,8 +380,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             Mono<Long> deleteNonAuthoredOperation;
 
-            if (StringUtils.isBlank(score.author())) {
-                // Delete from feedback_scores table only if author is not available
+            if (StringUtils.isBlank(score.author()) || !feedbackScoresConfig.isWriteToAuthored()) {
+                // Delete from feedback_scores table if author is not available OR writeToAuthored is disabled
                 String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
                         .add("table_name", "feedback_scores")
                         .render();
@@ -392,7 +394,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
                         .flatMap(result -> Mono.from(result.getRowsUpdated()));
             } else {
-                // Skip statement1 execution if author is not null
+                // Skip statement1 execution if author is provided AND writeToAuthored is enabled
                 deleteNonAuthoredOperation = Mono.just(0L);
             }
 
@@ -454,8 +456,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             Mono<Long> deleteNonAuthoredOperation;
 
-            if (StringUtils.isBlank(author)) {
-                // Delete from feedback_scores table only if author is not available
+            if (StringUtils.isBlank(author) || !feedbackScoresConfig.isWriteToAuthored()) {
+                // Delete from feedback_scores table if author is not available OR writeToAuthored is disabled
                 ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
                 template1.add("names", names);
                 template1.add("table_name", "feedback_scores");
@@ -468,7 +470,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
                         .flatMap(result -> Mono.from(result.getRowsUpdated()));
             } else {
-                // Skip statement1 execution if author is not null
+                // Skip statement1 execution if author is provided AND writeToAuthored is enabled
                 deleteNonAuthoredOperation = Mono.just(0L);
             }
 
