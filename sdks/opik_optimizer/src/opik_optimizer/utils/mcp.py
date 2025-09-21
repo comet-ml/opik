@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib
-import inspect
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,38 +134,46 @@ class MCPDependencyError(RuntimeError):
 
 def _load_sdk():
     candidates = (
-        ("modelcontextprotocol.client.session", "modelcontextprotocol.client.transport"),
-        ("mcp.client.session", "mcp.client.transport"),
+        (
+            "mcp.client.session",
+            "mcp.client.stdio",
+            "mcp.types",
+        ),
+        (
+            "modelcontextprotocol.client.session",
+            "modelcontextprotocol.client.stdio",
+            "modelcontextprotocol.types",
+        ),
     )
 
-    for session_path, transport_path in candidates:
+    for session_path, stdio_path, types_path in candidates:
         try:
             session_mod = importlib.import_module(session_path)
-            transport_mod = importlib.import_module(transport_path)
+            stdio_mod = importlib.import_module(stdio_path)
+            types_mod = importlib.import_module(types_path)
         except ImportError:
             continue
 
-        session_cls = getattr(session_mod, "ClientSession", None) or getattr(
-            session_mod, "Session", None
-        )
-        transport_cls = getattr(transport_mod, "SubprocessTransport", None) or getattr(
-            transport_mod, "StdioTransport", None
-        )
+        session_cls = getattr(session_mod, "ClientSession", None)
+        stdio_client_fn = getattr(stdio_mod, "stdio_client", None)
+        stdio_params_cls = getattr(stdio_mod, "StdioServerParameters", None)
 
-        if session_cls and transport_cls:
-            return session_cls, transport_cls
+        if session_cls and stdio_client_fn and stdio_params_cls:
+            return session_cls, stdio_client_fn, stdio_params_cls, types_mod
 
     raise MCPDependencyError(
-        "modelcontextprotocol Python SDK not found. Install it with 'pip install modelcontextprotocol'."
+        "modelcontextprotocol Python SDK not found. Install it with 'pip install mcp'."
     )
 
 
 try:
-    ClientSession, TransportCls = _load_sdk()
+    (ClientSession, StdioClientFactory, StdioServerParameters, types_mod) = _load_sdk()
     _SDK_ERROR: Optional[Exception] = None
 except MCPDependencyError as exc:  # pragma: no cover
     ClientSession = None  # type: ignore[assignment]
-    TransportCls = None  # type: ignore[assignment]
+    StdioClientFactory = None  # type: ignore[assignment]
+    StdioServerParameters = None  # type: ignore[assignment]
+    types_mod = None  # type: ignore[assignment]
     _SDK_ERROR = exc
 
 
@@ -199,33 +206,24 @@ class MCPClient:
         if _SDK_ERROR is not None:
             raise MCPDependencyError(str(_SDK_ERROR))
         self.manifest = manifest
-        self._transport = None
+        self._transport_cm = None
         self._session: Optional[ClientSession] = None
+        self._read_stream = None
+        self._write_stream = None
 
     async def __aenter__(self):
-        transport_kwargs: Dict[str, Any] = {}
-        command_list = [self.manifest.command, *self.manifest.args]
-        try:
-            init_sig = inspect.signature(TransportCls)  # type: ignore[arg-type]
-            params = init_sig.parameters
-            if "command" in params and "args" in params:
-                transport_kwargs["command"] = self.manifest.command
-                transport_kwargs["args"] = self.manifest.args
-            else:
-                transport_kwargs["command"] = command_list
-            if "env" in params:
-                transport_kwargs["env"] = self.manifest.env or None
-        except Exception:  # pragma: no cover
-            transport_kwargs["command"] = command_list
-            transport_kwargs["env"] = self.manifest.env or None
+        server_params = StdioServerParameters(  # type: ignore[arg-type]
+            command=self.manifest.command,
+            args=self.manifest.args,
+            env=self.manifest.env or None,
+        )
 
-        self._transport = TransportCls(**transport_kwargs)
-        self._session = ClientSession(self._transport)
+        self._transport_cm = StdioClientFactory(server_params)
+        self._read_stream, self._write_stream = await self._transport_cm.__aenter__()
+        self._session = ClientSession(self._read_stream, self._write_stream)
 
         if hasattr(self._session, "__aenter__"):
             await self._session.__aenter__()
-        elif hasattr(self._session, "start"):
-            await self._session.start()
 
         if hasattr(self._session, "initialize"):
             await self._session.initialize()
@@ -235,10 +233,8 @@ class MCPClient:
         if self._session is not None:
             if hasattr(self._session, "__aexit__"):
                 await self._session.__aexit__(exc_type, exc, tb)
-            elif hasattr(self._session, "close"):
-                await self._session.close()
-        if self._transport is not None and hasattr(self._transport, "close"):
-            await self._transport.close()
+        if self._transport_cm is not None:
+            await self._transport_cm.__aexit__(exc_type, exc, tb)
 
     async def list_tools(self):
         if self._session is None:
@@ -260,11 +256,7 @@ class MCPClient:
     async def call_tool(self, tool_name: str, arguments: Mapping[str, Any]):
         if self._session is None:
             raise RuntimeError("MCP session not started")
-        if hasattr(self._session, "call_tool"):
-            return await self._session.call_tool(tool_name=tool_name, arguments=arguments)
-        if hasattr(self._session, "invoke_tool"):
-            return await self._session.invoke_tool(tool_name, arguments)
-        raise RuntimeError("MCP session missing call_tool")
+        return await self._session.call_tool(name=tool_name, arguments=arguments)
 
 
 def run_sync(coro):
@@ -289,7 +281,16 @@ def call_tool_from_manifest(manifest: MCPManifest, tool_name: str, arguments: Di
 
 def response_to_text(response: object) -> str:
     if hasattr(response, "content"):
-        return str(getattr(response, "content"))
+        content = getattr(response, "content")
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                text_value = getattr(item, "text", None)
+                if text_value:
+                    texts.append(text_value)
+            if texts:
+                return "\n".join(texts)
+        return str(content)
     if hasattr(response, "output"):
         return str(getattr(response, "output"))
     return str(response)
@@ -331,23 +332,23 @@ def extract_description_from_system(system_prompt: str) -> Optional[str]:
 
 def load_tool_signature_from_manifest(manifest: MCPManifest, tool_name: str) -> ToolSignature:
     tools = list_tools_from_manifest(manifest)
-    tool = next((tool for tool in tools if tool.name == tool_name), None)
+    tool = next((tool for tool in tools if getattr(tool, "name", None) == tool_name), None)
     if tool is None:
         raise ValueError(f"Tool '{tool_name}' not found")
-    function_block = getattr(tool, "to_dict", lambda: tool)()
-    if isinstance(function_block, dict) and "function" in function_block:
-        return ToolSignature.from_tool_entry(function_block)
-    # Some SDKs expose attributes instead of dicts
-    entry = {
-        "type": "function",
-        "function": {
-            "name": getattr(tool, "name", tool_name),
-            "description": getattr(tool, "description", ""),
-            "parameters": getattr(tool, "input_schema", {}),
-            "examples": getattr(tool, "examples", None),
-        },
-    }
-    return ToolSignature.from_tool_entry(entry)
+    entry = tool.model_dump(by_alias=True)
+    annotations = entry.get("annotations") or {}
+    examples = annotations.get("examples")
+    return ToolSignature.from_tool_entry(
+        {
+            "type": "function",
+            "function": {
+                "name": entry.get("name", tool_name),
+                "description": entry.get("description", ""),
+                "parameters": entry.get("inputSchema", {}),
+                "examples": examples,
+            },
+        }
+    )
 
 
 def score_query_tool(
