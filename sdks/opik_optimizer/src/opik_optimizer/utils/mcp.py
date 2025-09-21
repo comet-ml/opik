@@ -9,6 +9,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+import json
+import textwrap
 
 
 TOOL_ENTRY_KEY = "function"
@@ -299,8 +301,15 @@ def response_to_text(response: object) -> str:
 PROMPT_TOOL_HEADER = "<<TOOL_DESCRIPTION>>"
 PROMPT_TOOL_FOOTER = "<<END_TOOL_DESCRIPTION>>"
 
+# System-prompt scaffolding below is inspired by the MCP section of Cline's
+# system prompt (Apache-2.0). See https://github.com/cline/cline for details.
 
-def system_prompt_from_tool(signature: ToolSignature) -> str:
+
+def _format_json_block(data: Mapping[str, Any]) -> str:
+    return textwrap.indent(json.dumps(data, indent=2), "    ")
+
+
+def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPManifest] = None) -> str:
     parameters = signature.parameters or {}
     parameter_lines = []
     for name, schema in parameters.get("properties", {}).items():
@@ -309,9 +318,37 @@ def system_prompt_from_tool(signature: ToolSignature) -> str:
         parameter_lines.append(f"- {name} ({type_hint}): {desc}")
     parameter_section = "\n".join(parameter_lines) if parameter_lines else "- No structured parameters."
 
-    return (
+    mcp_header = ""
+    if manifest is not None:
+        command_line = manifest.command
+        if manifest.args:
+            command_line = f"{command_line} {' '.join(manifest.args)}"
+
+        schema_block = _format_json_block(signature.parameters) if signature.parameters else "    {}"
+
+        mcp_header = textwrap.dedent(
+            f"""
+            MCP SERVERS
+
+            The Model Context Protocol (MCP) enables communication between the system and locally running MCP servers that provide additional tools and resources to extend your capabilities.
+
+            # Connected MCP Servers
+
+            When a server is connected, you can use the server's tools via the `use_mcp_tool` tool, and access the server's resources via the `access_mcp_resource` tool.
+
+            ## {manifest.name} (`{command_line}`)
+
+            ### Available Tools
+            - {signature.name}: {signature.description}
+                Input Schema:
+{schema_block}
+            """
+        ).strip()
+
+    body = (
         "You are an assistant that answers developer questions using the available MCP tool.\n"
         "Always decide whether the tool is required before answering.\n"
+        "Always call the tool at least once before replying.\n"
         "\n"
         "Tool description:\n"
         f"{PROMPT_TOOL_HEADER}\n{signature.description}\n{PROMPT_TOOL_FOOTER}\n"
@@ -320,6 +357,8 @@ def system_prompt_from_tool(signature: ToolSignature) -> str:
         f"{parameter_section}\n"
         "When you call the tool, read its response carefully before replying."
     )
+
+    return f"{mcp_header}\n\n{body}".strip()
 
 
 def extract_description_from_system(system_prompt: str) -> Optional[str]:
