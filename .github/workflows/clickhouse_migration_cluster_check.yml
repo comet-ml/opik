@@ -34,14 +34,18 @@ jobs:
           echo "🔍 Detecting ClickHouse migration files that were added or modified..."
           
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # For PRs, use GitHub's built-in files API (since fetch-depth=1 limits git history)
+            # For PRs, use GitHub's built-in files API
             gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
               --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
           else
-            # For pushes to main, check the last commit
-            CHANGED_FILES=$(git diff --name-only --diff-filter=AM HEAD~1..HEAD | grep "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\.sql$" || true)
+            # For pushes to main, use GitHub API to get commit files
+            # This works reliably regardless of fetch-depth
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }} \
+              --jq '.files[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            CHANGED_FILES=$(cat changed_files.txt || echo "")
+            rm -f changed_files.txt
           fi
           
           if [ -n "$CHANGED_FILES" ]; then
@@ -70,11 +74,10 @@ jobs:
           echo "📖 Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
           echo
           
-          # Convert the multiline environment variable to an array
-          mapfile -t FILES <<< "$MIGRATION_FILES"
-          
-          # Run the validation script with specific files
-          if ./scripts/check_clickhouse_migrations_cluster.sh "${FILES[@]}"; then
+          # Run the validation script with the migration files
+          # Use xargs with -0 flag and tr to handle newline-separated list safely
+          # This approach correctly handles filenames with spaces across different platforms
+          if echo "$MIGRATION_FILES" | tr '\n' '\0' | xargs -0 ./scripts/check_clickhouse_migrations_cluster.sh; then
             echo "✅ All modified ClickHouse migrations are properly configured!"
             echo "🎉 DDL operations will be executed distributively across the cluster."
           else

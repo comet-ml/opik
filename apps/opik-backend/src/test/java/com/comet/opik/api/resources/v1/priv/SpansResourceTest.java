@@ -6575,6 +6575,75 @@ class SpansResourceTest {
             var actualEntity = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
+
+        @Test
+        @DisplayName("delete span feedback score with author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score with author (using DeleteFeedbackScore with author for the bug scenario)
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score")
+                    .value(BigDecimal.valueOf(0.85))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITH an author (this is where the bug occurs)
+            // When writeToAuthored is disabled, this should still work
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score")
+                    .author(USER) // This is the key part - including author in the delete request
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was actually deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete span feedback score without author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score-2")
+                    .value(BigDecimal.valueOf(0.75))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITHOUT an author (this should work before and after the fix)
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score-2")
+                    // No author specified
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
+        }
     }
 
     @Nested
