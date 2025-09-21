@@ -21,6 +21,7 @@ target/
 
 # Opik opimizer related
 /sdks/opik_optimizer/benchmark_results/
+/sdks/opik_optimizer/node_modules
 
 # FE related
 /apps/opik-frontend/dist
