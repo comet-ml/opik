@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -25,7 +25,7 @@
         "opik.apiKey": {
           "type": "string",
           "default": "",
-          "description": "Opik API Key used to store your chat sessions"
+          "description": "Opik API Key used to store your chat sessions - Can be found at https://www.comet.com/api/my/settings/"
         },
         "opik.projectName": {
           "type": "string",
