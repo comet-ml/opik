@@ -6,11 +6,10 @@ import asyncio
 import copy
 import importlib
 import json
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
-import json
-import textwrap
 
 
 TOOL_ENTRY_KEY = "function"
@@ -303,6 +302,18 @@ PROMPT_TOOL_FOOTER = "<<END_TOOL_DESCRIPTION>>"
 
 # System-prompt scaffolding below is inspired by the MCP section of Cline's
 # system prompt (Apache-2.0). See https://github.com/cline/cline for details.
+TOOL_USE_GUIDELINES = textwrap.dedent(
+    """
+    # Tool Use Guidelines
+
+    1. In <thinking> tags, decide what you already know and what information you still need.
+    2. Choose the best tool for the current step using the descriptions and schemas provided.
+    3. Use one tool call per message, wait for its result, then decide the next step.
+    4. Format tool calls exactly with the XML shown in the tool examples.
+    5. After each tool call, read the result carefully before responding or calling another tool.
+    6. Always incorporate the tool output into your final answer.
+    """
+).strip()
 
 
 def _format_json_block(data: Mapping[str, Any]) -> str:
@@ -345,20 +356,25 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
             """
         ).strip()
 
-    body = (
-        "You are an assistant that answers developer questions using the available MCP tool.\n"
-        "Always decide whether the tool is required before answering.\n"
-        "Always call the tool at least once before replying.\n"
-        "\n"
-        "Tool description:\n"
-        f"{PROMPT_TOOL_HEADER}\n{signature.description}\n{PROMPT_TOOL_FOOTER}\n"
-        "\n"
-        "Tool parameters:\n"
-        f"{parameter_section}\n"
-        "When you call the tool, read its response carefully before replying."
-    )
+    body = textwrap.dedent(
+        f"""
+        You are an assistant that answers developer questions using the available MCP tool.
+        Always decide whether the tool is required before answering.
+        Always call the tool at least once before replying and incorporate the returned documentation into your answer (quote key terms, mention the library ID).
 
-    return f"{mcp_header}\n\n{body}".strip()
+        Tool description:
+        {PROMPT_TOOL_HEADER}
+        {signature.description}
+        {PROMPT_TOOL_FOOTER}
+
+        Tool parameters:
+        {parameter_section}
+        When you call the tool, read its response carefully before replying.
+        """
+    ).strip()
+
+    sections = [mcp_header, TOOL_USE_GUIDELINES, body]
+    return "\n\n".join(section for section in sections if section).strip()
 
 
 def extract_description_from_system(system_prompt: str) -> Optional[str]:
