@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -12,28 +13,37 @@ from opik_optimizer.utils.mcp import (
     call_tool_from_manifest,
     dump_mcp_signature,
     extract_description_from_system,
+    list_tools_from_manifest,
     load_tool_signature_from_manifest,
     response_to_text,
     system_prompt_from_tool,
 )
 
 
+cache_dir = Path("artifacts/.litellm_cache").resolve()
+os.environ.setdefault("LITELLM_CACHE_PATH", str(cache_dir))
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+
 # Update the manifest to point at your browser MCP server implementation.
 MCP_MANIFEST = MCPManifest.from_dict(
     {
         "name": "browser-info",
-        "command": "python",
-        "args": ["/path/to/browser_server.py"],
+        "command": "npx",
+        "args": ["@browsermcp/mcp@latest"],
         "env": {},
     }
 )
 
-TOOL_NAME = "browser_open"
+# Choose whichever tool you plan to optimise (see the list printed at runtime).
+TOOL_NAME = "browser_navigate"
 
 
-def browser_open(url: str, **_: Any) -> str:
-    response = call_tool_from_manifest(MCP_MANIFEST, TOOL_NAME, {"url": url})
-    return response_to_text(response)
+def browser_open(**arguments: Any) -> str:
+    response = call_tool_from_manifest(MCP_MANIFEST, TOOL_NAME, dict(arguments))
+    text = response_to_text(response)
+    print(f"[browser:{TOOL_NAME}] arguments={arguments} -> preview={text[:160]!r}")
+    return text
 
 
 def browser_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
@@ -44,7 +54,23 @@ def browser_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult
 
 dataset = load_browser_dataset()
 
+all_tools = list_tools_from_manifest(MCP_MANIFEST)
+available_names = [getattr(tool, "name", None) for tool in all_tools]
+print("MCP tools available:", available_names)
+
 signature = load_tool_signature_from_manifest(MCP_MANIFEST, TOOL_NAME)
+
+original_signature_path = Path("artifacts/browser_original_signature.json")
+original_signature_path.parent.mkdir(parents=True, exist_ok=True)
+dump_mcp_signature([signature], original_signature_path)
+print(f"Original signature written to {original_signature_path}")
+
+sample_item = dataset.get_items(nb_samples=1)[0]
+sample_args = sample_item.get("arguments", {})
+sample_preview = response_to_text(
+    call_tool_from_manifest(MCP_MANIFEST, TOOL_NAME, dict(sample_args))
+)
+print("Sample tool output preview:", sample_preview[:200].replace("\n", " "))
 system_prompt = system_prompt_from_tool(signature)
 
 prompt = ChatPrompt(
@@ -71,7 +97,12 @@ meta_result = meta_optimizer.optimize_prompt(
     n_samples=len(dataset.get_items()),
 )
 
-optimized_prompt = meta_result.best_prompt or prompt
+if meta_result.best_prompt is None:
+    raise RuntimeError(
+        "MetaPromptOptimizer did not return an optimized prompt. Check MCP responses and optimizer logs."
+    )
+
+optimized_prompt = meta_result.best_prompt
 
 maybe_description = extract_description_from_system(optimized_prompt.system or "")
 if maybe_description:
