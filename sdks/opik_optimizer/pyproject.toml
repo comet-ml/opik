@@ -14,7 +14,7 @@ dependencies = [
     "diskcache",
     "hf_xet",
     "litellm",
-    "modelcontextprotocol",
+    "mcp",
     "opik>=1.7.17",
     "optuna",
     "pandas",
