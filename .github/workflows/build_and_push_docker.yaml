@@ -76,7 +76,8 @@ jobs:
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
-              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              # ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               OPIK_VERSION=${{inputs.version}}
 
@@ -92,7 +93,8 @@ jobs:
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}-comet:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
-              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              # ${{ github.ref == 'refs/heads/main' && format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               ${{inputs.comet_build_args}}
               OPIK_VERSION=${{inputs.version}}
