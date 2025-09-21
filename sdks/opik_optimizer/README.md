@@ -120,7 +120,13 @@ The `result` object contains the optimized prompt, evaluation scores, and other 
 
 This repository now includes utilities and examples for tuning MCP tool signatures without rewriting entire prompt templates. The proof of concept uses the official MCP Python SDK to launch servers from `mcp.json` manifests, retrieve tool metadata, and run evaluation loops.
 
-Run the example scripts after updating the in-file `MCP_MANIFEST` constants to point at your MCP servers:
+Install the MCP Python SDK first:
+
+```bash
+pip install mcp
+```
+
+Then run the example scripts after updating the in-file `MCP_MANIFEST` constants to point at your MCP servers:
 
 ```bash
 python scripts/litellm_metaprompt_context7_mcp_example.py
