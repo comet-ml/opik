@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext) {
         const apiKey = getOpikApiKey();
 
         if (!apiKey) {
-          showInitialApiKeyWarning(context)
+          showInitialApiKeyWarning(context);
           return;
         }
         
