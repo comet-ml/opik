@@ -759,7 +759,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
     public Response updateThread(@PathParam("threadModelId") UUID threadModelId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadUpdate.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

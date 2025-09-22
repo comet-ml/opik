@@ -86,6 +86,8 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
+    Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
+
     Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
 
     Mono<Project> getOrCreate(String projectName);
@@ -482,6 +484,13 @@ class ProjectServiceImpl implements ProjectService {
 
             return repository.findByNames(workspaceId, names);
         });
+    }
+
+    @Override
+    public Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids) {
+        return findByIds(workspaceId, ids)
+                .stream()
+                .collect(Collectors.toMap(Project::id, Project::name));
     }
 
     public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {

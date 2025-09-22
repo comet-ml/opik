@@ -18,6 +18,7 @@ from . import (
 from .metrics import base_metric
 from .models import base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
+from .. import url_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def evaluate(
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -84,6 +86,8 @@ def evaluate(
 
         dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
             If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to run the task and evaluate the task output for every dataset item.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -115,6 +119,7 @@ def evaluate(
         scoring_key_mapping=scoring_key_mapping,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
+        trial_count=trial_count,
     )
 
 
@@ -132,6 +137,7 @@ def _evaluate_task(
     scoring_key_mapping: Optional[ScoringKeyMappingType],
     dataset_item_ids: Optional[List[str]],
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
+    trial_count: int,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -151,6 +157,7 @@ def _evaluate_task(
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
+            trial_count=trial_count,
         )
 
     total_time = time.time() - start_time
@@ -158,11 +165,13 @@ def _evaluate_task(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -171,6 +180,8 @@ def _evaluate_task(
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=trial_count,
     )
 
     return evaluation_result_
@@ -250,17 +261,21 @@ def evaluate_experiment(
             experiment.dataset_name, total_time, test_results
         )
 
-    report.display_experiment_link(
-        dataset_id=experiment.dataset_id,
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=1,
     )
 
     return evaluation_result_
@@ -307,6 +322,7 @@ def evaluate_prompt(
     prompt: Optional[Prompt] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -339,6 +355,8 @@ def evaluate_prompt(
 
         dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
             If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
@@ -386,6 +404,7 @@ def evaluate_prompt(
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
+            trial_count=trial_count,
         )
 
     total_time = time.time() - start_time
@@ -393,11 +412,13 @@ def evaluate_prompt(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
+
+    report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -406,6 +427,8 @@ def evaluate_prompt(
         dataset_id=dataset.id,
         experiment_name=experiment.name,
         test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=trial_count,
     )
 
     return evaluation_result_
@@ -427,6 +450,7 @@ def evaluate_optimization_trial(
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -476,6 +500,8 @@ def evaluate_optimization_trial(
 
         dataset_sampler: An instance of a dataset sampler that will be used to sample dataset items for evaluation.
             If not provided, all samples in the dataset will be evaluated.
+
+        trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -509,4 +535,5 @@ def evaluate_optimization_trial(
         scoring_key_mapping=scoring_key_mapping,
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
+        trial_count=trial_count,
     )

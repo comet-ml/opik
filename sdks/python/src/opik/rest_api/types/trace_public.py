@@ -10,7 +10,6 @@ from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_list_string_public import JsonListStringPublic
-from .json_node_public import JsonNodePublic
 from .trace_public_visibility_mode import TracePublicVisibilityMode
 
 
@@ -22,7 +21,7 @@ class TracePublic(UniversalBaseModel):
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListStringPublic] = None
     output: typing.Optional[JsonListStringPublic] = None
-    metadata: typing.Optional[JsonNodePublic] = None
+    metadata: typing.Optional[JsonListStringPublic] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoPublic] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
