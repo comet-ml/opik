@@ -22,4 +22,7 @@ public class S3Config {
 
     @Valid @JsonProperty
     private boolean isMinIO;
+
+    @Valid @JsonProperty
+    private int stripAttachmentsMinSize = 1000;
 }
