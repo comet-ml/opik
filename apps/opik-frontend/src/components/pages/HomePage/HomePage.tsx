@@ -6,7 +6,6 @@ import OverallPerformanceSection from "@/components/pages/HomePage/OverallPerfor
 import ObservabilitySection from "@/components/pages/HomePage/ObservabilitySection";
 import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
 import WelcomeBanner from "@/components/pages/HomePage/WecomeBanner";
-import { PostHogFeature } from "posthog-js/react";
 
 const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
 
@@ -22,26 +21,9 @@ const HomePage = () => {
         <WelcomeBanner setOpen={setShowWelcomeMessage} />
       ) : (
         <div className="mb-4 flex items-center justify-between">
-          <PostHogFeature flag="home-page-title">
-            <h1 className="comet-title-l truncate break-words">
-              Welcome back to Opik
-            </h1>
-          </PostHogFeature>
-          <PostHogFeature flag="home-page-title" match={"home-page-title-old"}>
-            <h1 className="comet-title-l truncate break-words">
-              Old Welcome back to Opik
-            </h1>
-          </PostHogFeature>
-          <PostHogFeature flag="home-page-title" match={"home-page-title-new"}>
-            <h1 className="comet-title-l truncate break-words">
-              New Welcome back to Opik
-            </h1>
-          </PostHogFeature>
-          <PostHogFeature flag="home-page-title" match={"control"}>
-            <h1 className="comet-title-l truncate break-words">
-              Control Welcome back to Opik
-            </h1>
-          </PostHogFeature>
+          <h1 className="comet-title-l truncate break-words">
+            Welcome back to Opik
+          </h1>
         </div>
       )}
       <WorkspaceStatisticSection />
