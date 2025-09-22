@@ -12,8 +12,6 @@ from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.span_page_public import SpanPagePublic
@@ -257,7 +255,7 @@ class SpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -294,7 +292,7 @@ class SpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -440,7 +438,7 @@ class SpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -476,7 +474,7 @@ class SpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -552,7 +550,12 @@ class SpansClient:
         return _response.data
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -562,6 +565,8 @@ class SpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -576,7 +581,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.delete_span_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_span_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names_1(
@@ -1070,7 +1077,7 @@ class AsyncSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1107,7 +1114,7 @@ class AsyncSpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -1265,7 +1272,7 @@ class AsyncSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1301,7 +1308,7 @@ class AsyncSpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -1383,7 +1390,12 @@ class AsyncSpansClient:
         return _response.data
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -1393,6 +1405,8 @@ class AsyncSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1410,7 +1424,9 @@ class AsyncSpansClient:
             await client.spans.delete_span_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_span_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names_1(

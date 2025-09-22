@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDeleteByProject;
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
@@ -97,6 +98,23 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void deleteTraceFeedbackScore(DeleteFeedbackScore score, UUID traceId, String apiKey, String workspaceName) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("feedback-scores")
+                .path("delete")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(score))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
@@ -293,7 +311,8 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String apiKey,
+    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String author,
+            String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -306,6 +325,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .projectName(projectName)
                         .threadId(threadId)
                         .names(scoreNames)
+                        .author(author)
                         .build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);

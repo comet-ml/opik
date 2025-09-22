@@ -47,28 +47,30 @@ const TraceAnnotateViewer: React.FunctionComponent<
       activeSection={activeSection}
       explainer={EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
     >
-      {hasFeedbackScores && (
-        <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {data.feedback_scores?.map((score) => (
-            <FeedbackScoreTag
-              key={score.name}
-              label={score.name}
-              value={score.value}
-              reason={score.reason}
-              lastUpdatedAt={score.last_updated_at}
-              lastUpdatedBy={score.last_updated_by}
-            />
-          ))}
-        </div>
-      )}
-      <FeedbackScoresEditor
-        key={traceId ?? spanId}
-        feedbackScores={data.feedback_scores || []}
-        onUpdateFeedbackScore={onUpdateFeedbackScore}
-        onDeleteFeedbackScore={onDeleteFeedbackScore}
-        className="mt-4"
-        entityCopy="traces"
-      />
+      <div className="size-full overflow-y-auto">
+        {hasFeedbackScores && (
+          <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
+            {data.feedback_scores?.map((score) => (
+              <FeedbackScoreTag
+                key={score.name}
+                label={score.name}
+                value={score.value}
+                reason={score.reason}
+                lastUpdatedAt={score.last_updated_at}
+                lastUpdatedBy={score.last_updated_by}
+              />
+            ))}
+          </div>
+        )}
+        <FeedbackScoresEditor
+          key={`${spanId}-${traceId}`}
+          feedbackScores={data.feedback_scores || []}
+          onUpdateFeedbackScore={onUpdateFeedbackScore}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          className="mt-4"
+          entityCopy="traces"
+        />
+      </div>
     </DetailsActionSectionLayout>
   );
 };

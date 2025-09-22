@@ -1,15 +1,232 @@
 ---
-description: Core library architecture and design patterns
-globs:
+description: Core library architecture and design patterns for the Python SDK
+globs: sdks/python/src/opik/**/*
 alwaysApply: true
 ---
+# Python SDK Architecture Guidelines
+
+Comprehensive guidelines for understanding and implementing the core architecture patterns in the Opik Python SDK.
 
 ## Core Architecture Patterns
-- Follow layered architecture: API Objects → Message Processing (for non-blocking operations) → REST API → Backend
-- Create spans, traces and feedback scores as non-blocking operations performed in the background
-- Use `opik.opik_context` module, `opik.context_storage` module, and `@opik.track` decorator to handle spans and traces lifecycle
+
+### Layered Architecture
+
+- **Flow**: API Objects → Message Processing (for non-blocking operations) → REST API → Backend
+- **Non-blocking Operations**: Create spans, traces and feedback scores as background operations
+- **Context Management**: Use `opik.opik_context`, `opik.context_storage`, and `@opik.track` decorator for lifecycle management
+
+```python
+# ✅ Good: Layered architecture flow example
+from opik.api_objects import opik_client
+from opik.message_processing import messages
+
+# API Object layer
+client = opik_client.Opik()
+client.trace(name="my_trace", input={"query": "test"})
+
+# Message Processing layer (happens automatically in background)
+# Creates CreateTraceMessage → processed by OpikMessageProcessor
+
+# REST API layer (handled by message processors)
+# Calls rest_api_client.OpikApi methods
+
+# Backend layer (external Opik server)
+```
+
+### Message Processing Architecture
+
+```python
+# ✅ Good: Message processing flow
+from opik.message_processing import messages, message_processors
+
+# 1. API calls create messages
+create_trace_message = messages.CreateTraceMessage(...)
+
+# 2. Messages are processed by OpikMessageProcessor
+processor = message_processors.OpikMessageProcessor(rest_client)
+processor.process(create_trace_message)
+
+# 3. Processor maps message types to handlers
+# {
+#     messages.CreateTraceMessage: _process_create_trace_message,
+#     messages.CreateSpanMessage: _process_create_span_message,
+#     messages.AddTraceFeedbackScoresBatchMessage: _process_add_trace_feedback_scores_batch_message,
+# }
+```
+
+### Context Storage
+
+```python
+# ✅ Good: Using context storage for trace/span lifecycle
+import opik.context_storage as context_storage
+import opik.opik_context as opik_context
+
+# Set trace data in context
+context_storage.set_trace_data(trace_data)
+
+# Update current trace
+opik_context.update_current_trace(
+    name="updated_name",
+    metadata={"key": "value"}
+)
+
+# Get current trace data
+current_trace = opik_context.get_current_trace_data()
+```
 
 ## Integration Patterns
-- Extend base decorator classes for new tracking integrations (example: `opik.integrations.anthropic`)
-- If the library to integrate with supports callbacks, consider implementing a callback first (example: `opik.integrations.langchain`)
-- Implement evaluation functionalities (new metrics and evaluate-like functions) consistent with existing logic and API
+
+### Base Decorator Classes
+
+- **Pattern**: Extend base tracking classes for new integrations
+- **Example**: `opik.integrations.anthropic` uses tracking decorators
+- **Consistency**: Follow established patterns for similar libraries
+
+```python
+# ✅ Good: Integration using tracking pattern (anthropic example)
+import anthropic
+from opik.integrations.anthropic import track_anthropic
+
+client = anthropic.Anthropic(api_key="your_key")
+tracked_client = track_anthropic(client, project_name="my_project")
+
+# Methods are automatically tracked
+response = tracked_client.messages.create(
+    model="claude-3-sonnet-20240229",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+```
+
+### Callback-Based Integrations
+
+- **Pattern**: Use callback pattern when library supports it
+- **Example**: `opik.integrations.langchain` uses `BaseTracer`
+- **Implementation**: Extend library's callback/tracer classes
+
+```python
+# ✅ Good: Callback-based integration (langchain example)
+from langchain_core.tracers import BaseTracer
+from opik.integrations.langchain import OpikTracer
+
+class OpikTracer(BaseTracer):
+    def __init__(self, project_name: Optional[str] = None):
+        super().__init__()
+        self._project_name = project_name
+
+    def _persist_run(self, run: Run) -> None:
+        # Process run data and create spans/traces
+        pass
+```
+
+### Decorator-Based Tracking
+
+```python
+# ✅ Good: Using @opik.track decorator
+import opik
+
+@opik.track
+def my_llm_function(prompt: str) -> str:
+    # Function automatically creates span
+    # Input/output automatically captured
+    return process_prompt(prompt)
+
+# ✅ Good: Nested tracking with decorators
+@opik.track
+def complex_function(input_data: dict) -> dict:
+    # Create nested spans by decorating helper functions
+    # top-level tracked function also creates a trace, not just a span
+    preprocessed = preprocess_data(input_data)
+    result = process_data(preprocessed)
+    return result
+
+@opik.track
+def preprocess_data(data: dict) -> dict:
+    # This function automatically creates a nested span
+    return {"processed": data}
+
+@opik.track
+def process_data(data: dict) -> dict:
+    # This function also creates a nested span
+    return {"result": data["processed"]}
+
+complex_function({"some-key": "some-value"})
+```
+
+## Evaluation Architecture
+
+### Metrics Implementation
+
+- **Pattern**: Implement evaluation metrics consistent with existing logic
+- **Base Class**: Extend `opik.evaluation.metrics.BaseMetric`
+- **Error Handling**: Use `opik.exceptions.MetricComputationError` for errors
+
+```python
+# ✅ Good: Metric implementation pattern
+from opik.evaluation.metrics import BaseMetric, score_result
+from opik.exceptions import MetricComputationError
+
+class CustomMetric(BaseMetric):
+    def __init__(self, threshold: float = 0.5):
+        super().__init__()
+        self.threshold = threshold
+
+    def score(self, input: str, output: str, context: str = None) -> score_result.ScoreResult:
+        try:
+            # Metric computation logic
+            score_value = compute_score(input, output, context)
+            return score_result.ScoreResult(
+                value=score_value,
+                name=self.name,
+                reason="Custom metric evaluation"
+            )
+        except Exception as e:
+            raise MetricComputationError(f"Failed to compute metric: {e}")
+```
+
+### Evaluation Functions
+
+```python
+# ✅ Good: Evaluation function pattern
+from opik.evaluation import evaluate
+
+def custom_evaluate_function(dataset, model_fn, metrics):
+    """Evaluation function following established patterns."""
+    return evaluate(
+        dataset=dataset,
+        task=model_fn,
+        scoring_metrics=metrics,
+        experiment_name="custom_evaluation"
+    )
+```
+
+## Best Practices
+
+### Architecture Principles
+
+1. **Separation of Concerns**: Keep API, message processing, and REST layers distinct
+2. **Non-blocking Operations**: Use background processing for performance
+3. **Context Isolation**: Use proper context management for concurrent operations
+4. **Error Propagation**: Handle errors appropriately at each layer
+
+### Integration Guidelines
+
+1. **Follow Existing Patterns**: Study similar integrations before implementing new ones
+2. **Use Library Callbacks**: Prefer callback patterns when available
+3. **Maintain Consistency**: Keep parameter names and patterns consistent
+4. **Handle Provider Specifics**: Account for library-specific behaviors
+
+### Performance Considerations
+
+```python
+# ✅ Good: Proper client lifecycle management
+client = opik.Opik()
+# Use client for operations
+client.flush()  # Ensure all data is sent
+```
+
+## Key References
+
+- [API Design Guidelines](api-design.mdc)
+- [Error Handling Guidelines](error-handling.mdc)
+- [Code Structure Guidelines](code-structure.mdc)
+- [Testing Guidelines](test-organization.mdc)

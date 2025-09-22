@@ -27,7 +27,7 @@ repos:
         files: ^sdks/python
         # `exclude` option will work only from here.
         # The rest of mypy configuration can be moved to pyproject.toml
-        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)"
+        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
         args:
           [
             --config-file,

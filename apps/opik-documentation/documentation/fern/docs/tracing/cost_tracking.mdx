@@ -68,7 +68,7 @@ print(trace.total_estimated_cost)
 If you are not using one of Opik's integration, Opik can still compute the cost. For you will need to ensure the
 span type is `llm` and you will need to pass:
 
-1. `provider`: The name of the provider, typically `openai`, `anthropic` or `google_ai` for example
+1. `provider`: The name of the provider, typically `openai`, `anthropic` or `google_ai` for example (the most recent providers list can be found in `opik.LLMProvider` enum object)
 2. `model`: The name of the model
 3. `usage`: The input, output and total tokens for this LLM call.
 
@@ -133,9 +133,11 @@ span = trace.span(
 
 ## Manually Setting Span Costs
 
-For cases where you need to set a custom cost or when using an unsupported model, you can
-manually set the cost of a span using `update_current_span`. Note that manually setting a
-cost will override any automatically computed cost by Opik:
+When you need to set a custom cost or use an unsupported model, you can manually set the cost of a span. There are two approaches depending on your use case:
+
+### Setting Costs During Span Creation
+
+If you're manually creating spans, you can set the cost directly when creating the span:
 
 ```python
 from opik import track, opik_context
@@ -150,20 +152,112 @@ def llm_call(input):
 llm_call("Hello world!")
 ```
 
-This is particularly useful when:
+### Updating Costs After Span Completion
+
+With Opik integrations, spans are automatically created and closed, preventing updates while they're open. However, you can update the cost afterward using the `update_span` method. This works well for implementing periodic cost estimation jobs:
+
+```python
+from opik import Opik
+from opik.rest_api.types.span_public import SpanPublic
+
+# Define your own cost mapping for different models
+TOKEN_COST = {
+    ("openai.chat", "gpt-4o-2024-08-06"): {
+        "input_tokens": 2.5e-06,
+        "output_tokens": 1e-05,
+    }
+}
+
+# This part would be custom for your use-case and is only here for example
+def compute_cost_for_span(span: SpanPublic):
+    provider = span.provider or span.input.get("ai.model.provider")
+    model = span.model or span.output.get("gen_ai.response.model")
+    usage = span.usage
+
+    if (provider, model) in TOKEN_COST:
+        model_cost = TOKEN_COST[(provider, model)]
+        cost = (
+            usage["input_tokens"] * model_cost["input_tokens"]
+            + usage["output_tokens"] * model_cost["output_tokens"]
+        )
+        return cost
+    return None
+
+def update_span_costs(project_name, trace_id=None):
+    opik_client = Opik()
+
+    # Find LLM spans that don't have estimated costs
+    spans = opik_client.search_spans(
+        project_name=project_name,
+        trace_id=trace_id,
+        filter_string='type="llm" and total_estimated_cost=0',
+    )
+
+    for span in spans:
+        cost = compute_cost_for_span(span)
+
+        if cost:
+            print(f"Updating span {span.id} of trace {span.trace_id} with cost: {cost}")
+            opik_client.update_span(
+                trace_id=span.trace_id,
+                parent_span_id=span.parent_span_id,
+                project_name=project_name,
+                id=span.id,
+                total_cost=cost,
+            )
+
+# Example usage in a CRON job
+if __name__ == "__main__":
+    update_span_costs("your-project-name")
+```
+
+This approach is particularly useful when:
 
 - Using models or providers not yet supported by automatic cost tracking
 - You have a custom pricing agreement with your provider
 - You want to track additional costs beyond model usage
+- You need to implement cost estimation as a background process
+- Working with integrations where spans are automatically managed
 
-## Supported Models and Integrations
+<Tip>
+  You can run the cost update function as a CRON job to automatically update costs for spans created without cost
+  information. This is especially valuable in production environments where accurate cost data for all spans is
+  essential.
+</Tip>
 
-Opik currently calculates costs automatically for:
+## Supported Models, Providers, and Integrations
 
-- [OpenAI Integration](/tracing/integrations/openai) with Text Models hosted on openai.com
-- [Langchain Integration](/tracing/integrations/langchain) with Vertex AI Gemini text generation models
+Opik currently calculates costs automatically for all LLM calls in the following Python SDK integrations:
+
+- [Google ADK Integration](/tracing/integrations/adk)
+- [AWS Bedrock Integration](/tracing/integrations/bedrock)
+- [LangChain Integration](/tracing/integrations/langchain)
+- [OpenAI Integration](/tracing/integrations/openai)
+- [LiteLLM Integration](https://docs.litellm.ai/docs/observability/opik_integration)
+- [Anthropic Integration](/tracing/integrations/anthropic)
+- [CrewAI Integration](/tracing/integrations/crewai)
+- [Google AI Integration](/tracing/integrations/genai)
+- [Haystack Integration](/tracing/integrations/haystack)
+- [LlamaIndex Integration](/tracing/integrations/llama_index)
+
+
+### Supported Providers
+
+Cost tracking is supported for the following LLM providers (as defined in `opik.LLMProvider` enum):
+
+- **OpenAI** (`openai`) - Models hosted by OpenAI (https://platform.openai.com)
+- **Anthropic** (`anthropic`) - Models hosted by Anthropic (https://www.anthropic.com)
+- **Anthropic on Vertex AI** (`anthropic_vertexai`) - Anthropic models hosted by Google Vertex AI
+- **Google AI** (`google_ai`) - Gemini models hosted in Google AI Studio (https://ai.google.dev/aistudio)
+- **Google Vertex AI** (`google_vertexai`) - Gemini models hosted in Google Vertex AI (https://cloud.google.com/vertex-ai)
+- **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
+- **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
 
 <Tip>
   We are actively expanding our cost tracking support. Need support for additional models or providers? Please [open a
   feature request](https://github.com/comet-ml/opik/issues) to help us prioritize development.
 </Tip>
+
+## Complete Model List
+
+For a comprehensive list of all supported models with detailed pricing information, visit the [Supported Models](/tracing/supported_models) page. This page is automatically generated from the latest model pricing data and includes:

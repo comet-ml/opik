@@ -250,7 +250,7 @@ class DockerExecutor(CodeExecutorBase):
 
         with self.tracer.start_as_current_span("docker.run_scoring"):
             try:
-                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.py", code, json.dumps(data), payload_type or ""]
+                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, json.dumps(data), payload_type or ""]
             
                 future = self.scoring_executor.submit(
                     container.exec_run,

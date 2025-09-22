@@ -24,6 +24,7 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 export const getDefaultConfigByProvider = (
   provider?: PROVIDER_TYPE | "",
@@ -116,4 +117,14 @@ export const generateDefaultPrompt = ({
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const parseCompletionOutput = (run: RunStreamingReturn) => {
+  return (
+    run.result ||
+    run.opikError ||
+    run.providerError ||
+    run.pythonProxyError ||
+    "The AI provider returned an empty response. Please, try again."
+  );
 };

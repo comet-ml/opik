@@ -7,7 +7,6 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanType } from "./SpanType";
 import { JsonListString } from "./JsonListString";
-import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
@@ -24,7 +23,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
     input: JsonListString.optional(),
     output: JsonListString.optional(),
-    metadata: JsonNode.optional(),
+    metadata: JsonListString.optional(),
     model: core.serialization.string().optional(),
     provider: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
@@ -57,7 +56,7 @@ export declare namespace Span {
         end_time?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
-        metadata?: JsonNode.Raw | null;
+        metadata?: JsonListString.Raw | null;
         model?: string | null;
         provider?: string | null;
         tags?: string[] | null;

@@ -518,6 +518,30 @@ const ExperimentsPage: React.FC = () => {
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
         />
       </PageBodyStickyContainer>
+      {Boolean(experiments.length) && (
+        <PageBodyStickyContainer
+          direction="horizontal"
+          className="-mb-2 pt-4"
+          limitWidth
+        >
+          <FeedbackScoresChartsWrapper
+            chartsData={chartsData}
+            noDataComponent={
+              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
+                <ChartLine className="size-4 shrink-0 text-light-slate" />
+                <div className="comet-body-s-accented text-foreground">
+                  No charts to show
+                </div>
+                <div className="comet-body-s text-muted-slate">
+                  Please expand a group to see its chart. You can expand up to{" "}
+                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
+                </div>
+              </Card>
+            }
+            isAverageScores
+          />
+        </PageBodyStickyContainer>
+      )}
       <PageBodyStickyContainer
         className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
@@ -570,35 +594,11 @@ const ExperimentsPage: React.FC = () => {
             size="sm"
             onClick={handleNewExperimentClick}
           >
-            <Info className="mr-2 size-3.5" />
+            <Info className="mr-1.5 size-3.5" />
             Create new experiment
           </Button>
         </div>
       </PageBodyStickyContainer>
-      {Boolean(experiments.length) && (
-        <PageBodyStickyContainer
-          direction="horizontal"
-          className="z-[5]"
-          limitWidth
-        >
-          <FeedbackScoresChartsWrapper
-            chartsData={chartsData}
-            noDataComponent={
-              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
-                <ChartLine className="size-4 shrink-0 text-light-slate" />
-                <div className="comet-body-s-accented text-foreground">
-                  No charts to show
-                </div>
-                <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to{" "}
-                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
-                </div>
-              </Card>
-            }
-            isAverageScores
-          />
-        </PageBodyStickyContainer>
-      )}
       <DataTable
         columns={columns}
         aggregationMap={aggregationMap}

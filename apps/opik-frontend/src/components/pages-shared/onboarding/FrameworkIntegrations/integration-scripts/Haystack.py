@@ -1,17 +1,19 @@
 import os
 
-os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true" # HIGHLIGHTED_LINE
+from opik import configure  # HIGHLIGHTED_LINE
 
-# INJECT_OPIK_CONFIGURATION
+configure()  # HIGHLIGHTED_LINE
+
+os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"  # HIGHLIGHTED_LINE
 
 from haystack import Pipeline
 from haystack.components.builders import ChatPromptBuilder
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
-from opik.integrations.haystack import OpikConnector # HIGHLIGHTED_LINE
+from opik.integrations.haystack import OpikConnector  # HIGHLIGHTED_LINE
 
 pipe = Pipeline()
-pipe.add_component("tracer", OpikConnector("Chat example")) # HIGHLIGHTED_LINE
+pipe.add_component("tracer", OpikConnector("Chat example"))  # HIGHLIGHTED_LINE
 pipe.add_component("prompt_builder", ChatPromptBuilder())
 pipe.add_component("llm", OpenAIChatGenerator(model="gpt-3.5-turbo"))
 pipe.connect("prompt_builder.prompt", "llm.messages")

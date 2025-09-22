@@ -153,6 +153,18 @@ export const OPERATORS_MAP: Record<
       value: "contains",
     },
     {
+      label: "doesn't contain",
+      value: "not_contains",
+    },
+    {
+      label: "starts with",
+      value: "starts_with",
+    },
+    {
+      label: "ends with",
+      value: "ends_with",
+    },
+    {
       label: ">",
       value: ">",
     },
@@ -208,3 +220,6 @@ export const OPERATORS_MAP: Record<
     },
   ],
 };
+
+export const CUSTOM_FILTER_VALIDATION_REGEXP =
+  /^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/;

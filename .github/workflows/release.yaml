@@ -72,6 +72,16 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
 
+  # release-typescript-langchain-sdk:
+  #   needs:
+  #     - set-version
+  #     - create-git-tag
+  #   uses: ./.github/workflows/typescript_langchain_sdk_publish.yml
+  #   secrets: inherit
+  #   with:
+  #     version: ${{needs.set-version.outputs.version}}
+  #     is_release: true
+
   publish-helm-chart:
     needs:
       - set-version
@@ -81,13 +91,31 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
 
-  update_version_txt:
+  create-github-release:
     needs:
       - set-version
       - create-git-tag
       - release-apps
       - release-sdk
+      - release-typescript-sdk
+      # - release-typescript-langchain-sdk
       - publish-helm-chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{needs.set-version.outputs.version}}
+          generate_release_notes: true
+
+      - name: Delete Release Draft
+        uses: hugo19941994/delete-draft-releases@v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  update_version_txt:
+    needs:
+      - create-github-release
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -134,19 +162,4 @@ jobs:
           branch: ${{ github.ref }}
           force_with_lease: true
 
-  create-github-release:
-    needs:
-      - set-version
-      - create-git-tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{needs.set-version.outputs.version}}
-          generate_release_notes: true
-
-      - name: Delete Release Draft
-        uses: hugo19941994/delete-draft-releases@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  

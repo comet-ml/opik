@@ -46,7 +46,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     Boolean(CODE_EXECUTOR_SERVICE_URL);
 
   return (
-    <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
+    <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
       <div>
         <div className="comet-body-s mb-3">
           1. Install Opik using pip from the command line.

@@ -15,6 +15,7 @@ import useTraceById from "@/api/traces/useTraceById";
 import Loader from "@/components/shared/Loader/Loader";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
 import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
+import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
 import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/components/shared/NoData/NoData";
 import { Span } from "@/types/traces";
@@ -233,6 +234,13 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                   />
                 )}
+                {activeSection === DetailsActionSection.AIAssistants && (
+                  <TraceAIViewer
+                    traceId={traceId}
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
+                  />
+                )}
               </ResizablePanel>
             </>
           )}
@@ -263,6 +271,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           graph={graph}
           setGraph={setGraph}
           hasAgentGraph={hasAgentGraph}
+          setActiveSection={setActiveSection}
         />
       }
       onClose={onClose}

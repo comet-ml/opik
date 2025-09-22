@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.langchain4j.model.openai.internal.chat.Message;
@@ -47,6 +48,14 @@ public class JsonUtils {
             return MAPPER.readTree(value);
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    public static JsonNode getJsonNodeFromStringWithFallback(@NonNull String value) {
+        try {
+            return getJsonNodeFromString(value);
+        } catch (UncheckedIOException e) {
+            return TextNode.valueOf(value);
         }
     }
 

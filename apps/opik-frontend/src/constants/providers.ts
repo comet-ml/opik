@@ -30,7 +30,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: OpenAIIcon,
     apiKeyName: "OPENAI_API_KEY",
     apiKeyURL: "https://platform.openai.com/account/api-keys",
-    defaultModel: PROVIDER_MODEL_TYPE.GPT_4O,
+    defaultModel: PROVIDER_MODEL_TYPE.GPT_5,
   },
   [PROVIDER_TYPE.ANTHROPIC]: {
     label: "Anthropic",
@@ -38,7 +38,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: AnthropicIcon,
     apiKeyName: "ANTHROPIC_API_KEY",
     apiKeyURL: "https://console.anthropic.com/settings/keys",
-    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
   },
   [PROVIDER_TYPE.OPEN_ROUTER]: {
     label: "OpenRouter",
@@ -54,7 +54,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: GeminiIcon,
     apiKeyName: "GEMINI_API_KEY",
     apiKeyURL: "https://aistudio.google.com/apikey",
-    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
+    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
   },
   [PROVIDER_TYPE.VERTEX_AI]: {
     label: "Vertex AI",

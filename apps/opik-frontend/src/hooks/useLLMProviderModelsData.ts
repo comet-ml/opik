@@ -34,6 +34,32 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       label: "GPT 5 Nano",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+      label: "GPT 5 Chat Latest",
+    },
+
+    // GPT O Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O1,
+      label: "GPT o1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+      label: "GPT o1 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O3,
+      label: "GPT o3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O3_MINI,
+      label: "GPT o3 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      label: "GPT o4 Mini",
+    },
 
     // GPT-4.0 Models
     {
@@ -65,6 +91,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
       label: "GPT 4.1 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
+      label: "GPT 4.1 Nano",
     },
 
     // GPT-4 Models
@@ -114,63 +144,55 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_4_SONNET,
-      label: "Claude 4 Sonnet",
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      label: "Claude Opus 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
+      label: "Claude Opus 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
+      label: "Claude Sonnet 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+      label: "Claude Sonnet 3.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
+      label: "Claude Haiku 3.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3,
+      label: "Claude Haiku 3",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
       label: "Claude 3.5 Sonnet 2024-10-22",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
-      label: "Claude 3.5 Haiku 2024-10-22",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
-      label: "Claude 3.5 Sonnet 2024-06-20",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
       label: "Claude 3 Opus 2024-02-29",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
-      label: "Claude 3 Sonnet 2024-02-29",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
-      label: "Claude 3 Haiku 2024-03-07",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
-      label: "Claude 3.5 Sonnet Latest",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
-      label: "Claude 3.5 Haiku Latest",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
-      label: "Claude 3 Opus Latest",
     },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
     {
-      value: PROVIDER_MODEL_TYPE.AETHERWIING_MN_STARCANNON_12B,
-      label: "aetherwiing/mn-starcannon-12b",
+      value: PROVIDER_MODEL_TYPE.AGENTICA_ORG_DEEPCODER_14B_PREVIEW,
+      label: "agentica-org/deepcoder-14b-preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.AI21_JAMBA_1_5_LARGE,
-      label: "ai21/jamba-1-5-large",
+      value: PROVIDER_MODEL_TYPE.AGENTICA_ORG_DEEPCODER_14B_PREVIEW_FREE,
+      label: "agentica-org/deepcoder-14b-preview:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.AI21_JAMBA_1_5_MINI,
-      label: "ai21/jamba-1-5-mini",
+      value: PROVIDER_MODEL_TYPE.AI21_JAMBA_LARGE_1_7,
+      label: "ai21/jamba-large-1.7",
     },
     {
-      value: PROVIDER_MODEL_TYPE.AI21_JAMBA_INSTRUCT,
-      label: "ai21/jamba-instruct",
+      value: PROVIDER_MODEL_TYPE.AI21_JAMBA_MINI_1_7,
+      label: "ai21/jamba-mini-1.7",
     },
     {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_1_0,
@@ -185,20 +207,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "aion-labs/aion-rp-llama-3.1-8b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ALLENAI_LLAMA_3_1_TULU_3_405B,
-      label: "allenai/llama-3.1-tulu-3-405b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ALLENAI_OLMO_7B_INSTRUCT,
-      label: "allenai/olmo-7b-instruct",
+      value: PROVIDER_MODEL_TYPE.ALFREDPROS_CODELLAMA_7B_INSTRUCT_SOLIDITY,
+      label: "alfredpros/codellama-7b-instruct-solidity",
     },
     {
       value: PROVIDER_MODEL_TYPE.ALPINDALE_GOLIATH_120B,
       label: "alpindale/goliath-120b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ALPINDALE_MAGNUM_72B,
-      label: "alpindale/magnum-72b",
     },
     {
       value: PROVIDER_MODEL_TYPE.AMAZON_NOVA_LITE_V1,
@@ -221,36 +235,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthracite-org/magnum-v4-72b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_1,
-      label: "anthropic/claude-1",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_HAIKU,
+      label: "anthropic/claude-3-haiku",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_1_2,
-      label: "anthropic/claude-1.2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2,
-      label: "anthropic/claude-2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2_0,
-      label: "anthropic/claude-2.0",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2_0_BETA,
-      label: "anthropic/claude-2.0:beta",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2_1,
-      label: "anthropic/claude-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2_1_BETA,
-      label: "anthropic/claude-2.1:beta",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_2_BETA,
-      label: "anthropic/claude-2:beta",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_OPUS,
+      label: "anthropic/claude-3-opus",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
@@ -261,14 +251,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-3.5-haiku-20241022",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022_BETA,
-      label: "anthropic/claude-3.5-haiku-20241022:beta",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU_BETA,
-      label: "anthropic/claude-3.5-haiku:beta",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET,
       label: "anthropic/claude-3.5-sonnet",
     },
@@ -277,56 +259,73 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-3.5-sonnet-20240620",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET_20240620_BETA,
-      label: "anthropic/claude-3.5-sonnet-20240620:beta",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET,
+      label: "anthropic/claude-3.7-sonnet",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET_BETA,
-      label: "anthropic/claude-3.5-sonnet:beta",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET_BETA,
+      label: "anthropic/claude-3.7-sonnet:beta",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_HAIKU,
-      label: "anthropic/claude-3-haiku",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET_THINKING,
+      label: "anthropic/claude-3.7-sonnet:thinking",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_HAIKU_BETA,
-      label: "anthropic/claude-3-haiku:beta",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4,
+      label: "anthropic/claude-opus-4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_OPUS,
-      label: "anthropic/claude-3-opus",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_1,
+      label: "anthropic/claude-opus-4.1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_OPUS_BETA,
-      label: "anthropic/claude-3-opus:beta",
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
+      label: "anthropic/claude-sonnet-4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_SONNET,
-      label: "anthropic/claude-3-sonnet",
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_CODER_LARGE,
+      label: "arcee-ai/coder-large",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_SONNET_BETA,
-      label: "anthropic/claude-3-sonnet:beta",
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_MAESTRO_REASONING,
+      label: "arcee-ai/maestro-reasoning",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_INSTANT_1,
-      label: "anthropic/claude-instant-1",
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_SPOTLIGHT,
+      label: "arcee-ai/spotlight",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_INSTANT_1_0,
-      label: "anthropic/claude-instant-1.0",
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_VIRTUOSO_LARGE,
+      label: "arcee-ai/virtuoso-large",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_INSTANT_1_1,
-      label: "anthropic/claude-instant-1.1",
+      value: PROVIDER_MODEL_TYPE.ARLIAI_QWQ_32B_ARLIAI_RPR_V1,
+      label: "arliai/qwq-32b-arliai-rpr-v1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.AUSTISM_CHRONOS_HERMES_13B,
-      label: "austism/chronos-hermes-13b",
+      value: PROVIDER_MODEL_TYPE.ARLIAI_QWQ_32B_ARLIAI_RPR_V1_FREE,
+      label: "arliai/qwq-32b-arliai-rpr-v1:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.BIGCODE_STARCODER2_15B_INSTRUCT,
-      label: "bigcode/starcoder2-15b-instruct",
+      value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_300B_A47B,
+      label: "baidu/ernie-4.5-300b-a47b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BYTEDANCE_UI_TARS_1_5_7B,
+      label: "bytedance/ui-tars-1.5-7b",
+    },
+    {
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
+      label: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MIXTRAL_8X22B,
+      label: "cognitivecomputations/dolphin-mixtral-8x22b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B,
+      label: "cognitivecomputations/dolphin3.0-mistral-24b",
     },
     {
       value:
@@ -335,32 +334,25 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B,
+      label: "cognitivecomputations/dolphin3.0-r1-mistral-24b",
+    },
+    {
+      value:
         PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B_FREE,
       label: "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_LLAMA_3_70B,
-      label: "cognitivecomputations/dolphin-llama-3-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MIXTRAL_8X22B,
-      label: "cognitivecomputations/dolphin-mixtral-8x22b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MIXTRAL_8X7B,
-      label: "cognitivecomputations/dolphin-mixtral-8x7b",
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND,
       label: "cohere/command",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R,
-      label: "cohere/command-r",
+      value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_A,
+      label: "cohere/command-a",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R7B_12_2024,
-      label: "cohere/command-r7b-12-2024",
+      value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R,
+      label: "cohere/command-r",
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_03_2024,
@@ -383,38 +375,44 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cohere/command-r-plus-08-2024",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DATABRICKS_DBRX_INSTRUCT,
-      label: "databricks/dbrx-instruct",
+      value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R7B_12_2024,
+      label: "cohere/command-r7b-12-2024",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
       label: "deepseek/deepseek-chat",
     },
-
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_0324,
       label: "deepseek/deepseek-chat-v3-0324",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_FREE,
-      label: "deepseek/deepseek-chat:free",
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_0324_FREE,
+      label: "deepseek/deepseek-chat-v3-0324:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V2_5,
-      label: "deepseek/deepseek-chat-v2.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CODER,
-      label: "deepseek/deepseek-coder",
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_PROVER_V2,
+      label: "deepseek/deepseek-prover-v2",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1,
       label: "deepseek/deepseek-r1",
     },
-
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528,
       label: "deepseek/deepseek-r1-0528",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528_QWEN3_8B,
+      label: "deepseek/deepseek-r1-0528-qwen3-8b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528_QWEN3_8B_FREE,
+      label: "deepseek/deepseek-r1-0528-qwen3-8b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_0528_FREE,
+      label: "deepseek/deepseek-r1-0528:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B,
@@ -429,12 +427,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-r1-distill-llama-8b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_1_5B,
+      label: "deepseek/deepseek-r1-distill-qwen-1.5b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_14B,
       label: "deepseek/deepseek-r1-distill-qwen-14b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_1_5B,
-      label: "deepseek/deepseek-r1-distill-qwen-1.5b",
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_14B_FREE,
+      label: "deepseek/deepseek-r1-distill-qwen-14b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_32B,
@@ -445,24 +447,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-r1:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.EVA_UNIT_01_EVA_LLAMA_3_33_70B,
-      label: "eva-unit-01/eva-llama-3.33-70b",
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_BASE,
+      label: "deepseek/deepseek-v3-base",
     },
     {
-      value: PROVIDER_MODEL_TYPE.EVA_UNIT_01_EVA_QWEN_2_5_14B,
-      label: "eva-unit-01/eva-qwen-2.5-14b",
+      value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
+      label: "eleutherai/llemma_7b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.EVA_UNIT_01_EVA_QWEN_2_5_32B,
-      label: "eva-unit-01/eva-qwen-2.5-32b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.EVA_UNIT_01_EVA_QWEN_2_5_72B,
-      label: "eva-unit-01/eva-qwen-2.5-72b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.FIREWORKS_FIRELLAVA_13B,
-      label: "fireworks/firellava-13b",
+      value: PROVIDER_MODEL_TYPE.FEATHERLESS_QWERKY_72B_FREE,
+      label: "featherless/qwerky-72b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
@@ -473,33 +467,36 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-2.0-flash-exp:free",
     },
     {
-      value:
-        PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE,
-      label: "google/gemini-2.0-flash-lite-preview-02-05:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_LITE_001,
+      label: "google/gemini-2.0-flash-lite-001",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_THINKING_EXP_1219_FREE,
-      label: "google/gemini-2.0-flash-thinking-exp-1219:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      label: "google/gemini-2.5-flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_THINKING_EXP_FREE,
-      label: "google/gemini-2.0-flash-thinking-exp:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE,
+      label: "google/gemini-2.5-flash-lite",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_PRO_EXP_02_05_FREE,
-      label: "google/gemini-2.0-pro-exp-02-05:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      label: "google/gemini-2.5-flash-lite-preview-06-17",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_EXP_1114,
-      label: "google/gemini-exp-1114",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO,
+      label: "google/gemini-2.5-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_EXP_1121,
-      label: "google/gemini-exp-1121",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_EXP_03_25,
+      label: "google/gemini-2.5-pro-exp-03-25",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_EXP_1206_FREE,
-      label: "google/gemini-exp-1206:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_PREVIEW,
+      label: "google/gemini-2.5-pro-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06,
+      label: "google/gemini-2.5-pro-preview-05-06",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5,
@@ -510,28 +507,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-flash-1.5-8b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5_8B_EXP,
-      label: "google/gemini-flash-1.5-8b-exp",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5_EXP,
-      label: "google/gemini-flash-1.5-exp",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO,
-      label: "google/gemini-pro",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_1_5,
       label: "google/gemini-pro-1.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_1_5_EXP,
-      label: "google/gemini-pro-1.5-exp",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_VISION,
-      label: "google/gemini-pro-vision",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -545,72 +522,57 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_9B_IT_FREE,
       label: "google/gemma-2-9b-it:free",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT,
-      label: "google/gemma-3n-e4b-it",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_12B_IT,
+      label: "google/gemma-3-12b-it",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E2B_IT_FREE,
-      label: "google/gemma-3n-e2b-it:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_12B_IT_FREE,
+      label: "google/gemma-3-12b-it:free",
     },
-
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_27B_IT,
+      label: "google/gemma-3-27b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_27B_IT_FREE,
+      label: "google/gemma-3-27b-it:free",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_4B_IT,
       label: "google/gemma-3-4b-it",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_7B_IT,
-      label: "google/gemma-7b-it",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_4B_IT_FREE,
+      label: "google/gemma-3-4b-it:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE,
-      label: "google/learnlm-1.5-pro-experimental:free",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E2B_IT_FREE,
+      label: "google/gemma-3n-e2b-it:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_PALM_2_CHAT_BISON,
-      label: "google/palm-2-chat-bison",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT,
+      label: "google/gemma-3n-e4b-it",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_PALM_2_CHAT_BISON_32K,
-      label: "google/palm-2-chat-bison-32k",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_PALM_2_CODECHAT_BISON,
-      label: "google/palm-2-codechat-bison",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_PALM_2_CODECHAT_BISON_32K,
-      label: "google/palm-2-codechat-bison-32k",
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT_FREE,
+      label: "google/gemma-3n-e4b-it:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B,
       label: "gryphe/mythomax-l2-13b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B_FREE,
-      label: "gryphe/mythomax-l2-13b:free",
+      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY,
+      label: "inception/mercury",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMIST_7B,
-      label: "gryphe/mythomist-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.HUGGINGFACEH4_ZEPHYR_7B_BETA_FREE,
-      label: "huggingfaceh4/zephyr-7b-beta:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.HUGGINGFACEH4_ZEPHYR_ORPO_141B_A35B,
-      label: "huggingfaceh4/zephyr-orpo-141b-a35b",
+      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
+      label: "inception/mercury-coder",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFERMATIC_MN_INFEROR_12B,
       label: "infermatic/mn-inferor-12b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INFLATEBOT_MN_MAG_MELL_R1,
-      label: "inflatebot/mn-mag-mell-r1",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
@@ -619,26 +581,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PRODUCTIVITY,
       label: "inflection/inflection-3-productivity",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INTEL_NEURAL_CHAT_7B,
-      label: "intel/neural-chat-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.JEBCARTER_PSYFIGHTER_13B,
-      label: "jebcarter/psyfighter-13b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.JONDURBIN_AIROBOROS_L2_70B,
-      label: "jondurbin/airoboros-l2-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.JONDURBIN_BAGEL_34B,
-      label: "jondurbin/bagel-34b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.KOBOLDAI_PSYFIGHTER_13B_2,
-      label: "koboldai/psyfighter-13b-2",
     },
     {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3B,
@@ -653,48 +595,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "liquid/lfm-7b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.LIUHAOTIAN_LLAVA_13B,
-      label: "liuhaotian/llava-13b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LIUHAOTIAN_LLAVA_YI_34B,
-      label: "liuhaotian/llava-yi-34b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LIZPRECIATIOR_LZLV_70B_FP16_HF,
-      label: "lizpreciatior/lzlv-70b-fp16-hf",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LYNN_SOLILOQUY_L3,
-      label: "lynn/soliloquy-l3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LYNN_SOLILOQUY_V3,
-      label: "lynn/soliloquy-v3",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MANCER_WEAVER,
       label: "mancer/weaver",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MATTSHUMER_REFLECTION_70B,
-      label: "mattshumer/reflection-70b",
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_70B_INSTRUCT,
+      label: "meta-llama/llama-3-70b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_CODELLAMA_34B_INSTRUCT,
-      label: "meta-llama/codellama-34b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_CODELLAMA_70B_INSTRUCT,
-      label: "meta-llama/codellama-70b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_2_13B_CHAT,
-      label: "meta-llama/llama-2-13b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_2_70B_CHAT,
-      label: "meta-llama/llama-2-70b-chat",
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B_INSTRUCT,
+      label: "meta-llama/llama-3-8b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_405B,
@@ -703,6 +613,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_405B_INSTRUCT,
       label: "meta-llama/llama-3.1-405b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_405B_INSTRUCT_FREE,
+      label: "meta-llama/llama-3.1-405b-instruct:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
@@ -729,6 +643,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-3.2-3b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_3B_INSTRUCT_FREE,
+      label: "meta-llama/llama-3.2-3b-instruct:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_90B_VISION_INSTRUCT,
       label: "meta-llama/llama-3.2-90b-vision-instruct",
     },
@@ -741,24 +659,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-3.3-70b-instruct:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_70B,
-      label: "meta-llama/llama-3-70b",
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
+      label: "meta-llama/llama-4-maverick",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_70B_INSTRUCT,
-      label: "meta-llama/llama-3-70b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B,
-      label: "meta-llama/llama-3-8b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B_INSTRUCT,
-      label: "meta-llama/llama-3-8b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B_INSTRUCT_FREE,
-      label: "meta-llama/llama-3-8b-instruct:free",
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
+      label: "meta-llama/llama-4-scout",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_2_8B,
@@ -773,64 +679,84 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-guard-4-12b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
-      label: "meta-llama/llama-4-maverick",
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
+      label: "microsoft/mai-ds-r1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
-      label: "meta-llama/llama-4-scout",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT,
-      label: "microsoft/phi-3.5-mini-128k-instruct",
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1_FREE,
+      label: "microsoft/mai-ds-r1:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT,
       label: "microsoft/phi-3-medium-128k-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT_FREE,
-      label: "microsoft/phi-3-medium-128k-instruct:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_MEDIUM_4K_INSTRUCT,
-      label: "microsoft/phi-3-medium-4k-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_MINI_128K_INSTRUCT,
       label: "microsoft/phi-3-mini-128k-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_MINI_128K_INSTRUCT_FREE,
-      label: "microsoft/phi-3-mini-128k-instruct:free",
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT,
+      label: "microsoft/phi-3.5-mini-128k-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4,
       label: "microsoft/phi-4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MICROSOFT_WIZARDLM_2_7B,
-      label: "microsoft/wizardlm-2-7b",
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_MULTIMODAL_INSTRUCT,
+      label: "microsoft/phi-4-multimodal-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_REASONING_PLUS,
+      label: "microsoft/phi-4-reasoning-plus",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_WIZARDLM_2_8X22B,
       label: "microsoft/wizardlm-2-8x22b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MIGTISSERA_SYNTHIA_70B,
-      label: "migtissera/synthia-70b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_01,
       label: "minimax/minimax-01",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M1,
+      label: "minimax/minimax-m1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_MAMBA,
-      label: "mistralai/codestral-mamba",
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2508,
+      label: "mistralai/codestral-2508",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_MEDIUM,
+      label: "mistralai/devstral-medium",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_SMALL,
+      label: "mistralai/devstral-small",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_SMALL_2505,
+      label: "mistralai/devstral-small-2505",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_SMALL_2505_FREE,
+      label: "mistralai/devstral-small-2505:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MAGISTRAL_MEDIUM_2506,
+      label: "mistralai/magistral-medium-2506",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MAGISTRAL_MEDIUM_2506_THINKING,
+      label: "mistralai/magistral-medium-2506:thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MAGISTRAL_SMALL_2506,
+      label: "mistralai/magistral-small-2506",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MINISTRAL_3B,
@@ -845,10 +771,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-7b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_7B_INSTRUCT_FREE,
-      label: "mistralai/mistral-7b-instruct:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_7B_INSTRUCT_V0_1,
       label: "mistralai/mistral-7b-instruct-v0.1",
     },
@@ -859,6 +781,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_7B_INSTRUCT_V0_3,
       label: "mistralai/mistral-7b-instruct-v0.3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_7B_INSTRUCT_FREE,
+      label: "mistralai/mistral-7b-instruct:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE,
@@ -873,8 +799,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-large-2411",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM,
-      label: "mistralai/mistral-medium",
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3,
+      label: "mistralai/mistral-medium-3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_1,
+      label: "mistralai/mistral-medium-3.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_NEMO,
@@ -901,20 +831,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-small-24b-instruct-2501:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_3_1_24B_INSTRUCT,
+      label: "mistralai/mistral-small-3.1-24b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_3_1_24B_INSTRUCT_FREE,
+      label: "mistralai/mistral-small-3.1-24b-instruct:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_3_2_24B_INSTRUCT,
+      label: "mistralai/mistral-small-3.2-24b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_3_2_24B_INSTRUCT_FREE,
+      label: "mistralai/mistral-small-3.2-24b-instruct:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_TINY,
       label: "mistralai/mistral-tiny",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X22B,
-      label: "mistralai/mixtral-8x22b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X22B_INSTRUCT,
       label: "mistralai/mixtral-8x22b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X7B,
-      label: "mistralai/mixtral-8x7b",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X7B_INSTRUCT,
@@ -928,50 +866,58 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_PIXTRAL_LARGE_2411,
       label: "mistralai/pixtral-large-2411",
     },
-
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_DEV_72B_FREE,
+      label: "moonshotai/kimi-dev-72b:free",
+    },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
       label: "moonshotai/kimi-k2",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B,
-      label: "neversleep/llama-3.1-lumimaid-70b",
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
+      label: "moonshotai/kimi-k2:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B,
-      label: "neversleep/llama-3.1-lumimaid-8b",
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_VL_A3B_THINKING,
+      label: "moonshotai/kimi-vl-a3b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_VL_A3B_THINKING_FREE,
+      label: "moonshotai/kimi-vl-a3b-thinking:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_FAST,
+      label: "morph/morph-v3-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_LARGE,
+      label: "morph/morph-v3-large",
     },
     {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_LUMIMAID_70B,
       label: "neversleep/llama-3-lumimaid-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_LUMIMAID_8B,
-      label: "neversleep/llama-3-lumimaid-8b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_LUMIMAID_8B_EXTENDED,
-      label: "neversleep/llama-3-lumimaid-8b:extended",
+      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B,
+      label: "neversleep/llama-3.1-lumimaid-8b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_NOROMAID_20B,
       label: "neversleep/noromaid-20b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_NOROMAID_MIXTRAL_8X7B_INSTRUCT,
-      label: "neversleep/noromaid-mixtral-8x7b-instruct",
+      value:
+        PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_LLAMA_3_8B_PREVIEW_FREE,
+      label: "nousresearch/deephermes-3-llama-3-8b-preview:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NOTHINGIISREAL_MN_CELESTE_12B,
-      label: "nothingiisreal/mn-celeste-12b",
+      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
+      label: "nousresearch/deephermes-3-mistral-24b-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B,
       label: "nousresearch/hermes-2-pro-llama-3-8b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_2_THETA_LLAMA_3_8B,
-      label: "nousresearch/hermes-2-theta-llama-3-8b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
@@ -982,76 +928,40 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nousresearch/hermes-3-llama-3.1-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_CAPYBARA_34B,
-      label: "nousresearch/nous-capybara-34b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_CAPYBARA_7B,
-      label: "nousresearch/nous-capybara-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_2_MISTRAL_7B_DPO,
-      label: "nousresearch/nous-hermes-2-mistral-7b-dpo",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_2_MIXTRAL_8X7B_DPO,
       label: "nousresearch/nous-hermes-2-mixtral-8x7b-dpo",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_2_MIXTRAL_8X7B_SFT,
-      label: "nousresearch/nous-hermes-2-mixtral-8x7b-sft",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_2_VISION_7B,
-      label: "nousresearch/nous-hermes-2-vision-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_LLAMA2_13B,
-      label: "nousresearch/nous-hermes-llama2-13b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_LLAMA2_70B,
-      label: "nousresearch/nous-hermes-llama2-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_NOUS_HERMES_YI_34B,
-      label: "nousresearch/nous-hermes-yi-34b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_LLAMA_3_1_NEMOTRON_70B_INSTRUCT,
       label: "nvidia/llama-3.1-nemotron-70b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_LLAMA_3_1_NEMOTRON_70B_INSTRUCT_FREE,
-      label: "nvidia/llama-3.1-nemotron-70b-instruct:free",
+      value: PROVIDER_MODEL_TYPE.NVIDIA_LLAMA_3_1_NEMOTRON_ULTRA_253B_V1,
+      label: "nvidia/llama-3.1-nemotron-ultra-253b-v1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_4_340B_INSTRUCT,
-      label: "nvidia/nemotron-4-340b-instruct",
+      value: PROVIDER_MODEL_TYPE.NVIDIA_LLAMA_3_1_NEMOTRON_ULTRA_253B_V1_FREE,
+      label: "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_LLAMA_3_3_NEMOTRON_SUPER_49B_V1,
+      label: "nvidia/llama-3.3-nemotron-super-49b-v1",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_CHATGPT_4O_LATEST,
       label: "openai/chatgpt-4o-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_CODEX_MINI,
+      label: "openai/codex-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO,
       label: "openai/gpt-3.5-turbo",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0125,
-      label: "openai/gpt-3.5-turbo-0125",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0301,
-      label: "openai/gpt-3.5-turbo-0301",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613,
       label: "openai/gpt-3.5-turbo-0613",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_1106,
-      label: "openai/gpt-3.5-turbo-1106",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_16K,
@@ -1066,16 +976,36 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_ONLINE,
-      label: "openai/gpt-4:online",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_0314,
+      label: "openai/gpt-4-0314",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1106_PREVIEW,
+      label: "openai/gpt-4-1106-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO,
+      label: "openai/gpt-4-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO_PREVIEW,
+      label: "openai/gpt-4-turbo-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
+      label: "openai/gpt-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_MINI,
+      label: "openai/gpt-4.1-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_NANO,
+      label: "openai/gpt-4.1-nano",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       label: "openai/gpt-4o",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_ONLINE,
-      label: "openai/gpt-4o:online",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_2024_05_13,
@@ -1090,10 +1020,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4o-2024-11-20",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_EXTENDED,
-      label: "openai/gpt-4o:extended",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
       label: "openai/gpt-4o-mini",
     },
@@ -1102,40 +1028,44 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4o-mini-2024-07-18",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_0314,
-      label: "openai/gpt-4-0314",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI_SEARCH_PREVIEW,
+      label: "openai/gpt-4o-mini-search-preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1106_PREVIEW,
-      label: "openai/gpt-4-1106-preview",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_SEARCH_PREVIEW,
+      label: "openai/gpt-4o-search-preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_32K,
-      label: "openai/gpt-4-32k",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_EXTENDED,
+      label: "openai/gpt-4o:extended",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_32K_0314,
-      label: "openai/gpt-4-32k-0314",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5,
+      label: "openai/gpt-5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO,
-      label: "openai/gpt-4-turbo",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT,
+      label: "openai/gpt-5-chat",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO_PREVIEW,
-      label: "openai/gpt-4-turbo-preview",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_MINI,
+      label: "openai/gpt-5-mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_VISION_PREVIEW,
-      label: "openai/gpt-4-vision-preview",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      label: "openai/gpt-5-nano",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
-      label: "openai/gpt-4.1",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B,
+      label: "openai/gpt-oss-120b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_MINI,
-      label: "openai/gpt-4.1-mini",
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_20B,
+      label: "openai/gpt-oss-20b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_20B_FREE,
+      label: "openai/gpt-oss-20b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1,
@@ -1150,12 +1080,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/o1-mini-2024-09-12",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PREVIEW,
-      label: "openai/o1-preview",
+      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PRO,
+      label: "openai/o1-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PREVIEW_2024_09_12,
-      label: "openai/o1-preview-2024-09-12",
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3,
+      label: "openai/o3",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI,
@@ -1166,109 +1096,64 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/o3-mini-high",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_SHAP_E,
-      label: "openai/shap-e",
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3_PRO,
+      label: "openai/o3-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENCHAT_OPENCHAT_7B,
-      label: "openchat/openchat-7b",
+      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI,
+      label: "openai/o4-mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENCHAT_OPENCHAT_7B_FREE,
-      label: "openchat/openchat-7b:free",
+      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH,
+      label: "openai/o4-mini-high",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENCHAT_OPENCHAT_8B,
-      label: "openchat/openchat-8b",
+      value: PROVIDER_MODEL_TYPE.OPENGVLAB_INTERNVL3_14B,
+      label: "opengvlab/internvl3-14b",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO,
       label: "openrouter/auto",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENROUTER_CINEMATIKA_7B,
-      label: "openrouter/cinematika-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPEN_ORCA_MISTRAL_7B_OPENORCA,
-      label: "open-orca/mistral-7b-openorca",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_1_SONAR_HUGE_128K_ONLINE,
-      label: "perplexity/llama-3.1-sonar-huge-128k-online",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_1_SONAR_LARGE_128K_CHAT,
-      label: "perplexity/llama-3.1-sonar-large-128k-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_1_SONAR_LARGE_128K_ONLINE,
-      label: "perplexity/llama-3.1-sonar-large-128k-online",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_1_SONAR_SMALL_128K_CHAT,
-      label: "perplexity/llama-3.1-sonar-small-128k-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_1_SONAR_SMALL_128K_ONLINE,
-      label: "perplexity/llama-3.1-sonar-small-128k-online",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_SONAR_LARGE_32K_CHAT,
-      label: "perplexity/llama-3-sonar-large-32k-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_SONAR_LARGE_32K_ONLINE,
-      label: "perplexity/llama-3-sonar-large-32k-online",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_SONAR_SMALL_32K_CHAT,
-      label: "perplexity/llama-3-sonar-small-32k-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_LLAMA_3_SONAR_SMALL_32K_ONLINE,
-      label: "perplexity/llama-3-sonar-small-32k-online",
+      value: PROVIDER_MODEL_TYPE.PERPLEXITY_R1_1776,
+      label: "perplexity/r1-1776",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
       label: "perplexity/sonar",
     },
     {
+      value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_DEEP_RESEARCH,
+      label: "perplexity/sonar-deep-research",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_PRO,
+      label: "perplexity/sonar-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING,
       label: "perplexity/sonar-reasoning",
     },
     {
-      value: PROVIDER_MODEL_TYPE.PHIND_PHIND_CODELLAMA_34B,
-      label: "phind/phind-codellama-34b",
+      value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING_PRO,
+      label: "perplexity/sonar-reasoning-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.PYGMALIONAI_MYTHALION_13B,
       label: "pygmalionai/mythalion-13b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QVQ_72B_PREVIEW,
-      label: "qwen/qvq-72b-preview",
-    },
-
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_VL_7B_INSTRUCT,
-      label: "qwen/qwen-2.5-vl-7b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE,
-      label: "qwen/qwen2.5-vl-72b-instruct:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_110B_CHAT,
-      label: "qwen/qwen-110b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_14B_CHAT,
-      label: "qwen/qwen-14b-chat",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_72B_INSTRUCT,
+      label: "qwen/qwen-2-72b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT,
       label: "qwen/qwen-2.5-72b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT_FREE,
+      label: "qwen/qwen-2.5-72b-instruct:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_7B_INSTRUCT,
@@ -1279,36 +1164,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen-2.5-coder-32b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_72B_INSTRUCT,
-      label: "qwen/qwen-2-72b-instruct",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_CODER_32B_INSTRUCT_FREE,
+      label: "qwen/qwen-2.5-coder-32b-instruct:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_7B_INSTRUCT,
-      label: "qwen/qwen-2-7b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_VL_72B_INSTRUCT,
-      label: "qwen/qwen-2-vl-72b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_VL_7B_INSTRUCT,
-      label: "qwen/qwen-2-vl-7b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_32B_CHAT,
-      label: "qwen/qwen-32b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_4B_CHAT,
-      label: "qwen/qwen-4b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_72B_CHAT,
-      label: "qwen/qwen-72b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_7B_CHAT,
-      label: "qwen/qwen-7b-chat",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_VL_7B_INSTRUCT,
+      label: "qwen/qwen-2.5-vl-7b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_MAX,
@@ -1323,38 +1184,88 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen-turbo",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_VL_PLUS_FREE,
-      label: "qwen/qwen-vl-plus:free",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_VL_MAX,
+      label: "qwen/qwen-vl-max",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
-      label: "qwen/qwen3-coder",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_VL_PLUS,
+      label: "qwen/qwen-vl-plus",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
-      label: "qwen/qwen3-8b",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_32B_INSTRUCT,
+      label: "qwen/qwen2.5-vl-32b-instruct",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
-      label: "qwen/qwen3-30b-a3b-instruct-2507",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_32B_INSTRUCT_FREE,
+      label: "qwen/qwen2.5-vl-32b-instruct:free",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
-      label: "qwen/qwen3-30b-a3b",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT,
+      label: "qwen/qwen2.5-vl-72b-instruct",
     },
-
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE,
+      label: "qwen/qwen2.5-vl-72b-instruct:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
+      label: "qwen/qwen3-14b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B_FREE,
+      label: "qwen/qwen3-14b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B,
+      label: "qwen/qwen3-235b-a22b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
+      label: "qwen/qwen3-235b-a22b-2507",
+    },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
       label: "qwen/qwen3-235b-a22b-thinking-2507",
     },
-
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
-      label: "qwen/qwen3-235b-a22b-2507",
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_FREE,
+      label: "qwen/qwen3-235b-a22b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
+      label: "qwen/qwen3-30b-a3b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
+      label: "qwen/qwen3-30b-a3b-instruct-2507",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_FREE,
+      label: "qwen/qwen3-30b-a3b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_32B,
+      label: "qwen/qwen3-32b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_4B_FREE,
+      label: "qwen/qwen3-4b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
+      label: "qwen/qwen3-8b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B_FREE,
+      label: "qwen/qwen3-8b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
+      label: "qwen/qwen3-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER_FREE,
+      label: "qwen/qwen3-coder:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
@@ -1365,36 +1276,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwq-32b-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B_FREE,
+      label: "qwen/qwq-32b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.RAIFLE_SORCERERLM_8X22B,
       label: "raifle/sorcererlm-8x22b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.RECURSAL_EAGLE_7B,
-      label: "recursal/eagle-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.RECURSAL_RWKV_5_3B_AI_TOWN,
-      label: "recursal/rwkv-5-3b-ai-town",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.RWKV_RWKV_5_WORLD_3B,
-      label: "rwkv/rwkv-5-world-3b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.SAO10K_FIMBULVETR_11B_V2,
-      label: "sao10k/fimbulvetr-11b-v2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.SAO10K_L3_1_70B_HANAMI_X1,
-      label: "sao10k/l3.1-70b-hanami-x1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.SAO10K_L3_1_EURYALE_70B,
-      label: "sao10k/l3.1-euryale-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.SAO10K_L3_3_EURYALE_70B,
-      label: "sao10k/l3.3-euryale-70b",
+      value: PROVIDER_MODEL_TYPE.REKAAI_REKA_FLASH_3_FREE,
+      label: "rekaai/reka-flash-3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.SAO10K_L3_EURYALE_70B,
@@ -1405,138 +1296,152 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "sao10k/l3-lunaris-8b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.SAO10K_L3_STHENO_8B,
-      label: "sao10k/l3-stheno-8b",
+      value: PROVIDER_MODEL_TYPE.SAO10K_L3_1_EURYALE_70B,
+      label: "sao10k/l3.1-euryale-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.SNOWFLAKE_SNOWFLAKE_ARCTIC_INSTRUCT,
-      label: "snowflake/snowflake-arctic-instruct",
+      value: PROVIDER_MODEL_TYPE.SAO10K_L3_3_EURYALE_70B,
+      label: "sao10k/l3.3-euryale-70b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SARVAMAI_SARVAM_M_FREE,
+      label: "sarvamai/sarvam-m:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SCB10X_LLAMA3_1_TYPHOON2_70B_INSTRUCT,
+      label: "scb10x/llama3.1-typhoon2-70b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SHISA_AI_SHISA_V2_LLAMA3_3_70B,
+      label: "shisa-ai/shisa-v2-llama3.3-70b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SHISA_AI_SHISA_V2_LLAMA3_3_70B_FREE,
+      label: "shisa-ai/shisa-v2-llama3.3-70b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.SOPHOSYMPATHEIA_MIDNIGHT_ROSE_70B,
       label: "sophosympatheia/midnight-rose-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.SOPHOSYMPATHEIA_ROGUE_ROSE_103B_V0_2_FREE,
-      label: "sophosympatheia/rogue-rose-103b-v0.2:free",
+      value: PROVIDER_MODEL_TYPE.SWITCHPOINT_ROUTER,
+      label: "switchpoint/router",
     },
     {
-      value: PROVIDER_MODEL_TYPE.TEKNIUM_OPENHERMES_2_5_MISTRAL_7B,
-      label: "teknium/openhermes-2.5-mistral-7b",
+      value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
+      label: "tencent/hunyuan-a13b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.TEKNIUM_OPENHERMES_2_MISTRAL_7B,
-      label: "teknium/openhermes-2-mistral-7b",
+      value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT_FREE,
+      label: "tencent/hunyuan-a13b-instruct:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
+      label: "thedrummer/anubis-70b-v1.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_PRO_105B_V1,
+      label: "thedrummer/anubis-pro-105b-v1",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ROCINANTE_12B,
       label: "thedrummer/rocinante-12b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THEDRUMMER_SKYFALL_36B_V2,
+      label: "thedrummer/skyfall-36b-v2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_UNSLOPNEMO_12B,
       label: "thedrummer/unslopnemo-12b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.TOGETHERCOMPUTER_STRIPEDHYENA_HESSIAN_7B,
-      label: "togethercomputer/stripedhyena-hessian-7b",
+      value: PROVIDER_MODEL_TYPE.THEDRUMMER_VALKYRIE_49B_V1,
+      label: "thedrummer/valkyrie-49b-v1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.TOGETHERCOMPUTER_STRIPEDHYENA_NOUS_7B,
-      label: "togethercomputer/stripedhyena-nous-7b",
+      value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_32B,
+      label: "thudm/glm-4-32b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
+      label: "thudm/glm-4.1v-9b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THUDM_GLM_Z1_32B,
+      label: "thudm/glm-z1-32b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T_CHIMERA,
+      label: "tngtech/deepseek-r1t-chimera",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T_CHIMERA_FREE,
+      label: "tngtech/deepseek-r1t-chimera:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T2_CHIMERA_FREE,
+      label: "tngtech/deepseek-r1t2-chimera:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,
       label: "undi95/remm-slerp-l2-13b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.UNDI95_TOPPY_M_7B,
-      label: "undi95/toppy-m-7b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNDI95_TOPPY_M_7B_FREE,
-      label: "undi95/toppy-m-7b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.XWIN_LM_XWIN_LM_70B,
-      label: "xwin-lm/xwin-lm-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.X_AI_GROK_2,
-      label: "x-ai/grok-2",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_2_1212,
       label: "x-ai/grok-2-1212",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.X_AI_GROK_2_MINI,
-      label: "x-ai/grok-2-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_2_VISION_1212,
       label: "x-ai/grok-2-vision-1212",
     },
     {
-      value: PROVIDER_MODEL_TYPE.X_AI_GROK_BETA,
-      label: "x-ai/grok-beta",
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_3,
+      label: "x-ai/grok-3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_3_BETA,
+      label: "x-ai/grok-3-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_3_MINI,
+      label: "x-ai/grok-3-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_3_MINI_BETA,
+      label: "x-ai/grok-3-mini-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4,
+      label: "x-ai/grok-4",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_VISION_BETA,
       label: "x-ai/grok-vision-beta",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_1_5_34B_CHAT,
-      label: "01-ai/yi-1.5-34b-chat",
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
+      label: "z-ai/glm-4-32b",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_34B,
-      label: "01-ai/yi-34b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_34B_200K,
-      label: "01-ai/yi-34b-200k",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_34B_CHAT,
-      label: "01-ai/yi-34b-chat",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_6B,
-      label: "01-ai/yi-6b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_LARGE,
-      label: "01-ai/yi-large",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_LARGE_FC,
-      label: "01-ai/yi-large-fc",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_LARGE_TURBO,
-      label: "01-ai/yi-large-turbo",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_VISION,
-      label: "01-ai/yi-vision",
-    },
-
-    {
-      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5_AIR,
-      label: "z-ai/glm-4.5-air",
-    },
-
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5,
       label: "z-ai/glm-4.5",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5_AIR,
+      label: "z-ai/glm-4.5-air",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5_AIR_FREE,
+      label: "z-ai/glm-4.5-air:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5V,
+      label: "z-ai/glm-4.5v",
+    },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash",
-    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
       label: "Gemini 2.5 Pro",
@@ -1546,8 +1451,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 2.5 Flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
-      label: "Gemini 2.5 Flash Lite Preview 06-17",
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      label: "Gemini 2.5 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      label: "Gemini 2.0 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
+      label: "Gemini 2.0 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,

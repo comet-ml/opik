@@ -57,7 +57,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       <DropdownMenu onOpenChange={openStateChangeHandler}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            <FilterIcon className="mr-2 size-3.5" />
+            <FilterIcon className="mr-1.5 size-3.5" />
             Filter projects
           </Button>
         </DropdownMenuTrigger>

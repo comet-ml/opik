@@ -15,7 +15,6 @@ import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @ImplementedBy(InstallationReportServiceImpl.class)
@@ -82,20 +81,24 @@ class InstallationReportServiceImpl implements InstallationReportService {
     }
 
     private String getAnonymousId() {
-        var anonymousId = usageReport.getAnonymousId();
 
-        if (anonymousId.isEmpty()) {
-            log.info("Anonymous ID not found, generating a new one");
-            var newId = UUID.randomUUID().toString();
-            log.info("Generated new ID: {}", newId);
-
-            // Save the new ID
-            usageReport.saveAnonymousId(newId);
-
-            anonymousId = Optional.of(newId);
+        var storedId = usageReport.getAnonymousId();
+        if (storedId.isPresent()) {
+            return storedId.get();
         }
 
-        return anonymousId.get();
+        var anonymousId = config.getUsageReport().getAnonymousId();
+
+        if (StringUtils.isNotBlank(anonymousId)) {
+            usageReport.saveAnonymousId(anonymousId);
+            return anonymousId;
+        }
+
+        log.info("Anonymous ID not found, generating a new one");
+        var newId = UUID.randomUUID().toString();
+        log.info("Generated new ID: {}", newId);
+        usageReport.saveAnonymousId(newId);
+        return newId;
     }
 
 }

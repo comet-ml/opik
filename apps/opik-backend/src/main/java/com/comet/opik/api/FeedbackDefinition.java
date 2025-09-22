@@ -72,11 +72,12 @@ public abstract sealed class FeedbackDefinition<T> {
         @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
         private final NumericalFeedbackDetail details;
 
-        @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
+        @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull NumericalFeedbackDetail details,
-                Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        public NumericalFeedbackDefinition(UUID id, @NotBlank String name, String description,
+                @NotNull NumericalFeedbackDetail details, Instant createdAt, String createdBy,
+                Instant lastUpdatedAt, String lastUpdatedBy) {
+            super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.details = details;
         }
 
@@ -110,11 +111,12 @@ public abstract sealed class FeedbackDefinition<T> {
         @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
         private final CategoricalFeedbackDetail details;
 
-        @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
+        @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
-        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull CategoricalFeedbackDetail details,
-                Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, String description,
+                @NotNull CategoricalFeedbackDetail details, Instant createdAt, String createdBy,
+                Instant lastUpdatedAt, String lastUpdatedBy) {
+            super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.details = details;
         }
 
@@ -150,6 +152,10 @@ public abstract sealed class FeedbackDefinition<T> {
 
     @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
+
+    @Size(max = 255, message = "cannot exceed 255 characters") @JsonView({View.Public.class, View.Create.class, View.Update.class})
+    @Schema(description = "Optional description for the feedback definition", example = "This feedback definition is used to rate response quality")
+    private final String description;
 
     /**
      * JSON is ignored as details type is polymorphic per subclass, so it's excluded from the Swagger definition

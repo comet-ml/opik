@@ -161,17 +161,6 @@ def test_llama_index__no_index_construction_logging_happyflow(
     opik_callback_handler.flush()
 
     EXPECTED_TRACE_TREES = [
-        # TraceModel(
-        #     id=ANY_BUT_NONE,
-        #     name="index_construction",
-        #     input={"documents": ANY_BUT_NONE},
-        #     output=ANY_BUT_NONE,
-        #     metadata={"created_from": "llama_index"},
-        #     start_time=ANY_BUT_NONE,
-        #     end_time=ANY_BUT_NONE,
-        #     project_name=expected_project_name,
-        #     spans=ANY_BUT_NONE,  # too complex spans tree, no check
-        # ),
         TraceModel(
             id=ANY_BUT_NONE,
             name="query",

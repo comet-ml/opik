@@ -26,6 +26,8 @@ on:
           - adk
           - adk_legacy_1_3_0
           - metrics
+          - bedrock
+          - litellm
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -132,4 +134,16 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-metrics-with-llm-judge-tests.yml
+    secrets: inherit
+
+  bedrock_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["bedrock", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-bedrock-tests.yml
+    secrets: inherit
+
+  litellm_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["litellm", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-litellm-tests.yml
     secrets: inherit

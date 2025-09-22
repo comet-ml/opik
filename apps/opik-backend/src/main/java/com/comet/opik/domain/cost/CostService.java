@@ -28,7 +28,8 @@ public class CostService {
             "anthropic", "anthropic",
             "vertex_ai-anthropic_models", "anthropic_vertexai",
             "bedrock", "bedrock",
-            "bedrock_converse", "bedrock");
+            "bedrock_converse", "bedrock",
+            "groq", "groq");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map

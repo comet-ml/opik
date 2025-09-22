@@ -19,8 +19,8 @@ import com.comet.opik.domain.ExperimentResponseBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.jayway.jsonpath.InvalidPathException;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.PathNotFoundException;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
@@ -430,7 +430,7 @@ public class ExperimentsTestUtils {
         try {
             Object value = JsonPath.read(jsonText, key);
             return String.valueOf(value);
-        } catch (PathNotFoundException e) {
+        } catch (InvalidPathException e) {
             return "";
         }
     }

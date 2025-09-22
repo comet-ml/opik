@@ -9,6 +9,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -77,6 +78,7 @@ public class ProjectsResource {
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull FiltersFactory filtersFactory;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
@@ -233,6 +235,11 @@ public class ProjectsResource {
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
+        request = request.toBuilder()
+                .traceFilters(filtersFactory.validateFilter(request.traceFilters()))
+                .threadFilters(filtersFactory.validateFilter(request.threadFilters()))
+                .build();
+
         ProjectMetricResponse<? extends Number> response = projectMetricsService.getProjectMetrics(projectId, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();

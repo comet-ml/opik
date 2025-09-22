@@ -40,7 +40,7 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
       <p className="comet-body-s-accented my-3">
         Output {getAlphabetLetter(index)}
       </p>
-      <div className="comet-body-s min-h-52 rounded-lg border bg-white p-3">
+      <div className="comet-body-s min-h-52 rounded-lg border bg-background p-3">
         {renderContent()}
       </div>
     </div>

@@ -6,7 +6,7 @@ export const generateDefaultLLMPromptMessage = (
 ): LLMMessage => {
   return {
     content: "",
-    role: LLM_MESSAGE_ROLE.system,
+    role: LLM_MESSAGE_ROLE.user,
     ...message,
     id: generateRandomString(),
   };

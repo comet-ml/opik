@@ -93,7 +93,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     value: reasonValue,
     onChange: onReasonChange,
     onReset: onReasonReset,
-    resetValue,
+    setInputValue: setReasonValue,
   } = useDebouncedValue({
     initialValue: feedbackScore?.reason,
     onDebouncedChange: handleChangeReason,
@@ -104,12 +104,17 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
     setEditReason(false);
-    resetValue();
+    setReasonValue(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, resetValue]);
+  }, [name, setReasonValue]);
 
-  const handleCopyReasonClick = async (reasonValue: string) => {
-    await copy(reasonValue);
+  const toggleEditReasonHandler = useCallback(() => {
+    setEditReason(!editReason);
+    setReasonValue(feedbackScore?.reason);
+  }, [editReason, feedbackScore?.reason, setReasonValue]);
+
+  const handleCopyReasonClick = async (v: string) => {
+    await copy(v);
 
     toast({
       description: "Reason successfully copied to clipboard",
@@ -271,16 +276,16 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             className={cn(
               "size-7 relative group/reason-btn",
               editReason &&
-                "bg-[#F3F4FE] active:bg-[#F3F4FE] hover:bg-[#F3F4FE]",
+                "bg-toggle-outline-active active:bg-toggle-outline-active hover:bg-toggle-outline-active",
             )}
-            onClick={() => setEditReason((v) => !v)}
+            onClick={toggleEditReasonHandler}
           >
-            {!!reasonValue && (
+            {!!feedbackScore?.reason && (
               <div
                 className={cn(
                   "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
                   editReason &&
-                    "border-[#F3F4FE] group-hover/reason-btn:border-[#F3F4FE]",
+                    "border-toggle-outline-active group-hover/reason-btn:border-toggle-outline-active",
                 )}
               />
             )}
@@ -313,13 +318,13 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                 updateTextAreaHeight(e, 32);
               }}
             />
-            {reasonValue && (
+            {feedbackScore?.reason && (
               <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
                 <TooltipWrapper content="Copy">
                   <Button
                     size="icon-2xs"
                     variant="outline"
-                    onClick={() => handleCopyReasonClick(reasonValue)}
+                    onClick={() => handleCopyReasonClick(feedbackScore.reason!)}
                   >
                     <Copy />
                   </Button>

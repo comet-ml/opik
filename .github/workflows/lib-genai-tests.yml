@@ -4,6 +4,8 @@
 #
 name: SDK Lib GenAI (Google) Tests
 run-name: "SDK Lib GenAI Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
@@ -29,7 +31,8 @@ jobs:
           # "3.9", skipped because asyncio requires async context in 3.9 to create a client
           "3.10",
           "3.11",
-          "3.12"
+          "3.12",
+          "3.13"
         ]
 
     steps:

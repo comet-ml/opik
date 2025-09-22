@@ -3,6 +3,9 @@ from typing import Optional, Dict, Any
 import pydantic
 
 
+LANGCHAIN_USAGE_KEYS = {"input_tokens", "output_tokens", "total_tokens"}
+
+
 class InputTokenDetails(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="allow")
 
@@ -151,3 +154,10 @@ class LangChainUsage(pydantic.BaseModel):
         }
 
         return groq_usage
+
+
+def is_langchain_usage(usage_dict: Dict[str, Any]) -> bool:
+    if usage_dict is None:
+        return False
+
+    return all(key in usage_dict for key in LANGCHAIN_USAGE_KEYS)

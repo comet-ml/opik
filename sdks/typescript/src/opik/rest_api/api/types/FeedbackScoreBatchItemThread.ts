@@ -13,4 +13,5 @@ export interface FeedbackScoreBatchItemThread {
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScoreBatchItemThreadSource;
+    author?: string;
 }

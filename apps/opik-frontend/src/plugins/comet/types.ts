@@ -41,6 +41,7 @@ export interface Organization {
   id: string;
   name: string;
   paymentPlan: string;
+  academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
 }
 

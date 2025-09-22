@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonListStringPublic } from "./JsonListStringPublic";
-import { JsonNodePublic } from "./JsonNodePublic";
 import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
 import { CommentPublic } from "./CommentPublic";
@@ -22,7 +21,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListStringPublic.optional(),
         output: JsonListStringPublic.optional(),
-        metadata: JsonNodePublic.optional(),
+        metadata: JsonListStringPublic.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoPublic.optional()),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
@@ -56,7 +55,7 @@ export declare namespace TracePublic {
         end_time?: string | null;
         input?: JsonListStringPublic.Raw | null;
         output?: JsonListStringPublic.Raw | null;
-        metadata?: JsonNodePublic.Raw | null;
+        metadata?: JsonListStringPublic.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfoPublic.Raw | null;
         usage?: Record<string, number> | null;

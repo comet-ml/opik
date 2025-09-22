@@ -1,3 +1,8 @@
+---
+title: Observability for DeepSeek with Opik
+description: Start here to integrate Opik into your DeepSeek-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 Deepseek is an Open-Source LLM model that rivals o1 from OpenAI. You can learn more about DeepSeek on [Github](https://github.com/deepseek-ai/DeepSeek-R1) or
 on [deepseek.com](https://www.deepseek.com/).
 
@@ -83,7 +88,7 @@ from opik.integrations.openai import track_openai
 from openai import OpenAI
 
 # Create the OpenAI client that points to DeepSeek API
-client = OpenAI(api_key="<Firebworks AI API Key>", base_url="https://api.fireworks.ai/inference/v1")
+client = OpenAI(api_key="<Fireworks AI API Key>", base_url="https://api.fireworks.ai/inference/v1")
 
 # Wrap your OpenAI client to track all calls to Opik
 client = track_openai(client)

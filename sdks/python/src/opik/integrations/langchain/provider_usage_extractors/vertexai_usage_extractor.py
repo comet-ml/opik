@@ -2,11 +2,19 @@ import logging
 from typing import Any, Dict, Optional
 
 import opik
-from opik import llm_usage, logging_messages
+from opik import llm_usage, logging_messages, _logging as opik_logging
 from . import langchain_run_helpers
 from . import provider_usage_extractor_protocol
+from .langchain_run_helpers import langchain_usage
 
 LOGGER = logging.getLogger(__name__)
+
+
+VERTEXAI_CANDIDATE_USAGE_KEYS = {
+    "candidates_token_count",
+    "prompt_token_count",
+    "total_token_count",
+}
 
 
 class VertexAIUsageExtractor(
@@ -53,30 +61,35 @@ class VertexAIUsageExtractor(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
-        # try raw VertexAI usage from generation_info
-        if (
-            usage_metadata := run_dict["outputs"]["generations"][-1][-1][
-                "generation_info"
-            ].get("usage_metadata")
-        ) is not None:
-            # inside LangGraph studio we have an empty usage_metadata dictionary here and
-            # should fallback to streaming token usage
-            if len(usage_metadata) >= 3:
-                return llm_usage.OpikUsage.from_google_dict(usage_metadata)
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
+            run_dict, VERTEXAI_CANDIDATE_USAGE_KEYS
+        ):
+            if isinstance(token_usage, dict):
+                return llm_usage.OpikUsage.from_google_dict(token_usage)
+            elif isinstance(token_usage, langchain_usage.LangChainUsage):
+                gemini_usage_dict = token_usage.map_to_google_gemini_usage()
+                return llm_usage.OpikUsage.from_google_dict(gemini_usage_dict)
 
-        usage = langchain_run_helpers.try_get_streaming_token_usage(run_dict)
-        if usage is not None:
-            return llm_usage.OpikUsage.from_google_dict(
-                usage.map_to_google_gemini_usage()
-            )
+        opik_logging.log_once_at_level(
+            logging.WARNING,
+            "Failed to extract token usage from presumably VertexAI LLM langchain run. Run dict: %s",
+            LOGGER,
+            run_dict,
+        )
 
-        raise Exception("No token usage found in the run dictionary.")
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+            logger=LOGGER,
+        )
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
+            run_dict,
             exc_info=True,
         )
-        return None
+
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:

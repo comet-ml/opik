@@ -18,6 +18,7 @@ export const FeedbackScoreBatchItemThread: core.serialization.ObjectSchema<
     value: core.serialization.number(),
     reason: core.serialization.string().optional(),
     source: FeedbackScoreBatchItemThreadSource,
+    author: core.serialization.string().optional(),
 });
 
 export declare namespace FeedbackScoreBatchItemThread {
@@ -29,5 +30,6 @@ export declare namespace FeedbackScoreBatchItemThread {
         value: number;
         reason?: string | null;
         source: FeedbackScoreBatchItemThreadSource.Raw;
+        author?: string | null;
     }
 }

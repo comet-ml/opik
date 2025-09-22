@@ -85,7 +85,7 @@ dataset.insert([
   `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 </Tip>
 
-Once the items have been inserted, you can view them them in the Opik UI:
+Once the items have been inserted, you can view them in the Opik UI:
 
 <Frame>
   <img src="/img/evaluation/dataset_items_page.png" />
@@ -160,7 +160,7 @@ client = Opik()
 dataset = client.get_dataset(name="My dataset")
 ```
 
-Once the dataset has been retrieved, you can access it's items using the `to_pandas()` or `to_json` methods:
+Once the dataset has been retrieved, you can access its items using the `to_pandas()` or `to_json` methods:
 
 ```python {pytest_codeblocks_skip=true}
 from opik import Opik
@@ -174,3 +174,58 @@ dataset.to_pandas()
 # Convert to a JSON array
 dataset.to_json()
 ```
+
+## Expanding a dataset with AI
+
+Dataset expansion allows you to use AI to generate additional synthetic samples based on your existing dataset. This is particularly useful when you have a small dataset and want to create more diverse test cases to improve your evaluation coverage.
+
+The AI analyzes the patterns in your existing data and generates new samples that follow similar structures while introducing variations. This helps you:
+
+- **Increase dataset size** for more comprehensive evaluation
+- **Create edge cases** and variations you might not have considered
+- **Improve model robustness** by testing against diverse inputs
+- **Scale your evaluation** without manual data creation
+
+### How to expand a dataset
+
+To expand a dataset with AI:
+
+1. **Navigate to your dataset** in the Opik UI (Evaluation > Datasets > [Your Dataset])
+2. **Click the "Expand with AI" button** in the dataset view
+3. **Configure the expansion settings**:
+   - **Model**: Choose the LLM model to use for generation (supports GPT-4, GPT-5, Claude, and other models)
+   - **Sample Count**: Specify how many new samples to generate (1-100)
+   - **Preserve Fields**: Select which fields from your original data to keep unchanged
+   - **Variation Instructions**: Provide specific guidance on how to vary the data (e.g., "Create variations that test edge cases" or "Generate examples with different complexity levels")
+   - **Custom Prompt**: Optionally provide a custom prompt template instead of the auto-generated one
+4. **Start the expansion** - The AI will analyze your data and generate new samples
+5. **Review the results** - New samples will be added to your dataset and can be reviewed, edited, or removed as needed
+
+<Frame>
+  <img src="/img/evaluation/dataset_expansion_modal.png" />
+</Frame>
+
+### Configuration options
+
+**Sample Count**: Start with a smaller number (10-20) to review the quality before generating larger batches.
+
+**Preserve Fields**: Use this to maintain consistency in certain fields while allowing variation in others. For example, preserve the `category` field while varying the `input` and `expected_output`.
+
+**Variation Instructions**: Provide specific guidance such as:
+- "Create variations with different difficulty levels"
+- "Generate edge cases and error scenarios"
+- "Add examples with different input formats"
+- "Include multilingual variations"
+
+### Best practices
+
+- **Start small**: Generate 10-20 samples first to evaluate quality before scaling up
+- **Review generated content**: Always review AI-generated samples for accuracy and relevance
+- **Use variation instructions**: Provide clear guidance on the type of variations you want
+- **Preserve key fields**: Use field preservation to maintain important categorizations or metadata
+- **Iterate and refine**: Use the custom prompt option to fine-tune generation for your specific needs
+
+<Tip>
+Dataset expansion works best when you have at least 5-10 high-quality examples in your original dataset. The AI uses these examples to understand the patterns and generate similar but varied content.
+</Tip>
+

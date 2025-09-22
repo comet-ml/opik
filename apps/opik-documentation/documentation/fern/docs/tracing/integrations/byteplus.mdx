@@ -1,0 +1,103 @@
+---
+title: Observability for BytePlus with Opik
+description: Start here to integrate Opik into your BytePlus-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[BytePlus](https://www.byteplus.com/) is ByteDance's AI-native enterprise platform offering ModelArk, a comprehensive Platform-as-a-Service (PaaS) solution for deploying and utilizing powerful large language models. It provides access to SkyLark models, DeepSeek V3.1, Kimi-K2, and other cutting-edge AI models with enterprise-grade security and scalability.
+
+This guide explains how to integrate Opik with BytePlus using the OpenAI SDK. BytePlus provides OpenAI-compatible API endpoints that allow you to use the standard OpenAI client with BytePlus models.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You'll also need a BytePlus API key. Find a guide on creating your BytePlus API keys for model services [here](https://docs.byteplus.com/en/docs/ModelArk/1399008).
+
+## Tracking BytePlus API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with BytePlus base URL
+client = OpenAI(
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
+    api_key="YOUR_BYTEPLUS_API_KEY"
+)
+client = track_openai(client)
+
+response = client.chat.completions.create(
+    model="kimi-k2-250711",  # You can use any model available on BytePlus
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+```
+
+## Advanced Usage
+
+### Using with @track decorator
+
+You can combine the tracked client with Opik's `@track` decorator for comprehensive tracing:
+
+```python
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
+    api_key="YOUR_BYTEPLUS_API_KEY"
+)
+client = track_openai(client)
+
+@track
+def analyze_data_with_ai(query: str):
+    """Analyze data using BytePlus AI models."""
+
+    response = client.chat.completions.create(
+        model="kimi-k2-250711",
+        messages=[
+            {"role": "user", "content": query}
+        ]
+    )
+
+    return response.choices[0].message.content
+
+# Call the tracked function
+result = analyze_data_with_ai("Analyze this business data...")
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your API key is correct and has the necessary permissions
+2. **Model Not Found**: Verify the model name is available on BytePlus
+3. **Rate Limiting**: BytePlus may have rate limits; implement appropriate retry logic
+4. **Base URL Issues**: Ensure the base URL is correct for your BytePlus deployment
+
+### Getting Help
+
+- Check the [BytePlus API documentation](https://docs.byteplus.com/en/docs/ModelArk/) for detailed error codes
+- Contact BytePlus support for API-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have BytePlus integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/datasets/overview) to test and improve your models
+- [Set up feedback collection](/feedback/overview) to gather human evaluations
+- [Monitor performance](/tracing/overview) across different models and configurations
+
+For more information about using Opik with OpenAI-compatible APIs, see the [OpenAI integration guide](/tracing/integrations/openai).

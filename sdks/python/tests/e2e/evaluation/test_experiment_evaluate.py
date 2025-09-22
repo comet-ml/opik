@@ -93,6 +93,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Paris"},
             feedback_scores=[
@@ -111,6 +112,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             dataset_item_data={
                 "input": {"question": "What is the of capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
@@ -129,6 +131,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             dataset_item_data={
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Krakow"},
             feedback_scores=[
@@ -239,6 +242,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Paris"},
             feedback_scores=[
@@ -257,6 +261,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
             dataset_item_data={
                 "input": {"question": "What is the of capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
@@ -362,6 +367,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Paris"},
             feedback_scores=[
@@ -380,6 +386,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             dataset_item_data={
                 "input": {"question": "What is the of capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
@@ -398,6 +405,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             dataset_item_data={
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
+                "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Krakow"},
             feedback_scores=[

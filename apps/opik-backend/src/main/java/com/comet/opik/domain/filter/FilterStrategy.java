@@ -15,7 +15,8 @@ public enum FilterStrategy {
     FEEDBACK_SCORES_IS_EMPTY,
     EXPERIMENT,
     PROMPT,
-    DATASET;
+    DATASET,
+    ANNOTATION_QUEUE;
 
     public static final String DYNAMIC_FIELD = ":dynamicField%1$d";
 

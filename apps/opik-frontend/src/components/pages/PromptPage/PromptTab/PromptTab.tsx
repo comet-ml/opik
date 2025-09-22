@@ -84,22 +84,21 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           size="sm"
           onClick={() => setOpenUseThisPrompt(true)}
         >
-          <Info className="mr-2 size-3.5" />
+          <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
         <TryInPlaygroundButton prompt={prompt} />
         <Button
           className="ml-auto"
-          variant="secondary"
           size="sm"
           onClick={() => handleOpenEditPrompt(true)}
         >
-          <Pencil className="mr-2 size-3.5" />
+          <Pencil className="mr-1.5 size-3.5" />
           Edit prompt
         </Button>
       </div>
 
-      <div className="mt-4 flex gap-6 rounded-md border bg-white p-6">
+      <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
           <p className="comet-body-s-accented text-foreground">Prompt</p>
           <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">

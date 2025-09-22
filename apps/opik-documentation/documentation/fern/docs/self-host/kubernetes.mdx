@@ -46,7 +46,7 @@ Opik will be available at `http://localhost:5173`.
 
 # Configuration
 
-You can find a full list the configuration options in the [helm chart documentation](https://comet-ml.github.io/opik/).
+You can find a full list of the configuration options in the [helm chart documentation](https://comet-ml.github.io/opik/).
 
 # Advanced deployment options
 
@@ -87,89 +87,7 @@ clickhouse:
 
 ## Configure Clickhouse backup
 
-### With AWS Key and Secret key - on AWS S3 or minio
-
-You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
-
-```yaml
-access_key_id: <your access key id>
-access_key_secret: <your access key secret>
-```
-
-Add to your configuration
-
-```yaml
-clickhouse:
-  backup:
-    enabled: true
-    bucketURL: https://<your bucket.s3.<region>.amazonaws.com
-    secretName: <your secret name with credential for clickhouse backup>
-    schedule: <your cron schedule, like "00 03 * * *">
-    baseBackup: ""
-```
-
-### With IAM Role on AWS
-
-You will need to create a IAM role with permissions for your bucket and with TrustRelationshipPolicy for the serviceAccount you configure here:
-
-Policy:
-```json
-{
-    "Statement": [
-        {
-            "Action": "s3:*",
-            "Effect": "Allow",
-            "Resource": [
-                "arn:aws:s3:::BUCKET",
-                "arn:aws:s3:::BUCKET/*"
-            ],
-            "Sid": "AllowS3ClickhouseBackup"
-        }
-    ],
-    "Version": "2012-10-17"
-}
-```
-
-Trust relationship policy:
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID"
-            },
-            "Action": "sts:AssumeRoleWithWebIdentity",
-            "Condition": {
-                "StringEquals": {
-                    "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:sub": "system:serviceaccount:YOURNAMESPACE:opik-clickhouse",
-                    "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:aud": "sts.amazonaws.com"
-                }
-            }
-        }
-    ]
-}
-```
-Helm values:
-```yaml
-clickhouse:
-  serviceAccount:
-    create: true
-    name: opik-clickhouse    # or any other name
-    annotations:
-      eks.amazonaws.com/role-arn: <your IAM role arn>
-  backup:
-    enabled: true
-    bucketURL: https://BUCKET.s3.REGION.amazonaws.com
-    schedule: <your cron schedule, like "00 03 * * *">
-    baseBackup: ""
-    
-```
-
-### With custom backup command
-
-You can also change Clickhouse backup command by setting `clickhouse.backup.command` if you want to change the default one.
+[Clickhouse Backup](./backup)
 
 ## Configure replication for Clickhouse
 
@@ -233,6 +151,11 @@ Configuration snippet for using external Clickhouse:
 component:
     backend:
       ...
+      waitForClickhouse:
+        clickhouse:
+          host: <YOUR CLICKHOUSE HOST>
+          port: 8123
+          protocol: http
       env:
         ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
         ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
@@ -270,7 +193,7 @@ clickhouse:
 
 # Delete your installation 
 
-Before deleting opik installation with helm, make sure to remove finilizer on the clickhouse resource:
+Before deleting opik installation with helm, make sure to remove finalizer on the clickhouse resource:
 
 ```bash
 kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
@@ -281,6 +204,29 @@ Then, uninstall the opik:
 ```bash
 helm uninstall opik -n opik
 ```
+
+# Version Compatibility
+
+It's important to ensure that your Python SDK version matches your Kubernetes deployment version to avoid compatibility issues.
+
+## Check your current versions
+
+### Check Opik UI version
+You can check your current Opik deployment version in the UI by clicking on the user menu in the top right corner.
+
+### Check Python SDK version
+You can check your installed Python SDK version by running:
+
+```bash
+pip show opik
+```
+
+## Ensure version compatibility
+
+Make sure both versions match. If they don't match:
+
+1. **To update your Python SDK**: Run `pip install --upgrade opik==<VERSION>` where `<VERSION>` matches your Kubernetes deployment
+2. **To update your Kubernetes deployment**: Update the VERSION variable in the helm installation command to match your Python SDK version
 
 # Troubleshooting
 

@@ -1,85 +1,134 @@
-[LangChainJS](https://js.langchain.com/docs/introduction/) is the Javascript package for LangChain which allows you to develop
-applications powered by Large Language Models.
+---
+title: Observability for LangChain (JavaScript) with Opik
+description: Start here to integrate Opik into your LangChain-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
 
-Opik provides an integration that allows you to log all your chain executions to
-the Opik dashboard, making it easier to debug your chains and monitor your
-applicaation in production.
+Opik provides seamless integration with [LangChain](https://js.langchain.com/) through the `opik-langchain` package, allowing you to trace, monitor, and debug your LangChain applications.
 
-<Note>
-  If you are using the Python LangChain package, refer to [this integration guide](/tracing/integrations/langchain)
-</Note>
+## Features
 
-## Getting Started
+- **Comprehensive Tracing**: Automatically trace LLM calls, chains, tools, retrievers, and agents
+- **Hierarchical Visualization**: View your LangChain execution as a structured trace with parent-child relationships
+- **Detailed Metadata Capture**: Record model names, prompts, completions, usage statistics, and custom metadata
+- **Error Handling**: Capture and visualize errors at every step of your LangChain execution
+- **Custom Tagging**: Add custom tags to organize and filter your traces
 
-To use Opik with LangChainJS, make sure you have the following installed:
+## Installation
 
-```bash
-npm install langchain @langchain/core opik-langchain
-```
-
-In addition you will need to set the following environment variables to make
-sure the data is logged to Opik if you are using the Cloud platform:
+### Option 1: Using npm
 
 ```bash
-export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
-export OPIK_API_KEY=<your-api-key>
-export OPIK_WORKSPACE_NAME=<your-workspace-name>
+npm install opik-langchain
 ```
 
-## Logging a chain
+### Option 2: Using yarn
 
-In order to log a chain, you will need to create the Opik callback:
+```bash
+yarn add opik-langchain
+```
 
-```js
+### Requirements
+
+- Node.js ≥ 18
+- LangChain (`@langchain/core` ≥ 0.3.42)
+- Opik SDK (automatically installed as a dependency)
+
+## Basic Usage
+
+### Using with LLM Calls
+
+You can add the OpikCallbackHandler in two ways in LangChain: at construction time and at execution time. Here's how to use both approaches:
+
+```typescript
 import { OpikCallbackHandler } from "opik-langchain";
+import { ChatOpenAI } from "@langchain/openai";
 
-const opikCallback = new OpikCallbackHandler();
-```
-
-You can then use this callback in your LangChain chain:
-
-```js {3,15,19}
-import { OpenAI } from "@langchain/openai";
-import { PromptTemplate } from "@langchain/core/prompts";
-import { OpikCallbackHandler } from "opik/langchain";
-
-// This is just a demo that doesn't require API key
-const model = new OpenAI({
-  temperature: 0.9,
-});
-
-const prompt = PromptTemplate.fromTemplate("What is a good name for a company that makes {product}?");
-
-const chain = prompt.pipe(model);
+// Create the Opik callback handler
 const opikHandler = new OpikCallbackHandler();
 
-const result = await chain.invoke({ product: "colorful socks" }, { callbacks: [opikHandler] });
+// Option 1: Add the handler at model initialization time
+const llm = new ChatOpenAI({
+  callbacks: [opikHandler], // Will be used for all calls to this model
+});
+
+// Run LLM
+const response = await llm.invoke("Hello, how can you help me today?");
+
+// Option 2: Add the handler at invocation time (or both)
+const llmWithoutHandler = new ChatOpenAI();
+const response2 = await llmWithoutHandler.invoke("What's the weather like today?", {
+  callbacks: [opikHandler], // Will be used just for this specific call
+});
+
+// You can also combine both approaches
+const anotherResponse = await llm.invoke("Tell me a joke", {
+  callbacks: [opikHandler], // Will use both the constructor handler and this one
+});
+
+// Ensure all traces are sent before your app terminates
+await opikHandler.flushAsync();
 ```
 
-## Settings tags and metadata
+### Configuring for All Components
 
-You can also customize the `OpikCallbackHandler` to include additional metadata,
-tags. For example:
+You can also set up the handler to be used across all LangChain components in your application:
 
-```js {pytest_codeblocks_skip=true}
+```typescript
+import { OpikCallbackHandler } from "opik-langchain";
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { LLMChain } from "langchain/chains";
+import { setGlobalCallbacks } from "@langchain/core/callbacks/manager";
+
+// Create the Opik callback handler
 const opikHandler = new OpikCallbackHandler({
-  tags: ["langchain"],
-  metadata: { "use-case": "documentation-example" },
+  tags: ["global"],
+  projectName: "langchain-app",
+});
+
+// Set as global handler (will be used for all LangChain components)
+setGlobalCallbacks([opikHandler]);
+
+// These components will now automatically use the global handler
+const llm = new ChatOpenAI();
+const template = PromptTemplate.fromTemplate("Answer this question: {question}");
+const chain = new LLMChain({ llm, prompt: template });
+
+// Global handlers are used automatically
+const result = await chain.call({ question: "What is 2+2?" });
+
+// Flush before your app exits
+await opikHandler.flushAsync();
+```
+
+## Advanced Configuration
+
+The `OpikCallbackHandler` constructor accepts several options to customize the integration:
+
+```typescript
+const opikHandler = new OpikCallbackHandler({
+  // Optional array of tags to apply to all traces
+  tags: ["langchain", "production", "user-query"],
+
+  // Optional metadata to include with all traces
+  metadata: {
+    environment: "production",
+    version: "1.0.0",
+  },
+
+  // Optional project name for Opik
+  projectName: "my-langchain-project",
+
+  // Optional pre-configured Opik client
+  // If not provided, a new client will be created automatically
+  client: customOpikClient,
 });
 ```
 
-## Logging to a specific project
+## Troubleshooting
 
-You can also log to a specific project by setting the `project` parameter:
+**Missing Traces**: Ensure you're providing the `OpikCallbackHandler` to both the component constructor and each invoke call.
 
-```js {pytest_codeblocks_skip=true}
-const opikHandler = new OpikCallbackHandler({
-  projectName: "my-project",
-});
-```
+**Incomplete Hierarchies**: For proper parent-child relationships, use the same handler instance throughout your application.
 
-Or alternatively, you can use the environment variable:
-
-```bash
-export OPIK_PROJECT_NAME="my-project"
-```
+**Performance Impact**: The Opik integration adds minimal overhead to your LangChain application.

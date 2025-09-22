@@ -13,22 +13,22 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
 const hasContent = (
-  obj: unknown
+  obj: unknown,
 ): obj is ContentContainer & Record<string, unknown> =>
   isObject(obj) && "content" in obj;
 
 const hasMessages = (
-  obj: unknown
+  obj: unknown,
 ): obj is MessageContainer & Record<string, unknown> =>
   isObject(obj) && "messages" in obj;
 
 const hasValue = (
-  obj: unknown
+  obj: unknown,
 ): obj is ValueContainer & Record<string, unknown> =>
   isObject(obj) && "value" in obj;
 
 const hasKwargs = (
-  obj: unknown
+  obj: unknown,
 ): obj is KwargsContainer & Record<string, unknown> =>
   isObject(obj) && "kwargs" in obj;
 
@@ -36,7 +36,7 @@ export const pick = (...values: unknown[]) =>
   values.find((value) => value !== undefined && value !== null);
 
 export const cleanObject = (
-  obj: Record<string, unknown>
+  obj: Record<string, unknown>,
 ): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(obj).filter(([, value]) => {
@@ -46,7 +46,7 @@ export const cleanObject = (
         return false;
       }
       return true;
-    })
+    }),
   );
 
 export const safeParseSerializedJson = (value: string) => {
@@ -58,7 +58,7 @@ export const safeParseSerializedJson = (value: string) => {
 };
 
 export const getMessageContent = (
-  message: BaseMessage
+  message: BaseMessage,
 ): Record<string, unknown> => {
   let role = message.name ?? message.getType();
 
@@ -90,7 +90,7 @@ export const inputFromMessages = (input: BaseMessage[][]) => {
 };
 
 export const parseGeneration = (
-  generation: Generation | ChatGeneration
+  generation: Generation | ChatGeneration,
 ): unknown => {
   if ("message" in generation) {
     return getMessageContent(generation.message);
@@ -104,7 +104,7 @@ export const parseGeneration = (
 };
 
 export const outputFromGenerations = (
-  input: Generation[][] | ChatGeneration[]
+  input: Generation[][] | ChatGeneration[],
 ) => {
   const generations = input.flatMap((batch) => {
     return Array.isArray(batch)
@@ -121,7 +121,7 @@ export const outputFromToolOutput = (output: unknown | ToolMessage) =>
 export const extractCallArgs = (
   llm: Serialized,
   invocationParams: Record<string, unknown>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ): Record<string, unknown> => {
   const args = cleanObject({
     model: pick(invocationParams?.model, metadata?.ls_model_name, llm.name),
@@ -130,7 +130,7 @@ export const extractCallArgs = (
     top_k: pick(invocationParams?.top_k, invocationParams?.topK),
     max_tokens: pick(
       invocationParams?.max_tokens,
-      invocationParams?.maxOutputTokens
+      invocationParams?.maxOutputTokens,
     ),
     frequency_penalty: invocationParams?.frequency_penalty,
     presence_penalty: invocationParams?.presence_penalty,
@@ -185,18 +185,18 @@ const parseChainValue = (output: unknown): Record<string, unknown> => {
   }
 
   return Object.fromEntries(
-    Object.entries(output).map(([key, value]) => [key, parseChainValue(value)])
+    Object.entries(output).map(([key, value]) => [key, parseChainValue(value)]),
   );
 };
 
 export const outputFromChainValues = (
-  output: unknown
+  output: unknown,
 ): Record<string, unknown> => {
   try {
     const parsed = (Array.isArray(output) ? output : [output])
       .filter(
         (item): item is NonNullable<typeof item> =>
-          item !== undefined && item !== null
+          item !== undefined && item !== null,
       )
       .flatMap(parseChainValue);
 
@@ -214,13 +214,13 @@ export const outputFromChainValues = (
 };
 
 export const inputFromChainValues = (
-  inputs: ChainValues
+  inputs: ChainValues,
 ): Record<string, unknown> => {
   try {
     const parsed = (Array.isArray(inputs) ? inputs : [inputs])
       .filter(
         (item): item is NonNullable<typeof item> =>
-          item !== undefined && item !== null
+          item !== undefined && item !== null,
       )
       .flatMap(parseChainValue);
 

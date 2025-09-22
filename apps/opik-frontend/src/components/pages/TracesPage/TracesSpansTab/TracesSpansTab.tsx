@@ -38,6 +38,7 @@ import {
   HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
+import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
@@ -366,9 +367,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             if (
               filter.key &&
               filter.value &&
-              !/^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/.test(
-                filter.key,
-              )
+              !CUSTOM_FILTER_VALIDATION_REGEXP.test(filter.key)
             ) {
               return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
             }

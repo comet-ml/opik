@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
@@ -19,6 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
+import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -127,5 +129,45 @@ public class DatasetResourceClient {
                 .get();
 
         return actualResponse.readEntity(DatasetPage.class);
+    }
+
+    public DatasetPage getDatasetPage(String apiKey, String workspaceName, String name, Integer size) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (size != null && size > 0) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        return actualResponse.readEntity(DatasetPage.class);
+    }
+
+    public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String apiKey,
+            String workspaceName) {
+        var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("experiments")
+                .path("items")
+                .queryParam("experiment_ids", experimentIdsQueryParam)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetItemPage.class);
+        }
     }
 }
