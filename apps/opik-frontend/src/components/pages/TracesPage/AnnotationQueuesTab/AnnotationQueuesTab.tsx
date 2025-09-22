@@ -71,8 +71,6 @@ import {
   ANNOTATION_QUEUE_SCOPE,
 } from "@/types/annotation-queues";
 
-const REFETCH_INTERVAL = 30000;
-
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
     id: COLUMN_ID_ID,
@@ -266,8 +264,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchOnMount: false,
-      refetchInterval: REFETCH_INTERVAL,
     },
   );
 

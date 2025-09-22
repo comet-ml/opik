@@ -70,8 +70,6 @@ import {
 } from "@/types/annotation-queues";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 
-const REFETCH_INTERVAL = 30000;
-
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
     id: COLUMN_ID_ID,
@@ -278,8 +276,6 @@ export const AnnotationQueuesPage: React.FC = () => {
     },
     {
       placeholderData: keepPreviousData,
-      refetchOnMount: false,
-      refetchInterval: REFETCH_INTERVAL,
     },
   );
 

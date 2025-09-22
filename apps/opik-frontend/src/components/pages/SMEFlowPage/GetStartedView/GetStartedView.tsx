@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import InstructionsContent from "@/components/pages-shared/annotation-queues/InstructionsContent";
 import ScoresContent from "@/components/pages-shared/annotation-queues/ScoresContent";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import SMEFlowLayout from "./SMEFlowLayout";
+import SMEFlowLayout from "../SMEFlowLayout";
 
 interface GetStartedViewProps {
   annotationQueue: AnnotationQueue;

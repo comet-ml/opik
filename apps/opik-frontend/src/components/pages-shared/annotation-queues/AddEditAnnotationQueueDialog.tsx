@@ -227,7 +227,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           value={field.value}
                           onChange={field.onChange}
                           options={SCOPE_OPTIONS}
-                          disabled={isEdit}
+                          disabled={isEdit || Boolean(scope)}
                         />
                       </FormControl>
                       <FormMessage />

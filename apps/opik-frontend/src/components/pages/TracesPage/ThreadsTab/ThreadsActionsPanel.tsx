@@ -81,7 +81,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
-      <AddToDropdown rows={rows} disabled={disabled} />
+      <AddToDropdown rows={rows} disabled={disabled} scope={["thread"]} />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}
