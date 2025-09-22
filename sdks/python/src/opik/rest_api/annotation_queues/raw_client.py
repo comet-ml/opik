@@ -17,6 +17,7 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
+from ..types.annotation_queue_write_scope import AnnotationQueueWriteScope
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -62,6 +63,156 @@ class RawAnnotationQueuesClient:
                 return HttpResponse(response=_response, data=None)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_annotation_queues(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[AnnotationQueuePagePublic]:
+        """
+        Find annotation queues with filtering and sorting
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[AnnotationQueuePagePublic]
+            Annotation queues page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/annotation-queues",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "filters": filters,
+                "sorting": sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AnnotationQueuePagePublic,
+                    parse_obj_as(
+                        type_=AnnotationQueuePagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_annotation_queue(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        scope: AnnotationQueueWriteScope,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create annotation queue for human annotation workflows
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        scope : AnnotationQueueWriteScope
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/annotation-queues",
+            method="POST",
+            json={
+                "id": id,
+                "project_id": project_id,
+                "name": name,
+                "description": description,
+                "instructions": instructions,
+                "scope": scope,
+                "comments_enabled": comments_enabled,
+                "feedback_definition_names": feedback_definition_names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -152,61 +303,49 @@ class RawAnnotationQueuesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def find_annotation_queues(
-        self,
-        *,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        name: typing.Optional[str] = None,
-        filters: typing.Optional[str] = None,
-        sorting: typing.Optional[str] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[AnnotationQueuePagePublic]:
+    def delete_annotation_queue_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
         """
-        Find annotation queues with filtering and sorting
+        Delete multiple annotation queues by their IDs
 
         Parameters
         ----------
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        name : typing.Optional[str]
-
-        filters : typing.Optional[str]
-
-        sorting : typing.Optional[str]
+        ids : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        HttpResponse[AnnotationQueuePagePublic]
-            Annotation queues page
+        HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/annotation-queues",
-            method="GET",
-            params={
-                "page": page,
-                "size": size,
-                "name": name,
-                "filters": filters,
-                "sorting": sorting,
+            "v1/private/annotation-queues/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
             },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    AnnotationQueuePagePublic,
-                    parse_obj_as(
-                        type_=AnnotationQueuePagePublic,  # type: ignore
-                        object_=_response.json(),
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
                     ),
                 )
-                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -247,6 +386,76 @@ class RawAnnotationQueuesClient:
                 return HttpResponse(response=_response, data=_data)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def update_annotation_queue(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update annotation queue by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(id)}",
+            method="PATCH",
+            json={
+                "name": name,
+                "description": description,
+                "instructions": instructions,
+                "comments_enabled": comments_enabled,
+                "feedback_definition_names": feedback_definition_names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -366,6 +575,156 @@ class AsyncRawAnnotationQueuesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def find_annotation_queues(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[AnnotationQueuePagePublic]:
+        """
+        Find annotation queues with filtering and sorting
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[AnnotationQueuePagePublic]
+            Annotation queues page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/annotation-queues",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "filters": filters,
+                "sorting": sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AnnotationQueuePagePublic,
+                    parse_obj_as(
+                        type_=AnnotationQueuePagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_annotation_queue(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        scope: AnnotationQueueWriteScope,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create annotation queue for human annotation workflows
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        scope : AnnotationQueueWriteScope
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/annotation-queues",
+            method="POST",
+            json={
+                "id": id,
+                "project_id": project_id,
+                "name": name,
+                "description": description,
+                "instructions": instructions,
+                "scope": scope,
+                "comments_enabled": comments_enabled,
+                "feedback_definition_names": feedback_definition_names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def create_annotation_queue_batch(
         self,
         *,
@@ -442,61 +801,49 @@ class AsyncRawAnnotationQueuesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def find_annotation_queues(
-        self,
-        *,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        name: typing.Optional[str] = None,
-        filters: typing.Optional[str] = None,
-        sorting: typing.Optional[str] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[AnnotationQueuePagePublic]:
+    async def delete_annotation_queue_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
         """
-        Find annotation queues with filtering and sorting
+        Delete multiple annotation queues by their IDs
 
         Parameters
         ----------
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        name : typing.Optional[str]
-
-        filters : typing.Optional[str]
-
-        sorting : typing.Optional[str]
+        ids : typing.Sequence[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        AsyncHttpResponse[AnnotationQueuePagePublic]
-            Annotation queues page
+        AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/annotation-queues",
-            method="GET",
-            params={
-                "page": page,
-                "size": size,
-                "name": name,
-                "filters": filters,
-                "sorting": sorting,
+            "v1/private/annotation-queues/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
             },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    AnnotationQueuePagePublic,
-                    parse_obj_as(
-                        type_=AnnotationQueuePagePublic,  # type: ignore
-                        object_=_response.json(),
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
                     ),
                 )
-                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -537,6 +884,76 @@ class AsyncRawAnnotationQueuesClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def update_annotation_queue(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update annotation queue by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(id)}",
+            method="PATCH",
+            json={
+                "name": name,
+                "description": description,
+                "instructions": instructions,
+                "comments_enabled": comments_enabled,
+                "feedback_definition_names": feedback_definition_names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

@@ -7,6 +7,7 @@ from ..core.request_options import RequestOptions
 from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
+from ..types.annotation_queue_write_scope import AnnotationQueueWriteScope
 from .raw_client import AsyncRawAnnotationQueuesClient, RawAnnotationQueuesClient
 
 # this is used as the default value for optional parameters
@@ -56,39 +57,6 @@ class AnnotationQueuesClient:
         _response = self._raw_client.add_items_to_annotation_queue(id, ids=ids, request_options=request_options)
         return _response.data
 
-    def create_annotation_queue_batch(
-        self,
-        *,
-        annotation_queues: typing.Sequence[AnnotationQueueWrite],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create multiple annotation queues for human annotation workflows
-
-        Parameters
-        ----------
-        annotation_queues : typing.Sequence[AnnotationQueueWrite]
-            List of annotation queues to create
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        from Opik import AnnotationQueueWrite
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.annotation_queues.create_annotation_queue_batch(annotation_queues=[AnnotationQueueWrite(project_id='project_id', name='name', scope="trace", )], )
-        """
-        _response = self._raw_client.create_annotation_queue_batch(
-            annotation_queues=annotation_queues, request_options=request_options
-        )
-        return _response.data
-
     def find_annotation_queues(
         self,
         *,
@@ -133,6 +101,125 @@ class AnnotationQueuesClient:
         )
         return _response.data
 
+    def create_annotation_queue(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        scope: AnnotationQueueWriteScope,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create annotation queue for human annotation workflows
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        scope : AnnotationQueueWriteScope
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.create_annotation_queue(project_id='project_id', name='name', scope="trace", )
+        """
+        _response = self._raw_client.create_annotation_queue(
+            project_id=project_id,
+            name=name,
+            scope=scope,
+            id=id,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def create_annotation_queue_batch(
+        self,
+        *,
+        annotation_queues: typing.Sequence[AnnotationQueueWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create multiple annotation queues for human annotation workflows
+
+        Parameters
+        ----------
+        annotation_queues : typing.Sequence[AnnotationQueueWrite]
+            List of annotation queues to create
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import AnnotationQueueWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.create_annotation_queue_batch(annotation_queues=[AnnotationQueueWrite(project_id='project_id', name='name', scope="trace", )], )
+        """
+        _response = self._raw_client.create_annotation_queue_batch(
+            annotation_queues=annotation_queues, request_options=request_options
+        )
+        return _response.data
+
+    def delete_annotation_queue_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete multiple annotation queues by their IDs
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.delete_annotation_queue_batch(ids=['ids'], )
+        """
+        _response = self._raw_client.delete_annotation_queue_batch(ids=ids, request_options=request_options)
+        return _response.data
+
     def get_annotation_queue_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AnnotationQueuePublic:
@@ -158,6 +245,58 @@ class AnnotationQueuesClient:
         client.annotation_queues.get_annotation_queue_by_id(id='id', )
         """
         _response = self._raw_client.get_annotation_queue_by_id(id, request_options=request_options)
+        return _response.data
+
+    def update_annotation_queue(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update annotation queue by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.update_annotation_queue(id='id', )
+        """
+        _response = self._raw_client.update_annotation_queue(
+            id,
+            name=name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+            request_options=request_options,
+        )
         return _response.data
 
     def remove_items_from_annotation_queue(
@@ -235,42 +374,6 @@ class AsyncAnnotationQueuesClient:
         _response = await self._raw_client.add_items_to_annotation_queue(id, ids=ids, request_options=request_options)
         return _response.data
 
-    async def create_annotation_queue_batch(
-        self,
-        *,
-        annotation_queues: typing.Sequence[AnnotationQueueWrite],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create multiple annotation queues for human annotation workflows
-
-        Parameters
-        ----------
-        annotation_queues : typing.Sequence[AnnotationQueueWrite]
-            List of annotation queues to create
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        from Opik import AnnotationQueueWrite
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.annotation_queues.create_annotation_queue_batch(annotation_queues=[AnnotationQueueWrite(project_id='project_id', name='name', scope="trace", )], )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.create_annotation_queue_batch(
-            annotation_queues=annotation_queues, request_options=request_options
-        )
-        return _response.data
-
     async def find_annotation_queues(
         self,
         *,
@@ -318,6 +421,134 @@ class AsyncAnnotationQueuesClient:
         )
         return _response.data
 
+    async def create_annotation_queue(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        scope: AnnotationQueueWriteScope,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create annotation queue for human annotation workflows
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        scope : AnnotationQueueWriteScope
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.create_annotation_queue(project_id='project_id', name='name', scope="trace", )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_annotation_queue(
+            project_id=project_id,
+            name=name,
+            scope=scope,
+            id=id,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def create_annotation_queue_batch(
+        self,
+        *,
+        annotation_queues: typing.Sequence[AnnotationQueueWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create multiple annotation queues for human annotation workflows
+
+        Parameters
+        ----------
+        annotation_queues : typing.Sequence[AnnotationQueueWrite]
+            List of annotation queues to create
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import AnnotationQueueWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.create_annotation_queue_batch(annotation_queues=[AnnotationQueueWrite(project_id='project_id', name='name', scope="trace", )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_annotation_queue_batch(
+            annotation_queues=annotation_queues, request_options=request_options
+        )
+        return _response.data
+
+    async def delete_annotation_queue_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete multiple annotation queues by their IDs
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.delete_annotation_queue_batch(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_annotation_queue_batch(ids=ids, request_options=request_options)
+        return _response.data
+
     async def get_annotation_queue_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AnnotationQueuePublic:
@@ -346,6 +577,61 @@ class AsyncAnnotationQueuesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_annotation_queue_by_id(id, request_options=request_options)
+        return _response.data
+
+    async def update_annotation_queue(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        instructions: typing.Optional[str] = OMIT,
+        comments_enabled: typing.Optional[bool] = OMIT,
+        feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update annotation queue by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        instructions : typing.Optional[str]
+
+        comments_enabled : typing.Optional[bool]
+
+        feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.update_annotation_queue(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_annotation_queue(
+            id,
+            name=name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+            request_options=request_options,
+        )
         return _response.data
 
     async def remove_items_from_annotation_queue(
