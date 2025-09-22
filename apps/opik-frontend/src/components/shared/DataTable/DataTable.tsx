@@ -128,6 +128,7 @@ interface DataTableProps<TData, TValue> {
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
+  getSubRows?: (originalRow: TData, index: number) => TData[] | undefined;
   getRowHeightStyle?: (height: ROW_HEIGHT) => React.CSSProperties;
   rowHeight?: ROW_HEIGHT;
   columnPinning?: ColumnPinningState;
@@ -166,6 +167,7 @@ const DataTable = <TData, TValue>({
   TableBody = DataTableBody,
   stickyHeader = false,
   meta,
+  getSubRows,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
@@ -174,6 +176,7 @@ const DataTable = <TData, TValue>({
     data,
     columns,
     getRowId,
+    getSubRows,
     columnResizeMode: "onChange",
     ...(isBoolean(groupingConfig?.groupedColumnMode) ||
     groupingConfig?.groupedColumnMode
@@ -338,7 +341,10 @@ const DataTable = <TData, TValue>({
           </TableCell>
         );
       }
-      return null;
+
+      if (!getSubRows) {
+        return null;
+      }
     }
 
     if (cell.getIsPlaceholder()) {
