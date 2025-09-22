@@ -153,7 +153,7 @@ public abstract sealed class FeedbackDefinition<T> {
     @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
 
-    @Size(max = 255, message = "Description cannot exceed 255 characters") @JsonView({View.Public.class, View.Create.class, View.Update.class})
+    @Size(max = 255, message = "cannot exceed 255 characters") @JsonView({View.Public.class, View.Create.class, View.Update.class})
     @Schema(description = "Optional description for the feedback definition", example = "This feedback definition is used to rate response quality")
     private final String description;
 
