@@ -1,6 +1,7 @@
 import { Explainer } from "@/types/shared";
 
 export enum EXPLAINER_ID {
+  visible_scores = "visible_scores",
   what_do_you_use_projects_for = "what_do_you_use_projects_for",
   what_are_feedback_scores = "what_are_feedback_scores",
   i_created_a_project_now_what = "i_created_a_project_now_what",
@@ -9,6 +10,7 @@ export enum EXPLAINER_ID {
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
+  how_to_choose_annotation_queue_type = "how_to_choose_annotation_queue_type",
   why_would_i_want_to_add_traces_to_a_dataset = "why_would_i_want_to_add_traces_to_a_dataset",
   hows_the_cost_estimated = "hows_the_cost_estimated",
   hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
@@ -74,6 +76,11 @@ export enum EXPLAINER_ID {
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
+  [EXPLAINER_ID.visible_scores]: {
+    id: EXPLAINER_ID.visible_scores,
+    description:
+      "Only the scores you select here will be visible to annotators during evaluation",
+  },
   [EXPLAINER_ID.what_do_you_use_projects_for]: {
     id: EXPLAINER_ID.what_do_you_use_projects_for,
     description:
@@ -174,10 +181,15 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Human review fields let you manually rate LLM outputs. Use them to gather structured feedback and monitor quality over time.",
   },
   [EXPLAINER_ID.what_are_annotation_queues]: {
-    id: EXPLAINER_ID.what_are_annotation_queues, // TODO lala add link for doctumentation for this
+    id: EXPLAINER_ID.what_are_annotation_queues,
     description:
-      "Annotation queues organize traces or threads for structured human review by SME users. Create queues with sampling rules to systematically collect feedback from subject matter experts and improve your model's performance.",
+      "Add traces or thread to an annotation queue to collect human feedback on your LLM outputs. Only queues created in this project appear here, and traces can be added to them only",
     docLink: "/evaluation/annotation_queues",
+  },
+  [EXPLAINER_ID.how_to_choose_annotation_queue_type]: {
+    id: EXPLAINER_ID.how_to_choose_annotation_queue_type,
+    description:
+      "Choose whether the annotation queue will contain the entire thread or individual traces",
   },
   [EXPLAINER_ID.whats_an_experiment]: {
     id: EXPLAINER_ID.whats_an_experiment,

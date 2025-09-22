@@ -1,5 +1,6 @@
 import { Thread, Trace } from "@/types/traces";
 import get from "lodash/get";
+import { isObjectThread } from "@/lib/traces";
 
 export const generateSMEURL = (workspace: string, id: string): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
@@ -12,4 +13,4 @@ export const generateSMEURL = (workspace: string, id: string): string => {
 };
 
 export const getAnnotationQueueItemId = (item: Trace | Thread) =>
-  get(item, "thread_model_id", item.id);
+  isObjectThread(item) ? get(item, "thread_model_id", "") : get(item, "id", "");

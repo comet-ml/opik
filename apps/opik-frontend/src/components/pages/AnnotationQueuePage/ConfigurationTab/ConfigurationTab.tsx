@@ -4,9 +4,11 @@ import Loader from "@/components/shared/Loader/Loader";
 import InstructionsSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/InstructionsSection";
 import ScoresSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ScoresSection";
 import ReviewersSection from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ReviewersSection";
+import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import { Separator } from "@/components/ui/separator";
 
 interface ConfigurationTabProps {
   annotationQueue?: AnnotationQueue;
@@ -27,8 +29,10 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         limitWidth
       >
         <div className="flex items-center gap-2">
-          <CopySMELinkButton annotationQueue={annotationQueue} />
+          <OpenSMELinkButton annotationQueue={annotationQueue} />
           <EditAnnotationQueueButton annotationQueue={annotationQueue} />
+          <Separator orientation="vertical" className="mx-2 h-4" />
+          <CopySMELinkButton annotationQueue={annotationQueue} />
         </div>
       </PageBodyStickyContainer>
       <div className="px-6">

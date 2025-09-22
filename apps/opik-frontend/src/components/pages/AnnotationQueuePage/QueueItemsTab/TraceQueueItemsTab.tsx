@@ -52,6 +52,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -68,6 +69,7 @@ import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELin
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
+import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
@@ -77,6 +79,7 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
+import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
   {
@@ -319,11 +322,11 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   const extendedFilters = useMemo(
     () => [
       ...filters,
-      // createFilter({ // TODO lala uncomment when we will have annotation queue ids in traces
-      //   field: "annotation_queue_ids",
-      //   value: annotationQueue.id,
-      //   operator: "contains",
-      // }),
+      createFilter({
+        field: "annotation_queue_ids",
+        value: annotationQueue.id,
+        operator: "contains",
+      }),
     ],
     [annotationQueue.id, filters],
   );
@@ -530,9 +533,12 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
   if (noData && rows.length === 0 && page === 1) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <DataTableNoData title={noDataText} />
-      </div>
+      <NoQueueItemsPage
+        queueScope={annotationQueue.scope}
+        Wrapper={NoDataPage}
+        height={278}
+        className="px-6"
+      />
     );
   }
 
@@ -559,12 +565,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
           />
         </div>
         <div className="flex items-center gap-2">
-          <CopySMELinkButton annotationQueue={annotationQueue} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          <OpenSMELinkButton annotationQueue={annotationQueue} />
+          <EditAnnotationQueueButton annotationQueue={annotationQueue} />
           <QueueItemActionsPanel
             items={selectedRows}
             annotationQueueId={annotationQueue.id}
           />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
@@ -577,7 +584,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           />
-          <EditAnnotationQueueButton annotationQueue={annotationQueue} />
+          <CopySMELinkButton annotationQueue={annotationQueue} />
         </div>
       </PageBodyStickyContainer>
       <DataTable

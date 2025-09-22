@@ -1,35 +1,21 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
-import { CheckCircle, FileText } from "lucide-react";
-import SMEFlowLayout from "./SMEFlowLayout";
-import { AnnotationQueue } from "@/types/annotation-queues";
-import { Trace, Thread } from "@/types/traces";
+import { FileText } from "lucide-react";
+import SMEFlowLayout from "../SMEFlowLayout";
+import { useSMEFlow } from "../SMEFlowContext";
 
 interface CompletionViewProps {
-  annotationQueue: AnnotationQueue;
-  queueItems: (Trace | Thread)[];
-  processedCount: number;
+  header: React.ReactNode;
 }
 
 const CompletionView: React.FunctionComponent<CompletionViewProps> = ({
-  annotationQueue,
-  queueItems,
-  processedCount,
+  header,
 }) => {
+  const { queueItems, processedCount } = useSMEFlow();
   const totalItemCount = queueItems.length;
 
-  const header = (
-    <div className="text-center">
-      <CheckCircle className="mx-auto mb-4 size-16 text-green-600" />
-      <h1 className="comet-title-xl mb-2">Annotation Completed</h1>
-      <p className="comet-body-s text-muted-slate">
-        Great job! Your annotation work is complete.
-      </p>
-    </div>
-  );
-
-  const children = (
-    <div>
+  return (
+    <SMEFlowLayout header={header}>
       <Card className="p-6 text-center">
         <h3 className="comet-title-m mb-4">Session Summary</h3>
         <p className="comet-body-s mb-6 text-muted-slate">
@@ -56,10 +42,8 @@ const CompletionView: React.FunctionComponent<CompletionViewProps> = ({
           </div>
         </div>
       </Card>
-    </div>
+    </SMEFlowLayout>
   );
-
-  return <SMEFlowLayout header={header}>{children}</SMEFlowLayout>;
 };
 
 export default CompletionView;
