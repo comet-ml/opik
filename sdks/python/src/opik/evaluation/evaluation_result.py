@@ -82,7 +82,7 @@ class EvaluationResult:
     experiment_url: Optional[str]
     trial_count: int
 
-    def aggregate_evaluations_scores(self) -> EvaluationResultAggregatedScoresView:
+    def aggregate_evaluation_scores(self) -> EvaluationResultAggregatedScoresView:
         """
         Aggregates evaluation scores from test results and returns the aggregated scores view.
 
