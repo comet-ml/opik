@@ -187,39 +187,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/annotation-queues/batch:
-    post:
-      tags:
-      - Annotation Queues
-      summary: Create annotation queue batch
-      description: Create multiple annotation queues for human annotation workflows
-      operationId: createAnnotationQueueBatch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AnnotationQueueBatch_Write"
-      responses:
-        "204":
-          description: No Content
-        "422":
-          description: Unprocessable Content
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "409":
-          description: Conflict
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/annotation-queues:
     get:
       tags:
@@ -261,6 +228,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnnotationQueuePage_Public"
+    post:
+      tags:
+      - Annotation Queues
+      summary: Create annotation queue
+      description: Create annotation queue for human annotation workflows
+      operationId: createAnnotationQueue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueue_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/{annotationId}"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/batch:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Create annotation queue batch
+      description: Create multiple annotation queues for human annotation workflows
+      operationId: createAnnotationQueueBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueBatch_Write"
+      responses:
+        "204":
+          description: No Content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/delete:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Delete annotation queue batch
+      description: Delete multiple annotation queues by their IDs
+      operationId: deleteAnnotationQueueBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/annotation-queues/{id}:
     get:
       tags:
@@ -288,6 +342,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Annotation Queues
+      summary: Update annotation queue
+      description: Update annotation queue by id
+      operationId: updateAnnotationQueue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/annotation-queues/{id}/items/delete:
     post:
       tags:
@@ -4346,20 +4427,6 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
-    AnnotationQueueBatch:
-      required:
-      - annotation_queues
-      type: object
-      properties:
-        annotation_queues:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          description: List of annotation queues to create
-          items:
-            $ref: "#/components/schemas/AnnotationQueue"
-      description: Batch of annotation queues to create
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -4380,20 +4447,6 @@ components:
           type: string
         value:
           type: number
-    AnnotationQueueBatch_Write:
-      required:
-      - annotation_queues
-      type: object
-      properties:
-        annotation_queues:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          description: List of annotation queues to create
-          items:
-            $ref: "#/components/schemas/AnnotationQueue_Write"
-      description: Batch of annotation queues to create
     AnnotationQueue_Write:
       required:
       - name
@@ -4426,6 +4479,47 @@ components:
           items:
             type: string
       description: List of annotation queues to create
+    AnnotationQueueBatch:
+      required:
+      - annotation_queues
+      type: object
+      properties:
+        annotation_queues:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of annotation queues to create
+          items:
+            $ref: "#/components/schemas/AnnotationQueue"
+      description: Batch of annotation queues to create
+    AnnotationQueueBatch_Write:
+      required:
+      - annotation_queues
+      type: object
+      properties:
+        annotation_queues:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of annotation queues to create
+          items:
+            $ref: "#/components/schemas/AnnotationQueue_Write"
+      description: Batch of annotation queues to create
+    BatchDelete:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AnnotationQueuePage_Public:
       type: object
       properties:
@@ -4539,6 +4633,23 @@ components:
           type: string
         details:
           type: string
+    AnnotationQueueUpdate:
+      type: object
+      properties:
+        name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          type: string
+        instructions:
+          type: string
+        comments_enabled:
+          type: boolean
+        feedback_definition_names:
+          type: array
+          items:
+            minLength: 1
+            type: string
     Attachment:
       required:
       - file_name
@@ -5121,19 +5232,6 @@ components:
           type: object
           additionalProperties:
             type: string
-    BatchDelete:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
       - action

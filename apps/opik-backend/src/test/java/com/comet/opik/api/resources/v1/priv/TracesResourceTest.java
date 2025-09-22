@@ -8744,6 +8744,73 @@ class TracesResourceTest {
             var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
+
+        @Test
+        @DisplayName("delete trace feedback score with author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
+            // Create a trace
+            var trace = createTrace();
+            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author (since the bug is in the delete operation)
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score")
+                    .value(BigDecimal.valueOf(0.85))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITH an author (this is where the bug occurs)
+            // When writeToAuthored is disabled, this should still work
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score")
+                    .author(USER) // This is the key part - including author in the delete request
+                    .build();
+
+            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was actually deleted
+            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(traceAfterDeletion.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete trace feedback score without author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
+            // Create a trace
+            var trace = createTrace();
+            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score-2")
+                    .value(BigDecimal.valueOf(0.75))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITHOUT an author (this should work before and after the fix)
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score-2")
+                    // No author specified
+                    .build();
+
+            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was deleted
+            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(traceAfterDeletion.feedbackScores()).isNull();
+        }
     }
 
     @Nested

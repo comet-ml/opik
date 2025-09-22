@@ -946,6 +946,10 @@ class PromptResourceTest {
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class),
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("a".repeat(256)).build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
+                            ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
@@ -1090,6 +1094,10 @@ class PromptResourceTest {
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
+                            ErrorMessage.class),
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("a".repeat(256)).build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
                             ErrorMessage.class));
         }
     }
