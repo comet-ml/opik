@@ -37,6 +37,7 @@ export const mapFeedbackScoresToRowsWithExpanded = (
 
     rows.push({
       id: feedbackScore.name,
+      author: feedbackScore.created_by,
       ...feedbackScore,
     });
   });

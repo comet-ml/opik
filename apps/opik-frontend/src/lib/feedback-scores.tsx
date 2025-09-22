@@ -218,6 +218,7 @@ export const generateUpdateMutation =
             value_by_author: updatedValueByAuthor,
             last_updated_at: new Date().toISOString(),
             last_updated_by: author,
+            created_by: author,
           };
         }
 
@@ -228,7 +229,7 @@ export const generateUpdateMutation =
     });
 
     if (!isUpdated) {
-      retVal.push(score);
+      retVal.push({ ...score, created_by: author });
     }
 
     return retVal;

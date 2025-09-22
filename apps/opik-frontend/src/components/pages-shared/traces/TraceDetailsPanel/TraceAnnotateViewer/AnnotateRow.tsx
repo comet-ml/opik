@@ -56,7 +56,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const userName = useLoggedInUserName();
 
   const feedbackScoreData = useMemo(() => {
-    if (!feedbackScore || !userName) {
+    if (!feedbackScore) {
       return {
         value: "" as const,
         reason: "",
@@ -64,7 +64,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       };
     }
 
-    if (hasValuesByAuthor(feedbackScore)) {
+    if (hasValuesByAuthor(feedbackScore) && userName) {
       const rawValue = feedbackScore.value_by_author[userName]?.value;
 
       return {
