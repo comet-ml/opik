@@ -26,6 +26,7 @@ import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
@@ -35,16 +36,19 @@ import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -128,6 +132,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -233,6 +238,7 @@ class TracesResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -240,7 +246,8 @@ class TracesResourceTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -249,9 +256,17 @@ class TracesResourceTest {
 
         MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .isMinIO(false)
+                        .modules(List.of(AWSUtils.testClients(minioUrl)))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -266,6 +281,7 @@ class TracesResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private ThreadCommentResourceClient threadCommentResourceClient;
+    private AttachmentResourceClient attachmentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -283,6 +299,7 @@ class TracesResourceTest {
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.attachmentResourceClient = new AttachmentResourceClient(client);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -7260,6 +7277,88 @@ class TracesResourceTest {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when trace contains base64 attachments, then attachments are stripped and stored")
+        void create__whenTraceContainsBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
+            // Given a trace with base64 encoded attachments in its input
+            // Create longer base64 strings that exceed the 1000 character threshold
+            // Create proper base64 PNG and GIF data that Tika will recognize (similar to AttachmentStripperServiceTest)
+            byte[] pngData = new byte[1500];
+            byte[] pngHeader = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}; // PNG header
+            System.arraycopy(pngHeader, 0, pngData, 0, pngHeader.length);
+            for (int i = pngHeader.length; i < pngData.length; i++) {
+                pngData[i] = (byte) (i % 256);
+            }
+            String base64Png = Base64.getEncoder().encodeToString(pngData);
+
+            byte[] gifData = new byte[1500];
+            byte[] gifHeader = {0x47, 0x49, 0x46, 0x38, 0x39, 0x61}; // GIF89a header
+            System.arraycopy(gifHeader, 0, gifData, 0, gifHeader.length);
+            for (int i = gifHeader.length; i < gifData.length; i++) {
+                gifData[i] = (byte) (i % 256);
+            }
+            String base64Gif = Base64.getEncoder().encodeToString(gifData);
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Images attached:\", \"png_data\": \"%s\", \"gif_data\": \"%s\"}",
+                    base64Png, base64Gif);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .build();
+
+            // When creating the trace
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+            assertThat(traceId).isNotNull();
+
+            // Then the trace should have attachments stripped and replaced with references
+            // Give some time for async processing if needed
+            Thread.sleep(2000);
+
+            Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedTrace).isNotNull();
+
+            JsonNode retrievedInput = retrievedTrace.input();
+            assertThat(retrievedInput).isNotNull();
+
+            String retrievedInputString = retrievedInput.toString();
+            System.out.println("Retrieved Input: " + retrievedInputString);
+
+            // Verify the base64 data is replaced by attachment references
+            assertThat(retrievedInputString).contains("attachment-1.png");
+            assertThat(retrievedInputString).contains("attachment-2.gif");
+            assertThat(retrievedInputString).doesNotContain(base64Png);
+            assertThat(retrievedInputString).doesNotContain(base64Gif);
+
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+
+            // Verify attachments can be listed via AttachmentResourceClient
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            var attachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            // Verify we got attachments
+            assertThat(attachmentPage).isNotNull();
+            assertThat(attachmentPage.content()).hasSize(2);
+
+            // Verify attachment names contain our references with context prefixes
+            var attachmentNames = attachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            assertThat(attachmentNames).contains("input-attachment-1.png");
+            assertThat(attachmentNames).contains("input-attachment-2.gif");
         }
     }
 

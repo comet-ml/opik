@@ -11,6 +11,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -19,6 +20,7 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -118,6 +120,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull EventBus eventBus;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull TraceSortingFactory traceSortingFactory;
+    private final @NonNull AttachmentStripperService attachmentStripperService;
 
     @Override
     @WithSpan
@@ -126,19 +129,27 @@ class TraceServiceImpl implements TraceService {
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
         UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
 
-        return Mono.deferContextual(ctx -> IdGenerator
-                .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                .flatMap(project -> lockService.executeWithLock(
-                        new LockService.Lock(id, TRACE_KEY),
-                        Mono.defer(() -> insertTrace(trace, project, id)))
-                        .doOnSuccess(__ -> {
-                            var savedTrace = trace.toBuilder().projectId(project.id()).projectName(projectName).build();
-                            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                            String userName = ctx.get(RequestContext.USER_NAME);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-                            eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                        })));
+            // Strip attachments from the trace with the generated ID
+            Trace traceWithId = trace.toBuilder().id(id).build();
+            Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName, projectName);
+
+            return IdGenerator
+                    .validateVersionAsync(id, TRACE_KEY)
+                    .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
+                    .flatMap(project -> lockService.executeWithLock(
+                            new LockService.Lock(id, TRACE_KEY),
+                            Mono.defer(() -> insertTrace(processedTrace, project, id)))
+                            .doOnSuccess(__ -> {
+                                var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                        .projectName(projectName).build();
+
+                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                            }));
+        });
     }
 
     @WithSpan
@@ -156,14 +167,17 @@ class TraceServiceImpl implements TraceService {
                 .toList();
 
         return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                     .flatMap(projectService::getOrCreate)
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
+                    .flatMapMany(Flux::fromIterable)
+                    .map(trace -> stripAttachmentsFromTrace(trace, workspaceId, userName, trace.projectName()))
+                    .collectList()
                     .subscribeOn(Schedulers.boundedElastic());
-
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
 
             return resolveProjects
                     .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection))
@@ -500,6 +514,55 @@ class TraceServiceImpl implements TraceService {
     public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.threadsSearch(limit, it));
+    }
+
+    /**
+     * Strips attachments from trace input, output, and metadata fields.
+     *
+     * @param trace The trace to process
+     * @param workspaceId The workspace ID
+     * @param userName The user name
+     * @param projectName The project name
+     * @return A new trace with attachments stripped and replaced by references
+     */
+    private Trace stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
+        Trace.TraceBuilder builder = trace.toBuilder();
+        boolean hasChanges = false;
+
+        // Process input field
+        if (trace.input() != null) {
+            log.debug("DEBUG: Processing input field");
+            var strippedInput = attachmentStripperService.stripAttachments(
+                    trace.input(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "input");
+            if (strippedInput != trace.input()) {
+                builder.input(strippedInput);
+                hasChanges = true;
+            }
+        }
+
+        // Process output field
+        if (trace.output() != null) {
+            log.debug("DEBUG: Processing output field");
+            var strippedOutput = attachmentStripperService.stripAttachments(
+                    trace.output(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "output");
+            if (strippedOutput != trace.output()) {
+                builder.output(strippedOutput);
+                hasChanges = true;
+            }
+        }
+
+        // Process metadata field
+        if (trace.metadata() != null) {
+            log.debug("DEBUG: Processing metadata field");
+            var strippedMetadata = attachmentStripperService.stripAttachments(
+                    trace.metadata(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "metadata");
+            if (strippedMetadata != trace.metadata()) {
+                builder.metadata(strippedMetadata);
+                hasChanges = true;
+            }
+        }
+
+        return hasChanges ? builder.build() : trace;
     }
 
 }

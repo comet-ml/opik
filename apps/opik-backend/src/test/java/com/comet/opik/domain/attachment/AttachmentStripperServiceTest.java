@@ -13,16 +13,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Base64;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AttachmentStripperServiceTest {
@@ -60,7 +61,7 @@ class AttachmentStripperServiceTest {
         for (int i = pngHeader.length; i < largeData.length; i++) {
             largeData[i] = (byte) (i % 256);
         }
-        LARGE_PNG_BASE64 = java.util.Base64.getEncoder().encodeToString(largeData);
+        LARGE_PNG_BASE64 = Base64.getEncoder().encodeToString(largeData);
     }
 
     // Short base64 string (less than 1000 chars)
@@ -70,8 +71,13 @@ class AttachmentStripperServiceTest {
     void setUp() {
         objectMapper = new ObjectMapper();
 
-        // Mock S3Config to return default threshold (lenient to avoid unnecessary stubbing errors)
-        lenient().when(s3Config.getStripAttachmentsMinSize()).thenReturn(1000);
+        // Mock S3Config to return default threshold
+        when(s3Config.getStripAttachmentsMinSize()).thenReturn(1000);
+        lenient().when(s3Config.isMinIO()).thenReturn(true); // Use MinIO mode for unit tests (direct upload)
+
+        // Mock direct upload for MinIO mode
+        lenient().doNothing().when(attachmentService).uploadAttachment(any(AttachmentInfo.class), any(byte[].class),
+                anyString(), anyString());
 
         attachmentStripperService = new AttachmentStripperService(
                 attachmentService, idGenerator, objectMapper, s3Config);
@@ -82,7 +88,7 @@ class AttachmentStripperServiceTest {
     void shouldReturnNullNodeUnchanged() {
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                null, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                null, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
 
         // Then
         assertThat(result).isNull();
@@ -111,7 +117,7 @@ class AttachmentStripperServiceTest {
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
 
         // Then
         assertThat(result).isEqualTo(input); // Should be unchanged
@@ -127,17 +133,17 @@ class AttachmentStripperServiceTest {
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
 
         // Then
         assertThat(result.has("data")).isTrue();
         String replacedValue = result.get("data").asText();
-        assertThat(replacedValue).startsWith("[attachment-1.");
+        assertThat(replacedValue).startsWith("[input-attachment-1.");
         assertThat(replacedValue).endsWith("]");
-        assertThat(replacedValue).contains("image/png");
+        assertThat(replacedValue).isEqualTo("[input-attachment-1.png]");
 
-        verify(attachmentService, times(1)).uploadAttachment(
-                any(AttachmentInfo.class), any(byte[].class), eq(TEST_WORKSPACE_ID), eq(TEST_USER_NAME));
+        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
+                anyString());
     }
 
     @Test
@@ -155,25 +161,26 @@ class AttachmentStripperServiceTest {
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "output");
 
         // Then
         // First attachment should be replaced
         String firstAttachment = result.get("first_attachment").asText();
-        assertThat(firstAttachment).startsWith("[attachment-1.");
-        assertThat(firstAttachment).contains("image/png");
+        assertThat(firstAttachment).startsWith("[output-attachment-1.");
+        assertThat(firstAttachment).isEqualTo("[output-attachment-1.png]");
 
         // Regular text should be unchanged
         assertThat(result.get("regular_text").asText()).isEqualTo("just some text");
 
         // Second attachment should be replaced with different number
         String secondAttachment = result.get("second_attachment").asText();
-        assertThat(secondAttachment).startsWith("[attachment-2.");
-        assertThat(secondAttachment).contains("image/png");
+        assertThat(secondAttachment).startsWith("[output-attachment-2.");
+        assertThat(secondAttachment).isEqualTo("[output-attachment-2.png]");
 
         // Should have called upload service twice
-        verify(attachmentService, times(2)).uploadAttachment(
-                any(AttachmentInfo.class), any(byte[].class), eq(TEST_WORKSPACE_ID), eq(TEST_USER_NAME));
+        verify(attachmentService, times(2)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
+                anyString());
     }
 
     @Test
@@ -206,20 +213,21 @@ class AttachmentStripperServiceTest {
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "metadata");
 
         // Then
         // Navigate to the data field and verify it was replaced
         JsonNode dataField = result.at("/messages/0/content/1/inline_data/data");
-        assertThat(dataField.asText()).startsWith("[attachment-1.");
-        assertThat(dataField.asText()).contains("image/png");
+
+        assertThat(dataField.asText()).isEqualTo("[metadata-attachment-1.png]");
 
         // Other fields should be unchanged
         assertThat(result.at("/messages/0/content/0/text").asText()).isEqualTo("What's in this image?");
         assertThat(result.at("/messages/0/content/1/inline_data/mime_type").asText()).isEqualTo("image/png");
 
-        verify(attachmentService, times(1)).uploadAttachment(
-                any(AttachmentInfo.class), any(byte[].class), eq(TEST_WORKSPACE_ID), eq(TEST_USER_NAME));
+        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
+                anyString());
     }
 
     @Test
@@ -234,11 +242,39 @@ class AttachmentStripperServiceTest {
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME);
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
 
         // Then
         // Should be unchanged since Tika will detect this as text/plain
         assertThat(result).isEqualTo(input);
         verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("Should generate context-aware filenames for different contexts")
+    void shouldGenerateContextAwareFilenames() throws Exception {
+        // Given
+        JsonNode input = objectMapper.readTree("{\"image\": \"" + LARGE_PNG_BASE64 + "\"}");
+
+        // When - Test with different contexts
+        JsonNode inputResult = attachmentStripperService.stripAttachments(
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
+
+        JsonNode outputResult = attachmentStripperService.stripAttachments(
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "output");
+
+        JsonNode metadataResult = attachmentStripperService.stripAttachments(
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "metadata");
+
+        // Then - Each context should generate different filename prefixes
+        assertThat(inputResult.get("image").asText()).isEqualTo("[input-attachment-1.png]");
+        assertThat(outputResult.get("image").asText()).isEqualTo("[output-attachment-1.png]");
+        assertThat(metadataResult.get("image").asText()).isEqualTo("[metadata-attachment-1.png]");
+
+        // Should have called upload service three times (once for each context)
+        verify(attachmentService, times(3)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
+                anyString());
     }
 }
