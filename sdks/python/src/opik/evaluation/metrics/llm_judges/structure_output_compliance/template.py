@@ -37,7 +37,7 @@ def generate_query(
         if few_shot_examples:
             examples_str = "\n\nEXAMPLES:\n\n" + "\n\n".join(
                 [
-                    f"<example>\nTitle: {example.title}\nExpected Schema: {example.schema or 'None'}\nOutput: {example.output}\n\n"
+                    f"<example>\nTitle: {example.title}\nExpected Schema: {example.output_schema or 'None'}\nOutput: {example.output}\n\n"
                     f'{{"score": {str(example.score).lower()}, "reason": ["{example.reason}"]}}\n</example>'
                     for example in few_shot_examples
                 ]
