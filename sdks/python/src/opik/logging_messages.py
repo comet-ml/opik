@@ -29,6 +29,8 @@ FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. 
 
 FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = "Failed to process %s. Error: %s"
 
+MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "Make sure Opik is configured correctly. See: https://www.comet.com/docs/opik/tracing/sdk_configuration"
+
 HALLUCINATION_DETECTION_FAILED = "Failed hallucination detection"
 
 FACTUALITY_SCORE_CALC_FAILED = "Failed to calculate factuality score"
