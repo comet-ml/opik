@@ -209,6 +209,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -310,8 +311,7 @@ public class FilterQueryBuilder {
                 TraceField.THREAD_ID,
                 TraceField.GUARDRAILS,
                 TraceField.VISIBILITY_MODE,
-                TraceField.ERROR_INFO,
-                TraceField.ANNOTATION_QUEUE_IDS));
+                TraceField.ERROR_INFO));
 
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,
@@ -320,8 +320,9 @@ public class FilterQueryBuilder {
                 TraceField.TOTAL_ESTIMATED_COST,
                 TraceField.LLM_SPAN_COUNT));
 
-        map.put(FilterStrategy.TRACE_ANNOTATION, Set.of(
-                TraceField.ANNOTATION_QUEUE_IDS));
+        map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
+                TraceField.ANNOTATION_QUEUE_IDS,
+                TraceThreadField.ANNOTATION_QUEUE_IDS));
 
         map.put(FilterStrategy.SPAN, Set.of(
                 SpanField.ID,

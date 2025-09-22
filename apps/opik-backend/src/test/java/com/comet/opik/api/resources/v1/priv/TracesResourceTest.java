@@ -5210,6 +5210,69 @@ class TracesResourceTest {
             assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
         }
 
+        @Test
+        @DisplayName("When filtering by annotation queue id, should return only threads with matching queue ids")
+        void whenFilterByAnnotationQueueId__thenReturnThreadsWithMatchingTags() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var threadId = UUID.randomUUID().toString();
+
+            // Create traces
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(project.name())
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Wait for thread to be created
+            Mono.delay(Duration.ofMillis(250)).block();
+
+            var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
+
+            // Create annotation queue for threads
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), Set.of(createdThread.threadModelId()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            List<TraceThread> expectedThreads = List.of(createdThread);
+
+            // Create filter for the specified status
+            var statusFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(annotationQueue.id().toString())
+                    .build();
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
         private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
                 List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
             var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,

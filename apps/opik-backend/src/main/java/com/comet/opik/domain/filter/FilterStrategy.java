@@ -7,7 +7,7 @@ import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 public enum FilterStrategy {
     TRACE,
     TRACE_AGGREGATION,
-    TRACE_ANNOTATION,
+    ANNOTATION_AGGREGATION,
     SPAN,
     EXPERIMENT_ITEM,
     DATASET_ITEM,
