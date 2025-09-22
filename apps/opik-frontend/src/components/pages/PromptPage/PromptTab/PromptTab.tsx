@@ -147,7 +147,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             activeVersionId={activeVersionId || ""}
             onVersionClick={(version) => setActiveVersionId(version.id)}
             onRestoreVersionClick={handleRestoreVersionClick}
-            isLatestVersion={activeVersionId === prompt.latest_version?.id}
+            latestVersionId={prompt.latest_version?.id}
           />
         </div>
       </div>

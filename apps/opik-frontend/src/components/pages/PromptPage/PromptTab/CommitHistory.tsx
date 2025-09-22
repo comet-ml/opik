@@ -14,7 +14,7 @@ interface CommitHistoryProps {
   onVersionClick: (version: PromptVersion) => void;
   activeVersionId: string;
   onRestoreVersionClick: (version: PromptVersion) => void;
-  isLatestVersion: boolean;
+  latestVersionId?: string;
 }
 
 const CommitHistory = ({
@@ -22,7 +22,7 @@ const CommitHistory = ({
   onVersionClick,
   activeVersionId,
   onRestoreVersionClick,
-  isLatestVersion,
+  latestVersionId,
 }: CommitHistoryProps) => {
   const { toast } = useToast();
   const [hoveredVersionId, setHoveredVersionId] = useState<string | null>(null);
@@ -75,7 +75,7 @@ const CommitHistory = ({
                         <Copy />
                       </Button>
                     </TooltipWrapper>
-                    {!isLatestVersion && (
+                    {version.id !== latestVersionId && (
                       <TooltipWrapper content="Restore this version">
                         <Button
                           size="icon-3xs"
