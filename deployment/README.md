@@ -45,13 +45,20 @@ docker info
 
 ## 🚀 Quick Start
 
-### 1. Navigate to Deployment Directory
+We provide two deployment options for Azure Kubernetes Service:
+
+1. **Application Gateway** (default): Azure-managed load balancer with AGIC
+2. **NGINX Ingress** (alternative): Kubernetes-native ingress with automatic SSL
+
+### Application Gateway Deployment (Default)
+
+#### 1. Navigate to Deployment Directory
 
 ```bash
 cd /opik/deployment
 ```
 
-### 2. Configure the Deployment
+#### 2. Configure the Deployment
 
 > [!TIP] 
 > **Only edit `.env.azure`** - never modify the template files directly.
@@ -63,7 +70,7 @@ To configure the Azure resources that you're going to deploy, edit the `.env.azu
 nano .env.azure
 ```
 
-### 3. Deploy
+#### 3. Deploy
 
 ```bash
 ./deploy-azure.sh
@@ -72,6 +79,62 @@ nano .env.azure
 > [!NOTE] 
 > **First deployment takes 15-30 minutes** - the script builds images, creates infrastructure, and deploys services.
 
+### Alternative: Quick Start with NGINX Ingress
+
+For the NGINX Ingress deployment with automatic SSL, see the [Alternative NGINX Ingress Deployment](#-alternative-nginx-ingress-deployment) section below.
+
+## 🌐 Alternative NGINX Ingress Deployment
+
+### Overview
+
+In addition to the default Azure Application Gateway deployment, 
+we've a script that provides an alternative deployment option using **NGINX Ingress Controller** with Let's Encrypt SSL certificates
+instead of using AGIC.
+
+This is a more cost-effective approach for smaller teams and where the workload does not require the advanced features of Application Gateway.
+
+### NGINX Deployment Files
+
+| File | Purpose |
+|------|---------|
+| `deploy-azure_nginx.sh` | NGINX-based deployment script with cert-manager and OAuth2 proxy |
+| `.env.azure-nginx` | Configuration file for NGINX deployment (domain, SSL, authentication) |
+| `helm-values-azure-nginx-template.yaml` | Helm values template optimized for NGINX Ingress |
+
+### Quick Start with NGINX
+
+#### 1. Configure NGINX Deployment
+
+Edit the NGINX-specific configuration file:
+
+```bash
+# Navigate to deployment directory
+cd /opik/deployment
+
+# Configure NGINX deployment
+nano .env.azure-nginx
+```
+
+#### 2. Key Configuration Options
+
+```bash
+# Domain Configuration (required for SSL)
+DOMAIN_NAME="opik.yourdomain.com"  # Your domain name
+EMAIL_FOR_LETSENCRYPT="you@yourdomain.com"  # Required for Let's Encrypt
+
+# SSL Configuration
+ENABLE_AUTO_SSL="true"  # Automatic SSL certificate provisioning
+
+# Authentication (Optional)
+OPIK_ACCESS_GROUP_NAME="Opik Users"  # Azure AD group for access control
+```
+
+#### 3. Deploy with NGINX
+
+```bash
+# Deploy using NGINX Ingress
+./deploy-azure_nginx.sh
+```
 ## 🔄 Upgrading Opik Versions
 
 ### Upgrade Process
@@ -81,11 +144,16 @@ nano .env.azure
 git remote add upstream https://github.com/comet-ml/opik.git
 git fetch upstream && git merge upstream/main
 
-# 2. Update version
-nano .env.azure  # Change OPIK_VERSION="NEW.VERSION.HERE"
+# 2. Update version (choose your deployment type)
+nano .env.azure        # For Application Gateway deployment
+# OR
+nano .env.azure-nginx  # For NGINX Ingress deployment
+# Change OPIK_VERSION="NEW.VERSION.HERE"
 
 # 3. Deploy upgrade (preserves all data)
-./deploy-azure.sh
+./deploy-azure.sh      # For Application Gateway
+# OR
+./deploy-azure_nginx.sh # For NGINX Ingress
 ```
 
 
@@ -115,31 +183,51 @@ kubectl rollout status deployment/opik-backend -n opik
 
 ## 🏗️ What the Deployment Does
 
-The script automatically handles everything:
+Both deployment scripts (`deploy-azure.sh` and `deploy-azure_nginx.sh`) automatically handle everything, with some key differences:
 
 ### Infrastructure Creation
 
+#### Application Gateway Deployment (`deploy-azure.sh`)
 - **Resource Group**: Container for all Azure resources
 - **Virtual Network**: Isolated network with subnets for AKS and Application Gateway
-- **Application Gateway**: Load balancer with public IP for external access
+- **Application Gateway**: Managed load balancer with public IP for external access
 - **AKS Cluster**: Kubernetes cluster with Azure CNI networking
-- **Container Registry**: Private registry for the Docker images
+- **Container Registry**: Private registry for Docker images
+
+#### NGINX Ingress Deployment (`deploy-azure_nginx.sh`)
+- **Resource Group**: Container for all Azure resources (reuses existing if available)
+- **Virtual Network**: Isolated network with AKS subnet only (no Application Gateway subnet)
+- **Azure Load Balancer**: Standard load balancer for NGINX Ingress Controller
+- **AKS Cluster**: Kubernetes cluster with Azure CNI networking
+- **Container Registry**: Private registry for Docker images (reuses existing if available)
 
 ### Image Building & Publishing
 
-- Builds all Opik services from source:
-  - `opik-backend`
-  - `opik-python-backend`
-  - `opik-frontend`
-  - `opik-sandbox-executor-python`
-- Pushes images to Azure Container Registry.
+Both deployments build all Opik services from source:
+- `opik-backend`
+- `opik-python-backend`
+- `opik-frontend`
+- `opik-sandbox-executor-python`
+
+Images are pushed to Azure Container Registry and reused across deployments.
 
 ### Application Deployment
 
-- Deploys using Helm with proper ingress configuration
-- Sets up databases: `MySQL`, `ClickHouse`, `Redis`
+#### Application Gateway Deployment
+- Deploys using Helm with Application Gateway Ingress Controller (AGIC)
+- Sets up databases: `MySQL`, `ClickHouse`, `Redis`, `MinIO`
 - Configures external access through Application Gateway
+- Uses Azure Entra ID authentication
 - Enables health monitoring and auto-scaling
+
+#### NGINX Ingress Deployment
+- Deploys using Helm with NGINX Ingress Controller
+- Sets up databases: `MySQL`, `ClickHouse`, `Redis`, `MinIO` (same as Application Gateway)
+- Configures external access through NGINX Ingress with enhanced buffer settings
+- Uses OAuth2 Proxy for Azure Entra ID authentication
+- Installs cert-manager for automatic SSL certificate management
+- Enables Let's Encrypt integration for trusted HTTPS certificates
+- Includes health monitoring and auto-scaling
 
 
 ## 🌐 Accessing the Application
@@ -290,43 +378,90 @@ The script automatically:
 - Updates the Kubernetes deployment
 - Preserves data and configuration
 
+### When to Choose Each Deployment Option
+
+#### Choose Application Gateway (deploy-azure.sh) when:
+- You need Azure-native load balancing
+- SSL certificate management is not a priority
+- You prefer managed Azure services
+- Budget allows for higher infrastructure costs
+- You have complex Azure networking requirements
+
+#### Choose NGINX Ingress (deploy-azure_nginx.sh) when:
+- You want automatic SSL certificate management
+- Cost optimization is important
+- You need fine-grained ingress control
+- You prefer Kubernetes-native solutions
+- You have a domain name and want trusted HTTPS certificates
+
 ## 📊 Monitoring the Deployment
 
 ### Check Application Status
 
 ```bash
-# Pod health
+# Pod health (works for both deployments)
 kubectl get pods -n opik
 
-# Service status
+# Service status  (works for both deployments)
 kubectl get svc -n opik
 
 # Ingress configuration
-kubectl get ingress -n opik
+kubectl get ingress -n opik  # For both Application Gateway and NGINX
+
+# NGINX-specific: Check ingress controller
+kubectl get pods -n ingress-nginx  # NGINX Ingress Controller pods
 ```
 
 ### View Application Logs
 
 ```bash
-# Backend logs
+# Backend logs (works for both deployments)
 kubectl logs -n opik deployment/opik-backend -f
 
-# Frontend logs
+# Frontend logs (works for both deployments)
 kubectl logs -n opik deployment/opik-frontend -f
 
-# Python backend logs
+# Python backend logs (works for both deployments)
 kubectl logs -n opik deployment/opik-python-backend -f
+
+# NGINX-specific: OAuth2 proxy logs
+kubectl logs -n opik deployment/opik-oauth2-proxy -f
+
+# NGINX-specific: Ingress controller logs
+kubectl logs -n ingress-nginx deployment/ingress-nginx-controller -f
 ```
 
 ### Check External Access
 
 ```bash
-# Get public IP
+# Application Gateway deployment
 az network public-ip show --name opik-appgw-ip --resource-group opik-rg --query "ipAddress" -o tsv
 
-# Test endpoints
+# NGINX Ingress deployment
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+# Test endpoints (replace PUBLIC_IP with actual IP from above)
 curl http://PUBLIC_IP_ADDRESS/health-check        # Backend health
 curl http://PUBLIC_IP_ADDRESS/v1/private/toggles/ # API endpoint
+
+# NGINX-specific: Test SSL certificate
+curl -I https://YOUR_DOMAIN_NAME/health-check
+```
+
+### SSL Certificate Status (NGINX only)
+
+```bash
+# Check certificate readiness
+kubectl get certificates -n opik
+
+# View certificate details
+kubectl describe certificate opik-tls-secret -n opik
+
+# Check cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager -f
+
+# Check ACME challenges (if certificate issues)
+kubectl get challenges -n opik
 ```
 
 ## 🌐 Public Access Through Ingress
@@ -346,6 +481,8 @@ Once deployed, the following endpoints are accessible from the internet after Az
 | `/health-check`            | **Java Backend**   | Health monitoring endpoint                            |
 
 ## 🏗️ Architecture Overview
+
+### Application Gateway Architecture (Default)
 
 ```mermaid
 graph TB
@@ -420,6 +557,96 @@ graph TB
     class Network,AKSSubnet,AppGWSubnet network
     class DeploymentFlow,Script,ACR,AzureInfra,HelmChart,AGIC,IngressController deployment
     class ConfigManagement,EnvConfig,HelmTemplate config
+```
+
+### NGINX Ingress Architecture (Alternative)
+
+```mermaid
+graph TB
+    Internet[🌐 Internet] --> LB[⚖️ Azure Load Balancer<br/>Public IP]
+    
+    LB --> |HTTPS/HTTP| NGINXIngress[🔀 NGINX Ingress Controller<br/>SSL Termination]
+    
+    NGINXIngress --> |"/ (Root Path)"| OAuth2[🔐 OAuth2 Proxy<br/>Azure Entra ID Auth]
+    NGINXIngress --> |"/v1/private/evaluators/*"| PythonBackend[🐍 Python Backend<br/>Evaluator Service<br/>Port: 8000]
+    NGINXIngress --> |"/v1/* (Fallback)"| Backend[⚙️ Java Backend<br/>Main API<br/>Port: 8080]
+    
+    OAuth2 --> Frontend[🌐 Frontend Service<br/>React App<br/>Port: 5173]
+
+    subgraph DeploymentFlow[🚀 NGINX Deployment Process]
+        NGINXScript[📋 deploy-azure_nginx.sh]
+        NGINXScript --> |1. Build & Push| ACR[📦 Azure Container Registry<br/>Docker Images]
+        NGINXScript --> |2. Create Infrastructure| AzureInfra[☁️ Azure Resources<br/>AKS, VNet, Load Balancer]
+        NGINXScript --> |3. Deploy with Helm| NGINXHelmChart[⚙️ Helm Chart<br/>helm-values-azure-nginx-template.yaml]
+        NGINXHelmChart --> |Deploy to| AKS
+    end
+
+    subgraph AKS[☸️ Azure Kubernetes Service]
+        subgraph OpikNamespace[📁 opik namespace]
+            Frontend
+            Backend
+            PythonBackend
+            SandboxExecutor[🔒 Sandbox Executor]
+            OAuth2
+            
+            subgraph SSLManagement[🔒 SSL Management]
+                CertManager[📜 cert-manager<br/>Let's Encrypt Integration]
+                LetsEncrypt[🔐 Let's Encrypt<br/>Automatic SSL Certificates]
+            end
+
+            subgraph DataServices[🗄️ Data Layer]
+                MySQL[(🗄️ MySQL<br/>User Data & Config)]
+                ClickHouse[(📊 ClickHouse<br/>Analytics & Metrics)]
+                Redis[(⚡ Redis<br/>Cache & Sessions)]
+                MinIO[📦 MinIO<br/>Object Storage]
+                ZooKeeper[🔧 ZooKeeper<br/>ClickHouse Coordination]
+            end
+        end
+
+        subgraph NGINXController[🔀 NGINX Ingress]
+            NGINXIngress
+            NGINXPods[NGINX Controller Pods<br/>Enhanced Buffer Config]
+        end
+    end
+
+    Backend --> MySQL
+    Backend --> ClickHouse
+    Backend --> Redis
+    Backend --> MinIO
+    ClickHouse --> ZooKeeper
+    PythonBackend --> SandboxExecutor
+    NGINXIngress -.-> |Manages| NGINXPods
+    CertManager --> LetsEncrypt
+
+    subgraph Network[🔗 Virtual Network - 10.0.0.0/16]
+        subgraph AKSSubnet[AKS Subnet - 10.0.1.0/24]
+            AKS
+        end
+    end
+
+    subgraph NGINXConfigManagement[⚙️ NGINX Configuration]
+        NGINXEnvConfig[📄 .env.azure-nginx<br/>Domain & SSL Configuration]
+        NGINXHelmTemplate[📋 helm-values-azure-nginx-template.yaml<br/>OAuth2 & Ingress Configuration]
+        NGINXEnvConfig --> |Processed by envsubst| NGINXHelmTemplate
+    end
+
+    classDef frontend fill:#e1f5fe,stroke:#0277bd
+    classDef backend fill:#f3e5f5,stroke:#7b1fa2
+    classDef database fill:#e8f5e8,stroke:#2e7d32
+    classDef network fill:#fff3e0,stroke:#f57c00
+    classDef deployment fill:#f1f8e9,stroke:#558b2f
+    classDef config fill:#fce4ec,stroke:#c2185b
+    classDef ssl fill:#e8f5e8,stroke:#4caf50
+    classDef auth fill:#fff8e1,stroke:#ff9800
+
+    class Frontend frontend
+    class Backend,PythonBackend,SandboxExecutor backend
+    class MySQL,ClickHouse,Redis,MinIO,ZooKeeper database
+    class Network,AKSSubnet network
+    class DeploymentFlow,NGINXScript,ACR,AzureInfra,NGINXHelmChart,NGINXController,NGINXIngress,NGINXPods deployment
+    class NGINXConfigManagement,NGINXEnvConfig,NGINXHelmTemplate config
+    class SSLManagement,CertManager,LetsEncrypt ssl
+    class OAuth2 auth
 ```
 
 ## 🛣️ Application Gateway Routing Configuration

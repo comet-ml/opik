@@ -1,4 +1,5 @@
-{{- if (index .Values "oauth2-proxy" "enabled") }}
+{{- if and (index .Values "oauth2-proxy" "enabled") (not .Values.disableOAuth2Ingress) }}
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,15 +7,21 @@ metadata:
   labels:
     {{- include "opik.labels" . | nindent 4 }}
   annotations:
+    {{- if eq .Values.ingress.ingressClassName "nginx" }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "http"
+    {{- else }}
     appgw.ingress.kubernetes.io/ssl-redirect: "false"
     appgw.ingress.kubernetes.io/use-private-ip: "false"
     appgw.ingress.kubernetes.io/backend-protocol: "http"
+    {{- end }}
     {{- if and .Values.ssl.enabled .Values.ssl.issuer }}
     cert-manager.io/cluster-issuer: {{ .Values.ssl.issuer | quote }}
     cert-manager.io/acme-challenge-type: "http01"
     {{- end }}
 spec:
-  ingressClassName: azure-application-gateway
+  ingressClassName: {{ .Values.ingress.ingressClassName | default "azure-application-gateway" }}
   tls:
     - secretName: opik-tls-secret
       {{- if .Values.ssl.hosts }}
@@ -48,4 +55,5 @@ spec:
                 port:
                   number: {{ (index .Values "oauth2-proxy" "service" "portNumber") }}
     {{- end }}
+{{- end }}
 {{- end }}

@@ -1,9 +1,29 @@
-# Custom values for Azure deployment
+# Custom values for Azure deployment with NGINX Ingress
 # This file uses environment variables from .env.azure
 # Variables are substituted by the deployment script
 #
 # DO NOT EDIT VERSION NUMBERS HERE - Change OPIK_VERSION in .env.azure instead
-# This is a TEMPLATE file processed by deploy-azure.sh.
+# This is a TEMPLATE file processed by deploy-azure_alt.sh.
+#
+# ============================================================================
+# IMPORTANT: NGINX Ingress Controller Buffer Configuration
+# ============================================================================
+# 
+# Azure AD OAuth2 tokens can be extremely large (50KB+) for users with many 
+# group memberships. To prevent "502 Bad Gateway" errors caused by "upstream 
+# sent too big header" issues, the NGINX Ingress Controller is configured 
+# with increased buffer sizes in the deployment script:
+#
+# - proxy-buffer-size: 16k (increased from 4k default)
+# - proxy-buffers-number: 8 (number of proxy buffers)
+# - proxy-busy-buffers-size: 64k (busy buffers size)  
+# - large-client-header-buffers: 4 32k (large client headers support)
+#
+# These settings are applied via Helm during NGINX Ingress Controller 
+# installation in deploy-azure_alt.sh and ensure authentication works 
+# properly even for users in multiple Azure AD groups.
+# ============================================================================
+
 registry: &registry $ACR_LOGIN_SERVER
 
 # OAuth2 Proxy Configuration for Azure Entra ID Authentication
@@ -28,7 +48,7 @@ oauth2-proxy:
     # =================================================================
     email-domain: "*" # Allow any email domain (restrict via groups instead)
     http-address: "0.0.0.0:4180" # Listen on all interfaces, port 4180
-    redirect-url: "https://$DOMAIN_NAME/oauth2/callback" # OAuth2 callback URL after authentication
+    redirect-url: "https://$OPIK_HOST/oauth2/callback" # OAuth2 callback URL after authentication
     skip-provider-button: "true" # Skip provider selection page (single provider)
     
     # =================================================================
@@ -85,8 +105,50 @@ oauth2-proxy:
     type: ClusterIP
     portNumber: 4180
 
+  # NGINX Ingress configuration for OAuth2 Proxy
+  # DISABLED: We use custom ingress templates instead
   ingress:
     enabled: false
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    hosts:
+      - $OPIK_HOST
+    paths:
+      - /oauth2
+    tls:
+      - secretName: opik-tls-secret
+        hosts:
+          - $OPIK_HOST
+
+# Main application ingress configuration for NGINX
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - host: $OPIK_HOST
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: opik-tls-secret
+      hosts:
+        - $OPIK_HOST
+  annotations:
+    # NGINX Ingress annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # OAuth2 authentication annotations (SECURE)
+    nginx.ingress.kubernetes.io/auth-url: "https://$OPIK_HOST/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$OPIK_HOST/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "x-auth-request-user,x-auth-request-email,x-auth-request-access-token"
+    
+    # SSL/TLS configuration
+    cert-manager.io/cluster-issuer: "$SSL_ISSUER"
+    cert-manager.io/acme-challenge-type: "http01"
 
 # Overriding component image configuration
 component:
@@ -99,7 +161,7 @@ component:
       TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "true"
       OPIK_USAGE_REPORT_ENABLED: "true"
     ingress:
-      enabled: false
+      enabled: false  # Handled by main ingress above
 
   python-backend:
     image:
@@ -114,14 +176,14 @@ component:
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "4"
       OPIK_REVERSE_PROXY_URL: ""
     ingress:
-      enabled: false
+      enabled: false  # Handled by main ingress above
 
   frontend:
     image:
       repository: opik-frontend
       tag: $OPIK_VERSION
     ingress:
-      enabled: false
+      enabled: false  # Handled by main ingress above
 
 # Disable demo data generation for production
 demoDataJob:
@@ -150,14 +212,20 @@ clickhouse:
   enabled: true
   storageClassName: "managed-standard-retain"
   storage: 128Gi
+  # Enable ZooKeeper for proper ClickHouse replication
+  shardsCount: 1
+  replicasCount: 1  # Set to 1 replica to use pre-created PVs
+  zookeeper:
+    host: "opik-zookeeper"
 
 mysql:
   enabled: true
   primary:
     persistence:
       enabled: true
-      size: 32Gi
+      size: 64Gi
       storageClass: "managed-standard-retain"
+
 redis:
   enabled: true
   master:
@@ -173,6 +241,14 @@ minio:
     size: 128Gi
     storageClass: "managed-standard-retain"
 
+zookeeper:
+  enabled: true
+  replicaCount: 1  # Set to 1 replica to use pre-created PV
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: "managed-standard-retain"
+
 ssl:
   # Enable automatic SSL certificate provisioning
   enabled: $SSL_ENABLED
@@ -182,3 +258,7 @@ ssl:
   
   # Hosts for SSL certificate (set dynamically by deployment script)
   hosts: []
+
+# Disable the conflicting oauth2-ingress template
+# We use the main ingress + oauth2-proxy subchart ingress instead
+disableOAuth2Ingress: true
