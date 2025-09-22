@@ -340,7 +340,7 @@ const redirectDatasetsRoute = createRoute({
 const homeSMERoute = createRoute({
   path: "/$workspaceName/sme",
   getParentRoute: () => workspaceGuardSMELayoutRoute,
-  component: lazy(() => import("@/components/pages/SMEFLowPage/SMEFlowPage")),
+  component: lazy(() => import("@/components/pages/SMEFlowPage/SMEFlowPage")),
 });
 
 // --------- playground
