@@ -193,5 +193,6 @@ def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:
     return {
         key: value
         for key, value in dict_.items()
-        if value is not _openai_types.NOT_GIVEN or not isinstance(value, _openai_types.Omit)
+        if value is not _openai_types.NOT_GIVEN
+        or not isinstance(value, _openai_types.Omit)
     }
