@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import { FeedbackDefinition } from "@/types/feedback-definitions";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 import ScoresContent from "@/components/pages-shared/annotation-queues/ScoresContent";
@@ -42,7 +41,7 @@ const ScoresSection: React.FunctionComponent<ScoresSectionProps> = ({
   return (
     <div className="pt-6">
       <h2 className="comet-title-s truncate break-words pb-3 pt-2">
-        Scores ({feedbackDefinitions.length})
+        Feedback scores ({feedbackDefinitions.length})
       </h2>
       <ScoresContent annotationQueue={annotationQueue} />
     </div>

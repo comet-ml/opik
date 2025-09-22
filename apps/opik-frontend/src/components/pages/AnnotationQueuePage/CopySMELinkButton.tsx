@@ -20,15 +20,16 @@ const CopySMELinkButton: React.FC<CopySMELinkButtonProps> = ({
   const handleCopySMELink = useCallback(() => {
     copy(generateSMEURL(workspaceName, annotationQueue.id));
     toast({
-      title: "Copied",
-      description: "SME link copied to clipboard",
+      title: "Annotation queue link copied to clipboard",
+      description:
+        "Share this queue with your annotators so they can start annotating and provide feedback to improve the evaluation of your LLM application.",
     });
   }, [annotationQueue.id, toast, workspaceName]);
 
   return (
-    <Button variant="outline" size="sm" onClick={handleCopySMELink}>
+    <Button size="sm" onClick={handleCopySMELink}>
       <Copy className="mr-1.5 size-3.5" />
-      Copy SME link
+      Copy sharing link
     </Button>
   );
 };

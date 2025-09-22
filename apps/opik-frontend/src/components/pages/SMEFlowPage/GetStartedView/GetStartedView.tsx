@@ -4,20 +4,17 @@ import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InstructionsContent from "@/components/pages-shared/annotation-queues/InstructionsContent";
 import ScoresContent from "@/components/pages-shared/annotation-queues/ScoresContent";
-import { AnnotationQueue } from "@/types/annotation-queues";
-import SMEFlowLayout from "./SMEFlowLayout";
+import SMEFlowLayout from "../SMEFlowLayout";
+import { useSMEFlow } from "../SMEFlowContext";
 
-interface GetStartedViewProps {
-  annotationQueue: AnnotationQueue;
-  canStartAnnotation: boolean;
-  onStartAnnotating?: () => void;
-}
+const GetStartedView: React.FC = () => {
+  const { annotationQueue, canStartAnnotation, handleStartAnnotating } =
+    useSMEFlow();
 
-const GetStartedView: React.FC<GetStartedViewProps> = ({
-  annotationQueue,
-  canStartAnnotation,
-  onStartAnnotating,
-}) => {
+  if (!annotationQueue) {
+    return null;
+  }
+
   return (
     <SMEFlowLayout
       header={
@@ -33,7 +30,7 @@ const GetStartedView: React.FC<GetStartedViewProps> = ({
         <Button
           size="lg"
           className="px-8"
-          onClick={onStartAnnotating}
+          onClick={handleStartAnnotating}
           disabled={!canStartAnnotation}
         >
           Start annotating

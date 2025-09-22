@@ -20,7 +20,6 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -46,7 +45,6 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const { toast } = useToast();
 
   const { mutate } = useAnnotationQueueAddItemsMutation();
 
@@ -113,7 +111,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
     if (queues.length === 0) {
       const text = search
         ? "No search results"
-        : "There are no annotation queues yet";
+        : "There are no annotation queues in this project yet";
 
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
@@ -131,7 +129,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <UserPen className="size-4 shrink-0 text-muted-slate" />
-            <span className="comet-body-s-accented w-full truncate text-muted-gray">
+            <span className="comet-body-s-accented w-full truncate">
               {q.name}
             </span>
           </div>
@@ -191,6 +189,8 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         open={openDialog}
         setOpen={setOpenDialog}
         onQueueCreated={onQueueCreated}
+        projectId={projectId}
+        scope={scope}
       />
     </>
   );
