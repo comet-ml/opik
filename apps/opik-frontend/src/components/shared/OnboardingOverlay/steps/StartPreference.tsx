@@ -19,7 +19,7 @@ const StartPreference: React.FC = () => {
       <OnboardingStep.BackButton />
       <OnboardingStep.Title>How would you like to start?</OnboardingStep.Title>
 
-      <OnboardingStep.AnswerList className="gap-4 space-y-0 lg:flex-row">
+      <OnboardingStep.AnswerList className="w-full gap-4 space-y-0 lg:flex-row">
         <OnboardingStep.AnswerCard option={OPTIONS.TRACE_APP} />
 
         <Link

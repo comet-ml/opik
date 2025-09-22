@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { STEP_IDENTIFIERS } from "./constants";
-import useSubmitOnboardingAnswerMutation from "./useSubmitOnboardingAnswerMutation";
+import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
 
 export const ONBOARDING_STEP_FINISHED = "done";
 type OnboardingStep = null | 1 | 2 | 3 | typeof ONBOARDING_STEP_FINISHED;

@@ -1,7 +1,9 @@
 import React from "react";
 import OnboardingProvider, { useOnboarding } from "./OnboardingOverlayContext";
 import { ONBOARDING_STEPS } from "./constants";
-import { Role, AIJourney, StartPreference } from "./steps";
+import Role from "./steps/Role";
+import AIJourney from "./steps/AIJourney";
+import StartPreference from "./steps/StartPreference";
 import imageOnboardingUrl from "/images/onboarding.png";
 
 const STEP_IMAGES = {
