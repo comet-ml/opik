@@ -56,9 +56,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         ), "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
-        if _is_completions_stream_call(
-            name_passed_to_track_decorator=name, kwargs=kwargs
-        ):
+        if kwargs.get("stream") is True:
             kwargs = _remove_not_given_sentinel_values(kwargs)
             name = "chat_completion_stream"
 
@@ -196,17 +194,5 @@ def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:
         key: value
         for key, value in dict_.items()
         if value is not _openai_types.NOT_GIVEN
+        and not isinstance(value, _openai_types.Omit)
     }
-
-
-def _is_completions_stream_call(
-    name_passed_to_track_decorator: str, kwargs: Dict[str, Any]
-) -> bool:
-    if not name_passed_to_track_decorator == "chat_completion_create":
-        return False
-
-    for _, value in kwargs.items():
-        if value is _openai_types.NOT_GIVEN:
-            return True
-
-    return False
