@@ -318,6 +318,7 @@ public class AttachmentStripperService {
         int attachmentCounter = 1;
 
         while (matcher.find()) {
+            matchCount++;
             String base64Data = matcher.group(1); // Extract base64 without quotes
 
             // Try to process as attachment
@@ -416,6 +417,47 @@ public class AttachmentStripperService {
                     attachmentNumber, context, e.getMessage(), e);
             attachmentErrors.add(1);
             return null; // Graceful degradation - continue without this attachment
+        }
+    }
+
+    /**
+     * Converts MIME type to appropriate file extension.
+     *
+     * @param mimeType the MIME type (e.g., "image/png", "application/pdf")
+     * @return the file extension (e.g., "png", "pdf")
+     */
+    private String getFileExtension(String mimeType) {
+        if (mimeType == null || mimeType.isEmpty()) {
+            return "bin";
+        }
+
+        try {
+            // Use Apache Tika's built-in MIME type to extension mapping
+            MimeTypes allTypes = MimeTypes.getDefaultMimeTypes();
+            String extension = allTypes.forName(mimeType).getExtension();
+
+            // Remove the leading dot if present (Tika returns ".png", we want "png")
+            if (extension.startsWith(".")) {
+                extension = extension.substring(1);
+            }
+
+            return extension.isEmpty() ? "bin" : extension;
+
+        } catch (MimeTypeException e) {
+            log.debug("Unknown MIME type: {}, using fallback extension", mimeType);
+
+            // Fallback: extract from MIME type (e.g., "image/png" -> "png")
+            if (mimeType.contains("/")) {
+                String subtype = mimeType.substring(mimeType.indexOf("/") + 1);
+                // Handle special cases like "svg+xml" -> "svg"
+                if (subtype.contains("+")) {
+                    subtype = subtype.substring(0, subtype.indexOf("+"));
+                }
+                // Remove any parameters (e.g., "jpeg; charset=utf-8" -> "jpeg")
+                return subtype.split(";")[0].trim();
+            }
+
+            return "bin";
         }
     }
 
