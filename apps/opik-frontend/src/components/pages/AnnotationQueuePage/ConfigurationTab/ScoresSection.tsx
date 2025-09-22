@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import { FeedbackDefinition } from "@/types/feedback-definitions";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 import ScoresContent from "@/components/pages-shared/annotation-queues/ScoresContent";

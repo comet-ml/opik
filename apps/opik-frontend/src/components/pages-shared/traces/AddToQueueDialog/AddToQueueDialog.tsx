@@ -20,7 +20,6 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -46,7 +45,6 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const { toast } = useToast();
 
   const { mutate } = useAnnotationQueueAddItemsMutation();
 

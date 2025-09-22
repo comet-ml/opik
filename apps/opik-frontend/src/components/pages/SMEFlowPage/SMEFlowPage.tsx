@@ -15,6 +15,7 @@ import CompletionView from "./CompletionView/CompletionView";
 import AnnotatingHeader from "@/components/pages/SMEFlowPage/AnnotatingHeader";
 import { Button } from "@/components/ui/button";
 import { Info } from "lucide-react";
+import { createFilter } from "@/lib/filters";
 
 export enum WORKFLOW_STATUS {
   INITIAL = "initial",
@@ -60,7 +61,13 @@ const SMEFlowPage: React.FunctionComponent = () => {
 
   const annotationQueueFilter = useMemo(() => {
     if (!annotationQueue?.id) return [];
-    return [];
+    return [
+      createFilter({
+        field: "annotation_queue_ids",
+        value: annotationQueue.id,
+        operator: "contains",
+      }),
+    ];
   }, [annotationQueue?.id]);
 
   const { data: tracesData, isLoading: isTracesLoading } = useTracesList(

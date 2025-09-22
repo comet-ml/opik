@@ -273,11 +273,11 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   const extendedFilters = useMemo(
     () => [
       ...filters,
-      // createFilter({ // TODO lala uncomment when we will have annotation queue ids in traces
-      //   field: "annotation_queue_ids",
-      //   value: annotationQueue.id,
-      //   operator: "contains",
-      // }),
+      createFilter({
+        field: "annotation_queue_ids",
+        value: annotationQueue.id,
+        operator: "contains",
+      }),
     ],
     [annotationQueue.id, filters],
   );
