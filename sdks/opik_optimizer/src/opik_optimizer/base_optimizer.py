@@ -90,6 +90,23 @@ class BaseOptimizer:
         """
         pass
 
+    def optimize_mcp(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: Dataset,
+        metric: Callable,
+        *,
+        tool_name: str,
+        second_pass: Any,
+        experiment_config: Optional[Dict] = None,
+        **kwargs: Any,
+    ) -> optimization_result.OptimizationResult:
+        """Optimize prompts that rely on MCP tooling."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement optimize_mcp yet."
+        )
+
+
     def get_history(self) -> List[OptimizationRound]:
         """
         Get the optimization history.
