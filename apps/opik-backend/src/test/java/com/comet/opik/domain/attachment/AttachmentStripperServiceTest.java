@@ -8,9 +8,6 @@ import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.LongHistogram;
-import io.opentelemetry.api.metrics.Meter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,66 +29,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AttachmentStripperServiceTest {
-
-    // Helper classes for mocking OpenTelemetry builders
-    private static class MockLongCounterBuilder implements io.opentelemetry.api.metrics.LongCounterBuilder {
-        @Override
-        public io.opentelemetry.api.metrics.LongCounterBuilder setDescription(String description) {
-            return this;
-        }
-
-        @Override
-        public io.opentelemetry.api.metrics.LongCounterBuilder setUnit(String unit) {
-            return this;
-        }
-
-        @Override
-        public LongCounter build() {
-            return new LongCounter() {
-                @Override
-                public void add(long value) {
-                    // No-op for tests
-                }
-
-                @Override
-                public void add(long value, io.opentelemetry.api.common.Attributes attributes) {
-                    // No-op for tests
-                }
-            };
-        }
-    }
-
-    private static class MockLongHistogramBuilder implements io.opentelemetry.api.metrics.LongHistogramBuilder {
-        @Override
-        public io.opentelemetry.api.metrics.LongHistogramBuilder setDescription(String description) {
-            return this;
-        }
-
-        @Override
-        public io.opentelemetry.api.metrics.LongHistogramBuilder setUnit(String unit) {
-            return this;
-        }
-
-        @Override
-        public LongHistogram build() {
-            return new LongHistogram() {
-                @Override
-                public void record(long value) {
-                    // No-op for tests
-                }
-
-                @Override
-                public void record(long value, io.opentelemetry.api.common.Attributes attributes) {
-                    // No-op for tests
-                }
-            };
-        }
-
-        @Override
-        public io.opentelemetry.api.metrics.LongHistogramBuilder ofLongs() {
-            return this;
-        }
-    }
 
     @Mock
     private AttachmentService attachmentService;
