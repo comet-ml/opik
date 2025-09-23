@@ -1,5 +1,5 @@
 # Multi-stage build to reduce final image size
-FROM docker:27.5.1 AS builder
+FROM docker:28.4.0 AS builder
 
 # Build dependencies (only needed during pip install)
 RUN apk add --no-cache tini python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev && \
@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ##############################################################
 # Runtime stage - minimal packages only
-FROM docker:27.5.1
+FROM docker:28.4.0
 
 # Only runtime dependencies needed
 RUN apk add --no-cache tini python3

@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.19.0-alpine3.20 AS builder
+FROM node:20.19.5-alpine3.22 AS builder
 
 WORKDIR /opt/frontend
 
