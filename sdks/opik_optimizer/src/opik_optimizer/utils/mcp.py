@@ -24,10 +24,10 @@ from typing import (
     TypeVar,
 )
 
-ClientSession: Any
-StdioClientFactory: Any
-StdioServerParameters: Any
-types_mod: Any
+ClientSession: Optional[Type[Any]] = None
+StdioClientFactory: Optional[Type[Any]] = None
+StdioServerParameters: Optional[Type[Any]] = None
+types_mod: Optional[Any] = None
 
 _T = TypeVar("_T")
 
