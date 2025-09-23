@@ -2492,6 +2492,76 @@ class PromptResourceTest {
                 assertThat(restoredVersion.commit()).isNotEqualTo(createdV2.commit());
             }
         }
+
+        @Test
+        @DisplayName("when trying to restore prompt version from a different prompt, then return not found")
+        void when__tryingToRestorePromptVersionFromDifferentPrompt__thenReturnNotFound() {
+            var prompt1 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            // Create first version to restore from
+            var promptVersion1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(promptId1)
+                    .commit(null)
+                    .createdBy(USER)
+                    .variables(null)
+                    .template("Original template content")
+                    .changeDescription("First version")
+                    .build();
+
+            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Create second version
+            var promptVersion2 = promptVersion1.toBuilder()
+                    .promptId(promptId2)
+                    .build();
+
+            var newpPromptVersion1 = promptVersion1.toBuilder()
+                    .commit(null)
+                    .createdBy(USER)
+                    .template("Modified template content")
+                    .changeDescription("Second version")
+                    .build();
+
+            var prompt2V1 = createPromptVersion(new CreatePromptVersion(prompt2.name(), promptVersion2), API_KEY,
+                    TEST_WORKSPACE);
+
+            createPromptVersion(new CreatePromptVersion(prompt1.name(), newpPromptVersion1), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Now restore the first version
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
+                            .formatted(prompt1.id(), prompt2V1.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(""))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt version not found for the specified prompt"));
+            }
+        }
     }
 
     private void retrievePromptVersionAndAssert(PromptVersionRetrieve retrieveRequest,
