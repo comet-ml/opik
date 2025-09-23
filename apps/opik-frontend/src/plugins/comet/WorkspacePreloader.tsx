@@ -5,7 +5,7 @@ import {
   useParams,
 } from "@tanstack/react-router";
 import { MoveLeft } from "lucide-react";
-import React from "react";
+import React, { useEffect } from "react";
 
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import Loader from "@/components/shared/Loader/Loader";
@@ -17,6 +17,7 @@ import Logo from "./Logo";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import { usePostHog } from "posthog-js/react";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -39,6 +40,17 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   const isRootPath = matchRoute({ to: "/" });
 
   useSegment(user?.userName);
+
+  const posthog = usePostHog();
+  useEffect(() => {
+    if (!user?.loggedIn) {
+      return;
+    }
+
+    posthog?.identify(user.userName, {
+      email: user.email,
+    });
+  }, [posthog, user?.loggedIn, user?.userName, user?.email]);
 
   if (isLoading) {
     return <Loader />;

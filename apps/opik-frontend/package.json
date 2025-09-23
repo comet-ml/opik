@@ -85,6 +85,7 @@
     "mermaid": "^11.4.1",
     "mustache": "^4.2.0",
     "patch-package": "^8.0.0",
+    "posthog-js": "^1.266.1",
     "re-resizable": "^6.10.3",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
