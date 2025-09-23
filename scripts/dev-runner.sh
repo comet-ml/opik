@@ -105,7 +105,7 @@ start_backend() {
     JAR_FILES=()
     while IFS= read -r -d '' jar; do
         JAR_FILES+=("$jar")
-    done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' -print0)
+    done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
     if [ "${#JAR_FILES[@]}" -eq 0 ]; then
         log_error "No backend JAR file found in target/. Please build the backend first."
         exit 1
