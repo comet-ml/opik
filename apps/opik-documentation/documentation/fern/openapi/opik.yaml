@@ -5924,6 +5924,8 @@ components:
           items:
             type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
@@ -5990,9 +5992,10 @@ components:
           items:
             type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          maxLength: 255
     Comment:
       required:
       - text
@@ -6681,6 +6684,8 @@ components:
           items:
             type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
@@ -6928,9 +6933,10 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          maxLength: 255
         visibility:
           type: string
           enum:
@@ -8777,6 +8783,8 @@ components:
           - private
           - public
         description:
+          maxLength: 255
+          minLength: 0
           type: string
         created_at:
           type: string
@@ -8842,6 +8850,8 @@ components:
           - private
           - public
         description:
+          maxLength: 255
+          minLength: 0
           type: string
     ProjectPage_Public:
       type: object
@@ -8881,6 +8891,8 @@ components:
           - private
           - public
         description:
+          maxLength: 255
+          minLength: 0
           type: string
         created_at:
           type: string
@@ -9133,6 +9145,8 @@ components:
           - private
           - public
         description:
+          maxLength: 255
+          minLength: 0
           type: string
         created_at:
           type: string
@@ -9206,6 +9220,8 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -9224,6 +9240,8 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         template:
@@ -9320,6 +9338,8 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         template:
@@ -9418,6 +9438,8 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         tags:
@@ -9532,6 +9554,8 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         tags:
@@ -9576,6 +9600,8 @@ components:
           minLength: 1
           type: string
         description:
+          maxLength: 255
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         tags:
