@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 import os
 import time
+import contextlib
+import io
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Optional
@@ -40,6 +42,20 @@ def _default_rate_limit() -> float:
 
 
 DEFAULT_MCP_RATELIMIT_SLEEP = _default_rate_limit()
+
+
+@contextlib.contextmanager
+def _suppress_mcp_stdout(logger: logging.Logger):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        yield
+    for line in buffer.getvalue().splitlines():
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        if "MCP Server running on stdio" in trimmed:
+            continue
+        logger.debug("MCP stdout: %s", trimmed)
 
 
 def extract_tool_arguments(item: Any) -> Dict[str, Any]:
@@ -147,13 +163,18 @@ class MCPToolInvocation:
         def call_tool(name: str, payload: Dict[str, Any]) -> Any:
             if self.rate_limit_sleep > 0:
                 time.sleep(self.rate_limit_sleep)
-            return call_tool_from_manifest(self.manifest, name, payload)
+            with _suppress_mcp_stdout(self._logger):
+                return call_tool_from_manifest(self.manifest, name, payload)
 
         prepared = dict(arguments)
         if self.argument_adapter:
             prepared = self.argument_adapter(prepared, call_tool)
 
-        response = call_tool(self.tool_name, prepared)
+        # TODO(opik-mcp): reuse a persistent MCP client so we avoid spawning a
+        # new stdio subprocess for each call. This currently mirrors the
+        # original blocking behaviour for stability.
+        with _suppress_mcp_stdout(self._logger):
+            response = call_tool(self.tool_name, prepared)
         text = response_to_text(response)
         preview = text[: self.preview_chars].replace("\n", " ")
         label = self.preview_label or self.tool_name
