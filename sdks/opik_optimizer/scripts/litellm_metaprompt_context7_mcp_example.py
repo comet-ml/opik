@@ -5,7 +5,7 @@ import logging
 import os
 import textwrap
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
@@ -13,15 +13,14 @@ from opik_optimizer.utils import (
     MCPManifest,
     MCPToolInvocation,
     apply_tool_entry_from_prompt,
-    call_tool_from_manifest,
     create_second_pass_coordinator,
     dump_signature_artifact,
     ensure_argument_via_resolver,
-    extract_tool_arguments,
     list_manifest_tools,
     load_manifest_tool_signature,
+    make_argument_summary_builder,
     make_similarity_metric,
-    preview_tool_output,
+    preview_dataset_tool_invocation,
     system_prompt_from_tool,
     extract_description_from_system,
 )
@@ -50,21 +49,17 @@ argument_adapter = ensure_argument_via_resolver(
     query_fields=("library_query", "context7LibraryQuery"),
 )
 
-def summary_builder(tool_output: str, arguments: Dict[str, Any]) -> str:
-    scoped_args = dict(arguments)
-    library_id = scoped_args.get("context7CompatibleLibraryID", "unknown")
-    topic = scoped_args.get("topic", "unspecified")
-    snippet = tool_output[:800]
-    return textwrap.dedent(
-        f"""
-        CONTEXT7_DOC_RESULT
-        Library ID: {library_id}
-        Topic: {topic}
-        Instructions: In your final reply, explicitly mention the library ID and key terms from the documentation snippet.
-        Documentation Snippet:
-        {snippet}
-        """
-    ).strip()
+summary_builder = make_argument_summary_builder(
+    heading="CONTEXT7_DOC_RESULT",
+    instructions=(
+        "In your final reply, explicitly mention the library ID and key terms from the documentation snippet."
+    ),
+    argument_labels={
+        "context7CompatibleLibraryID": "Library ID",
+        "topic": "Topic",
+    },
+    preview_chars=800,
+)
 
 
 FOLLOW_UP_TEMPLATE = (
@@ -84,7 +79,7 @@ tool_invocation = MCPToolInvocation(
     summary_handler=second_pass,
     summary_builder=summary_builder,
     argument_adapter=argument_adapter,
-    rate_limit_sleep=1.0,
+    rate_limit_sleep=2.0,
     preview_label="context7/get-library-docs",
 )
 
@@ -99,19 +94,13 @@ dump_signature_artifact(signature, artifacts_dir, "context7_original_signature.j
 
 # Preview a single tool invocation to validate wiring.
 dataset = load_context7_dataset()
-try:
-    sample_item = dataset.get_items(nb_samples=1)[0]
-    sample_args = extract_tool_arguments(sample_item)
-    if sample_args:
-        sample_args = argument_adapter(
-            sample_args,
-            lambda name, payload: call_tool_from_manifest(MCP_MANIFEST, name, payload),
-        )
-        preview_tool_output(MCP_MANIFEST, TOOL_NAME, sample_args, logger=logger)
-    else:
-        logger.warning("No sample arguments available for preview.")
-except Exception as exc:  # pragma: no cover - best-effort logging
-    logger.warning("Failed to fetch sample tool output: %s", exc)
+preview_dataset_tool_invocation(
+    manifest=MCP_MANIFEST,
+    tool_name=TOOL_NAME,
+    dataset=dataset,
+    logger=logger,
+    argument_adapter=argument_adapter,
+)
 
 raw_system_prompt = textwrap.dedent(system_prompt_from_tool(signature, MCP_MANIFEST)).strip()
 resolve_preamble = textwrap.dedent(
@@ -128,11 +117,6 @@ prompt = ChatPrompt(
     tools=[signature.to_tool_entry()],
     function_map={TOOL_NAME: tool_invocation},
 )
-
-if prompt.model is None:
-    prompt.model = "openai/gpt-4o-mini"
-if not prompt.model_kwargs:
-    prompt.model_kwargs = {"temperature": 0.2}
 
 context7_metric = make_similarity_metric("context7")
 
@@ -170,6 +154,13 @@ if maybe_description:
     signature.description = maybe_description
     final_tool_entry["function"]["description"] = signature.description
     optimized_prompt.tools = [final_tool_entry]
+
+tuned_system_prompt = textwrap.dedent(
+    system_prompt_from_tool(signature, MCP_MANIFEST)
+).strip()
+optimized_prompt.system = "\n\n".join(
+    filter(None, [resolve_preamble, tuned_system_prompt])
+).strip()
 
 final_signature_path = dump_signature_artifact(
     signature,
