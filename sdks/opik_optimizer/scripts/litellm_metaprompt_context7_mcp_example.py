@@ -14,7 +14,7 @@ from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.optimization_config import mappers
 from opik_optimizer import task_evaluator
-from opik_optimizer.utils_main import create_litellm_agent_class
+from opik_optimizer.utils import create_litellm_agent_class
 from opik_optimizer.utils.mcp import (
     MCPManifest,
     call_tool_from_manifest,
