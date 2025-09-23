@@ -30,8 +30,7 @@ def _insert_tool_message(
                 {
                     "role": "assistant",
                     "content": (
-                        "Here is the result from tool "
-                        f"`{tool_name}`:\n\n{tool_content}"
+                        f"Here is the result from tool `{tool_name}`:\n\n{tool_content}"
                     ),
                 }
             )
@@ -42,7 +41,7 @@ def _insert_tool_message(
         with_tool.append(
             {
                 "role": "assistant",
-                "content": ("Tool result from " f"`{tool_name}`:\n\n{tool_content}"),
+                "content": (f"Tool result from `{tool_name}`:\n\n{tool_content}"),
             }
         )
 
