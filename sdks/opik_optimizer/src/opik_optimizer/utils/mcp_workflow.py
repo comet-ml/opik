@@ -9,6 +9,7 @@ generic so that any MCP tool can reuse them with minimal adjustment.
 from __future__ import annotations
 
 import contextlib
+import copy
 import io
 import logging
 import os
@@ -16,9 +17,8 @@ import textwrap
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-import copy
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
 
 from opik import track
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -61,7 +61,7 @@ DEFAULT_MCP_RATELIMIT_SLEEP = _default_rate_limit()
 
 
 @contextlib.contextmanager
-def suppress_mcp_stdout(logger: logging.Logger = logger):
+def suppress_mcp_stdout(logger: logging.Logger = logger) -> Iterator[None]:
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
         yield
@@ -248,10 +248,10 @@ def apply_tool_entry_from_prompt(
     prompt: Any,
     default_entry: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    tool_entry = copy.deepcopy(default_entry)
+    tool_entry: Dict[str, Any] = copy.deepcopy(dict(default_entry))
     prompt_tools = getattr(prompt, "tools", None)
     if prompt_tools:
-        tool_entry = copy.deepcopy(prompt_tools[0])
+        tool_entry = copy.deepcopy(dict(prompt_tools[0]))
     update_signature_from_tool_entry(signature, tool_entry)
     return tool_entry
 
@@ -306,7 +306,7 @@ def preview_dataset_tool_invocation(
         with suppress_mcp_stdout(logger):
             return call_tool_from_manifest(resolver_manifest, name, payload)
 
-    prepared_args = sample_args
+    prepared_args: Dict[str, Any] = dict(sample_args)
     if argument_adapter:
         prepared_args = argument_adapter(sample_args, _resolver_call)
 
@@ -457,7 +457,7 @@ class MCPExecutionConfig:
 
 
 def preview_second_pass(
-    prompt,
+    prompt: Any,
     dataset_item: Dict[str, Any],
     coordinator: MCPSecondPassCoordinator,
     agent_factory: Callable[[Any], Any],

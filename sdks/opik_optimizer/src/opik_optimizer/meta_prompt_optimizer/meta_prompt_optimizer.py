@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import textwrap
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, cast
 
 import litellm
 import opik
@@ -59,29 +59,32 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
         prompt.tools[0].get("function", {}).get("name") if prompt.tools else None
     )
 
-    system_text = prompt.system
+    system_text = cast(str, prompt.system)
     if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
         return
 
     start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
     end = system_text.index(PROMPT_TOOL_FOOTER)
-    prompt.system = (
-        system_text[:start] + "\n" + description.strip() + "\n" + system_text[end:]
+    description_text = description.strip()
+    system_text = (
+        system_text[:start] + "\n" + description_text + "\n" + system_text[end:]
     )
+    prompt.system = system_text
 
     if tool_name:
         pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
 
         def _tool_section_replacer(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{description.strip()}"
+            return f"{match.group(1)}{description_text}"
 
-        prompt.system = re.sub(
+        system_text = re.sub(
             pattern,
             _tool_section_replacer,
-            prompt.system,
+            system_text,
             count=1,
             flags=re.MULTILINE,
         )
+        prompt.system = system_text
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -812,14 +815,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         improvement_this_round: float,
     ) -> OptimizationRound:
         """Create an OptimizationRound object with the current round's data."""
-        generated_prompts_log = []
+        generated_prompts_log: List[Dict[str, Any]] = []
         for prompt, score in evaluated_candidates:
             improvement_vs_prev = self._calculate_improvement(
                 score, previous_best_score
             )
-            tool_entries = []
+            tool_entries: List[Any] = []
             if getattr(prompt, "tools", None):
-                tool_entries = copy.deepcopy(prompt.tools)
+                tool_entries = copy.deepcopy(list(prompt.tools or []))
 
             generated_prompts_log.append(
                 {

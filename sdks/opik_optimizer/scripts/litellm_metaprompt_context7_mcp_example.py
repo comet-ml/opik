@@ -167,7 +167,7 @@ meta_result = meta_optimizer.optimize_mcp(
     metric=context7_metric,
     tool_name=TOOL_NAME,
     second_pass=second_pass,
-    fallback_invoker=tool_invocation,
+    fallback_invoker=lambda args: tool_invocation.invoke(args),
     n_samples=len(dataset.get_items()),
     tool_panel_style="bright_magenta",
 )

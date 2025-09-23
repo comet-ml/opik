@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from importlib import resources
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 try:  # pragma: no cover - optional dependency
     import opik  # type: ignore
@@ -11,6 +11,8 @@ except ImportError:  # pragma: no cover - fallback for tests
     opik = None
 
 from opik_optimizer.utils.dataset_utils import attach_uuids, dataset_suffix
+
+OpikDataset = Any
 
 DATA_PACKAGE = "opik_optimizer.data"
 DATA_FILENAME = "context7_eval.jsonl"
@@ -50,7 +52,10 @@ class _ListDataset:
         return [dict(item) for item in self._items[:nb_samples]]
 
 
-def load_context7_dataset(test_mode: bool = False):
+DatasetResult = Union["_ListDataset", OpikDataset]
+
+
+def load_context7_dataset(test_mode: bool = False) -> DatasetResult:
     """Return the context7 synthetic dataset as an Opik dataset when available."""
 
     examples = _load_examples()
@@ -60,7 +65,7 @@ def load_context7_dataset(test_mode: bool = False):
         return _ListDataset(dataset_name, examples)
 
     client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
+    dataset: OpikDataset = client.get_or_create_dataset(dataset_name)
     items = dataset.get_items()
     expected_len = len(examples) if not test_mode else min(len(examples), 2)
 
