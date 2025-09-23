@@ -332,9 +332,30 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
 
     mcp_header = ""
     if manifest is not None:
-        command_line = manifest.command
+        command_line_parts = [manifest.command]
         if manifest.args:
-            command_line = f"{command_line} {' '.join(manifest.args)}"
+            sanitized_args: List[str] = []
+            skip_next = False
+            for idx, token in enumerate(manifest.args):
+                if skip_next:
+                    skip_next = False
+                    continue
+
+                lowered = token.lower()
+                if lowered in {"--api-key", "--apikey", "--token"}:
+                    sanitized_args.append(f"{token} ***")
+                    if idx + 1 < len(manifest.args):
+                        skip_next = True
+                    continue
+
+                if any(keyword in lowered for keyword in ("key", "token", "secret")):
+                    sanitized_args.append("***")
+                    continue
+
+                sanitized_args.append(token)
+            command_line_parts.extend(sanitized_args)
+
+        command_line = " ".join(command_line_parts)
 
         schema_block = _format_json_block(signature.parameters) if signature.parameters else "    {}"
 

@@ -79,7 +79,7 @@ tool_invocation = MCPToolInvocation(
     summary_handler=second_pass,
     summary_builder=summary_builder,
     argument_adapter=argument_adapter,
-    rate_limit_sleep=2.0,
+    rate_limit_sleep=5.0,
     preview_label="context7/get-library-docs",
 )
 
