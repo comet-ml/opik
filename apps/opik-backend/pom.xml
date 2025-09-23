@@ -20,7 +20,7 @@
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
         <mysql.version>9.4.0</mysql.version>
-        <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
+        <dropwizard-guicey.version>8.0.0-rc.5</dropwizard-guicey.version>
         <stringtemplate.version>3.49.4</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
@@ -181,6 +181,10 @@
             <artifactId>dropwizard-jobs-guice</artifactId>
             <version>6.0.1</version>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty.ee10</groupId>
+            <artifactId>jetty-ee10-servlets</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.jdbi</groupId>
@@ -304,7 +308,7 @@
 
         <dependency>
             <groupId>org.wiremock</groupId>
-            <artifactId>wiremock</artifactId>
+            <artifactId>wiremock-jetty12</artifactId>
             <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
