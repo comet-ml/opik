@@ -102,14 +102,7 @@ preview_dataset_tool_invocation(
     argument_adapter=argument_adapter,
 )
 
-raw_system_prompt = textwrap.dedent(system_prompt_from_tool(signature, MCP_MANIFEST)).strip()
-resolve_preamble = textwrap.dedent(
-    """
-    Before using get-library-docs, call resolve-library-id with the user's textual query to retrieve a UID.
-    Then call get-library-docs with that UID and the topic. Always use the tool outputs in your final answer.
-    """
-).strip()
-system_prompt = "\n\n".join(filter(None, [resolve_preamble, raw_system_prompt])).strip()
+system_prompt = textwrap.dedent(system_prompt_from_tool(signature, MCP_MANIFEST)).strip()
 
 prompt = ChatPrompt(
     system=system_prompt,
@@ -158,9 +151,7 @@ if maybe_description:
 tuned_system_prompt = textwrap.dedent(
     system_prompt_from_tool(signature, MCP_MANIFEST)
 ).strip()
-optimized_prompt.system = "\n\n".join(
-    filter(None, [resolve_preamble, tuned_system_prompt])
-).strip()
+optimized_prompt.system = tuned_system_prompt
 
 final_signature_path = dump_signature_artifact(
     signature,

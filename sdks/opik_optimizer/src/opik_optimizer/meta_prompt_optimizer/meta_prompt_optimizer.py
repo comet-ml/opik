@@ -77,10 +77,14 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
     )
 
     if tool_name:
-        pattern = rf"(-\s*{re.escape(tool_name)}:\s).*"
+        pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
+
+        def _tool_section_replacer(match: re.Match[str]) -> str:
+            return f"{match.group(1)}{description.strip()}"
+
         prompt.system = re.sub(
             pattern,
-            rf"\\1{description.strip()}",
+            _tool_section_replacer,
             prompt.system,
             count=1,
             flags=re.MULTILINE,
