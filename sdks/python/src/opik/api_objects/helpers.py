@@ -1,11 +1,11 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Tuple
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
 
-from .. import config, datetime_helpers, logging_messages, _logging
+from .. import config, datetime_helpers, logging_messages
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
 from ..message_processing import messages
 from ..rest_api.types import (
@@ -16,9 +16,6 @@ from ..rest_api.types import (
 from ..types import FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
-
-LANGGRAPH_OUTPUT_SIZE_THRESHOLD = 5000
-
 
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
@@ -166,54 +163,3 @@ def parse_feedback_score_messages(
     ]
 
     return score_messages
-
-
-def split_big_langgraph_outputs(
-    outputs: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """
-    Filter LangGraph outputs to extract only messages for thread display.
-
-    Returns:
-        tuple: (filtered_output_for_display, additional_metadata_for_span)
-
-    LangGraph agents often produce complex outputs with large internal state
-    that breaks thread display. This method extracts only the conversational
-    messages for clean thread display while preserving the full state in metadata.
-    """
-    if not isinstance(outputs, dict):
-        return outputs, {}
-
-    if "messages" in outputs and len(outputs) > 1:
-        output_str = str(outputs)
-        output_size = len(output_str)
-
-        if output_size > LANGGRAPH_OUTPUT_SIZE_THRESHOLD:
-            _logging.log_once_at_level(
-                logging.WARNING,
-                f"Filtering large LangGraph output ({output_size} chars) for thread display",
-                LOGGER,
-            )
-
-            filtered_output = {
-                "messages": outputs["messages"],
-            }
-
-            if "thread_id" in outputs:
-                filtered_output["thread_id"] = outputs["thread_id"]
-
-            additional_metadata = {
-                "_opik_langgraph_full_output": outputs,
-                "_opik_output_filtering": {
-                    "filtered": True,
-                    "original_size_chars": output_size,
-                    "filtered_keys": [
-                        k for k in outputs.keys() if k not in ["messages", "thread_id"]
-                    ],
-                    "reason": "Large LangGraph output filtered for better thread display",
-                },
-            }
-
-            return filtered_output, additional_metadata
-
-    return outputs, {}

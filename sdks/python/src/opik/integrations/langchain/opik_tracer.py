@@ -13,11 +13,12 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
+    helpers,
     opik_encoder_extension,
     provider_usage_extractors,
 )
 
-from ...api_objects import helpers, opik_client
+from ...api_objects import opik_client
 import opik.context_storage as context_storage
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
