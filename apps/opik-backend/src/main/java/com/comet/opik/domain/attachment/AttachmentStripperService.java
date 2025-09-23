@@ -12,7 +12,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Singleton;
-import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
@@ -72,15 +72,14 @@ public class AttachmentStripperService {
     public AttachmentStripperService(@NonNull AttachmentService attachmentService,
             @NonNull IdGenerator idGenerator,
             @NonNull ObjectMapper objectMapper,
-            @NonNull S3Config s3Config,
-            @NonNull OpenTelemetry openTelemetry) {
+            @NonNull S3Config s3Config) {
         this.attachmentService = attachmentService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.s3Config = s3Config;
 
-        // Initialize OpenTelemetry metrics
-        Meter meter = openTelemetry.getMeter("opik.attachments");
+        // Initialize OpenTelemetry metrics using global instance
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
 
         this.attachmentsProcessed = meter
                 .counterBuilder("opik.attachments.processed")

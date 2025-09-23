@@ -6,7 +6,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.opentelemetry.api.OpenTelemetry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,7 +60,7 @@ class AttachmentStripperServiceTest {
 
         // Use OpenTelemetry no-op implementation - no mocking needed!
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, s3Config, OpenTelemetry.noop());
+                attachmentService, idGenerator, objectMapper, s3Config);
     }
 
     @Test
