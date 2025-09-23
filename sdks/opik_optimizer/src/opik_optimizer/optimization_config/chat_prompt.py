@@ -148,6 +148,7 @@ class ChatPrompt:
 
         # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
         # migrate callers away from generic copies so optimizer metadata stays typed.
+        model_kwargs = copy.deepcopy(self.model_kwargs) if self.model_kwargs is not None else {}
         return ChatPrompt(
             system=self.system,
             user=self.user,
@@ -157,7 +158,7 @@ class ChatPrompt:
             model=self.model,
             invoke=self.invoke,
             project_name=self.project_name,
-            **copy.deepcopy(self.model_kwargs),
+            **model_kwargs,
         )
 
     def set_messages(self, messages: List[Dict[str, Any]]) -> None:
