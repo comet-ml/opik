@@ -120,24 +120,38 @@ meta_result = meta_optimizer.optimize_mcp(
     tool_panel_style="bright_cyan",
 )
 
-if meta_result.best_prompt is None:
+if not meta_result.prompt:
     raise RuntimeError(
         "MetaPromptOptimizer did not return an optimized prompt. Check MCP responses and optimizer logs."
     )
 
-optimized_prompt = meta_result.best_prompt
-final_tool_entry = apply_tool_entry_from_prompt(signature, optimized_prompt, original_tool_entry)
+if meta_result.tool_prompts and TOOL_NAME in meta_result.tool_prompts:
+    signature.description = meta_result.tool_prompts[TOOL_NAME]
 
-maybe_description = extract_description_from_system(optimized_prompt.system or "")
-if maybe_description:
-    signature.description = maybe_description
-    final_tool_entry["function"]["description"] = signature.description
-    optimized_prompt.tools = [final_tool_entry]
+final_tools = meta_result.details.get("final_tools") if isinstance(meta_result.details, dict) else None
+if final_tools:
+    final_tool_entry = copy.deepcopy(final_tools[0])
+    signature.description = final_tool_entry.get("function", {}).get("description", signature.description)
+    signature.parameters = final_tool_entry.get("function", {}).get("parameters", signature.parameters)
+    signature.examples = final_tool_entry.get("function", {}).get("examples", signature.examples)
+else:
+    final_tool_entry = apply_tool_entry_from_prompt(
+        signature,
+        ChatPrompt(system=system_prompt, user="{user_query}", tools=[signature.to_tool_entry()], function_map={TOOL_NAME: tool_invocation}),
+        original_tool_entry,
+    )
 
 tuned_system_prompt = textwrap.dedent(
     system_prompt_from_tool(signature, MCP_MANIFEST)
 ).strip()
-optimized_prompt.system = tuned_system_prompt
+
+optimized_prompt = ChatPrompt(
+    system=tuned_system_prompt,
+    user="{user_query}",
+    tools=[final_tool_entry],
+    function_map={TOOL_NAME: tool_invocation},
+)
+optimized_prompt.set_messages(meta_result.prompt)
 
 final_signature_path = dump_signature_artifact(
     signature,
