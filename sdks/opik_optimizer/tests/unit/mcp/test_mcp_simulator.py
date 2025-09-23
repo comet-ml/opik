@@ -3,6 +3,7 @@ import importlib
 import sys
 import types
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict
 
 
 root = Path(__file__).resolve().parents[3]
@@ -31,14 +32,19 @@ mcp_module = importlib.import_module("opik_optimizer.utils.mcp")
 mcp_simulator_module = importlib.import_module("opik_optimizer.utils.mcp_simulator")
 
 load_context7_dataset = context_dataset_module.load_context7_dataset
-ToolSignature = mcp_module.ToolSignature
-SimulationReport = mcp_simulator_module.SimulationReport
-ToolCallResult = mcp_simulator_module.ToolCallResult
 simulate_session = mcp_simulator_module.simulate_session
+if TYPE_CHECKING:
+    from opik_optimizer.utils.mcp import ToolSignature as MCPToolSignature
+    from opik_optimizer.utils.mcp_simulator import (
+        ToolCallResult as MCPToolCallResult,
+    )
+else:  # pragma: no cover - typing fallback
+    MCPToolSignature = Any  # type: ignore[valid-type]
+    MCPToolCallResult = Any  # type: ignore[valid-type]
 
 
-def _signature_for(name: str) -> ToolSignature:
-    return ToolSignature(
+def _signature_for(name: str) -> MCPToolSignature:
+    return mcp_module.ToolSignature(
         name=name,
         description="",
         parameters={
@@ -52,12 +58,12 @@ def _signature_for(name: str) -> ToolSignature:
     )
 
 
-def test_load_datasets_have_entries():
+def test_load_datasets_have_entries() -> None:
     context_examples = load_context7_dataset()
     assert len(context_examples.get_items()) >= 3
 
 
-def test_simulate_session_default_invocation():
+def test_simulate_session_default_invocation() -> None:
     dataset_item = {
         "id": "ctx-001",
         "expected_tool": "doc_lookup",
@@ -66,13 +72,13 @@ def test_simulate_session_default_invocation():
     }
     signature = _signature_for("doc_lookup")
     report = simulate_session({"doc_lookup": signature}, dataset_item)
-    assert isinstance(report, SimulationReport)
+    assert isinstance(report, mcp_simulator_module.SimulationReport)
     assert report.tool_called
     assert report.arguments_valid
     assert report.score == 1.0
 
 
-def test_simulate_session_detects_argument_error():
+def test_simulate_session_detects_argument_error() -> None:
     dataset_item = {
         "id": "ctx-err",
         "expected_tool": "doc_lookup",
@@ -86,7 +92,7 @@ def test_simulate_session_detects_argument_error():
     assert report.score == 0.0
 
 
-def test_simulate_session_with_custom_invoker_detects_wrong_tool():
+def test_simulate_session_with_custom_invoker_detects_wrong_tool() -> None:
     dataset_item = {
         "id": "ctx-wrong",
         "expected_tool": "doc_lookup",
@@ -95,8 +101,12 @@ def test_simulate_session_with_custom_invoker_detects_wrong_tool():
     }
     signature = _signature_for("doc_lookup")
 
-    def bad_invoker(signature, arguments, dataset_item):
-        return ToolCallResult(
+    def bad_invoker(
+        signature: MCPToolSignature,
+        arguments: Dict[str, Any],
+        dataset_item: Dict[str, Any],
+    ) -> MCPToolCallResult:
+        return mcp_simulator_module.ToolCallResult(
             tool_name="other_tool",
             arguments=arguments,
             response="",

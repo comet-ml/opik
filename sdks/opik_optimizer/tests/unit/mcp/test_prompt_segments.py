@@ -1,11 +1,8 @@
 import tests.unit.mcp.stub_opik  # noqa: F401
-import copy
 import importlib
 import sys
 import types
 from pathlib import Path
-
-import pytest
 
 
 root = Path(__file__).resolve().parents[3]
@@ -27,9 +24,7 @@ if "opik_optimizer.utils" not in sys.modules:
     sys.modules["opik_optimizer.utils"] = utils_pkg
 
 
-chat_prompt = importlib.import_module(
-    "opik_optimizer.optimization_config.chat_prompt"
-)
+chat_prompt = importlib.import_module("opik_optimizer.optimization_config.chat_prompt")
 prompt_segments = importlib.import_module("opik_optimizer.utils.prompt_segments")
 
 ChatPrompt = chat_prompt.ChatPrompt
@@ -38,7 +33,7 @@ extract_prompt_segments = prompt_segments.extract_prompt_segments
 segment_ids_for_tools = prompt_segments.segment_ids_for_tools
 
 
-def test_extract_and_update_system_user_and_tool_segments():
+def test_extract_and_update_system_user_and_tool_segments() -> None:
     prompt = ChatPrompt(
         name="context7",
         system="You are a docs assistant.",
@@ -84,7 +79,7 @@ def test_extract_and_update_system_user_and_tool_segments():
     assert prompt.tools[0]["function"]["description"] == "Search the docs."
 
 
-def test_extract_and_update_message_segments():
+def test_extract_and_update_message_segments() -> None:
     prompt = ChatPrompt(
         name="message",
         messages=[
@@ -108,7 +103,7 @@ def test_extract_and_update_message_segments():
     assert prompt.messages[1]["content"] == "Hi"
 
 
-def test_apply_updates_ignores_unknown_segments():
+def test_apply_updates_ignores_unknown_segments() -> None:
     prompt = ChatPrompt(name="noop", user="Hello")
     updated = apply_segment_updates(prompt, {"message:99": "ignored"})
     assert updated.user == "Hello"
