@@ -782,9 +782,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         return self._create_result(
             metric,
-            initial_prompt=initial_prompt.get_messages()
-            if initial_prompt is not None
-            else [],
+            initial_prompt=(
+                initial_prompt.get_messages() if initial_prompt is not None else []
+            ),
             best_prompt=best_prompt.get_messages() if best_prompt is not None else [],
             best_score=best_score,
             initial_score=initial_score,

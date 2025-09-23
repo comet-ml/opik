@@ -53,7 +53,10 @@ def _default_rate_limit() -> float:
     try:
         return float(value)
     except ValueError:
-        logger.warning("Invalid MCP_RATELIMIT_SLEEP=%r, expected a numeric value, using default 0.1", value)
+        logger.warning(
+            "Invalid MCP_RATELIMIT_SLEEP=%r, expected a numeric value, using default 0.1",
+            value,
+        )
         return 0.1
 
 
