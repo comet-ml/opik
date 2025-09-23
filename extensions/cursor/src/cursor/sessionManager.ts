@@ -5,7 +5,7 @@ import initSqlJs, { Database, QueryExecResult, SqlValue } from 'sql.js';
 
 import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
-import { Sentry } from '../sentry';
+import { captureException } from '../sentry';
 
 import { TraceData } from "../interface";
 
@@ -316,7 +316,7 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
                     bubbleCount: bubbles.length
                 });
             } catch (parseErr) {
-                Sentry.captureException(parseErr);
+                captureException(parseErr);
                 console.error(`Could not parse composer data for row ${index}:`, parseErr);
             }
         });
@@ -324,7 +324,7 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
         db.close();
         return conversations;
     } catch (error) {
-        Sentry.captureException(error);
+        captureException(error);
         console.error(`Error reading database ${stateDbPath}:`, error);
         throw error;
     }
@@ -341,13 +341,13 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
     
     if (globalStoragePaths.length > 1) {
         const error = new Error(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`);
-        Sentry.captureException(error);
+        captureException(error);
         console.warn(`More than one global storage folder found - Should not happen - ${globalStoragePaths}`)
     }
     
     if (globalStoragePaths.length === 0) {
         const error = new Error("Could not find global SQLite state DB.");
-        Sentry.captureException(error);
+        captureException(error);
         console.warn("Could not find global SQLite state DB.")
         return null;
     }
@@ -358,7 +358,7 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
     
     if (!fs.existsSync(stateDbPath)) {
         const error = new Error(`Could not find global SQLite state DB at path: ${stateDbPath}`);
-        Sentry.captureException(error);
+        captureException(error);
         console.warn("Could not find global SQLite state DB.")
         return null;
     } else {
@@ -378,11 +378,11 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
             // Log to Sentry when conversations are found but no traces generated
             if (conversations.length > 0) {
                 const error = new Error(`Found ${conversations.length} conversations but generated 0 traces`);
-                Sentry.captureException(error);
+                captureException(error);
             }
             return { tracesData: [], updatedSessionInfo: {} };
         } catch (error) {
-            Sentry.captureException(error);
+            captureException(error);
             console.error("Error reading cursor chat data:", error);
             return null;
         }

@@ -315,8 +315,9 @@ const DatasetItemsPage = () => {
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel
             datasetItems={selectedRows}
+            datasetId={datasetId}
+            datasetName={dataset?.name ?? ""}
             columnsToExport={columnsToExport}
-            datasetName={dataset?.name || "dataset"}
             dynamicColumns={dynamicColumnsIds}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
