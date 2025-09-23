@@ -1,25 +1,12 @@
 from typing import List, Optional, Dict
 from collections import defaultdict
-import statistics
 import logging
-import math
 
 import dataclasses
 
-from . import test_result
+from . import score_statistics, test_result
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclasses.dataclass
-class ScoreStatistics:
-    """Statistics for a single score metric across multiple trials."""
-
-    mean: float
-    max: float
-    min: float
-    values: List[float]
-    std: Optional[float] = None  # Standard deviation (None if count < 2)
 
 
 @dataclasses.dataclass
@@ -27,7 +14,7 @@ class DatasetItemResults:
     """Results for a single dataset item across all trials."""
 
     test_results: List[test_result.TestResult]
-    scores: Dict[str, ScoreStatistics]
+    scores: Dict[str, score_statistics.ScoreStatistics]
 
 
 @dataclasses.dataclass
@@ -70,7 +57,7 @@ class EvaluationResultAggregatedScoresView:
     experiment_url: Optional[str]
     trial_count: int
     test_results: List[test_result.TestResult]
-    aggregated_scores: Dict[str, ScoreStatistics]
+    aggregated_scores: Dict[str, score_statistics.ScoreStatistics]
 
 
 @dataclasses.dataclass
@@ -97,7 +84,9 @@ class EvaluationResult:
             EvaluationResultAggregatedScoresView object containing details about the
             experiment and the aggregated scores calculated from test results.
         """
-        aggregated_scores = _calculate_aggregated_scores(self.test_results)
+        aggregated_scores = score_statistics.calculate_aggregated_statistics(
+            self.test_results
+        )
         return EvaluationResultAggregatedScoresView(
             experiment_id=self.experiment_id,
             dataset_id=self.dataset_id,
@@ -145,58 +134,12 @@ class EvaluationResult:
         dataset_items_results = {}
         for dataset_item_id, dataset_item_results in results_by_dataset_item.items():
             dataset_item_results.sort(key=lambda x: x.trial_id)
-            aggregated_scores = _calculate_aggregated_scores(dataset_item_results)
+            aggregated_scores = score_statistics.calculate_aggregated_statistics(
+                dataset_item_results
+            )
 
             dataset_items_results[dataset_item_id] = DatasetItemResults(
                 test_results=dataset_item_results, scores=aggregated_scores
             )
 
         return dataset_items_results
-
-
-def _calculate_aggregated_scores(
-    evaluation_results: List[test_result.TestResult],
-) -> Dict[str, ScoreStatistics]:
-    """
-    Calculate mean, max, and min scores for each score name in the evaluation results.
-
-    Args:
-        evaluation_results: List of TestResult objects to be aggregated
-
-    Returns:
-        Dict mapping score names to their aggregated statistics
-    """
-    if not evaluation_results:
-        return {}
-
-    # Group scores by name across all trials
-    scores_by_name = defaultdict(list)
-
-    for test_result_ in evaluation_results:
-        for score_result in test_result_.score_results:
-            # Only include successful scores with valid values
-            if not score_result.scoring_failed and _is_valid_score_value(
-                score_result.value
-            ):
-                scores_by_name[score_result.name].append(score_result.value)
-
-    # Calculate aggregated statistics for each score name
-    aggregated_scores = {}
-    for score_name, values in scores_by_name.items():
-        if values:
-            std = statistics.stdev(values) if len(values) >= 2 else None
-
-            aggregated_scores[score_name] = ScoreStatistics(
-                mean=statistics.mean(values),
-                max=max(values),
-                min=min(values),
-                values=values.copy(),  # Store the actual values used
-                std=std,
-            )
-
-    return aggregated_scores
-
-
-def _is_valid_score_value(value: float) -> bool:
-    """Check if a score value is valid for statistical calculations."""
-    return isinstance(value, (int, float)) and math.isfinite(value)
