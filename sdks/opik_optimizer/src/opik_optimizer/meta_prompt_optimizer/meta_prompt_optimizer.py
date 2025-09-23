@@ -520,6 +520,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         allow_tool_use_on_second_pass: bool = False,
         **kwargs: Any,
     ) -> OptimizationResult:
+        panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+
         if prompt.tools is None or not prompt.tools:
             raise ValueError("Prompt must include tools for MCP optimization")
 
@@ -555,7 +557,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             candidate_generator_kwargs={
                 "tool_segment_id": tool_segment_id,
                 "tool_name": tool_name,
+                "panel_style": panel_style,
             },
+            tool_panel_style=panel_style,
             **kwargs,
         )
 
@@ -573,6 +577,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             Callable[..., List[chat_prompt.ChatPrompt]]
         ] = None,
         candidate_generator_kwargs: Optional[Dict[str, Any]] = None,
+        tool_panel_style: str = "bright_magenta",
         **kwargs: Any,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
@@ -704,6 +709,19 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if improvement > 0:
                     best_score = best_cand_score_avg
                     best_prompt = best_candidate_this_round
+
+        if tool_panel_style and getattr(best_prompt, "tools", None):
+            description = (
+                best_prompt.tools[0].get("function", {}).get("description", "")
+                if best_prompt.tools
+                else ""
+            )
+            if description.strip():
+                reporting.display_tool_description(
+                    description.strip(),
+                    "Final tool description",
+                    tool_panel_style,
+                )
 
         reporting.display_result(
             initial_score,
@@ -1007,6 +1025,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         tool_name: str,
         optimization_id: Optional[str] = None,
         project_name: Optional[str] = None,
+        panel_style: str = "bright_magenta",
     ) -> List[chat_prompt.ChatPrompt]:
         segments = {segment.segment_id: segment for segment in extract_prompt_segments(current_prompt)}
         if tool_segment_id not in segments:
@@ -1092,6 +1111,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                         current_prompt,
                         {tool_segment_id: description.strip()},
                     )
+                    if description.strip() and description.strip() != current_description.strip():
+                        reporting.display_tool_description(
+                            description.strip(),
+                            f"Round {round_num + 1} tool description",
+                            panel_style,
+                        )
                     candidates.append(updated_prompt)
 
                 if not candidates:
