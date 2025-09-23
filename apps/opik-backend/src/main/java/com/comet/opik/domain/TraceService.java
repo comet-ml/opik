@@ -133,22 +133,25 @@ class TraceServiceImpl implements TraceService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Strip attachments from the trace with the generated ID
-            Trace traceWithId = trace.toBuilder().id(id).build();
-            Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName, projectName);
-
             return IdGenerator
                     .validateVersionAsync(id, TRACE_KEY)
                     .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                    .flatMap(project -> lockService.executeWithLock(
-                            new LockService.Lock(id, TRACE_KEY),
-                            Mono.defer(() -> insertTrace(processedTrace, project, id)))
-                            .doOnSuccess(__ -> {
-                                var savedTrace = processedTrace.toBuilder().projectId(project.id())
-                                        .projectName(projectName).build();
+                    .flatMap(project -> {
+                        // Strip attachments from the trace with the generated ID and project ID
+                        Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
+                        Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName,
+                                projectName);
 
-                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                            }));
+                        return lockService.executeWithLock(
+                                new LockService.Lock(id, TRACE_KEY),
+                                Mono.defer(() -> insertTrace(processedTrace, project, id)))
+                                .doOnSuccess(__ -> {
+                                    var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                            .projectName(projectName).build();
+
+                                    eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                });
+                    });
         });
     }
 

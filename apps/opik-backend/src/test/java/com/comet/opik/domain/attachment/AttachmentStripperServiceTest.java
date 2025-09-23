@@ -13,9 +13,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Base64;
 import java.util.UUID;
 
+import static com.comet.opik.utils.AttachmentPayloadUtilsTest.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -45,27 +45,6 @@ class AttachmentStripperServiceTest {
     private static final String TEST_WORKSPACE_ID = "test-workspace";
     private static final String TEST_USER_NAME = "test-user";
     private static final String TEST_PROJECT_NAME = "test-project";
-
-    // Base64 encoded 1x1 PNG image (minimal valid image) - keeping for potential future use
-    @SuppressWarnings("unused")
-    private static final String SMALL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77gwAAAABJRU5ErkJggg==";
-
-    // Large base64 string (1000+ chars) - create a valid large PNG by duplicating the header and padding
-    private static final String LARGE_PNG_BASE64;
-    static {
-        // Create a fake PNG with proper PNG header but large enough to trigger our threshold
-        byte[] pngHeader = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}; // PNG header
-        byte[] largeData = new byte[1500]; // Large enough to exceed threshold
-        System.arraycopy(pngHeader, 0, largeData, 0, pngHeader.length);
-        // Fill rest with pattern that will compress well
-        for (int i = pngHeader.length; i < largeData.length; i++) {
-            largeData[i] = (byte) (i % 256);
-        }
-        LARGE_PNG_BASE64 = Base64.getEncoder().encodeToString(largeData);
-    }
-
-    // Short base64 string (less than 1000 chars)
-    private static final String SHORT_BASE64 = "dGVzdA=="; // "test" in base64
 
     @BeforeEach
     void setUp() {
@@ -99,7 +78,7 @@ class AttachmentStripperServiceTest {
     @DisplayName("Should detect correct MIME type for PNG")
     void shouldDetectCorrectMimeTypeForPng() {
         // Given
-        String base64Data = LARGE_PNG_BASE64;
+        String base64Data = createLargePngBase64();
 
         // When
         String mimeType = attachmentStripperService.detectMimeType(base64Data);
@@ -113,7 +92,7 @@ class AttachmentStripperServiceTest {
     @DisplayName("Should not process short base64 strings")
     void shouldNotProcessShortBase64Strings() throws Exception {
         // Given
-        JsonNode input = objectMapper.readTree("{\"data\": \"" + SHORT_BASE64 + "\"}");
+        JsonNode input = objectMapper.readTree("{\"data\": \"" + createShortBase64() + "\"}");
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
@@ -128,19 +107,20 @@ class AttachmentStripperServiceTest {
     @DisplayName("Should process large base64 strings and replace with attachment references")
     void shouldProcessLargeBase64StringsAndReplaceWithReferences() throws Exception {
         // Given
-        JsonNode input = objectMapper.readTree("{\"data\": \"" + LARGE_PNG_BASE64 + "\"}");
+        JsonNode metadata = objectMapper.readTree("{\"data\": \"" + createLargePngBase64() + "\"}");
         // No need to mock idGenerator since we don't use it in the new implementation
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
+                metadata, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "metadata");
 
         // Then
         assertThat(result.has("data")).isTrue();
         String replacedValue = result.get("data").asText();
-        assertThat(replacedValue).startsWith("[input-attachment-1.");
+        assertThat(replacedValue).startsWith("[metadata-attachment-1.");
         assertThat(replacedValue).endsWith("]");
-        assertThat(replacedValue).isEqualTo("[input-attachment-1.png]");
+        assertThat(replacedValue).isEqualTo("[metadata-attachment-1.png]");
 
         verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
                 anyString());
@@ -151,9 +131,9 @@ class AttachmentStripperServiceTest {
     void shouldHandleMultipleAttachmentsInSameJson() throws Exception {
         // Given - JSON with multiple large base64 strings
         String jsonWithMultipleAttachments = "{\n" +
-                "  \"first_attachment\": \"" + LARGE_PNG_BASE64 + "\",\n" +
+                "  \"first_attachment\": \"" + createLargePngBase64() + "\",\n" +
                 "  \"regular_text\": \"just some text\",\n" +
-                "  \"second_attachment\": \"" + LARGE_PNG_BASE64 + "\"\n" +
+                "  \"second_attachment\": \"" + createLargePdfBase64() + "\"\n" +
                 "}";
 
         JsonNode input = objectMapper.readTree(jsonWithMultipleAttachments);
@@ -167,7 +147,6 @@ class AttachmentStripperServiceTest {
         // Then
         // First attachment should be replaced
         String firstAttachment = result.get("first_attachment").asText();
-        assertThat(firstAttachment).startsWith("[output-attachment-1.");
         assertThat(firstAttachment).isEqualTo("[output-attachment-1.png]");
 
         // Regular text should be unchanged
@@ -175,8 +154,7 @@ class AttachmentStripperServiceTest {
 
         // Second attachment should be replaced with different number
         String secondAttachment = result.get("second_attachment").asText();
-        assertThat(secondAttachment).startsWith("[output-attachment-2.");
-        assertThat(secondAttachment).isEqualTo("[output-attachment-2.png]");
+        assertThat(secondAttachment).isEqualTo("[output-attachment-2.pdf]");
 
         // Should have called upload service twice
         verify(attachmentService, times(2)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
@@ -200,7 +178,7 @@ class AttachmentStripperServiceTest {
                 "          \"type\": \"image\",\n" +
                 "          \"inline_data\": {\n" +
                 "            \"mime_type\": \"image/png\",\n" +
-                "            \"data\": \"" + LARGE_PNG_BASE64 + "\"\n" +
+                "            \"data\": \"" + createLargePngBase64() + "\"\n" +
                 "          }\n" +
                 "        }\n" +
                 "      ]\n" +
@@ -208,12 +186,12 @@ class AttachmentStripperServiceTest {
                 "  ]\n" +
                 "}";
 
-        JsonNode input = objectMapper.readTree(nestedJson);
+        JsonNode metadata = objectMapper.readTree(nestedJson);
         // No need to mock idGenerator since we don't use it in the new implementation
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                metadata, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
                 "metadata");
 
         // Then
@@ -238,15 +216,16 @@ class AttachmentStripperServiceTest {
                 "This is a large text content that will be encoded to base64 for testing purposes. ".repeat(50)
                         .getBytes());
 
-        JsonNode input = objectMapper.readTree("{\"data\": \"" + largeTextBase64 + "\"}");
+        JsonNode output = objectMapper.readTree("{\"data\": \"" + largeTextBase64 + "\"}");
 
         // When
         JsonNode result = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
+                output, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "output");
 
         // Then
         // Should be unchanged since Tika will detect this as text/plain
-        assertThat(result).isEqualTo(input);
+        assertThat(result).isEqualTo(output);
         verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
     }
 
@@ -254,11 +233,12 @@ class AttachmentStripperServiceTest {
     @DisplayName("Should generate context-aware filenames for different contexts")
     void shouldGenerateContextAwareFilenames() throws Exception {
         // Given
-        JsonNode input = objectMapper.readTree("{\"image\": \"" + LARGE_PNG_BASE64 + "\"}");
+        JsonNode input = objectMapper.readTree("{\"image\": \"" + createLargeGifBase64() + "\"}");
 
         // When - Test with different contexts
         JsonNode inputResult = attachmentStripperService.stripAttachments(
-                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME, "input");
+                input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
+                "input");
 
         JsonNode outputResult = attachmentStripperService.stripAttachments(
                 input, TEST_ENTITY_ID, EntityType.TRACE, TEST_WORKSPACE_ID, TEST_USER_NAME, TEST_PROJECT_NAME,
@@ -269,9 +249,9 @@ class AttachmentStripperServiceTest {
                 "metadata");
 
         // Then - Each context should generate different filename prefixes
-        assertThat(inputResult.get("image").asText()).isEqualTo("[input-attachment-1.png]");
-        assertThat(outputResult.get("image").asText()).isEqualTo("[output-attachment-1.png]");
-        assertThat(metadataResult.get("image").asText()).isEqualTo("[metadata-attachment-1.png]");
+        assertThat(inputResult.get("image").asText()).isEqualTo("[input-attachment-1.gif]");
+        assertThat(outputResult.get("image").asText()).isEqualTo("[output-attachment-1.gif]");
+        assertThat(metadataResult.get("image").asText()).isEqualTo("[metadata-attachment-1.gif]");
 
         // Should have called upload service three times (once for each context)
         verify(attachmentService, times(3)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),

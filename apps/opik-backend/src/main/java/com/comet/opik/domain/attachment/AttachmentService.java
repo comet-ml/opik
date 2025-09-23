@@ -241,7 +241,7 @@ class AttachmentServiceImpl implements AttachmentService {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
 
         var project = projectService.getOrCreate(projectName)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
 
         return project.id();
