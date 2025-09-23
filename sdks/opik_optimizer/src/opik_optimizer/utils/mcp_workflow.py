@@ -8,18 +8,30 @@ generic so that any MCP tool can reuse them with minimal adjustment.
 
 from __future__ import annotations
 
-import logging
-import os
-import time
 import contextlib
 import io
+import logging
+import os
+import textwrap
+import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional
+import copy
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 
+from opik import track
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from .mcp import MCPManifest, call_tool_from_manifest, response_to_text
+from .mcp import (
+    MCPManifest,
+    ToolSignature,
+    call_tool_from_manifest,
+    dump_mcp_signature,
+    list_tools_from_manifest,
+    load_tool_signature_from_manifest,
+    response_to_text,
+)
 from .mcp_second_pass import MCPSecondPassCoordinator, FollowUpBuilder, extract_user_query
 
 logger = logging.getLogger(__name__)
@@ -45,7 +57,7 @@ DEFAULT_MCP_RATELIMIT_SLEEP = _default_rate_limit()
 
 
 @contextlib.contextmanager
-def _suppress_mcp_stdout(logger: logging.Logger):
+def suppress_mcp_stdout(logger: logging.Logger = logger):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         yield
@@ -56,6 +68,32 @@ def _suppress_mcp_stdout(logger: logging.Logger):
         if "MCP Server running on stdio" in trimmed:
             continue
         logger.debug("MCP stdout: %s", trimmed)
+
+
+def ensure_argument_via_resolver(
+    *,
+    target_field: str,
+    resolver_tool: str,
+    query_fields: Sequence[str],
+) -> ArgumentAdapter:
+    """Return an adapter that resolves ``target_field`` via an MCP tool."""
+
+    def _adapter(arguments: Dict[str, Any], call_tool: ToolCall) -> Dict[str, Any]:
+        prepared = dict(arguments)
+        if prepared.get(target_field):
+            return prepared
+        for key in query_fields:
+            query = prepared.get(key)
+            if not query:
+                continue
+            response = call_tool(resolver_tool, {"query": query})
+            resolved = response_to_text(response).strip()
+            if resolved:
+                prepared[target_field] = resolved
+                break
+        return prepared
+
+    return _adapter
 
 
 def extract_tool_arguments(item: Any) -> Dict[str, Any]:
@@ -82,6 +120,21 @@ def extract_tool_arguments(item: Any) -> Dict[str, Any]:
                 return dict(arguments)
 
     return {}
+
+
+def create_second_pass_coordinator(
+    tool_name: str,
+    follow_up_template: str,
+    *,
+    summary_var_name: Optional[str] = None,
+) -> MCPSecondPassCoordinator:
+    summary_var = create_summary_var(summary_var_name or f"{tool_name}_summary")
+    follow_up_builder = make_follow_up_builder(follow_up_template)
+    return MCPSecondPassCoordinator(
+        tool_name=tool_name,
+        summary_var=summary_var,
+        follow_up_builder=follow_up_builder,
+    )
 
 
 def make_follow_up_builder(template: str) -> FollowUpBuilder:
@@ -131,6 +184,85 @@ def _sequence_match_ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
+def list_manifest_tools(
+    manifest: MCPManifest, *, logger: logging.Logger = logger
+) -> tuple[list[Any], list[str]]:
+    with suppress_mcp_stdout(logger):
+        tools = list_tools_from_manifest(manifest)
+    names = [getattr(tool, "name", "") for tool in tools if getattr(tool, "name", None)]
+    logger.info("MCP tools available: %s", names)
+    return tools, names
+
+
+def load_manifest_tool_signature(
+    manifest: MCPManifest,
+    tool_name: str,
+    *,
+    logger: logging.Logger = logger,
+) -> 'ToolSignature':
+    signature = load_tool_signature_from_manifest(manifest, tool_name)
+    logger.debug("Loaded signature for %s", tool_name)
+    return signature
+
+
+def dump_signature_artifact(
+    signature: 'ToolSignature',
+    artifacts_dir: Path | str,
+    filename: str,
+    *,
+    logger: logging.Logger = logger,
+) -> Path:
+    artifacts_path = Path(artifacts_dir)
+    artifacts_path.mkdir(parents=True, exist_ok=True)
+    destination = artifacts_path / filename
+    dump_mcp_signature([signature], destination)
+    logger.info("Signature written to %s", destination)
+    return destination
+
+
+def update_signature_from_tool_entry(
+    signature: ToolSignature, tool_entry: Mapping[str, Any]
+) -> ToolSignature:
+    function_block = tool_entry.get("function", {})
+    signature.description = function_block.get("description", signature.description)
+    signature.parameters = function_block.get("parameters", signature.parameters)
+    signature.examples = function_block.get("examples", signature.examples)
+    signature.extra = {
+        **signature.extra,
+        **{k: v for k, v in tool_entry.items() if k != "function"},
+    }
+    return signature
+
+
+def apply_tool_entry_from_prompt(
+    signature: ToolSignature,
+    prompt: Any,
+    default_entry: Mapping[str, Any],
+) -> Dict[str, Any]:
+    tool_entry = copy.deepcopy(default_entry)
+    prompt_tools = getattr(prompt, "tools", None)
+    if prompt_tools:
+        tool_entry = copy.deepcopy(prompt_tools[0])
+    update_signature_from_tool_entry(signature, tool_entry)
+    return tool_entry
+
+
+def preview_tool_output(
+    manifest: MCPManifest,
+    tool_name: str,
+    arguments: Mapping[str, Any],
+    *,
+    logger: logging.Logger = logger,
+    preview_chars: int = 200,
+) -> str:
+    with suppress_mcp_stdout(logger):
+        response = call_tool_from_manifest(manifest, tool_name, dict(arguments))
+    text = response_to_text(response)
+    preview = text[:preview_chars].replace("\n", " ")
+    logger.info("Sample tool output preview: %s", preview)
+    return text
+
+
 def create_summary_var(name: str) -> ContextVar[Optional[str]]:
     """Return a ``ContextVar`` used to share tool summaries."""
 
@@ -163,8 +295,12 @@ class MCPToolInvocation:
         def call_tool(name: str, payload: Dict[str, Any]) -> Any:
             if self.rate_limit_sleep > 0:
                 time.sleep(self.rate_limit_sleep)
-            with _suppress_mcp_stdout(self._logger):
-                return call_tool_from_manifest(self.manifest, name, payload)
+            with suppress_mcp_stdout(self._logger):
+                @track(name=f"mcp_tool::{name}")
+                def _tracked() -> Any:
+                    return call_tool_from_manifest(self.manifest, name, payload)
+
+                return _tracked()
 
         prepared = dict(arguments)
         if self.argument_adapter:
@@ -173,8 +309,12 @@ class MCPToolInvocation:
         # TODO(opik-mcp): reuse a persistent MCP client so we avoid spawning a
         # new stdio subprocess for each call. This currently mirrors the
         # original blocking behaviour for stability.
-        with _suppress_mcp_stdout(self._logger):
-            response = call_tool(self.tool_name, prepared)
+        with suppress_mcp_stdout(self._logger):
+            @track(name=f"mcp_tool::{self.tool_name}")
+            def _invoke() -> Any:
+                return call_tool(self.tool_name, prepared)
+
+            response = _invoke()
         text = response_to_text(response)
         preview = text[: self.preview_chars].replace("\n", " ")
         label = self.preview_label or self.tool_name
