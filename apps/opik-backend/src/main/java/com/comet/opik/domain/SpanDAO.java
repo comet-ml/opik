@@ -17,15 +17,14 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
-import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -1413,7 +1412,7 @@ class SpanDAO {
                     statement.bindNull("last_updated_at" + i, String.class);
                 }
 
-                bindTruncationThreshold(statement, "truncation_threshold" + i);
+                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
                 bindCost(span, statement, String.valueOf(i));
 
@@ -1482,7 +1481,7 @@ class SpanDAO {
             statement.bind("error_info", "");
         }
 
-        bindTruncationThreshold(statement, "truncation_threshold");
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         bindCost(span, statement, "");
 
@@ -1609,15 +1608,7 @@ class SpanDAO {
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
 
-        bindTruncationThreshold(statement, "truncation_threshold");
-    }
-
-    private void bindTruncationThreshold(Statement statement, String truncationThresholdField) {
-        if (configuration.getResponseFormatting().getTruncationSize() > 0) {
-            statement.bind(truncationThresholdField, configuration.getResponseFormatting().getTruncationSize());
-        } else {
-            statement.bindNull(truncationThresholdField, Integer.class);
-        }
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
@@ -1765,11 +1756,13 @@ class SpanDAO {
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                                value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                                value))
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
@@ -1816,19 +1809,6 @@ class SpanDAO {
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
                 .build());
-    }
-
-    private JsonNode getJsonNodeOrTruncatedString(RowMetadata rowMetadata, String truncatedFlag, Row row, String value) {
-        if  (rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))) {
-            return TextNode.valueOf(value);
-        }
-
-        try {
-            return JsonUtils.getJsonNodeFromString(value);
-        } catch (Exception e) {
-            log.warn("Failed to parse JSON, returning as plain text node. Error: {}", e.getMessage());
-            return TextNode.valueOf(value);
-        }
     }
 
     private Publisher<Span> mapToPartialDto(Result result) {

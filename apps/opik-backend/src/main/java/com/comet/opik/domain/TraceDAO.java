@@ -24,16 +24,15 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
-import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -2308,17 +2307,9 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
-        bindTruncationThreshold(statement, "truncation_threshold");
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         return statement;
-    }
-
-    private void bindTruncationThreshold(Statement statement, String truncationThresholdField) {
-        if (configuration.getResponseFormatting().getTruncationSize() > 0) {
-            statement.bind(truncationThresholdField, configuration.getResponseFormatting().getTruncationSize());
-        } else {
-            statement.bindNull(truncationThresholdField, Integer.class);
-        }
     }
 
     private ST buildInsertTemplate(Trace trace) {
@@ -2386,7 +2377,7 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("thread_id", traceUpdate.threadId());
         }
 
-        bindTruncationThreshold(statement, "truncation_threshold");
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
@@ -2496,11 +2487,13 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                                value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                                value))
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
@@ -2560,20 +2553,6 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
                 .build());
-    }
-
-    private JsonNode getJsonNodeOrTruncatedString(RowMetadata rowMetadata, String truncatedFlag, Row row,
-            String value) {
-        if  (rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))) {
-            return TextNode.valueOf(value);
-        }
-
-        try {
-            return JsonUtils.getJsonNodeFromString(value);
-        } catch (Exception e) {
-            log.warn("Failed to parse JSON, returning as plain text node. Error: {}", e.getMessage());
-            return TextNode.valueOf(value);
-        }
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
@@ -2867,7 +2846,7 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bindNull("visibility_mode" + i, String.class);
                 }
 
-                bindTruncationThreshold(statement, "truncation_threshold" + i);
+                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
                 i++;
             }
@@ -3145,11 +3124,13 @@ class TraceDAOImpl implements TraceDAO {
                 .duration(row.get("duration", Double.class))
                 .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
                         .filter(it -> !it.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "first_message_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
+                                "first_message_truncated", row, value))
                         .orElse(null))
                 .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
                         .filter(it -> !it.isBlank())
-                        .map(value -> getJsonNodeOrTruncatedString(rowMetadata, "last_message_truncated", row, value))
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
+                                "last_message_truncated", row, value))
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
                 .usage(row.get("usage", Map.class))
