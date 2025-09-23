@@ -150,7 +150,7 @@ public class AttachmentStripperService {
 
         // Use the pre-compiled pattern from construction
         Matcher matcher = base64Pattern.matcher(jsonString);
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
         int attachmentCounter = 1;
 
         while (matcher.find()) {
@@ -164,7 +164,7 @@ public class AttachmentStripperService {
             if (attachmentReference != null) {
                 // Replace the base64 string with the reference
                 matcher.appendReplacement(result, attachmentReference);
-                attachmentCounter++; // Only increment if we actually processed an attachment
+                attachmentCounter++; // Only increment if we actually processed an attachments
             }
             // If not an attachment, matcher.appendTail() will handle keeping the original
         }
