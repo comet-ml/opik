@@ -134,8 +134,7 @@ class OpikTracer(BaseTracer):
                 "traceback": run_dict["error"],
             }
         else:
-            # Filter LangGraph outputs for better thread display
-            output, trace_additional_metadata = self._filter_langgraph_output(
+            output, trace_additional_metadata = helpers.split_big_langgraph_outputs(
                 run_dict["outputs"]
             )
             error_info = None
@@ -161,7 +160,6 @@ class OpikTracer(BaseTracer):
             if trace_data.input == {"input": ""}:
                 trace_data.input = run_dict["inputs"]
 
-            # Apply additional metadata if filtering occurred
             if trace_additional_metadata:
                 trace_data.update(metadata=trace_additional_metadata)
 
@@ -400,12 +398,10 @@ class OpikTracer(BaseTracer):
             if span_data.input == {"input": ""}:
                 span_data.input = run_dict["inputs"]
 
-            # Filter LangGraph outputs for better thread display
-            filtered_output, additional_metadata = self._filter_langgraph_output(
+            filtered_output, additional_metadata = helpers.split_big_langgraph_outputs(
                 run_dict["outputs"]
             )
 
-            # Apply additional metadata if filtering occurred
             if additional_metadata:
                 span_data.update(metadata=additional_metadata)
 
@@ -460,61 +456,6 @@ class OpikTracer(BaseTracer):
 
             if thread_id:
                 self._thread_id = thread_id
-
-    def _filter_langgraph_output(
-        self, outputs: Dict[str, Any]
-    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Filter LangGraph outputs to extract only messages for thread display.
-
-        Returns:
-            tuple: (filtered_output_for_display, additional_metadata_for_span)
-
-        LangGraph agents often produce complex outputs with large internal state
-        that breaks thread display. This method extracts only the conversational
-        messages for clean thread display while preserving the full state in metadata.
-        """
-        if not isinstance(outputs, dict):
-            return outputs, {}
-
-        # Check if this looks like a LangGraph output (has messages + other complex data)
-        if "messages" in outputs and len(outputs) > 1:
-            output_str = str(outputs)
-            output_size = len(output_str)
-
-            # If output is large and complex, filter it for better thread display
-            if output_size > 5000:  # Threshold for "large" output
-                LOGGER.debug(
-                    f"Filtering large LangGraph output ({output_size} chars) for thread display"
-                )
-
-                # Clean output for thread display - only messages
-                filtered_output = {
-                    "messages": outputs["messages"],
-                }
-
-                # Preserve thread_id if present
-                if "thread_id" in outputs:
-                    filtered_output["thread_id"] = outputs["thread_id"]
-
-                # Store complete original data in metadata for debugging
-                additional_metadata = {
-                    "_opik_langgraph_full_output": outputs,  # Full original output
-                    "_opik_output_filtering": {
-                        "filtered": True,
-                        "original_size_chars": output_size,
-                        "filtered_keys": [
-                            k
-                            for k in outputs.keys()
-                            if k not in ["messages", "thread_id"]
-                        ],
-                        "reason": "Large LangGraph output filtered for better thread display",
-                    },
-                }
-
-                return filtered_output, additional_metadata
-
-        return outputs, {}
 
     def flush(self) -> None:
         """
