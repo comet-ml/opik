@@ -1,0 +1,128 @@
+name: "ClickHouse Migration Cluster Check"
+run-name: "ClickHouse Migration Cluster Check on ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**/*.sql"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**/*.sql"
+
+  workflow_dispatch:
+
+jobs:
+  validate-clickhouse-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 1
+
+      - name: Get changed ClickHouse migration files
+        id: changed-files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Detecting ClickHouse migration files that were added or modified..."
+          
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PRs, use GitHub's built-in files API
+            gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
+              --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            CHANGED_FILES=$(cat changed_files.txt || echo "")
+            rm -f changed_files.txt
+          else
+            # For pushes to main, use GitHub API to get commit files
+            # This works reliably regardless of fetch-depth
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }} \
+              --jq '.files[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+            CHANGED_FILES=$(cat changed_files.txt || echo "")
+            rm -f changed_files.txt
+          fi
+          
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "📄 Found ClickHouse migration files to validate:"
+            printf '%s\n' $CHANGED_FILES | while read -r file; do
+              [ -n "$file" ] && echo "   - $file"
+            done
+            
+            # Save the files to environment variable for next step
+            echo "MIGRATION_FILES<<EOF" >> $GITHUB_ENV
+            printf '%s\n' $CHANGED_FILES | while read -r file; do
+              [ -n "$file" ] && echo "$file" >> $GITHUB_ENV
+            done
+            echo "EOF" >> $GITHUB_ENV
+            echo "HAS_MIGRATION_FILES=true" >> $GITHUB_ENV
+          else
+            echo "📋 No ClickHouse migration files were added or modified."
+            echo "✅ No validation needed."
+            echo "HAS_MIGRATION_FILES=false" >> $GITHUB_ENV
+          fi
+
+      - name: Validate ClickHouse migrations have ON CLUSTER clause
+        if: env.HAS_MIGRATION_FILES == 'true'
+        run: |
+          echo "🔍 Validating ClickHouse migrations for proper ON CLUSTER clause usage..."
+          echo "📖 Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
+          echo
+          
+          # Run the validation script with the migration files
+          # Use xargs with -0 flag and tr to handle newline-separated list safely
+          # This approach correctly handles filenames with spaces across different platforms
+          if echo "$MIGRATION_FILES" | tr '\n' '\0' | xargs -0 ./scripts/check_clickhouse_migrations_cluster.sh; then
+            echo "✅ All modified ClickHouse migrations are properly configured!"
+            echo "🎉 DDL operations will be executed distributively across the cluster."
+          else
+            echo "❌ ClickHouse migration validation failed!"
+            echo
+            echo "💡 What this means:"
+            echo "   - DDL operations without ON CLUSTER clause will only execute on a single node"
+            echo "   - This can cause inconsistencies in distributed ClickHouse deployments"
+            echo "   - All CREATE, DROP, ALTER, and RENAME statements must include ON CLUSTER '{cluster}'"
+            echo
+            echo "🔧 How to fix:"
+            echo "   1. Add 'ON CLUSTER '\"'\"'{cluster}'\"'\"'' to all DDL statements in your migration files"
+            echo "   2. Example: CREATE TABLE my_table ON CLUSTER '{cluster}' (...)"
+            echo "   3. Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl"
+            echo
+            exit 1
+          fi
+
+      - name: Summary for no migration files
+        if: env.HAS_MIGRATION_FILES == 'false'
+        run: |
+          echo "=========================================="
+          echo "✅ No ClickHouse Migration Files Changed"
+          echo "=========================================="
+          echo "📋 No ClickHouse migration files were added or modified in this change."
+          echo "✅ No validation required."
+          echo
+          echo "💡 Note: This check only validates NEW or MODIFIED migration files."
+          echo "   Existing migration files are not checked as they cannot be changed."
+
+      - name: Summary for validated files
+        if: env.HAS_MIGRATION_FILES == 'true' && success()
+        run: |
+          echo "=========================================="
+          echo "✅ ClickHouse Migration Validation PASSED"
+          echo "=========================================="
+          echo "✅ All modified DDL operations include proper ON CLUSTER clause"
+          echo "✅ Migrations are ready for distributed ClickHouse deployment"
+          echo "✅ No cluster inconsistencies will occur"
+          echo
+          echo "🎯 This check ensures that:"
+          echo "   • CREATE statements will create tables/indexes on all cluster nodes"
+          echo "   • DROP statements will remove objects from all cluster nodes"
+          echo "   • ALTER statements will modify schema on all cluster nodes"
+          echo "   • RENAME statements will rename objects on all cluster nodes"
+          echo
+          echo "📚 For more information about distributed DDL:"
+          echo "   https://clickhouse.com/docs/sql-reference/distributed-ddl"

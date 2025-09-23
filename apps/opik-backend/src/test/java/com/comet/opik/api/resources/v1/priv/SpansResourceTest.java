@@ -10,7 +10,6 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
@@ -6548,28 +6547,32 @@ class SpansResourceTest {
         @Test
         @DisplayName("when span does not exist, then return no content")
         void deleteFeedback__whenSpanDoesNotExist__thenReturnNoContent() {
-
             var id = generator.generate();
-
-            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
-                    TEST_WORKSPACE);
+            var deleteFeedbackScore = podamFactory.manufacturePojo(DeleteFeedbackScore.class);
+            spanResourceClient.deleteSpanFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
         }
 
-        @Test
+        Stream<String> deleteFeedback() {
+            return Stream.of(USER, null, "", "   ");
+        }
+
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void deleteFeedback() {
-            Span expectedSpan = podamFactory.manufacturePojo(Span.class);
-            var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+        void deleteFeedback(String author) {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+            var score = podamFactory.manufacturePojo(FeedbackScore.class);
+            createAndAssert(spanId, score, TEST_WORKSPACE, API_KEY);
+            expectedSpan = expectedSpan.toBuilder().feedbackScores(List.of(score)).build();
+            var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
 
-            var score = FeedbackScore.builder()
-                    .name("name")
-                    .value(BigDecimal.valueOf(1))
-                    .source(ScoreSource.SDK)
+            var deleteFeedbackScore = DeleteFeedbackScore.builder()
+                    .name(score.name())
+                    .author(author)
                     .build();
-            createAndAssert(id, score, TEST_WORKSPACE, API_KEY);
-
-            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
-                    TEST_WORKSPACE);
+            spanResourceClient.deleteSpanFeedbackScore(deleteFeedbackScore, spanId, API_KEY, TEST_WORKSPACE);
 
             expectedSpan = expectedSpan.toBuilder().feedbackScores(null).build();
             var actualEntity = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);

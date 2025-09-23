@@ -43,7 +43,7 @@ setup(
         "rapidfuzz>=3.0.0,<4.0.0",
         # Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
         "litellm!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
-        "openai<1.100.0",  # unlock when litellm supports 1.100.0
+        "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",

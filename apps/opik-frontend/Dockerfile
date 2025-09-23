@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.19.0-alpine3.20 AS builder
+FROM node:20.19.5-alpine3.22 AS builder
 
 WORKDIR /opt/frontend
 
@@ -56,11 +56,14 @@ RUN rm -f /etc/nginx/nginx.conf.default && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
     sed -i '/user nginx/d' /etc/nginx/nginx.conf && \
-    sed -i 's/error_log\ \/var\/log\/nginx\/error.log/error_log\ \/dev\/stderr/' /etc/nginx/nginx.conf && \
-    sed -i 's/access_log\ \/dev\/stdout/access_log\ \/var\/log\/nginx\/access.log/' /etc/nginx/nginx.conf
-RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
-    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run /var/run && \
-    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run /var/run
+    sed -i 's/error_log\ \/var\/log\/nginx\/error.log/error_log\ \/dev\/stderr/' /etc/nginx/nginx.conf
+RUN mkdir -p /var/cache/nginx /run && \
+    chown -R nginx:nginx /var/cache/nginx /etc/nginx /run /var/run && \
+    chmod -R g+w /var/cache/nginx /etc/nginx /run /var/run && \
+    mkdir -p /var/log/nginx && \
+    ln -sf /dev/stderr /var/log/nginx/error.log && \
+    ln -sf /dev/stdout /var/log/nginx/access.log && \
+    chown -R nginx:nginx /var/log/nginx
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html

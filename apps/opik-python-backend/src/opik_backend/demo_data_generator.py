@@ -11,16 +11,23 @@ import urllib.request
 import uuid6
 import logging
 import datetime
+import time
 import uuid
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import opik.rest_api
-from opik_backend.demo_data import evaluation_traces, evaluation_spans, demo_traces, demo_spans
+from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores, demo_projects, demo_prompt, experiment_traces_grouped_by_project, experiment_spans_grouped_by_project, demo_datasets, demo_dataset_items, demo_experiments, demo_experiment_items, demo_optimizations
 
 logger = logging.getLogger(__name__)
 
 UUID_MAP = {}
-TRACE_DAY_SHIFT = {}
+TRACE_TIME_SHIFT = {}
+DATASET_IDS = {}
+DATASET_ITEM_IDS = {}
+
+prompt_names = {}
+prompt_commits = {}
 
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
@@ -106,31 +113,65 @@ def project_exists(base_url, workspace_name, comet_api_key, project_name):
     return status_code == 200
 
 
-def replace_datetime_to_today(time_object, day_shift=0):
-    today = datetime.datetime.today() + datetime.timedelta(days=day_shift)
-    return time_object.replace(year=today.year, month=today.month, day=today.day)
-
-
-def set_day_shift(trace_id, day_shift):
-    TRACE_DAY_SHIFT[trace_id] = day_shift
-
-
-def get_day_shift(trace_id):
+def calculate_time_shift_to_now(traces):
     """
-    Get the day shift value for a given trace ID from the TRACE_DAY_SHIFT dictionary.
+    Calculate time shift to move the latest end_time to 'now' while preserving time differences.
 
-    Parameters:
-    - trace_id (string): The trace ID to retrieve the day shift value for.
+    Args:
+        traces: List of trace dictionaries with 'start_time' and 'end_time' keys
 
     Returns:
-    int: The day shift value for the provided trace ID. If the trace ID is not found in the dictionary, a default value of 0 is returned.
+        datetime.timedelta: The time shift to apply to all timestamps
     """
-    if trace_id in TRACE_DAY_SHIFT:
-        day_shift = TRACE_DAY_SHIFT[trace_id]
-    else:
-        day_shift = 0
-    return day_shift
+    if not traces:
+        return datetime.timedelta(0)
 
+    # Find the maximum end_time among all traces
+    traces_with_end_time = [trace['end_time'] for trace in traces if 'end_time' in trace]
+    if not traces_with_end_time:
+        return datetime.timedelta(0)
+
+    max_end_time = max(traces_with_end_time)
+
+    # Current time (now)
+    now = datetime.datetime.now()
+
+    # Calculate shift to move max_end_time to now
+    time_shift = now - max_end_time
+
+    return time_shift
+
+
+def apply_time_shift(time_object, time_shift):
+    """
+    Apply a time shift to a datetime object.
+
+    Args:
+        time_object: datetime object to shift
+        time_shift: datetime.timedelta to apply
+
+    Returns:
+        datetime: Shifted datetime object
+    """
+    return time_object + time_shift
+
+def set_time_shift(trace_id, time_shift):
+    TRACE_TIME_SHIFT[trace_id] = time_shift
+
+def get_time_shift(trace_id):
+    """
+    Get the time shift value for a given trace ID from the TRACE_TIME_SHIFT dictionary.
+
+    Parameters:
+    - trace_id (string): The trace ID to retrieve the time shift value for.
+
+    Returns:
+    datetime.timedelta: The time shift value for the provided trace ID. If the trace ID is not found in the dictionary, a default value of 0 timedelta is returned.
+    """
+    if trace_id in TRACE_TIME_SHIFT:
+        time_shift = TRACE_TIME_SHIFT[trace_id]
+        return time_shift
+    return datetime.timedelta(0)
 
 def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
 
@@ -189,11 +230,19 @@ def get_new_uuid_by_time(old_id, datetime):
         UUID_MAP[old_id] = new_id
     return new_id
 
-
 def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
     try:
-        project_name = "Demo evaluation"
+
+        project_name = "Opik Demo Assistant"
+
+        # Find project ID by project name
+        project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Assistant"), None)
+       
+        if project_id is None:
+            logger.error("Could not find project ID for 'Opik Assistant'")
+            return
+        
         if project_exists(base_url, workspace_name, comet_api_key, project_name):
             logger.info("%s project already exists", project_name)
             return
@@ -206,109 +255,107 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             _use_batching=True,
         )
 
-        days = len(evaluation_traces)
+        evaluation_traces = experiment_traces_grouped_by_project[project_id]
+        # Calculate time shift to move latest end_time to now while preserving time differences
+        time_shift = calculate_time_shift_to_now(experiment_traces_grouped_by_project[project_id])
 
-        for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["start_time"])):
-            day_shift = idx + 1 - days
-            trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
-            trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
+        for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            # Apply time shift to maintain time differences
+            trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
+            trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
             new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
-            set_day_shift(new_id, day_shift)
+            # Remove fields that shouldn't be in the trace data
+            trace.pop("project_id", None)
+            trace.pop("workspace_id", None)
+            set_time_shift(new_id, time_shift)
             client.trace(**trace)
 
         # To handle parent_span_id correct UUIDv7 time first iterate over all spans
-        for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
+        evaluation_spans = experiment_spans_grouped_by_project[project_id]
+        for span in sorted(evaluation_spans, key=lambda x: x["id"]):
+            
             new_trace_id = get_new_uuid(span["trace_id"])
-            span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
-            span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
+            # Apply the same time shift as the parent trace to maintain temporal relationships
+            trace_time_shift = get_time_shift(new_trace_id)
+            span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
+            span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
             new_id = get_new_uuid_by_time(span["id"], span["start_time"])
             span["id"] = new_id
             span["trace_id"] = new_trace_id
+            # Remove fields that shouldn't be in the span data
+            span.pop("project_id", None)
+            span.pop("workspace_id", None)
 
-        for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
+        for span in sorted(evaluation_spans, key=lambda x: x["id"]):
             if "parent_span_id" in span:
                 new_parent_span_id = get_new_uuid(span["parent_span_id"])
                 span["parent_span_id"] = new_parent_span_id
             client.span(**span)
 
+        client.flush()
+        
         # Prompts
         # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
-
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""Answer the query using your prior knowledge.
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
-
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""Here is the context information.
-        -----------------
-        {{context_str}}
-        -----------------
-        Answer the query using the given context and not prior knowledge.
-
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
-
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""You are an expert Q&A system that is trusted around the world.
-        Always answer the query using the provided context information, and not prior knowledge.
-        Some rules to follow:
-        1. Never directly reference the given context in your answer.
-        2. Avoid statements like 'Based on the context, ...' or 'The context information ...' or anything along those lines.
-
-        Context information is below.
-        ---------------------
-        {{context_str}}
-        ---------------------
-        Given the context information and not prior knowledge, answer the query.
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
+        for version in demo_prompt["versions"]:
+            prompt = client.create_prompt(
+                name="Demo - " + demo_prompt["name"],
+                prompt=version["template"],
+            )
+            prompt_names[version["id"]] = prompt.name
+            prompt_commits[version["id"]] = prompt.commit
 
         # Dataset
+        dataset_name = "Opik Questions"
+        dataset = next((x for x in demo_datasets if x["name"] == dataset_name), None)
+        opik_dataset = client.get_or_create_dataset(name="Opik Demo Questions", description=dataset["description"])
+        
+        DATASET_IDS[dataset["id"]] = opik_dataset.id
 
-        dataset = client.get_or_create_dataset(name="Demo dataset")
-        dataset.insert(
-            [
-                {"input": "What is the best LLM evaluation tool?"},
-                {"input": "What is the easiest way to start with Opik?"},
-                {"input": "Is Opik open source?"},
-            ]
-        )
+        dataset_item_ids = {}
+        new_items = []
+        for item in demo_dataset_items[dataset["id"]]:
+            new_id = str(uuid6.uuid7())
+            dataset_item_ids[item["id"]] = new_id
+            DATASET_ITEM_IDS[item["id"]] = new_id
+            new_item = {
+                **item["data"],
+                "id": new_id,
+            }
+            new_items.append(new_item)
+
+        opik_dataset.insert(new_items)
 
         # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
-
-        items = dataset.get_items()
-        dataset_id_map = {item["input"]: item["id"] for item in items}
+        items = opik_dataset.get_items()
 
         # Experiment
         # The experiment is constructed by joining the traces with the dataset items.
+        experiments = [x for x in demo_experiments if x["name"] in ["opik-assistant-v1", "opik-assistant-v2"]]
 
-        experiment = client.create_experiment(
-            name="Demo experiment", dataset_name="Demo dataset"
-        )
-        experiment_items = []
-
-        for trace in evaluation_traces:
-            trace_id = trace["id"]
-            dataset_item_id = dataset_id_map.get(trace.get("input", {}).get("input", " "))
-            if dataset_item_id is not None:
-                experiment_items.append(
-                    opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                        dataset_item_id=dataset_item_id, trace_id=trace_id
+        for item in experiments:
+            commits =  [sub_item.decode() for sublist in item["prompt_versions"].values() for sub_item in sublist]
+            
+            prompts = []
+            for version in commits:
+                prompt = client.get_prompt(name=prompt_names[version], commit=prompt_commits[version])
+                prompts.append(prompt)
+            
+            experiment = client.create_experiment(name="Demo-" + item["name"], dataset_name=opik_dataset.name, prompts=prompts)
+            experiment_items = []
+            
+            for experiment_item in demo_experiment_items[item["id"]]:
+                trace_id = get_new_uuid(experiment_item["trace_id"])
+                dataset_item_id = dataset_item_ids[experiment_item["dataset_item_id"]]
+                
+                if dataset_item_id is not None:
+                    experiment_items.append(
+                        opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
+                            dataset_item_id=dataset_item_id, trace_id=trace_id
+                        )
                     )
-                )
 
-        experiment.insert(experiment_items)
+            experiment.insert(experiment_items)
 
     except Exception as e:
         logger.error(e)
@@ -318,12 +365,11 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             client.flush()
             client.end()
 
-
 def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
 
     try:
-        project_name = "Demo chatbot 🤖"
+        project_name = "Opik Demo Agent Observability"
         if project_exists(base_url, workspace_name, comet_api_key, project_name):
             logger.info("%s project already exists", project_name)
             return
@@ -340,31 +386,237 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             _use_batching=True,
         )
 
-        days = len(demo_traces)
+        # Calculate time shift to move latest end_time to now while preserving time differences
+        time_shift = calculate_time_shift_to_now(demo_traces)
+        threads = []
 
-        for idx, trace in enumerate(sorted(demo_traces, key=lambda x: x["start_time"])):
-            day_shift = idx + 1 - days
-            trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
-            trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
+        for idx, trace in enumerate(sorted(demo_traces, key=lambda x: x["id"])):
+            
+            # Apply time shift to maintain time differences
+            trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
+            trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
             new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
-            set_day_shift(new_id, day_shift)
+            # Only add thread_id if it exists and is not None
+            if "thread_id" in trace and trace["thread_id"] is not None:
+                threads.append(trace["thread_id"])
+            set_time_shift(new_id, time_shift)
             client.trace(**trace)
 
         # To handle parent_span_id correct UUIDv7 time first iterate over all spans
-        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
+        for span in sorted(demo_spans, key=lambda x: x["id"]):
             new_trace_id = get_new_uuid(span["trace_id"])
-            span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
-            span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
+            # Apply the same time shift as the parent trace to maintain temporal relationships
+            trace_time_shift = get_time_shift(new_trace_id)
+            span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
+            span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
             new_id = get_new_uuid_by_time(span["id"], span["start_time"])
             span["id"] = new_id
             span["trace_id"] = new_trace_id
 
-        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
+        for span in sorted(demo_spans, key=lambda x: x["id"]):
             if "parent_span_id" in span:
                 new_parent_span_id = get_new_uuid(span["parent_span_id"])
                 span["parent_span_id"] = new_parent_span_id
             client.span(**span)
+
+        client.flush()
+
+        # Process threads concurrently using ThreadPoolExecutor
+        def process_thread(thread):
+            if thread is None:
+                logger.warning("Skipping thread scoring because thread_id is None")
+                return
+
+            done = False
+            max_attempts = 10
+            attempts = 0
+
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
+                    done = True
+                    attempts = 0
+                except Exception as e:
+                    logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
+
+        # Process all threads concurrently using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(threads), 4)) as executor:
+            # Submit all thread processing tasks
+            future_to_thread = {executor.submit(process_thread, thread): thread for thread in threads}
+
+            # Wait for all tasks to complete
+            for future in as_completed(future_to_thread):
+                thread = future_to_thread[future]
+                try:
+                    future.result()  # This will raise any exceptions that occurred
+                except Exception as exc:
+                    logger.error(f"Thread processing failed for thread {thread}: {exc}")
+
+        all_scores = []
+
+        for thread, items in demo_thread_feedback_scores.items():
+            if not items:  # skip empty lists
+                logger.info("No feedback scores for thread %s", thread)
+                continue
+
+            all_scores.extend(
+                opik.rest_api.types.FeedbackScoreBatchItemThread(
+                    thread_id=thread,
+                    project_name=project_name,
+                    name=item['name'],
+                    category_name=item.get('category_name'),
+                    value=item['value'],
+                    reason=item.get('reason'),
+                    source=item.get('source', 'sdk')
+                )
+                for item in items
+            )
+
+        if all_scores:
+            done = False
+            max_attempts = 10
+            attempts = 0
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.score_batch_of_threads(scores=all_scores)
+                    done = True
+                    attempts = 0
+                except Exception as e:
+                    logger.error(f"Error scoring batch of threads attempt {attempts}: {e}")
+                    attempts += 1
+                    time.sleep(0.5)
+            if not done:
+                logger.error("Failed to score batch of threads after %d attempts", max_attempts)
+    except Exception as e:
+        logger.error(e)
+    finally:
+        # Close the client
+        if client:
+            client.flush()
+            client.end()
+
+def create_demo_optimizer_project(base_url: str, workspace_name, comet_api_key):
+    client: opik.Opik = None
+    try:
+
+        project_name = "Opik Demo Optimizer"
+
+        # Find project ID by project name
+        project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Optimizer"), None)
+       
+        if project_id is None:
+            logger.error("Could not find project ID for 'Opik Optimizer'")
+            return
+        
+        if project_exists(base_url, workspace_name, comet_api_key, project_name):
+            logger.info("%s project already exists", project_name)
+            return
+
+        client = opik.Opik(
+            project_name=project_name,
+            workspace=workspace_name,
+            host=base_url,
+            api_key=comet_api_key,
+            _use_batching=True,
+        )
+
+        evaluation_traces = experiment_traces_grouped_by_project[project_id]
+        # Calculate time shift to move latest end_time to now while preserving time differences
+        time_shift = calculate_time_shift_to_now(evaluation_traces)
+
+        for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            # Apply time shift to maintain time differences
+            trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
+            trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
+            new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
+            trace["id"] = new_id
+            # Remove fields that shouldn't be in the trace data
+            trace.pop("project_id", None)
+            trace.pop("workspace_id", None)
+            set_time_shift(new_id, time_shift)
+            client.trace(**trace)
+
+        # To handle parent_span_id correct UUIDv7 time first iterate over all spans
+        evaluation_spans = experiment_spans_grouped_by_project[project_id]
+        for span in sorted(evaluation_spans, key=lambda x: x["id"]):
+            
+            new_trace_id = get_new_uuid(span["trace_id"])
+            # Apply the same time shift as the parent trace to maintain temporal relationships
+            trace_time_shift = get_time_shift(new_trace_id)
+            span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
+            span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
+            new_id = get_new_uuid_by_time(span["id"], span["start_time"])
+            span["id"] = new_id
+            span["trace_id"] = new_trace_id
+            # Remove fields that shouldn't be in the span data
+            span.pop("project_id", None)
+            span.pop("workspace_id", None)
+
+        for span in sorted(evaluation_spans, key=lambda x: x["id"]):
+            if "parent_span_id" in span:
+                new_parent_span_id = get_new_uuid(span["parent_span_id"])
+                span["parent_span_id"] = new_parent_span_id
+            client.span(**span)
+
+        client.flush()
+
+        dataset_name = "Opik Demo Questions"
+        
+        for optimization in demo_optimizations:
+
+            new_optimization = client.create_optimization(
+                name=optimization["name"],
+                dataset_name=dataset_name,
+                objective_name=optimization["objective_name"],
+                metadata=optimization["metadata"],
+            )
+        
+            # Experiment
+            # The experiment is constructed by joining the traces with the dataset items.
+            experiments = [x for x in demo_experiments if x.get("optimization_id") == optimization["id"]]
+
+            for item in experiments:
+                commits =  [item.decode() for sublist in item.get("prompt_versions", {}).values() for item in sublist]
+                
+                prompts = []
+                for version in commits:
+                    prompt = client.get_prompt(name=prompt_names[version], commit=prompt_commits[version])
+                    prompts.append(prompt)
+                
+                experiment = client.create_experiment(
+                    name="Demo-" + item["name"],
+                    dataset_name=dataset_name,
+                    prompts=prompts,
+                    optimization_id=new_optimization.id,
+                    experiment_config = {
+                        **item.get("metadata", {}),
+                        "dataset": dataset_name,
+                    },
+                    type=item["type"]
+                )
+
+                experiment_items = []
+                
+                for experiment_item in demo_experiment_items.get(item["id"], []):
+                    trace_id = get_new_uuid(experiment_item["trace_id"])
+                    dataset_item_id = DATASET_ITEM_IDS[experiment_item["dataset_item_id"]]
+                    
+                    if dataset_item_id is not None:
+                        experiment_items.append(
+                            opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
+                                dataset_item_id=dataset_item_id, trace_id=trace_id
+                            )
+                        )
+
+                experiment.insert(experiment_items)
+                
+            client.rest_client.optimizations.update_optimizations_by_id(
+                id=new_optimization.id,
+                status="completed"
+            )
 
     except Exception as e:
         logger.error(e)
@@ -374,10 +626,11 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             client.flush()
             client.end()
 
-
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
     try:
         create_demo_evaluation_project(base_url, workspace_name, comet_api_key)
+
+        create_demo_optimizer_project(base_url, workspace_name, comet_api_key)
 
         create_demo_chatbot_project(base_url, workspace_name, comet_api_key)
 

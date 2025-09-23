@@ -26,11 +26,11 @@ import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface FeedbackDefinitionDAO {
 
-    @SqlUpdate("INSERT INTO feedback_definitions(id, name, `type`, details, workspace_id, created_by, last_updated_by) VALUES (:feedback.id, :feedback.name, :feedback.type, :feedback.details, :workspaceId, :feedback.createdBy, :feedback.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO feedback_definitions(id, name, description, `type`, details, workspace_id, created_by, last_updated_by) VALUES (:feedback.id, :feedback.name, :feedback.description, :feedback.type, :feedback.details, :workspaceId, :feedback.createdBy, :feedback.lastUpdatedBy)")
     <T> void save(@Bind("workspaceId") String workspaceId,
             final @BindMethods("feedback") FeedbackDefinitionModel<T> feedback);
 
-    @SqlUpdate("UPDATE feedback_definitions SET name = :feedback.name, `type` = :feedback.type, details = :feedback.details, last_updated_by = :feedback.lastUpdatedBy WHERE id = :id AND workspace_id = :workspaceId")
+    @SqlUpdate("UPDATE feedback_definitions SET name = :feedback.name, description = :feedback.description, `type` = :feedback.type, details = :feedback.details, last_updated_by = :feedback.lastUpdatedBy WHERE id = :id AND workspace_id = :workspaceId")
     <T> void update(@Bind("id") UUID id, @BindMethods("feedback") FeedbackDefinitionModel<T> feedback,
             @Bind("workspaceId") String workspaceId);
 

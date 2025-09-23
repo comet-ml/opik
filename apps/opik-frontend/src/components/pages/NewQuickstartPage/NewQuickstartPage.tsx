@@ -4,9 +4,25 @@ import { ChevronsRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
+import OnboardingOverlay from "@/components/shared/OnboardingOverlay/OnboardingOverlay";
+import {
+  ONBOARDING_STEP_FINISHED,
+  ONBOARDING_STEP_KEY,
+} from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
+import useLocalStorageState from "use-local-storage-state";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
 
 const NewQuickstartPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
+  const variant = useFeatureFlagVariantKey("onboarding-flow-conversion");
+
+  if (
+    currentOnboardingStep !== ONBOARDING_STEP_FINISHED &&
+    variant === "test"
+  ) {
+    return <OnboardingOverlay />;
+  }
 
   return (
     <div className="w-full pb-10">
@@ -37,7 +53,10 @@ const NewQuickstartPage: React.FunctionComponent = () => {
             </div>
           </div>
 
-          <IntegrationExplorer.QuickInstall />
+          <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <IntegrationExplorer.QuickInstall />
+            <IntegrationExplorer.TypeScriptSDK />
+          </div>
 
           <IntegrationExplorer.Tabs>
             <IntegrationExplorer.Grid />

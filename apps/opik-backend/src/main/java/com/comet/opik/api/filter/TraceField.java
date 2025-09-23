@@ -28,6 +28,7 @@ public enum TraceField implements Field {
     VISIBILITY_MODE(VISIBILITY_MODE_QUERY_PARAM, FieldType.ENUM),
     ERROR_INFO(ERROR_INFO_QUERY_PARAM, FieldType.ERROR_CONTAINER),
     CUSTOM(CUSTOM_QUERY_PARAM, FieldType.CUSTOM),
+    ANNOTATION_QUEUE_IDS(ANNOTATION_QUEUE_IDS_QUERY_PARAM, FieldType.LIST),
     ;
 
     private final String queryParamField;

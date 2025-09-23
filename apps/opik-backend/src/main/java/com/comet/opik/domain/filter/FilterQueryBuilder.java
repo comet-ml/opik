@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
@@ -12,7 +13,6 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -69,12 +69,17 @@ public class FilterQueryBuilder {
     private static final String LAST_UPDATED_BY_DB = "last_updated_by";
     private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
     private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
+    private static final String PROJECT_ID_DB = "project_id";
+    private static final String INSTRUCTIONS_DB = "instructions";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
+    public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
+    public static final String SCOPE_DB = "scope";
+    public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -187,6 +192,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -203,6 +209,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -263,108 +270,146 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
 
+    private static final Map<AnnotationQueueField, String> ANNOTATION_QUEUE_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AnnotationQueueField, String>builder()
+                    .put(AnnotationQueueField.ID, ID_DB)
+                    .put(AnnotationQueueField.PROJECT_ID, PROJECT_ID_DB)
+                    .put(AnnotationQueueField.NAME, NAME_DB)
+                    .put(AnnotationQueueField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(AnnotationQueueField.INSTRUCTIONS, INSTRUCTIONS_DB)
+                    .put(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES, FEEDBACK_DEFINITIONS_DB)
+                    .put(AnnotationQueueField.SCOPE, SCOPE_DB)
+                    .put(AnnotationQueueField.CREATED_AT, CREATED_AT_DB)
+                    .put(AnnotationQueueField.CREATED_BY, CREATED_BY_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
 
-    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
-            FilterStrategy.TRACE, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
-                    .add(TraceField.ID)
-                    .add(TraceField.NAME)
-                    .add(TraceField.START_TIME)
-                    .add(TraceField.END_TIME)
-                    .add(TraceField.INPUT)
-                    .add(TraceField.OUTPUT)
-                    .add(TraceField.INPUT_JSON)
-                    .add(TraceField.OUTPUT_JSON)
-                    .add(TraceField.METADATA)
-                    .add(TraceField.TAGS)
-                    .add(TraceField.DURATION)
-                    .add(TraceField.THREAD_ID)
-                    .add(TraceField.GUARDRAILS)
-                    .add(TraceField.VISIBILITY_MODE)
-                    .add(TraceField.ERROR_INFO)
-                    .build()),
-            FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
-                    .add(TraceField.USAGE_COMPLETION_TOKENS)
-                    .add(TraceField.USAGE_PROMPT_TOKENS)
-                    .add(TraceField.USAGE_TOTAL_TOKENS)
-                    .add(TraceField.TOTAL_ESTIMATED_COST)
-                    .add(TraceField.LLM_SPAN_COUNT)
-                    .build()),
-            FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
-                    .add(SpanField.ID)
-                    .add(SpanField.NAME)
-                    .add(SpanField.START_TIME)
-                    .add(SpanField.END_TIME)
-                    .add(SpanField.INPUT)
-                    .add(SpanField.OUTPUT)
-                    .add(SpanField.INPUT_JSON)
-                    .add(SpanField.OUTPUT_JSON)
-                    .add(SpanField.METADATA)
-                    .add(SpanField.MODEL)
-                    .add(SpanField.PROVIDER)
-                    .add(SpanField.TOTAL_ESTIMATED_COST)
-                    .add(SpanField.TAGS)
-                    .add(SpanField.USAGE_COMPLETION_TOKENS)
-                    .add(SpanField.USAGE_PROMPT_TOKENS)
-                    .add(SpanField.USAGE_TOTAL_TOKENS)
-                    .add(SpanField.DURATION)
-                    .add(SpanField.ERROR_INFO)
-                    .add(SpanField.TYPE)
-                    .build()),
-            FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
-                    .add(TraceField.FEEDBACK_SCORES)
-                    .add(SpanField.FEEDBACK_SCORES)
-                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
-                    .add(TraceThreadField.FEEDBACK_SCORES)
-                    .build(),
-            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
-                    .add(ExperimentsComparisonValidKnownField.OUTPUT)
-                    .build()),
-            FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
-                    .add(ExperimentField.METADATA)
-                    .add(ExperimentField.DATASET_ID)
-                    .add(ExperimentField.PROMPT_IDS)
-                    .build(),
-            FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
-                    .add(PromptField.ID)
-                    .add(PromptField.NAME)
-                    .add(PromptField.DESCRIPTION)
-                    .add(PromptField.CREATED_AT)
-                    .add(PromptField.LAST_UPDATED_AT)
-                    .add(PromptField.CREATED_BY)
-                    .add(PromptField.LAST_UPDATED_BY)
-                    .add(PromptField.TAGS)
-                    .add(PromptField.VERSION_COUNT)
-                    .build(),
-            FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
-                    .add(DatasetField.ID)
-                    .add(DatasetField.NAME)
-                    .add(DatasetField.DESCRIPTION)
-                    .add(DatasetField.TAGS)
-                    .add(DatasetField.CREATED_AT)
-                    .add(DatasetField.CREATED_BY)
-                    .add(DatasetField.LAST_UPDATED_AT)
-                    .add(DatasetField.LAST_UPDATED_BY)
-                    .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
-                    .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
-                    .build()),
-            FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
-                    .add(TraceThreadField.ID)
-                    .add(TraceThreadField.NUMBER_OF_MESSAGES)
-                    .add(TraceThreadField.FIRST_MESSAGE)
-                    .add(TraceThreadField.LAST_MESSAGE)
-                    .add(TraceThreadField.DURATION)
-                    .add(TraceThreadField.CREATED_AT)
-                    .add(TraceThreadField.LAST_UPDATED_AT)
-                    .add(TraceThreadField.START_TIME)
-                    .add(TraceThreadField.END_TIME)
-                    .add(TraceThreadField.STATUS)
-                    .add(TraceThreadField.TAGS)
-                    .build())));
+    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = createFilterStrategyMap();
+
+    private static Map<FilterStrategy, Set<? extends Field>> createFilterStrategyMap() {
+        Map<FilterStrategy, Set<? extends Field>> map = new EnumMap<>(FilterStrategy.class);
+
+        map.put(FilterStrategy.TRACE, Set.of(
+                TraceField.ID,
+                TraceField.NAME,
+                TraceField.START_TIME,
+                TraceField.END_TIME,
+                TraceField.INPUT,
+                TraceField.OUTPUT,
+                TraceField.INPUT_JSON,
+                TraceField.OUTPUT_JSON,
+                TraceField.METADATA,
+                TraceField.TAGS,
+                TraceField.DURATION,
+                TraceField.THREAD_ID,
+                TraceField.GUARDRAILS,
+                TraceField.VISIBILITY_MODE,
+                TraceField.ERROR_INFO));
+
+        map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
+                TraceField.USAGE_COMPLETION_TOKENS,
+                TraceField.USAGE_PROMPT_TOKENS,
+                TraceField.USAGE_TOTAL_TOKENS,
+                TraceField.TOTAL_ESTIMATED_COST,
+                TraceField.LLM_SPAN_COUNT));
+
+        map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
+                TraceField.ANNOTATION_QUEUE_IDS,
+                TraceThreadField.ANNOTATION_QUEUE_IDS));
+
+        map.put(FilterStrategy.SPAN, Set.of(
+                SpanField.ID,
+                SpanField.NAME,
+                SpanField.START_TIME,
+                SpanField.END_TIME,
+                SpanField.INPUT,
+                SpanField.OUTPUT,
+                SpanField.INPUT_JSON,
+                SpanField.OUTPUT_JSON,
+                SpanField.METADATA,
+                SpanField.MODEL,
+                SpanField.PROVIDER,
+                SpanField.TOTAL_ESTIMATED_COST,
+                SpanField.TAGS,
+                SpanField.USAGE_COMPLETION_TOKENS,
+                SpanField.USAGE_PROMPT_TOKENS,
+                SpanField.USAGE_TOTAL_TOKENS,
+                SpanField.DURATION,
+                SpanField.ERROR_INFO,
+                SpanField.TYPE));
+
+        map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
+                TraceField.FEEDBACK_SCORES,
+                SpanField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
+                TraceThreadField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
+                ExperimentsComparisonValidKnownField.OUTPUT));
+
+        map.put(FilterStrategy.EXPERIMENT, Set.of(
+                ExperimentField.METADATA,
+                ExperimentField.DATASET_ID,
+                ExperimentField.PROMPT_IDS));
+
+        map.put(FilterStrategy.PROMPT, Set.of(
+                PromptField.ID,
+                PromptField.NAME,
+                PromptField.DESCRIPTION,
+                PromptField.CREATED_AT,
+                PromptField.LAST_UPDATED_AT,
+                PromptField.CREATED_BY,
+                PromptField.LAST_UPDATED_BY,
+                PromptField.TAGS,
+                PromptField.VERSION_COUNT));
+
+        map.put(FilterStrategy.DATASET, Set.of(
+                DatasetField.ID,
+                DatasetField.NAME,
+                DatasetField.DESCRIPTION,
+                DatasetField.TAGS,
+                DatasetField.CREATED_AT,
+                DatasetField.CREATED_BY,
+                DatasetField.LAST_UPDATED_AT,
+                DatasetField.LAST_UPDATED_BY,
+                DatasetField.LAST_CREATED_EXPERIMENT_AT,
+                DatasetField.LAST_CREATED_OPTIMIZATION_AT));
+
+        map.put(FilterStrategy.ANNOTATION_QUEUE, Set.of(
+                AnnotationQueueField.ID,
+                AnnotationQueueField.PROJECT_ID,
+                AnnotationQueueField.NAME,
+                AnnotationQueueField.DESCRIPTION,
+                AnnotationQueueField.INSTRUCTIONS,
+                AnnotationQueueField.FEEDBACK_DEFINITION_NAMES,
+                AnnotationQueueField.SCOPE,
+                AnnotationQueueField.CREATED_AT,
+                AnnotationQueueField.CREATED_BY,
+                AnnotationQueueField.LAST_UPDATED_AT,
+                AnnotationQueueField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.TRACE_THREAD, Set.of(
+                TraceThreadField.ID,
+                TraceThreadField.NUMBER_OF_MESSAGES,
+                TraceThreadField.FIRST_MESSAGE,
+                TraceThreadField.LAST_MESSAGE,
+                TraceThreadField.DURATION,
+                TraceThreadField.CREATED_AT,
+                TraceThreadField.LAST_UPDATED_AT,
+                TraceThreadField.START_TIME,
+                TraceThreadField.END_TIME,
+                TraceThreadField.STATUS,
+                TraceThreadField.TAGS));
+
+        return map;
+    }
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
@@ -426,8 +471,9 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedBackScore(Filter filter) {
-        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
-                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
+        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
+                TraceThreadField.FEEDBACK_SCORES, ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+        return feedbackScoreFields.contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
@@ -451,6 +497,7 @@ public class FilterQueryBuilder {
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
+            case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

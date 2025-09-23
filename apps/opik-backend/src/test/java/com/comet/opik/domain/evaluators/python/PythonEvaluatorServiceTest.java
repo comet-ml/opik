@@ -50,7 +50,6 @@ class PythonEvaluatorServiceTest {
     @Mock
     private Client client;
 
-    @Mock
     private OpikConfiguration config;
 
     @Mock
@@ -73,11 +72,12 @@ class PythonEvaluatorServiceTest {
     void setUp() {
         pythonEvaluatorConfig = new PythonEvaluatorConfig();
         pythonEvaluatorConfig.setUrl("http://localhost:8000");
-        pythonEvaluatorConfig.setMaxAttempts(4);
+        pythonEvaluatorConfig.setMaxRetryAttempts(4);
         pythonEvaluatorConfig.setMinRetryDelay(Duration.milliseconds(100));
         pythonEvaluatorConfig.setMaxRetryDelay(Duration.milliseconds(100));
 
-        lenient().when(config.getPythonEvaluator()).thenReturn(pythonEvaluatorConfig);
+        config = new OpikConfiguration();
+        config.setPythonEvaluator(pythonEvaluatorConfig);
 
         pythonEvaluatorService = new PythonEvaluatorService(new RetriableHttpClient(client), config);
     }

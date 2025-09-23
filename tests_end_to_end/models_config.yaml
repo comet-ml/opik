@@ -33,18 +33,18 @@ providers:
     display_name: "Anthropic"
     api_key_env_var: "ANTHROPIC_API_KEY"
     models:
-      - name: "Claude 3.5 Sonnet Latest"
-        ui_selector: "Claude 3.5 Sonnet Latest"
+      - name: "Claude Sonnet 3.7"
+        ui_selector: "Claude Sonnet 3.7"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "Claude 3.5 Haiku Latest"
-        ui_selector: "Claude 3.5 Haiku Latest"
+      - name: "Claude Haiku 3.5"
+        ui_selector: "Claude Haiku 3.5"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "Claude 4 Sonnet"
-        ui_selector: "Claude 4 Sonnet"
+      - name: "Claude Sonnet 4"
+        ui_selector: "Claude Sonnet 4"
         enabled: true
         test_playground: true
         test_online_scoring: true

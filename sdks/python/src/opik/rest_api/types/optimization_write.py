@@ -5,7 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .json_node_write import JsonNodeWrite
+from .json_list_string_write import JsonListStringWrite
 from .optimization_write_status import OptimizationWriteStatus
 
 
@@ -15,7 +15,7 @@ class OptimizationWrite(UniversalBaseModel):
     dataset_name: str
     objective_name: str
     status: OptimizationWriteStatus
-    metadata: typing.Optional[JsonNodeWrite] = None
+    metadata: typing.Optional[JsonListStringWrite] = None
     last_updated_at: typing.Optional[dt.datetime] = None
 
     if IS_PYDANTIC_V2:
