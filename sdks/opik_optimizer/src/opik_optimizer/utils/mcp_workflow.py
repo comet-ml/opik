@@ -59,7 +59,7 @@ DEFAULT_MCP_RATELIMIT_SLEEP = _default_rate_limit()
 @contextlib.contextmanager
 def suppress_mcp_stdout(logger: logging.Logger = logger):
     buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
         yield
     for line in buffer.getvalue().splitlines():
         trimmed = line.strip()
@@ -263,6 +263,53 @@ def preview_tool_output(
     return text
 
 
+def preview_dataset_tool_invocation(
+    *,
+    manifest: MCPManifest,
+    tool_name: str,
+    dataset: Any,
+    logger: logging.Logger = logger,
+    argument_adapter: Optional[ArgumentAdapter] = None,
+    resolver_manifest: Optional[MCPManifest] = None,
+    preview_chars: int = 200,
+) -> Optional[str]:
+    """Execute a best-effort preview tool call using a dataset sample."""
+
+    resolver_manifest = resolver_manifest or manifest
+
+    try:
+        items = dataset.get_items(nb_samples=1)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Failed to fetch dataset sample for preview: %s", exc)
+        return None
+
+    if not items:
+        logger.warning("No dataset items available for preview.")
+        return None
+
+    sample_item = items[0]
+    sample_args = extract_tool_arguments(sample_item)
+    if not sample_args:
+        logger.warning("No sample arguments available for preview.")
+        return None
+
+    def _resolver_call(name: str, payload: Dict[str, Any]) -> Any:
+        with suppress_mcp_stdout(logger):
+            return call_tool_from_manifest(resolver_manifest, name, payload)
+
+    prepared_args = sample_args
+    if argument_adapter:
+        prepared_args = argument_adapter(sample_args, _resolver_call)
+
+    return preview_tool_output(
+        manifest,
+        tool_name,
+        prepared_args,
+        logger=logger,
+        preview_chars=preview_chars,
+    )
+
+
 def create_summary_var(name: str) -> ContextVar[Optional[str]]:
     """Return a ``ContextVar`` used to share tool summaries."""
 
@@ -327,6 +374,9 @@ class MCPToolInvocation:
         if self.summary_handler:
             self.summary_handler.record_summary(summary)
 
+        if os.getenv("OPIK_DEBUG_MCP"):
+            self._logger.info("MCP %s raw response:\n%s", label, text)
+
         return summary
 
 
@@ -351,6 +401,35 @@ def default_summary_builder(label: str, instructions: str) -> SummaryBuilder:
     ).format(label=label, instructions=instructions)
 
     return summarise_with_template(template)
+
+
+def make_argument_summary_builder(
+    *,
+    heading: str,
+    instructions: str,
+    argument_labels: Mapping[str, str],
+    preview_chars: int = 800,
+) -> SummaryBuilder:
+    """Return a structured summary builder that highlights selected arguments."""
+
+    def _builder(tool_output: str, arguments: Mapping[str, Any]) -> str:
+        scoped_args = dict(arguments)
+        highlighted = "\n".join(
+            f"{label}: {scoped_args.get(key, 'unknown')}"
+            for key, label in argument_labels.items()
+        )
+        snippet = tool_output[:preview_chars]
+        return textwrap.dedent(
+            f"""
+            {heading}
+            {highlighted}
+            Instructions: {instructions}
+            Documentation Snippet:
+            {snippet}
+            """
+        ).strip()
+
+    return _builder
 
 
 @dataclass

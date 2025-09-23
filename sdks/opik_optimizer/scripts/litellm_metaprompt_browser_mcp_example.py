@@ -15,11 +15,10 @@ from opik_optimizer.utils import (
     create_second_pass_coordinator,
     dump_signature_artifact,
     extract_description_from_system,
-    extract_tool_arguments,
     list_manifest_tools,
     load_manifest_tool_signature,
     make_similarity_metric,
-    preview_tool_output,
+    preview_dataset_tool_invocation,
     summarise_with_template,
     system_prompt_from_tool,
 )
@@ -82,15 +81,12 @@ artifacts_dir = Path("artifacts")
 dump_signature_artifact(signature, artifacts_dir, "browser_original_signature.json")
 
 dataset = load_browser_dataset()
-try:
-    sample_item = dataset.get_items(nb_samples=1)[0]
-    sample_args = extract_tool_arguments(sample_item)
-    if sample_args:
-        preview_tool_output(MCP_MANIFEST, TOOL_NAME, sample_args, logger=logger)
-    else:
-        logger.warning("No sample arguments available for preview.")
-except Exception as exc:  # pragma: no cover - best-effort logging
-    logger.warning("Failed to fetch sample tool output: %s", exc)
+preview_dataset_tool_invocation(
+    manifest=MCP_MANIFEST,
+    tool_name=TOOL_NAME,
+    dataset=dataset,
+    logger=logger,
+)
 
 system_prompt = textwrap.dedent(system_prompt_from_tool(signature, MCP_MANIFEST)).strip()
 
@@ -100,11 +96,6 @@ prompt = ChatPrompt(
     tools=[signature.to_tool_entry()],
     function_map={TOOL_NAME: tool_invocation},
 )
-
-if prompt.model is None:
-    prompt.model = "openai/gpt-4o-mini"
-if not prompt.model_kwargs:
-    prompt.model_kwargs = {"temperature": 0.2}
 
 browser_metric = make_similarity_metric("browser")
 
@@ -142,6 +133,11 @@ if maybe_description:
     signature.description = maybe_description
     final_tool_entry["function"]["description"] = signature.description
     optimized_prompt.tools = [final_tool_entry]
+
+tuned_system_prompt = textwrap.dedent(
+    system_prompt_from_tool(signature, MCP_MANIFEST)
+).strip()
+optimized_prompt.system = tuned_system_prompt
 
 final_signature_path = dump_signature_artifact(
     signature,

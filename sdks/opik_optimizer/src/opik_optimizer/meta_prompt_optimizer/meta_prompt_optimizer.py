@@ -286,6 +286,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.get_messages(),
+                    "tools": getattr(prompt, "tools", None),
                     "n_samples": subset_size,
                     "use_full_dataset": use_full_dataset,
                 },
@@ -475,6 +476,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "auto_continue": auto_continue,
             },
             verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
         )
 
         try:
@@ -657,12 +659,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompt)
 
-                        new_prompt = current_prompt.copy()
-                        new_prompt.set_messages(prompt.get_messages())
+                        candidate_prompt = prompt.copy()
 
                         try:
                             prompt_score = self._evaluate_prompt(
-                                prompt=new_prompt,
+                                prompt=candidate_prompt,
                                 optimization_id=optimization_id,
                                 dataset=dataset,
                                 metric=metric,
@@ -728,6 +729,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score,
             best_prompt.get_messages() if best_prompt is not None else [],
             verbose=self.verbose,
+            tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
 
         return self._create_result(
@@ -741,6 +743,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             rounds=rounds,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
+            best_tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
 
     def _calculate_improvement(
@@ -802,6 +805,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         rounds: List[OptimizationRound],
         dataset_id: Optional[str],
         optimization_id: Optional[str],
+        best_tools: Optional[List[Dict[str, Any]]],
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
@@ -814,6 +818,17 @@ class MetaPromptOptimizer(BaseOptimizer):
             "temperature": self.model_kwargs.get("temperature"),
         }
 
+        if best_tools:
+            details["final_tools"] = best_tools
+
+        tool_prompts = None
+        if best_tools:
+            tool_prompts = {
+                (tool.get("function", {}).get("name") or f"tool_{idx}"):
+                tool.get("function", {}).get("description")
+                for idx, tool in enumerate(best_tools)
+            }
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
@@ -825,6 +840,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             llm_calls=self.llm_call_counter,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
+            tool_prompts=tool_prompts,
         )
 
     def _get_task_context(self, metric: Callable) -> str:
