@@ -88,14 +88,24 @@ start_backend() {
     export CORS=true
     
     # Find and validate the JAR file
-    JAR_FILE=$(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original' | head -n 1)
-    if [ -z "$JAR_FILE" ]; then
+    JAR_FILES=($(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original'))
+    if [ ${#JAR_FILES[@]} -eq 0 ]; then
         log_error "No backend JAR file found in target/. Please build the backend first."
         exit 1
-    fi
-    if [ "$(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original' | wc -l)" -gt 1 ]; then
-        log_error "Multiple backend JAR files found in target/. Please clean up old JARs."
-        exit 1
+    elif [ ${#JAR_FILES[@]} -eq 1 ]; then
+        JAR_FILE="${JAR_FILES[0]}"
+        log_info "Using JAR file: $JAR_FILE"
+    else
+        log_warning "Multiple backend JAR files found in target/:"
+        for jar in "${JAR_FILES[@]}"; do
+            log_warning "  - $jar"
+        done
+        
+        # Sort JAR files by version (assuming semantic versioning in filename)
+        # This will work for patterns like opik-backend-1.0-SNAPSHOT.jar, opik-backend-1.1-SNAPSHOT.jar, etc.
+        JAR_FILE=$(printf '%s\n' "${JAR_FILES[@]}" | sort -V | tail -n 1)
+        log_info "Automatically selected JAR with highest version: $JAR_FILE"
+        log_info "To use a different JAR, clean up target/ directory and rebuild"
     fi
     
     # Start backend in background using the JAR file
