@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Opik Development Runner Script
 
 # Configuration
@@ -34,11 +36,19 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+require_command() {
+    if ! command -v "$1" &>/dev/null; then
+        log_error "Required command '$1' not found. Please install it."
+        exit 1
+    fi
+}
+
 # Function to build backend
 build_backend() {
+    require_command mvn
     log_info "Building backend (skipping tests)..."
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
-    
+
     if mvn clean install -DskipTests; then
         log_success "Backend build completed successfully"
     else
@@ -49,9 +59,10 @@ build_backend() {
 
 # Function to lint frontend
 lint_frontend() {
+    require_command npm
     log_info "Linting frontend..."
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
-    
+
     if npm run lint; then
         log_success "Frontend linting completed successfully"
     else
@@ -62,9 +73,10 @@ lint_frontend() {
 
 # Function to lint backend
 lint_backend() {
+    require_command mvn
     log_info "Linting backend with spotless..."
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
-    
+
     if mvn spotless:apply; then
         log_success "Backend linting completed successfully"
     else
@@ -75,6 +87,7 @@ lint_backend() {
 
 # Function to start backend
 start_backend() {
+    require_command java
     log_info "Starting backend..."
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
     
@@ -86,13 +99,13 @@ start_backend() {
     
     # Set environment variables
     export CORS=true
-    
+
     # Find and validate the JAR file
-    JAR_FILES=($(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original'))
-    if [ ${#JAR_FILES[@]} -eq 0 ]; then
+    mapfile -t JAR_FILES < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' -print)
+    if [ "${#JAR_FILES[@]}" -eq 0 ]; then
         log_error "No backend JAR file found in target/. Please build the backend first."
         exit 1
-    elif [ ${#JAR_FILES[@]} -eq 1 ]; then
+    elif [ "${#JAR_FILES[@]}" -eq 1 ]; then
         JAR_FILE="${JAR_FILES[0]}"
         log_info "Using JAR file: $JAR_FILE"
     else
@@ -112,13 +125,13 @@ start_backend() {
     nohup java -jar "$JAR_FILE" \
         server config.yml \
         > /tmp/opik-backend.log 2>&1 &
-    
+
     BACKEND_PID=$!
-    echo $BACKEND_PID > "$BACKEND_PID_FILE"
-    
+    echo "$BACKEND_PID" > "$BACKEND_PID_FILE"
+
     # Wait a bit and check if process is still running
     sleep 3
-    if kill -0 $BACKEND_PID 2>/dev/null; then
+    if kill -0 "$BACKEND_PID" 2>/dev/null; then
         log_success "Backend started successfully (PID: $BACKEND_PID)"
         log_info "Backend logs: tail -f /tmp/opik-backend.log"
     else
@@ -130,6 +143,7 @@ start_backend() {
 
 # Function to start frontend
 start_frontend() {
+    require_command npm
     log_info "Starting frontend..."
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
     
@@ -142,11 +156,11 @@ start_frontend() {
     # Start frontend in background
     nohup npm run start > /tmp/opik-frontend.log 2>&1 &
     FRONTEND_PID=$!
-    echo $FRONTEND_PID > "$FRONTEND_PID_FILE"
-    
+    echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
+
     # Wait a bit and check if process is still running
     sleep 3
-    if kill -0 $FRONTEND_PID 2>/dev/null; then
+    if kill -0 "$FRONTEND_PID" 2>/dev/null; then
         log_success "Frontend started successfully (PID: $FRONTEND_PID)"
         log_info "Frontend logs: tail -f /tmp/opik-frontend.log"
     else
@@ -160,24 +174,24 @@ start_frontend() {
 stop_backend() {
     if [ -f "$BACKEND_PID_FILE" ]; then
         BACKEND_PID=$(cat "$BACKEND_PID_FILE")
-        if kill -0 $BACKEND_PID 2>/dev/null; then
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
             log_info "Stopping backend (PID: $BACKEND_PID)..."
-            kill $BACKEND_PID
-            
+            kill "$BACKEND_PID"
+
             # Wait for graceful shutdown
-            for i in {1..10}; do
-                if ! kill -0 $BACKEND_PID 2>/dev/null; then
+            for _ in {1..10}; do
+                if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
                     break
                 fi
                 sleep 1
             done
             
             # Force kill if still running
-            if kill -0 $BACKEND_PID 2>/dev/null; then
+            if kill -0 "$BACKEND_PID" 2>/dev/null; then
                 log_warning "Force killing backend..."
-                kill -9 $BACKEND_PID
+                kill -9 "$BACKEND_PID"
             fi
-            
+
             log_success "Backend stopped"
         else
             log_warning "Backend PID file exists but process is not running"
@@ -192,35 +206,35 @@ stop_backend() {
 stop_frontend() {
     if [ -f "$FRONTEND_PID_FILE" ]; then
         FRONTEND_PID=$(cat "$FRONTEND_PID_FILE")
-        if kill -0 $FRONTEND_PID 2>/dev/null; then
+        if kill -0 "$FRONTEND_PID" 2>/dev/null; then
             log_info "Stopping frontend (PID: $FRONTEND_PID)..."
-            
+
             # First try to kill just the main process
-            kill -TERM $FRONTEND_PID 2>/dev/null
-            
+            kill -TERM "$FRONTEND_PID" 2>/dev/null
+
             # Wait for graceful shutdown
-            for i in {1..10}; do
-                if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+            for _ in {1..10}; do
+                if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
                     break
                 fi
                 sleep 1
             done
             
             # Force kill if still running (kill main process and find children)
-            if kill -0 $FRONTEND_PID 2>/dev/null; then
+            if kill -0 "$FRONTEND_PID" 2>/dev/null; then
                 log_warning "Force killing frontend..."
-                kill -9 $FRONTEND_PID 2>/dev/null
-                
+                kill -9 "$FRONTEND_PID" 2>/dev/null
+
                 # Also kill any child processes that may still be running
-                CHILD_PIDS=$(pgrep -P $FRONTEND_PID 2>/dev/null || true)
+                CHILD_PIDS=$(pgrep -P "$FRONTEND_PID" 2>/dev/null || true)
                 if [ -n "$CHILD_PIDS" ]; then
                     log_info "Killing remaining child processes (PIDs: $CHILD_PIDS)..."
                     for PID in $CHILD_PIDS; do
-                        kill -9 $PID 2>/dev/null || true
+                        kill -9 "$PID" 2>/dev/null || true
                     done
                 fi
             fi
-            
+
             log_success "Frontend stopped"
         else
             log_warning "Frontend PID file exists but process is not running"
@@ -229,10 +243,10 @@ stop_frontend() {
     else
         log_warning "Frontend is not running"
     fi
-    
+
     # Clean up any orphaned processes by checking for processes in our project directory
     # This is safer than using broad pkill patterns
-    OPIK_FRONTEND_PROCESSES=$(ps aux | grep -E "(npm.*start|node.*vite)" | grep "$FRONTEND_DIR" | awk '{print $2}' | tr '\n' ' ')
+    OPIK_FRONTEND_PROCESSES=$(pgrep -f "npm.*start|node.*vite" | xargs)
     if [ -n "$OPIK_FRONTEND_PROCESSES" ]; then
         log_info "Cleaning up remaining frontend processes related to $FRONTEND_DIR..."
         for PID in $OPIK_FRONTEND_PROCESSES; do
@@ -265,7 +279,7 @@ show_status() {
     else
         echo -e "Frontend: ${RED}STOPPED${NC}"
     fi
-    
+
     echo ""
     echo "Logs:"
     echo "  Backend:  tail -f /tmp/opik-backend.log"
@@ -303,17 +317,17 @@ show_usage() {
 # Function to show logs
 show_logs() {
     log_info "=== Recent Logs ==="
-    
+
     if [ -f "/tmp/opik-backend.log" ]; then
         echo -e "\n${BLUE}Backend logs (last 20 lines):${NC}"
         tail -20 /tmp/opik-backend.log
     fi
-    
+
     if [ -f "/tmp/opik-frontend.log" ]; then
         echo -e "\n${BLUE}Frontend logs (last 20 lines):${NC}"
         tail -20 /tmp/opik-frontend.log
     fi
-    
+
     echo -e "\n${BLUE}To follow logs in real-time:${NC}"
     echo "  Backend:  tail -f /tmp/opik-backend.log"
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
