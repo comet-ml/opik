@@ -87,8 +87,19 @@ start_backend() {
     # Set environment variables
     export CORS=true
     
+    # Find and validate the JAR file
+    JAR_FILE=$(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original' | head -n 1)
+    if [ -z "$JAR_FILE" ]; then
+        log_error "No backend JAR file found in target/. Please build the backend first."
+        exit 1
+    fi
+    if [ "$(ls target/opik-backend-*.jar 2>/dev/null | grep -v 'original' | wc -l)" -gt 1 ]; then
+        log_error "Multiple backend JAR files found in target/. Please clean up old JARs."
+        exit 1
+    fi
+    
     # Start backend in background using the JAR file
-    nohup java -jar target/opik-backend-1.0-SNAPSHOT.jar \
+    nohup java -jar "$JAR_FILE" \
         server config.yml \
         > /tmp/opik-backend.log 2>&1 &
     
@@ -174,8 +185,8 @@ stop_frontend() {
         if kill -0 $FRONTEND_PID 2>/dev/null; then
             log_info "Stopping frontend (PID: $FRONTEND_PID)..."
             
-            # Kill the entire process group to stop npm and its children
-            kill -TERM -$FRONTEND_PID 2>/dev/null
+            # First try to kill just the main process
+            kill -TERM $FRONTEND_PID 2>/dev/null
             
             # Wait for graceful shutdown
             for i in {1..10}; do
@@ -185,10 +196,19 @@ stop_frontend() {
                 sleep 1
             done
             
-            # Force kill if still running
+            # Force kill if still running (kill main process and find children)
             if kill -0 $FRONTEND_PID 2>/dev/null; then
                 log_warning "Force killing frontend..."
-                kill -9 -$FRONTEND_PID 2>/dev/null
+                kill -9 $FRONTEND_PID 2>/dev/null
+                
+                # Also kill any child processes that may still be running
+                CHILD_PIDS=$(pgrep -P $FRONTEND_PID 2>/dev/null || true)
+                if [ -n "$CHILD_PIDS" ]; then
+                    log_info "Killing remaining child processes (PIDs: $CHILD_PIDS)..."
+                    for PID in $CHILD_PIDS; do
+                        kill -9 $PID 2>/dev/null || true
+                    done
+                fi
             fi
             
             log_success "Frontend stopped"
@@ -200,9 +220,22 @@ stop_frontend() {
         log_warning "Frontend is not running"
     fi
     
-    # Also kill any remaining npm/node processes for opik-frontend
-    pkill -f "npm.*start.*opik-frontend" 2>/dev/null || true
-    pkill -f "node.*vite.*opik-frontend" 2>/dev/null || true
+    # Clean up any orphaned processes by checking for processes in our project directory
+    # This is safer than using broad pkill patterns
+    OPIK_FRONTEND_PROCESSES=$(ps aux | grep -E "(npm.*start|node.*vite)" | grep "$FRONTEND_DIR" | awk '{print $2}' | tr '\n' ' ')
+    if [ -n "$OPIK_FRONTEND_PROCESSES" ]; then
+        log_info "Cleaning up remaining frontend processes related to $FRONTEND_DIR..."
+        for PID in $OPIK_FRONTEND_PROCESSES; do
+            if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+                kill -TERM "$PID" 2>/dev/null || true
+                sleep 1
+                # Force kill if still running
+                if kill -0 "$PID" 2>/dev/null; then
+                    kill -9 "$PID" 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
 }
 
 # Function to show status
