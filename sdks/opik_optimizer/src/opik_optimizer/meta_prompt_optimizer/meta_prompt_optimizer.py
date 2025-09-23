@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -750,9 +751,14 @@ class MetaPromptOptimizer(BaseOptimizer):
             improvement_vs_prev = self._calculate_improvement(
                 score, previous_best_score
             )
+            tool_entries = []
+            if getattr(prompt, "tools", None):
+                tool_entries = copy.deepcopy(prompt.tools)
+
             generated_prompts_log.append(
                 {
                     "prompt": prompt.get_messages(),
+                    "tools": tool_entries,
                     "score": score,
                     "improvement": improvement_vs_prev,
                 }
