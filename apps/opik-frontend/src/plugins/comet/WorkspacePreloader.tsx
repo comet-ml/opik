@@ -27,7 +27,7 @@ type WorkspacePreloaderProps = {
 
 const hasWorkspaceAccess = (
   workspace: Workspace,
-  organizations: Organization[]
+  organizations: Organization[],
 ): boolean => {
   const workspaceOrganization = organizations?.find(
     (organization) => organization.id === workspace.organizationId,
@@ -108,7 +108,10 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
       allWorkspaces?.[0];
 
     if (defaultWorkspace) {
-      if (organizations && !hasWorkspaceAccess(defaultWorkspace, organizations)) {
+      if (
+        organizations &&
+        !hasWorkspaceAccess(defaultWorkspace, organizations)
+      ) {
         redirectToEM();
         return null;
       }
