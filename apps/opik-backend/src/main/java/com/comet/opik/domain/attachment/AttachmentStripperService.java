@@ -109,6 +109,27 @@ public class AttachmentStripperService {
                 .ofLongs()
                 .build();
 
+        // Initialize OpenTelemetry metrics
+        Meter meter = openTelemetry.getMeter("opik.attachments");
+
+        this.attachmentsProcessed = meter
+                .counterBuilder("opik.attachments.processed")
+                .setDescription("Number of attachments successfully processed and uploaded")
+                .build();
+        this.attachmentsSkipped = meter
+                .counterBuilder("opik.attachments.skipped")
+                .setDescription("Number of base64 strings skipped (not valid attachments)")
+                .build();
+        this.attachmentErrors = meter
+                .counterBuilder("opik.attachments.errors")
+                .setDescription("Number of errors during attachment processing")
+                .build();
+        this.processingTimer = meter
+                .histogramBuilder("opik.attachments.processing.duration.ms")
+                .setDescription("Time spent processing attachments in milliseconds")
+                .ofLongs()
+                .build();
+
         // Compile the regex pattern once during construction based on configuration
         int minLength = s3Config.getStripAttachmentsMinSize();
         this.minBase64Size = minLength;
