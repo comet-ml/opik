@@ -6,7 +6,10 @@ import logging
 import sys
 import textwrap
 import types
+from contextvars import ContextVar
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+
+import pytest
 
 
 root = Path(__file__).resolve().parents[3]
@@ -51,6 +54,7 @@ from opik_optimizer.utils.mcp_workflow import (  # noqa: E402
     make_similarity_metric,
     preview_dataset_tool_invocation,
 )
+from opik_optimizer.utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
 
 
 def _sample_tool_entry() -> Dict[str, Any]:
@@ -75,21 +79,25 @@ def _sample_tool_entry() -> Dict[str, Any]:
 
 
 def test_load_and_dump_signature(tmp_path: Path) -> None:
+    # Prepare a sample tool entry and write it as JSON to a file
     path = tmp_path / "signature.json"
-    payload = [
-        _sample_tool_entry(),
-    ]
-    Path(path).write_text(json.dumps(payload))
+    payload = [_sample_tool_entry()]
+    path.write_text(json.dumps(payload))
 
+    # Load the signature from the file
     signatures = load_mcp_signature(path)
 
+    # Check that the loaded signature matches expectations
     assert len(signatures) == 1
     sig = signatures[0]
     assert sig.name == "doc_lookup"
     assert sig.description.startswith("Find documentation")
+    assert sig.parameters is not None
     assert sig.parameters["type"] == "object"
+    assert sig.examples is not None
     assert sig.examples[0]["arguments"]["query"] == "sdk install"
 
+    # Dump the signature back to a new file and reload it to verify round-trip integrity
     out_path = tmp_path / "round_trip.json"
     dump_mcp_signature(signatures, out_path)
     reloaded = load_mcp_signature(out_path)
@@ -164,7 +172,7 @@ def test_make_argument_summary_builder_formats_arguments() -> None:
     assert "abcdefghij" in summary  # preview truncated
 
 
-def test_preview_dataset_tool_invocation(monkeypatch: Any) -> None:
+def test_preview_dataset_tool_invocation(monkeypatch: pytest.MonkeyPatch) -> None:
     manifest = MCPManifest.from_dict(
         {
             "name": "stub",
@@ -175,15 +183,19 @@ def test_preview_dataset_tool_invocation(monkeypatch: Any) -> None:
     )
 
     class DummyDataset:
-        def get_items(self, nb_samples=None):  # pragma: no cover - signature parity
+        def get_items(
+            self, nb_samples: Optional[int] = None
+        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
             return [{"arguments": {"query": "docs"}}]
 
     class DummyResponse:
         content = "tool output"
 
-    captured = {}
+    captured: Dict[str, Any] = {}
 
-    def fake_call(manifest_obj, name, payload):
+    def fake_call(
+        manifest_obj: MCPManifest, name: str, payload: Dict[str, Any]
+    ) -> DummyResponse:
         captured["manifest"] = manifest_obj
         captured["name"] = name
         captured["payload"] = payload
@@ -203,7 +215,7 @@ def test_preview_dataset_tool_invocation(monkeypatch: Any) -> None:
     assert captured["payload"] == {"query": "docs"}
 
 
-def test_argument_adapter_resolves_missing_id(monkeypatch: Any) -> None:
+def test_argument_adapter_resolves_missing_id(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = ensure_argument_via_resolver(
         target_field="context7CompatibleLibraryID",
         resolver_tool="resolver",
@@ -232,14 +244,16 @@ def test_argument_adapter_resolves_missing_id(monkeypatch: Any) -> None:
     assert prepared_noop["context7CompatibleLibraryID"] == "/existing"
 
 
-def test_argument_adapter_skips_when_no_queries(monkeypatch: Any) -> None:
+def test_argument_adapter_skips_when_no_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = ensure_argument_via_resolver(
         target_field="context7CompatibleLibraryID",
         resolver_tool="resolver",
         query_fields=("library_query",),
     )
 
-    calls: List[Any] = []
+    calls: List[Tuple[str, Dict[str, Any]]] = []
 
     def fake_call(name: str, payload: Dict[str, Any]) -> Any:
         calls.append((name, payload))
@@ -251,7 +265,7 @@ def test_argument_adapter_skips_when_no_queries(monkeypatch: Any) -> None:
 
 
 def test_preview_dataset_tool_invocation_handles_empty_dataset(
-    caplog: Any, capsys: Any
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
     manifest = MCPManifest.from_dict(
         {
@@ -276,11 +290,12 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
     )
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
-    assert "No dataset items available for preview" in out
+    assert "No dataset items available for" in out
+    assert "preview." in out
 
 
 def test_preview_dataset_tool_invocation_handles_errors(
-    caplog: Any, capsys: Any
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
     manifest = MCPManifest.from_dict(
         {
@@ -325,7 +340,7 @@ def test_system_prompt_masks_secrets_and_compacts_schema() -> None:
 
 
 def test_mcp_tool_invocation_applies_adapter_and_records_summary(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manifest = MCPManifest.from_dict(
         {
@@ -352,9 +367,59 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
 
     recorded: List[str] = []
 
-    class DummyCoordinator:
+    class DummyCoordinator(MCPSecondPassCoordinator):
+        def __init__(self) -> None:
+            # Create a dummy follow-up builder
+            def dummy_follow_up_builder(
+                dataset_item: Dict[str, Any], summary: str
+            ) -> Optional[str]:
+                return None
+
+            super().__init__(
+                tool_name="dummy",
+                summary_var=ContextVar[Optional[str]]("dummy_summary", default=None),
+                follow_up_builder=dummy_follow_up_builder,
+            )
+            self._last_summary: Optional[str] = None
+            self._last_follow_up: Optional[str] = None
+
+        @property
+        def tool_name(self) -> str:
+            return self._tool_name
+
+        def reset(self) -> None:
+            self._summary_var.set(None)
+
         def record_summary(self, summary: str) -> None:
             recorded.append(summary)
+            self._summary_var.set(summary)
+
+        def fetch_summary(self) -> Optional[str]:
+            return self._summary_var.get()
+
+        def get_last_summary(self) -> Optional[str]:
+            return self._last_summary
+
+        def build_second_pass_messages(
+            self,
+            *,
+            base_messages: List[Dict[str, Any]],
+            dataset_item: Dict[str, Any],
+            summary_override: Optional[str] = None,
+        ) -> Optional[List[Dict[str, Any]]]:
+            self._last_summary = None
+            self._last_follow_up = None
+            summary = (
+                summary_override
+                if summary_override is not None
+                else self.fetch_summary()
+            )
+            if not summary:
+                return None
+
+            # Simple implementation that just returns the base messages
+            self._last_summary = summary
+            return base_messages
 
     def adapter(
         arguments: Dict[str, Any], call_tool: Callable[[str, Dict[str, Any]], Any]

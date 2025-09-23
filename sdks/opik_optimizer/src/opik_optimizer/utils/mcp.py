@@ -22,6 +22,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    cast,
 )
 
 ClientSession: Optional[Type[Any]] = None
@@ -237,16 +238,18 @@ class MCPClient:
         self._write_stream: Optional[Any] = None
 
     async def __aenter__(self) -> "MCPClient":
-        server_params = StdioServerParameters(  # type: ignore[arg-type]
+        server_params = cast(Type[Any], StdioServerParameters)(
             command=self.manifest.command,
             args=self.manifest.args,
             env=self.manifest.env or None,
         )
 
-        transport_cm = StdioClientFactory(server_params)
+        transport_factory = cast(Type[Any], StdioClientFactory)
+        transport_cm = transport_factory(server_params)
         self._transport_cm = transport_cm
         self._read_stream, self._write_stream = await transport_cm.__aenter__()
-        self._session = ClientSession(self._read_stream, self._write_stream)
+        session_cls = cast(Type[Any], ClientSession)
+        self._session = session_cls(self._read_stream, self._write_stream)
 
         if hasattr(self._session, "__aenter__"):
             await self._session.__aenter__()
