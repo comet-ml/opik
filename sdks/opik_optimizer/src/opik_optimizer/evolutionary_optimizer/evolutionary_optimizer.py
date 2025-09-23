@@ -266,6 +266,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "_deap_crossover_word_level",
                 "_deap_crossover",
                 "_llm_deap_crossover",
+                "_extract_json_arrays",
             ],
         )
 
