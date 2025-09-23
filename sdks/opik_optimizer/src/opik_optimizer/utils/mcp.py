@@ -10,7 +10,26 @@ import textwrap
 from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from types import TracebackType
+from typing import (
+    Any,
+    Coroutine,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+)
+
+ClientSession: Any
+StdioClientFactory: Any
+StdioServerParameters: Any
+types_mod: Any
+
+_T = TypeVar("_T")
 
 
 TOOL_ENTRY_KEY = "function"
@@ -101,9 +120,9 @@ def validate_tool_arguments(
     """Validate ``arguments`` against required fields in the signature schema."""
 
     schema_required = signature.parameters.get("required", [])
-    for field in schema_required:
-        if field not in arguments:
-            return False, f"Missing required argument '{field}'"
+    for required_field in schema_required:
+        if required_field not in arguments:
+            return False, f"Missing required argument '{required_field}'"
 
     properties = signature.parameters.get("properties", {})
     for key, value in arguments.items():
@@ -132,7 +151,7 @@ class MCPDependencyError(RuntimeError):
     """Raised when the Model Context Protocol SDK is unavailable."""
 
 
-def _load_sdk():
+def _load_sdk() -> Tuple[Any, Any, Any, Any]:
     candidates = (
         (
             "mcp.client.session",
@@ -202,24 +221,31 @@ class MCPManifest:
 
 
 class MCPClient:
-    def __init__(self, manifest: MCPManifest):
+    def __init__(self, manifest: MCPManifest) -> None:
         if _SDK_ERROR is not None:
             raise MCPDependencyError(str(_SDK_ERROR))
+        if (
+            ClientSession is None
+            or StdioClientFactory is None
+            or StdioServerParameters is None
+        ):
+            raise MCPDependencyError("MCP SDK is not available")
         self.manifest = manifest
-        self._transport_cm = None
-        self._session: Optional[ClientSession] = None
-        self._read_stream = None
-        self._write_stream = None
+        self._transport_cm: Optional[Any] = None
+        self._session: Optional[Any] = None
+        self._read_stream: Optional[Any] = None
+        self._write_stream: Optional[Any] = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MCPClient":
         server_params = StdioServerParameters(  # type: ignore[arg-type]
             command=self.manifest.command,
             args=self.manifest.args,
             env=self.manifest.env or None,
         )
 
-        self._transport_cm = StdioClientFactory(server_params)
-        self._read_stream, self._write_stream = await self._transport_cm.__aenter__()
+        transport_cm = StdioClientFactory(server_params)
+        self._transport_cm = transport_cm
+        self._read_stream, self._write_stream = await transport_cm.__aenter__()
         self._session = ClientSession(self._read_stream, self._write_stream)
 
         if hasattr(self._session, "__aenter__"):
@@ -229,14 +255,20 @@ class MCPClient:
             await self._session.initialize()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> Optional[bool]:
         if self._session is not None:
             if hasattr(self._session, "__aexit__"):
                 await self._session.__aexit__(exc_type, exc, tb)
         if self._transport_cm is not None:
             await self._transport_cm.__aexit__(exc_type, exc, tb)
+        return None
 
-    async def list_tools(self):
+    async def list_tools(self) -> Any:
         if self._session is None:
             raise RuntimeError("MCP session not started")
         if hasattr(self._session, "list_tools"):
@@ -246,25 +278,25 @@ class MCPClient:
             return await self._session.tools()
         raise RuntimeError("MCP session missing list_tools")
 
-    async def get_tool(self, tool_name: str):
+    async def get_tool(self, tool_name: str) -> Any:
         tools = await self.list_tools()
         for tool in tools:
             if tool.name == tool_name:
                 return tool
         raise ValueError(f"Tool '{tool_name}' not found")
 
-    async def call_tool(self, tool_name: str, arguments: Mapping[str, Any]):
+    async def call_tool(self, tool_name: str, arguments: Mapping[str, Any]) -> Any:
         if self._session is None:
             raise RuntimeError("MCP session not started")
         return await self._session.call_tool(name=tool_name, arguments=arguments)
 
 
-def run_sync(coro):
+def run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
     return asyncio.run(coro)
 
 
-def list_tools_from_manifest(manifest: MCPManifest):
-    async def _inner():
+def list_tools_from_manifest(manifest: MCPManifest) -> Any:
+    async def _inner() -> Any:
         async with MCPClient(manifest) as client:
             return await client.list_tools()
 
@@ -273,8 +305,8 @@ def list_tools_from_manifest(manifest: MCPManifest):
 
 def call_tool_from_manifest(
     manifest: MCPManifest, tool_name: str, arguments: Dict[str, Any]
-):
-    async def _inner():
+) -> Any:
+    async def _inner() -> Any:
         async with MCPClient(manifest) as client:
             return await client.call_tool(tool_name, arguments)
 
