@@ -67,7 +67,7 @@ def simulate_session(
         tool_call = ToolCallResult(
             tool_name=expected_tool,
             arguments=reference_arguments,
-            response=dataset_item.get("reference_response", expected_answer),
+            response=dataset_item.get("reference_response", reference_answer),
         )
     else:
         tool_call = invoke_tool(signature, reference_arguments, dataset_item)
