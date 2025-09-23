@@ -109,8 +109,8 @@ public class AttachmentStripperService {
                 .ofLongs()
                 .build();
 
-        // Initialize OpenTelemetry metrics
-        Meter meter = openTelemetry.getMeter("opik.attachments");
+        // Initialize OpenTelemetry metrics using global instance
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
 
         this.attachmentsProcessed = meter
                 .counterBuilder("opik.attachments.processed")
