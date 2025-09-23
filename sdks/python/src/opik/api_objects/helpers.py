@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Tuple
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
@@ -170,7 +170,7 @@ def parse_feedback_score_messages(
 
 def split_big_langgraph_outputs(
     outputs: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Filter LangGraph outputs to extract only messages for thread display.
 
