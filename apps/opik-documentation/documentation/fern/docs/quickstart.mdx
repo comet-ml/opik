@@ -78,7 +78,7 @@ After verifying language compatibility, perform a full codebase scan with the fo
 
 ### Step 3: Discover Available Integrations
 
-After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/tracing/integrations/overview.md
+After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/integrations/overview.md
 
 ### Step 4: Deep Analysis Confirmed files for LLM Frameworks & SDKs
 
@@ -187,7 +187,7 @@ const client = new Opik({
 ### Logging LLM calls
 
 The first step in integrating Opik with your codebase is to track your LLM calls. If you are using OpenAI, OpenRouter, or any LLM provider that is supported by LiteLLM, then you
-can use one of our [integrations](/tracing/integrations/overview):
+can use one of our [integrations](/integrations/overview):
 
 <Tabs>
     <Tab value="OpenAI (Python)" title="OpenAI (Python)">
@@ -318,7 +318,7 @@ await client.flush();
 ### Logging chains
 
 It is common for LLM applications to use chains rather than just calling the LLM once. This is achieved by either using a framework
-like [LangChain](/tracing/integrations/langchain), [LangGraph](/tracing/integrations/langgraph) or [LLamaIndex](/tracing/integrations/llama_index),
+like [LangChain](/integrations/langchain), [LangGraph](/integrations/langgraph) or [LLamaIndex](/integrations/llama_index),
 or by writing custom python code.
 
 Opik makes it easy for you to log your chains no matter how you implement them:
@@ -431,7 +431,7 @@ set_global_handler("opik")
 opik_callback_handler = global_handler
 ```
 
-Your LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index).
+Your LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/integrations/llama_index).
 
 <Info>
   Your chains will now be logged to Opik and can be viewed in the Opik UI. To

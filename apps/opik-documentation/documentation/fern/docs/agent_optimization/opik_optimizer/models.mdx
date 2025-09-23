@@ -125,7 +125,7 @@ When you initialize an optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianO
 `MetaPromptOptimizer`) accepts a LiteLLM model string. LiteLLM then handles the communication with
 the specified model provider or local endpoint.
 
-This builds upon Opik's existing [tracing integration with LiteLLM](/tracing/integrations/litellm),
+This builds upon Opik's existing [tracing integration with LiteLLM](/integrations/litellm),
 ensuring that not only are your optimization processes flexible in model choice, but calls made
 during optimization can also be seamlessly tracked if you have the `OpikLogger` callback configured
 in LiteLLM.

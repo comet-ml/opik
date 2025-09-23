@@ -1,12 +1,17 @@
 ---
-description: How to send [FRAMEWORK_NAME] telemetry data to Opik using OpenTelemetry
+title: Observability for [FRAMEWORK_NAME] with Opik
+description: Start here to integrate Opik into your [FRAMEWORK_NAME]-based genai application for end-to-end LLM observability, unit testing, and optimization.
 ---
-
-# [FRAMEWORK_NAME] Integration via OpenTelemetry
 
 [Brief description of the framework and what it's used for. For example: "[FRAMEWORK_NAME] is a Python framework designed to build production-grade AI applications."]
 
 [Brief explanation of the framework's primary advantage or key feature that makes it valuable for AI development.]
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=[framework_name]&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=[framework_name]&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=[framework_name]&utm_campaign=opik) for more information.
 
 <Frame>
   <img src="/img/tracing/[framework_name]_integration.png" alt="[FRAMEWORK_NAME] tracing" />

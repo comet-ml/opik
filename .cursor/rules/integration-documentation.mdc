@@ -143,12 +143,11 @@ Each integration must include framework-specific setup code in the "Using Opik w
 ### Minimum Required Sections
 
 1. **Header with provider link** - Provider name with link and brief description
-2. **Colab notebook link** - Styled div with link to notebook (if exists)
-3. **Getting started** - Installation and configuration instructions
-4. **Configuring Opik** - Standard Opik setup with pip install and configure
-5. **Configuring [Provider]** - Provider-specific API key setup
-6. **Logging LLM calls** - Basic usage example with OpikLogger
-7. **Logging LLM calls within a tracked function** - Advanced usage with @track decorator
+2. **Getting started** - Installation and configuration instructions
+3. **Configuring Opik** - Standard Opik setup with pip install and configure
+4. **Configuring [Provider]** - Provider-specific API key setup
+5. **Logging LLM calls** - Basic usage example with OpikLogger
+6. **Logging LLM calls within a tracked function** - Advanced usage with @track decorator
 
 ### Required Code Patterns
 
@@ -203,7 +202,6 @@ Replace these placeholders in templates:
 - `[PROVIDER_API_KEY_NAME]` → Environment variable name (e.g., "GROQ_API_KEY", "FIREWORKS_API_KEY")
 - `[provider_model_name]` → Example model name (e.g., "groq/llama3-8b-8192", "accounts/fireworks/models/llama-v3p1-8b-instruct")
 - `[provider_model_name_2]` → Different model name for advanced example (optional, can be same)
-- `[provider_notebook_name]` → Name for Colab notebook file (e.g., "groq", "fireworks-ai")
 - `[provider_screenshot_name]` → Base name for screenshot files (e.g., "groq", "fireworks_ai")
 
 **OpenTelemetry Integrations:**
@@ -254,13 +252,9 @@ Screenshots must be placed in the correct directory structure to avoid confusion
 
 **📸 Screenshot Paths by Documentation Type:**
 
-**Integration Documentation (Short format):**
+**Integration Documentation:**
 - File location: `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
 - Documentation reference: `/img/tracing/[integration_name]_integration.png`
-
-**Cookbook Documentation (Long format):**
-- File location: `apps/opik-documentation/documentation/fern/img/cookbook/[integration_name]_trace_cookbook.png`
-- Documentation reference: `/img/cookbook/[integration_name]_trace_cookbook.png`
 
 **OpenTelemetry Documentation:**
 - File location: `apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png`
@@ -326,31 +320,31 @@ Only include "Advanced usage" if the framework has genuine advanced features wor
 
 **⚠️ CRITICAL: Integration Documentation Structure**
 
-There are TWO types of integration documentation:
+All integration documentation is now consolidated into a single comprehensive format within the dedicated integrations tab.
 
-#### 1. Integration Documentation (Short format)
+#### Integration Documentation (Comprehensive format)
 **Location**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/[integration_name].mdx`
-**Navigation**: Added to `docs.yml` under `tracing` > `Integrations` section  
-**Purpose**: Concise integration guides with links to detailed cookbook notebooks
-**Format**: Short, focused on setup and basic usage (similar to anthropic.mdx)
+**Navigation**: Added to `docs.yml` under `integrations` tab with organized categories
+**Purpose**: Complete integration guides with all necessary content merged from cookbooks
+**Format**: Comprehensive guides with setup, basic usage, advanced examples, and troubleshooting
 
-#### 2. Cookbook Documentation (Long format)  
-**Location**: `apps/opik-documentation/documentation/fern/docs/cookbook/[integration_name].mdx`
-**Navigation**: Added to `docs.yml` under `cookbook` > `Integrations` section
-**Purpose**: Comprehensive tutorials with detailed examples and notebooks
-**Format**: Detailed, comprehensive guides with advanced usage examples
+#### Integration Tab Structure:
+
+**Categories in the integrations tab:**
+- **Native**: Python SDK, TypeScript SDK, OpenTelemetry
+- **Frameworks**: AG2, Agno, Autogen, CrewAI, DSPy, Haystack, Instructor, LangChain, etc.
+- **Evaluation**: Ragas and other evaluation frameworks
+- **Model Providers**: Anthropic, Bedrock, OpenAI, Groq, Ollama, etc.
+- **Gateways**: LiteLLM and other gateway solutions
+- **No-Code Tools**: AIsuite, BeeAI, Cursor, Dify, Flowise, etc.
+- **OpenTelemetry**: Ruby SDK, Pydantic AI, and other OTEL integrations
 
 #### Integration Type Mapping:
 
-**Code Integrations:**
+**All Integration Types:**
 - Integration Doc: `docs/tracing/integrations/[integration_name].mdx` (required)
-- Cookbook Doc: `docs/cookbook/[integration_name].mdx` (optional, for detailed tutorials)
-- Notebook: `apps/opik-documentation/documentation/docs/cookbook/[integration_name].ipynb` (optional)
-
-**OpenTelemetry Integrations:**
-- Integration Doc: `docs/tracing/integrations/[framework_name].mdx` (required)
-- Cookbook Doc: `docs/cookbook/[framework_name]_otel_integration.mdx` (optional)
-- Alternative Location: `docs/tracing/opentelemetry/[framework_name].mdx` (for pure OTel frameworks)
+- **No separate cookbook documentation** - all content is merged into integration pages
+- **No Colab notebook links** - comprehensive examples are included in the integration docs
 
 ### Templates Location
 
@@ -359,38 +353,38 @@ Templates are available at:
 - `apps/opik-documentation/documentation/templates/integration_template_litellm.md`
 - `apps/opik-documentation/documentation/templates/integration_template_otel.md`
 
-## 📚 Cookbook Architecture
+## 📚 Integration Content Architecture
 
-### File Structure and Conversion Process
+### Comprehensive Integration Documentation
 
-**Source Files**: `apps/opik-documentation/documentation/docs/cookbook/[integration_name].ipynb`
-**Converted Files**: `apps/opik-documentation/documentation/fern/docs/cookbook/[integration_name].mdx`
-**Navigation**: `apps/opik-documentation/documentation/fern/docs.yml`
+All integration documentation is now consolidated into comprehensive integration pages that include:
 
-### Conversion Process
+**Content Requirements:**
+- Complete setup instructions
+- Basic usage examples
+- Advanced usage patterns (when applicable)
+- Troubleshooting guides
+- Screenshots and visual examples
+- All content previously found in separate cookbooks
 
-Notebooks are automatically converted using `update_cookbooks.sh`:
-```bash
-jupyter nbconvert -ClearOutputPreprocessor.enabled=True --output-dir=fern/docs/cookbook docs/cookbook/*.ipynb --to markdown
-for file in fern/docs/cookbook/*.md; do mv "$file" "${file%.md}.mdx"; done
-```
+### Integration Content Validation
 
-### Cookbook Validation Method
+To verify integration documentation is complete:
 
-To verify cookbook integration is complete:
+1. **Check integration page exists**: `docs/tracing/integrations/[integration_name].mdx`
+2. **Check navigation entry exists**: Entry in `docs.yml` under integrations tab
+3. **Check URL consistency**: Integration overview href matches docs.yml slug
+4. **Check integration overview card exists**: Card in `overview.mdx` with correct href
+5. **Verify comprehensive content**: Page includes all necessary setup, usage, and examples
 
-1. **Check source notebook exists**: `docs/cookbook/[integration_name].ipynb`
-2. **Check converted documentation exists**: `fern/docs/cookbook/[integration_name].mdx`  
-3. **Check navigation entry exists**: Entry in `docs.yml` under cookbook > Integrations section
-4. **Check URL consistency**: Cookbook overview href matches docs.yml slug
-5. **Check cookbook overview card exists**: Card in `overview.mdx` with correct href
+### Common Integration Issues
 
-### Common Cookbook Issues
-
-- **URL Mismatch**: Cookbook overview href doesn't match docs.yml slug
-- **Missing Navigation**: Converted .mdx exists but no docs.yml entry  
+- **URL Mismatch**: Integration overview href doesn't match docs.yml slug
+- **Missing Navigation**: Integration page exists but no docs.yml entry  
 - **Duplicate Entries**: Same integration listed multiple times in docs.yml
 - **Broken Links**: Overview cards link to non-existent slugs
+- **Incomplete Content**: Missing setup instructions or examples
+- **Wrong Category**: Integration placed in incorrect section
 
 ## 📋 Integration Maintenance Requirements
 
@@ -403,66 +397,99 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 **Section**: "📝 Logging Traces with Integrations"
 - Update the integrations table/list in ALL README files (including translated versions)
 - Ensure all integration names are consistent across all languages
-- **Documentation Links**: Point to `/tracing/integrations/[integration_name]` (NOT cookbook links)
+- **Documentation Links**: Point to `/integrations/[integration_name]` (new integrations tab URLs)
+- **No Colab links** - comprehensive examples are included in the integration docs
 - Update any integration-specific descriptions in all translations
 
 #### 2. Integration Overview Documentation
 **File**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx`
-**Section**: Main integrations table
-- Update the integrations table with consistent naming
-- Ensure all columns are populated (Integration, Description, Documentation, Try in Colab)
-- **Documentation Links**: Point to `/tracing/integrations/[integration_name]` (NOT cookbook links)
-- Add Colab badges for integrations with cookbook notebooks
+**Structure**: Card-based layout organized by category (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry, Other)
+- Update the integration cards with consistent naming
+- Ensure all cards have proper hrefs pointing to `/docs/opik/integrations/[integration_name]`
+- Organize integrations by their appropriate categories using `<CardGroup cols={3}>` and `<Card>` components
+- **No Colab badges** - comprehensive examples are included in the integration docs
+- Use consistent card structure: `<Card title="Integration Name" href="/docs/opik/integrations/integration-name" />`
 
-#### 3. Cookbook Overview
-**File**: `apps/opik-documentation/documentation/fern/docs/cookbook/overview.mdx`
-**Sections**: 
-- "LLM Providers" card group
-- "Frameworks & Tools" card group
-- Only include integrations that have corresponding cookbook notebooks
+#### 3. Integration Tab Navigation
+**File**: `apps/opik-documentation/documentation/fern/docs.yml`
+**Tab**: `integrations`
+- Ensure all integrations are properly categorized in the correct sections
+- Verify `skip-slug: true` is set for all category sections to maintain clean URLs
+- Check that all integration pages exist and are properly linked
 
 #### 4. Navigation Structure
 **File**: `apps/opik-documentation/documentation/fern/docs.yml`
 
 **For Integration Documentation** (Required for ALL integrations):
-- **Section**: `tracing` > `Integrations` section
+- **Tab**: `integrations` (dedicated integrations tab)
+- **Categories**: Organized into sections (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry)
 - **Path**: `docs/tracing/integrations/[integration_name].mdx`
 - **Slug**: `[integration_name]` (matches the filename)
+- **URL Structure**: `/docs/opik/integrations/[integration_name]` (clean URLs without category folders)
 
-**For Cookbook Documentation** (Optional, only if detailed cookbook exists):
-- **Section**: `cookbook` > `Integrations` section  
-- **Path**: `docs/cookbook/[integration_name].mdx`
-- **Slug**: Must match the href used in cookbook overview cards
+**Navigation Structure Example:**
+```yaml
+- tab: integrations
+  layout:
+    - page: Overview
+      path: docs/tracing/integrations/overview.mdx
+      slug: overview
+    - section: Native
+      skip-slug: true
+      contents:
+        - page: Python SDK
+          path: docs/reference/python-sdk/overview.mdx
+          slug: python-sdk
+    - section: Frameworks
+      skip-slug: true
+      contents:
+        - page: LangChain (Python)
+          path: docs/tracing/integrations/langchain.mdx
+          slug: langchain
+```
 
 ### Integration Information Requirements
 
 #### For Each Integration, Ensure:
 - **Name**: Consistent across all locations
 - **Description**: Clear, concise explanation of what the integration does
-- **Documentation Link**: Points to the correct integration documentation
-- **Colab Badge**: Only for integrations with cookbook notebooks
-- **Category**: Properly categorized as either "LLM Provider" or "Framework & Tool"
+- **Documentation Link**: Points to the correct integration documentation (`/docs/opik/integrations/[integration_name]`)
+- **Card Structure**: Properly formatted card with correct href
+- **Category**: Properly categorized in the appropriate section (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry, Other)
 
 #### Integration Categories:
-- **LLM Providers**: OpenAI, Anthropic, Bedrock, Gemini, Groq, Ollama, Vertex AI, watsonx, etc.
-- **Frameworks & Tools**: LangChain, LlamaIndex, Haystack, Instructor, CrewAI, DSPy, etc.
+- **Native**: Python SDK, TypeScript SDK, OpenTelemetry
+- **Frameworks**: AG2, Agno, Autogen, CrewAI, DSPy, Haystack, Instructor, LangChain, etc.
+- **Evaluation**: Ragas and other evaluation frameworks
+- **Model Providers**: Anthropic, Bedrock, OpenAI, Groq, Ollama, etc.
+- **Gateways**: LiteLLM, OpenRouter, AISuite
+- **No-Code Tools**: Dify, Flowise, Langflow, OpenWebUI
+- **OpenTelemetry**: OpenTelemetry Overview, Python SDK, Ruby SDK
+- **Other**: Guardrails AI and additional integrations
+
+#### Card Structure Requirements:
+- Use `<CardGroup cols={3}>` for consistent 3-column layout
+- Each integration card: `<Card title="Integration Name" href="/docs/opik/integrations/integration-name" />`
+- Ensure proper categorization within the appropriate section
+- Maintain consistent naming across all card titles
 
 ### Update Checklist
 
 When modifying integrations, verify:
 
 - [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
-- [ ] Integration overview table is updated
-- [ ] Cookbook overview cards are updated (if applicable)
-- [ ] Navigation structure in docs.yml is updated (for cookbook integrations)
+- [ ] Integration overview cards are updated with correct categories and card structure
+- [ ] Integration tab navigation in docs.yml is updated
 - [ ] Integration names are consistent across all locations
-- [ ] Documentation links are correct and functional
-- [ ] Cookbook overview hrefs match docs.yml slugs
-- [ ] Colab badges are added for integrations with notebooks
-- [ ] Categories are properly assigned
+- [ ] Documentation links point to `/docs/opik/integrations/[integration_name]`
+- [ ] Integration is properly categorized in the correct section
+- [ ] Categories are properly assigned (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry)
 - [ ] Descriptions are clear and consistent
 - [ ] No duplicate navigation entries exist
 - [ ] Enterprise deployment configuration is included for OTel integrations
+- [ ] `skip-slug: true` is set for all category sections
+- [ ] Integration page contains comprehensive content (no separate cookbook needed)
+- [ ] No Colab links in README files (comprehensive examples in integration docs)
 
 ### Example Integration Entry
 
@@ -476,13 +503,11 @@ When modifying integrations, verify:
 
 - ❌ Updating main README.md but forgetting translated README files (readme_CN.md, readme_JP.md, readme_KO.md)
 - ❌ Adding integration to README but forgetting integration overview
-- ❌ Updating integration overview but forgetting cookbook overview
 - ❌ Inconsistent naming between locations
-- ❌ Broken documentation links
-- ❌ Missing Colab badges for integrations with notebooks
-- ❌ Incorrect categorization of integrations
-- ❌ Cookbook overview href doesn't match docs.yml slug
-- ❌ Missing navigation entries in docs.yml for cookbook integrations
+- ❌ Broken documentation links pointing to old `/tracing/integrations/` URLs instead of `/integrations/`
+- ❌ Incorrect categorization of integrations in the integrations tab
+- ❌ Missing `skip-slug: true` for category sections in docs.yml
+- ❌ Missing navigation entries in docs.yml integrations tab
 - ❌ Duplicate entries in docs.yml navigation structure
 - ❌ Screenshot positioned at the bottom instead of near the top (after framework overview)
 - ❌ Screenshot placed in incorrect directory (`static/img/tracing/` instead of `fern/img/tracing/`)
@@ -492,6 +517,13 @@ When modifying integrations, verify:
 - ❌ Including generic OpenTelemetry configurations in Advanced usage instead of framework-specific features
 - ❌ Adding Advanced usage section when no framework-specific features exist
 - ❌ Including redundant text like "This combined with the environment variables above will log your traces to Opik"
+- ❌ Creating separate cookbook documentation instead of merging content into integration pages
+- ❌ Adding Colab notebook links instead of including comprehensive examples in integration docs
+- ❌ Using incorrect card structure (missing CardGroup wrapper or wrong href format)
+- ❌ Placing integrations in wrong category sections
+- ❌ Inconsistent card titles or hrefs in integration overview
+- ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
+- ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
 
 ## 📖 Integration-Specific Guidance
 
@@ -590,19 +622,18 @@ When modifying integrations, verify:
 ### Integration Lifecycle Management
 
 #### Addition Process:
-1. Add to README.md integration list
-2. Add to integration overview table
-3. Add to cookbook overview (if notebook exists)
-4. Create integration documentation
-5. Create cookbook notebook (optional)
+1. Add to README.md integration list (all language versions)
+2. Add to integration overview with proper categorization
+3. Create comprehensive integration documentation page
+4. Add to integrations tab navigation in docs.yml
+5. Ensure proper categorization in correct section
 6. Update any cross-references
 
 #### Removal Process:
-1. Remove from README.md
+1. Remove from README.md (all language versions)
 2. Remove from integration overview
-3. Remove from cookbook overview (if present)
+3. Remove from integrations tab navigation
 4. Remove corresponding documentation files
-5. Remove cookbook notebooks (if present)
-6. Update any cross-references
+5. Update any cross-references
 
 This rule ensures that users always have consistent, up-to-date information about Opik integrations across all documentation locations, while providing clear guidelines for creating high-quality integration documentation.

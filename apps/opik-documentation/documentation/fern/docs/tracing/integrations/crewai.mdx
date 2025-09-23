@@ -5,26 +5,21 @@ description: Start here to integrate Opik into your CrewAI-based genai applicati
 
 [CrewAI](https://www.crewai.com/) is a cutting-edge framework for orchestrating autonomous AI agents.
 
+> CrewAI enables you to create AI teams where each agent has specific roles, tools, and goals, working together to accomplish complex tasks.
+
+> Think of it as assembling your dream team - each member (agent) brings unique skills and expertise, collaborating seamlessly to achieve your objectives.
+
 Opik integrates with CrewAI to log traces for all CrewAI activity.
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/crewai.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
 
-## Getting started
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=crewai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=crewai&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=crewai&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
 
 First, ensure you have both `opik` and `crewai` installed:
 
@@ -32,19 +27,45 @@ First, ensure you have both `opik` and `crewai` installed:
 pip install opik crewai crewai-tools
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring CrewAI
+
+In order to configure CrewAI, you will need to have your LLM provider API key. For this example, we'll use OpenAI. You can [find or create your OpenAI API Key in this page](https://platform.openai.com/settings/organization/api-keys).
+
+You can set it as an environment variable:
 
 ```bash
-opik configure
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Logging CrewAI calls
 
-To log a CrewAI pipeline run, you can use the [`track_crewai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/crewai/track_crewai.html). This callback will log each CrewAI call to Opik:
+To log a CrewAI pipeline run, you can use the [`track_crewai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/crewai/track_crewai.html). This callback will log each CrewAI call to Opik.
+
+### Creating a CrewAI Project
+
+The first step is to create our project. We will use an example from CrewAI's documentation:
 
 ```python
 from crewai import Agent, Crew, Task, Process
-
 
 class YourCrewName:
     def agent_one(self) -> Agent:
@@ -60,7 +81,7 @@ class YourCrewName:
             role="Market Researcher",
             goal="Gather information on market dynamics",
             backstory="A diligent researcher with a keen eye for detail",
-            verbose=True
+            verbose=True,
         )
 
     def task_one(self) -> Task:
@@ -68,7 +89,7 @@ class YourCrewName:
             name="Collect Data Task",
             description="Collect recent market data and identify trends.",
             expected_output="A report summarizing key trends in the market.",
-            agent=self.agent_one()
+            agent=self.agent_one(),
         )
 
     def task_two(self) -> Task:
@@ -76,7 +97,7 @@ class YourCrewName:
             name="Market Research Task",
             description="Research factors affecting market dynamics.",
             expected_output="An analysis of factors influencing the market.",
-            agent=self.agent_two()
+            agent=self.agent_two(),
         )
 
     def crew(self) -> Crew:
@@ -84,10 +105,15 @@ class YourCrewName:
             agents=[self.agent_one(), self.agent_two()],
             tasks=[self.task_one(), self.task_two()],
             process=Process.sequential,
-            verbose=True
+            verbose=True,
         )
+```
 
+### Running with Opik Tracking
 
+Now we can import Opik's tracker and run our `crew`:
+
+```python
 from opik.integrations.crewai import track_crewai
 
 track_crewai(project_name="crewai-integration-demo")
@@ -109,6 +135,7 @@ Each run will now be logged to the Opik platform:
 The `track_crewai` integration automatically tracks token usage and cost for all supported LLM models used during CrewAI agent execution.
 
 Cost information is automatically captured and displayed in the Opik UI, including:
+
 - Token usage details
 - Cost per request based on model pricing
 - Total trace cost
