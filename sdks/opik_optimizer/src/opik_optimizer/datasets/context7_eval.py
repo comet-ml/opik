@@ -18,8 +18,10 @@ DATASET_NAME = "context7_eval"
 
 
 def _load_examples() -> List[Dict[str, Any]]:
-    text = resources.files(DATA_PACKAGE).joinpath(DATA_FILENAME).read_text(
-        encoding="utf-8"
+    text = (
+        resources.files(DATA_PACKAGE)
+        .joinpath(DATA_FILENAME)
+        .read_text(encoding="utf-8")
     )
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 

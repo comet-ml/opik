@@ -44,22 +44,19 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+
 def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
     if not prompt.system or not getattr(prompt, "tools", None):
         return
 
     description = (
-        prompt.tools[0].get("function", {}).get("description")
-    if prompt.tools
-        else None
+        prompt.tools[0].get("function", {}).get("description") if prompt.tools else None
     )
     if not description:
         return
 
     tool_name = (
-        prompt.tools[0].get("function", {}).get("name")
-        if prompt.tools
-        else None
+        prompt.tools[0].get("function", {}).get("name") if prompt.tools else None
     )
 
     system_text = prompt.system
@@ -69,11 +66,7 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
     start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
     end = system_text.index(PROMPT_TOOL_FOOTER)
     prompt.system = (
-        system_text[:start]
-        + "\n"
-        + description.strip()
-        + "\n"
-        + system_text[end:]
+        system_text[:start] + "\n" + description.strip() + "\n" + system_text[end:]
     )
 
     if tool_name:
@@ -388,7 +381,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
 
                 if second_pass_messages is not None:
-                    logger.debug("Executing MCP second pass with %d messages", len(second_pass_messages))
+                    logger.debug(
+                        "Executing MCP second pass with %d messages",
+                        len(second_pass_messages),
+                    )
                     final_response = agent.llm_invoke(
                         messages=second_pass_messages,
                         seed=None,
@@ -873,8 +869,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         tool_prompts = None
         if best_tools:
             tool_prompts = {
-                (tool.get("function", {}).get("name") or f"tool_{idx}"):
-                tool.get("function", {}).get("description")
+                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
+                    "function", {}
+                ).get("description")
                 for idx, tool in enumerate(best_tools)
             }
 
@@ -1092,7 +1089,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         project_name: Optional[str] = None,
         panel_style: str = "bright_magenta",
     ) -> List[chat_prompt.ChatPrompt]:
-        segments = {segment.segment_id: segment for segment in extract_prompt_segments(current_prompt)}
+        segments = {
+            segment.segment_id: segment
+            for segment in extract_prompt_segments(current_prompt)
+        }
         if tool_segment_id not in segments:
             raise ValueError(f"Tool segment '{tool_segment_id}' not found in prompt")
 
@@ -1177,7 +1177,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                         {tool_segment_id: description.strip()},
                     )
                     _sync_tool_description_in_system(updated_prompt)
-                    if description.strip() and description.strip() != current_description.strip():
+                    if (
+                        description.strip()
+                        and description.strip() != current_description.strip()
+                    ):
                         reporting.display_tool_description(
                             description.strip(),
                             f"Round {round_num + 1} tool description",
@@ -1186,7 +1189,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                     candidates.append(updated_prompt)
 
                 if not candidates:
-                    raise ValueError("Reasoning output did not produce valid tool descriptions")
+                    raise ValueError(
+                        "Reasoning output did not produce valid tool descriptions"
+                    )
 
                 return candidates
             except Exception as exc:

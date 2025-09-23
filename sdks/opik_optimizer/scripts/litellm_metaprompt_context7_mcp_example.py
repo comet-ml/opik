@@ -26,7 +26,11 @@ MCP_MANIFEST = mcp_flow.MCPManifest.from_dict(
         "args": [
             "-y",
             "@upstash/context7-mcp",
-            *(["--api-key", os.environ["CONTEXT7_API_KEY"]] if os.getenv("CONTEXT7_API_KEY") else []),
+            *(
+                ["--api-key", os.environ["CONTEXT7_API_KEY"]]
+                if os.getenv("CONTEXT7_API_KEY")
+                else []
+            ),
         ],
         "env": {},
     }
@@ -110,7 +114,9 @@ mcp_flow.list_manifest_tools(MCP_MANIFEST)
 signature = mcp_flow.load_manifest_tool_signature(MCP_MANIFEST, TOOL_NAME)
 original_tool_entry = copy.deepcopy(signature.to_tool_entry())
 artifacts_dir = Path("artifacts")
-mcp_flow.dump_signature_artifact(signature, artifacts_dir, "context7_original_signature.json")
+mcp_flow.dump_signature_artifact(
+    signature, artifacts_dir, "context7_original_signature.json"
+)
 
 # ---------------------------------------------------------------------------
 # 6. Execute a smoke-test call using the first dataset item so the operator can
@@ -130,7 +136,9 @@ mcp_flow.preview_dataset_tool_invocation(
 # The system prompt is used to build the chat prompt. The chat prompt is used to
 # optimize the tool invocation.
 # ---------------------------------------------------------------------------
-system_prompt = textwrap.dedent(mcp_utils.system_prompt_from_tool(signature, MCP_MANIFEST)).strip()
+system_prompt = textwrap.dedent(
+    mcp_utils.system_prompt_from_tool(signature, MCP_MANIFEST)
+).strip()
 prompt = ChatPrompt(
     system=system_prompt,
     user="{user_query}",
@@ -172,7 +180,11 @@ if not meta_result.prompt:
 if meta_result.tool_prompts and TOOL_NAME in meta_result.tool_prompts:
     signature.description = meta_result.tool_prompts[TOOL_NAME]
 
-final_tools = meta_result.details.get("final_tools") if isinstance(meta_result.details, dict) else None
+final_tools = (
+    meta_result.details.get("final_tools")
+    if isinstance(meta_result.details, dict)
+    else None
+)
 if final_tools:
     final_tool_entry = copy.deepcopy(final_tools[0])
     mcp_flow.update_signature_from_tool_entry(signature, final_tool_entry)

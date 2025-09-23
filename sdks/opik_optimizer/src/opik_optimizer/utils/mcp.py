@@ -40,9 +40,7 @@ class ToolSignature:
         parameters = function_block.get("parameters", {}) or {}
         examples = function_block.get("examples")
         extra = {
-            key: value
-            for key, value in entry.items()
-            if key not in {TOOL_ENTRY_KEY}
+            key: value for key, value in entry.items() if key not in {TOOL_ENTRY_KEY}
         }
 
         return cls(
@@ -273,7 +271,9 @@ def list_tools_from_manifest(manifest: MCPManifest):
     return run_sync(_inner())
 
 
-def call_tool_from_manifest(manifest: MCPManifest, tool_name: str, arguments: Dict[str, Any]):
+def call_tool_from_manifest(
+    manifest: MCPManifest, tool_name: str, arguments: Dict[str, Any]
+):
     async def _inner():
         async with MCPClient(manifest) as client:
             return await client.call_tool(tool_name, arguments)
@@ -321,14 +321,18 @@ def _format_json_block(data: Mapping[str, Any]) -> str:
     return json.dumps(data, sort_keys=True)
 
 
-def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPManifest] = None) -> str:
+def system_prompt_from_tool(
+    signature: ToolSignature, manifest: Optional[MCPManifest] = None
+) -> str:
     parameters = signature.parameters or {}
     parameter_lines = []
     for name, schema in parameters.get("properties", {}).items():
         type_hint = schema.get("type", "any")
         desc = schema.get("description", "")
         parameter_lines.append(f"- {name} ({type_hint}): {desc}")
-    parameter_section = "\n".join(parameter_lines) if parameter_lines else "- No structured parameters."
+    parameter_section = (
+        "\n".join(parameter_lines) if parameter_lines else "- No structured parameters."
+    )
 
     mcp_header = ""
     if manifest is not None:
@@ -357,7 +361,9 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
 
         command_line = " ".join(command_line_parts)
 
-        schema_block = _format_json_block(signature.parameters) if signature.parameters else "{}"
+        schema_block = (
+            _format_json_block(signature.parameters) if signature.parameters else "{}"
+        )
 
         mcp_header = textwrap.dedent(
             f"""
@@ -400,16 +406,23 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
 
 
 def extract_description_from_system(system_prompt: str) -> Optional[str]:
-    if PROMPT_TOOL_HEADER not in system_prompt or PROMPT_TOOL_FOOTER not in system_prompt:
+    if (
+        PROMPT_TOOL_HEADER not in system_prompt
+        or PROMPT_TOOL_FOOTER not in system_prompt
+    ):
         return None
     start = system_prompt.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
     end = system_prompt.index(PROMPT_TOOL_FOOTER)
     return system_prompt[start:end].strip()
 
 
-def load_tool_signature_from_manifest(manifest: MCPManifest, tool_name: str) -> ToolSignature:
+def load_tool_signature_from_manifest(
+    manifest: MCPManifest, tool_name: str
+) -> ToolSignature:
     tools = list_tools_from_manifest(manifest)
-    tool = next((tool for tool in tools if getattr(tool, "name", None) == tool_name), None)
+    tool = next(
+        (tool for tool in tools if getattr(tool, "name", None) == tool_name), None
+    )
     if tool is None:
         raise ValueError(f"Tool '{tool_name}' not found")
     entry = tool.model_dump(by_alias=True)
