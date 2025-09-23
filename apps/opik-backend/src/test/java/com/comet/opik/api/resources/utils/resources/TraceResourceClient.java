@@ -300,28 +300,22 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String author,
+    public void deleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
             String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("threads")
-                .path("feedback-scores")
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(DeleteThreadFeedbackScores.builder()
-                        .projectName(projectName)
-                        .threadId(threadId)
-                        .names(scoreNames)
-                        .author(author)
-                        .build()))) {
-
+        try (var response = callDeleteThreadFeedbackScores(
+                projectName, threadId, scoreNames, author, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
-    public Response callDeleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames,
+    public Response callDeleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
             String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
@@ -335,6 +329,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .projectName(projectName)
                         .threadId(threadId)
                         .names(scoreNames)
+                        .author(author)
                         .build()));
     }
 

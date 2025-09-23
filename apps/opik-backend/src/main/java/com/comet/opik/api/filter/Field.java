@@ -44,6 +44,7 @@ public interface Field {
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
     String CUSTOM_QUERY_PARAM = "custom";
+    String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
 
     @JsonValue
     String getQueryParamField();

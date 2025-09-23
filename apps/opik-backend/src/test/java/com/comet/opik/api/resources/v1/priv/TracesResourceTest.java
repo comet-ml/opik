@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
@@ -45,6 +46,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -133,6 +135,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -266,6 +269,7 @@ class TracesResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private ThreadCommentResourceClient threadCommentResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -282,6 +286,7 @@ class TracesResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -2057,6 +2062,76 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(),
                     filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterAnnotationQueueIdContains__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(project.name())
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build());
+
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            // Create annotation queue with items
+            var queue1 = prepareAnnotationQueue(projectId);
+            var queue2 = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue1.id(), Set.of(traces.getFirst().id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue2.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(queue1.id().toString())
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        private AnnotationQueue prepareAnnotationQueue(UUID projectId) {
+            return factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
         }
 
         @ParameterizedTest
@@ -5135,6 +5210,69 @@ class TracesResourceTest {
             assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
         }
 
+        @Test
+        @DisplayName("When filtering by annotation queue id, should return only threads with matching queue ids")
+        void whenFilterByAnnotationQueueId__thenReturnThreadsWithMatchingTags() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var threadId = UUID.randomUUID().toString();
+
+            // Create traces
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(project.name())
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Wait for thread to be created
+            Mono.delay(Duration.ofMillis(250)).block();
+
+            var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
+
+            // Create annotation queue for threads
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), Set.of(createdThread.threadModelId()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            List<TraceThread> expectedThreads = List.of(createdThread);
+
+            // Create filter for the specified status
+            var statusFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(annotationQueue.id().toString())
+                    .build();
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
         private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
                 List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
             var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,
@@ -6925,8 +7063,8 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // When
-            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(projectName, threadId, scoreNames,
-                    apiKey, workspaceName)) {
+            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(
+                    projectName, threadId, scoreNames, null, apiKey, workspaceName)) {
                 // Then
                 assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
@@ -8718,98 +8856,36 @@ class TracesResourceTest {
         @Test
         @DisplayName("when trace does not exist, then return no content")
         void deleteFeedback__whenTraceDoesNotExist__thenReturnNoContent() {
-
             var id = generator.generate();
-
-            traceResourceClient.deleteTraceFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id,
-                    API_KEY, TEST_WORKSPACE);
+            var deleteFeedbackScore = factory.manufacturePojo(DeleteFeedbackScore.class);
+            traceResourceClient.deleteTraceFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
         }
 
-        @Test
+        Stream<String> deleteFeedback() {
+            return Stream.of(USER, null, "", "   ");
+        }
+
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void deleteFeedback() {
-
-            var trace = createTrace();
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
-            var score = FeedbackScore.builder()
-                    .name("name")
-                    .value(BigDecimal.valueOf(1))
-                    .source(ScoreSource.UI)
-                    .build();
+        void deleteFeedback(String author) {
+            var expectedTrace = createTrace();
+            var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
+            var score = factory.manufacturePojo(FeedbackScore.class);
             create(id, score, TEST_WORKSPACE, API_KEY);
+            expectedTrace = expectedTrace.toBuilder().feedbackScores(List.of(score)).build();
+            var actualTrace = getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
 
-            traceResourceClient.deleteTraceFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id,
-                    API_KEY, TEST_WORKSPACE);
+            var deleteFeedbackScore = DeleteFeedbackScore.builder()
+                    .name(score.name())
+                    .author(author)
+                    .build();
+            traceResourceClient.deleteTraceFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
 
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            expectedTrace = expectedTrace.toBuilder().feedbackScores(null).build();
+            var actualEntity = getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity.feedbackScores()).isNull();
-        }
-
-        @Test
-        @DisplayName("delete trace feedback score with author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
-            // Create a trace
-            var trace = createTrace();
-            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
-
-            // Add a feedback score without author (since the bug is in the delete operation)
-            var feedbackScore = FeedbackScore.builder()
-                    .name("test-score")
-                    .value(BigDecimal.valueOf(0.85))
-                    .source(ScoreSource.SDK)
-                    .build();
-
-            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
-
-            // Verify the feedback score was created
-            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
-            assertThat(actualTrace.feedbackScores()).hasSize(1);
-
-            // Try to delete the score WITH an author (this is where the bug occurs)
-            // When writeToAuthored is disabled, this should still work
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test-score")
-                    .author(USER) // This is the key part - including author in the delete request
-                    .build();
-
-            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
-
-            // Verify the score was actually deleted
-            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
-            assertThat(traceAfterDeletion.feedbackScores()).isNull();
-        }
-
-        @Test
-        @DisplayName("delete trace feedback score without author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
-            // Create a trace
-            var trace = createTrace();
-            var traceId = create(trace, API_KEY, TEST_WORKSPACE);
-
-            // Add a feedback score without author
-            var feedbackScore = FeedbackScore.builder()
-                    .name("test-score-2")
-                    .value(BigDecimal.valueOf(0.75))
-                    .source(ScoreSource.SDK)
-                    .build();
-
-            create(traceId, feedbackScore, TEST_WORKSPACE, API_KEY);
-
-            // Verify the feedback score was created
-            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
-            assertThat(actualTrace.feedbackScores()).hasSize(1);
-
-            // Try to delete the score WITHOUT an author (this should work before and after the fix)
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test-score-2")
-                    // No author specified
-                    .build();
-
-            traceResourceClient.deleteTraceFeedbackScore(deleteRequest, traceId, API_KEY, TEST_WORKSPACE);
-
-            // Verify the score was deleted
-            var traceAfterDeletion = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
-            assertThat(traceAfterDeletion.feedbackScores()).isNull();
         }
     }
 

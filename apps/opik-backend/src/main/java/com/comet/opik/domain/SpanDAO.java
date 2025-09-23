@@ -922,8 +922,8 @@ class SpanDAO {
                 <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.truncated_input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
                 <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.truncated_output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
                 <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
-                <if(truncate)>, if(input_length > truncation_threshold, true, false) as input_truncated<endif>
-                <if(truncate)>, if(output_length > truncation_threshold, true, false) as output_truncated<endif>
+                <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
+                <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                 <if(!exclude_feedback_scores)>
                 , fsa.feedback_scores_list as feedback_scores_list
                 , fsa.feedback_scores as feedback_scores

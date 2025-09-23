@@ -39,14 +39,14 @@ class TestStructuredOutputComplianceTemplate:
             FewShotExampleStructuredOutputCompliance(
                 title="Valid JSON",
                 output='{"name": "Alice", "age": 25}',
-                schema="User(name: str, age: int)",
+                output_schema="User(name: str, age: int)",
                 score=True,
                 reason="Valid JSON format",
             ),
             FewShotExampleStructuredOutputCompliance(
                 title="Invalid JSON",
                 output='{"name": "Bob", age: 30}',
-                schema="User(name: str, age: int)",
+                output_schema="User(name: str, age: int)",
                 score=False,
                 reason="Missing quotes around age key",
             ),
@@ -77,7 +77,7 @@ class TestStructuredOutputComplianceTemplate:
             FewShotExampleStructuredOutputCompliance(
                 title="Valid Example",
                 output='{"name": "Alice", "age": 25}',
-                schema="User(name: str, age: int)",
+                output_schema="User(name: str, age: int)",
                 score=True,
                 reason="Valid format",
             )
