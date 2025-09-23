@@ -23,6 +23,9 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from . import reporting
+import re
+
+from ..utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ..utils.mcp_workflow import (
     MCPExecutionConfig,
     MCPSecondPassCoordinator,
@@ -40,6 +43,48 @@ litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+
+def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
+    if not prompt.system or not getattr(prompt, "tools", None):
+        return
+
+    description = (
+        prompt.tools[0].get("function", {}).get("description")
+    if prompt.tools
+        else None
+    )
+    if not description:
+        return
+
+    tool_name = (
+        prompt.tools[0].get("function", {}).get("name")
+        if prompt.tools
+        else None
+    )
+
+    system_text = prompt.system
+    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
+        return
+
+    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
+    end = system_text.index(PROMPT_TOOL_FOOTER)
+    prompt.system = (
+        system_text[:start]
+        + "\n"
+        + description.strip()
+        + "\n"
+        + system_text[end:]
+    )
+
+    if tool_name:
+        pattern = rf"(-\s*{re.escape(tool_name)}:\s).*"
+        prompt.system = re.sub(
+            pattern,
+            rf"\\1{description.strip()}",
+            prompt.system,
+            count=1,
+            flags=re.MULTILINE,
+        )
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -1127,6 +1172,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         current_prompt,
                         {tool_segment_id: description.strip()},
                     )
+                    _sync_tool_description_in_system(updated_prompt)
                     if description.strip() and description.strip() != current_description.strip():
                         reporting.display_tool_description(
                             description.strip(),

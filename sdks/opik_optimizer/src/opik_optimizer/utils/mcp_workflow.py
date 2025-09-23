@@ -65,7 +65,7 @@ def suppress_mcp_stdout(logger: logging.Logger = logger):
         trimmed = line.strip()
         if not trimmed:
             continue
-        if "MCP Server running on stdio" in trimmed:
+        if "MCP Server running on stdio" in trimmed or "Context7 Documentation MCP Server running on stdio" in trimmed:
             continue
         logger.debug("MCP stdout: %s", trimmed)
 
