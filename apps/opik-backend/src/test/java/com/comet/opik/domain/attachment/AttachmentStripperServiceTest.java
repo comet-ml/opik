@@ -6,6 +6,10 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,66 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AttachmentStripperServiceTest {
 
+    // Helper classes for mocking OpenTelemetry builders
+    private static class MockLongCounterBuilder implements io.opentelemetry.api.metrics.LongCounterBuilder {
+        @Override
+        public io.opentelemetry.api.metrics.LongCounterBuilder setDescription(String description) {
+            return this;
+        }
+
+        @Override
+        public io.opentelemetry.api.metrics.LongCounterBuilder setUnit(String unit) {
+            return this;
+        }
+
+        @Override
+        public LongCounter build() {
+            return new LongCounter() {
+                @Override
+                public void add(long value) {
+                    // No-op for tests
+                }
+
+                @Override
+                public void add(long value, io.opentelemetry.api.common.Attributes attributes) {
+                    // No-op for tests
+                }
+            };
+        }
+    }
+
+    private static class MockLongHistogramBuilder implements io.opentelemetry.api.metrics.LongHistogramBuilder {
+        @Override
+        public io.opentelemetry.api.metrics.LongHistogramBuilder setDescription(String description) {
+            return this;
+        }
+
+        @Override
+        public io.opentelemetry.api.metrics.LongHistogramBuilder setUnit(String unit) {
+            return this;
+        }
+
+        @Override
+        public LongHistogram build() {
+            return new LongHistogram() {
+                @Override
+                public void record(long value) {
+                    // No-op for tests
+                }
+
+                @Override
+                public void record(long value, io.opentelemetry.api.common.Attributes attributes) {
+                    // No-op for tests
+                }
+            };
+        }
+
+        @Override
+        public io.opentelemetry.api.metrics.LongHistogramBuilder ofLongs() {
+            return this;
+        }
+    }
+
     @Mock
     private AttachmentService attachmentService;
 
@@ -36,6 +100,18 @@ class AttachmentStripperServiceTest {
 
     @Mock
     private S3Config s3Config;
+
+    @Mock
+    private OpenTelemetry openTelemetry;
+
+    @Mock
+    private Meter meter;
+
+    @Mock
+    private LongCounter longCounter;
+
+    @Mock
+    private LongHistogram longHistogram;
 
     private ObjectMapper objectMapper;
     private AttachmentStripperService attachmentStripperService;
@@ -58,8 +134,22 @@ class AttachmentStripperServiceTest {
         lenient().doNothing().when(attachmentService).uploadAttachment(any(AttachmentInfo.class), any(byte[].class),
                 anyString(), anyString());
 
+        // Mock OpenTelemetry metrics
+        lenient().when(openTelemetry.getMeter("opik.attachments")).thenReturn(meter);
+        lenient().when(meter.counterBuilder(anyString())).thenReturn(new MockLongCounterBuilder());
+
+        // Create a proper mock for histogram builder that returns the right type
+        @SuppressWarnings("unchecked")
+        io.opentelemetry.api.metrics.DoubleHistogramBuilder doubleHistogramBuilder = (io.opentelemetry.api.metrics.DoubleHistogramBuilder) org.mockito.Mockito
+                .mock(io.opentelemetry.api.metrics.DoubleHistogramBuilder.class);
+        lenient().when(doubleHistogramBuilder.setDescription(anyString())).thenReturn(doubleHistogramBuilder);
+        lenient().when(doubleHistogramBuilder.setUnit(anyString())).thenReturn(doubleHistogramBuilder);
+        lenient().when(doubleHistogramBuilder.ofLongs()).thenReturn(new MockLongHistogramBuilder());
+
+        lenient().when(meter.histogramBuilder(anyString())).thenReturn(doubleHistogramBuilder);
+
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, s3Config);
+                attachmentService, idGenerator, objectMapper, s3Config, openTelemetry);
     }
 
     @Test

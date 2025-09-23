@@ -12,6 +12,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Singleton;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
@@ -52,6 +56,12 @@ public class AttachmentStripperService {
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
 
+    // OpenTelemetry metrics for monitoring attachment processing
+    private final LongCounter attachmentsProcessed;
+    private final LongCounter attachmentsSkipped;
+    private final LongCounter attachmentErrors;
+    private final LongHistogram processingTimer;
+
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
 
@@ -62,11 +72,33 @@ public class AttachmentStripperService {
     public AttachmentStripperService(@NonNull AttachmentService attachmentService,
             @NonNull IdGenerator idGenerator,
             @NonNull ObjectMapper objectMapper,
-            @NonNull S3Config s3Config) {
+            @NonNull S3Config s3Config,
+            @NonNull OpenTelemetry openTelemetry) {
         this.attachmentService = attachmentService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.s3Config = s3Config;
+
+        // Initialize OpenTelemetry metrics
+        Meter meter = openTelemetry.getMeter("opik.attachments");
+
+        this.attachmentsProcessed = meter
+                .counterBuilder("opik.attachments.processed")
+                .setDescription("Number of attachments successfully processed and uploaded")
+                .build();
+        this.attachmentsSkipped = meter
+                .counterBuilder("opik.attachments.skipped")
+                .setDescription("Number of base64 strings skipped (not valid attachments)")
+                .build();
+        this.attachmentErrors = meter
+                .counterBuilder("opik.attachments.errors")
+                .setDescription("Number of errors during attachment processing")
+                .build();
+        this.processingTimer = meter
+                .histogramBuilder("opik.attachments.processing.duration.ms")
+                .setDescription("Time spent processing attachments in milliseconds")
+                .ofLongs()
+                .build();
 
         // Compile the regex pattern once during construction based on configuration
         int minLength = s3Config.getStripAttachmentsMinSize();
@@ -102,6 +134,7 @@ public class AttachmentStripperService {
             return node;
         }
 
+        long startTime = System.currentTimeMillis();
         try {
             // Step 1: Convert JSON to string
             String jsonString = objectMapper.writeValueAsString(node);
@@ -122,6 +155,9 @@ public class AttachmentStripperService {
             log.error("Failed to process JSON for attachment stripping", e);
             // We cannot return the original large payload to ClickHouse
             throw new InternalServerErrorException("Failed to process attachments in payload", e);
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            processingTimer.record(duration);
         }
     }
 
@@ -206,6 +242,7 @@ public class AttachmentStripperService {
             // Skip if not a recognizable file type (Tika returns these for non-binary data)
             if ("application/octet-stream".equals(mimeType) || "text/plain".equals(mimeType)) {
                 log.debug("Skipping base64 string - detected as {} (not an attachment)", mimeType);
+                attachmentsSkipped.add(1);
                 return null;
             }
 
@@ -234,16 +271,29 @@ public class AttachmentStripperService {
             log.info("Successfully processed attachment: fileName='{}', type='{}', size='{}' bytes",
                     fileName, mimeType, bytes.length);
 
+            // Record successful attachment processing
+            attachmentsProcessed.add(1);
+
             log.debug("Replaced base64 attachment with attachment name: {}", fileName);
             return "[" + fileName + "]";
 
         } catch (IllegalArgumentException e) {
             // Not valid base64, ignore silently
             log.debug("String is not valid base64, skipping attachment processing: {}", e.getMessage());
+            attachmentsSkipped.add(1);
             return null;
+        } catch (IOException | InterruptedException e) {
+            // Network/IO errors during upload - these are often transient
+            log.warn("Network error during attachment upload (attachment #{}), skipping: {}",
+                    attachmentNumber, e.getMessage());
+            attachmentErrors.add(1);
+            return null; // Graceful degradation - continue without this attachment
         } catch (Exception e) {
-            log.warn("Error processing potential attachment (attachment #{}): {}", attachmentNumber, e.getMessage());
-            return null;
+            // Unexpected errors - log more details for debugging
+            log.error("Unexpected error processing attachment #{} in context '{}': {}",
+                    attachmentNumber, context, e.getMessage(), e);
+            attachmentErrors.add(1);
+            return null; // Graceful degradation - continue without this attachment
         }
     }
 
@@ -312,48 +362,62 @@ public class AttachmentStripperService {
      * @param bytes the binary data to upload
      * @param workspaceId the workspace ID
      * @param userName the user name
-     * @throws Exception if any step of the multipart upload fails
+     * @throws IOException if network/IO errors occur during upload
+     * @throws InterruptedException if the upload is interrupted
      */
     private void uploadAttachmentViaMultipart(AttachmentInfo attachmentInfo, byte[] bytes,
-            String workspaceId, String userName) throws Exception {
-        // Step 1: Start multipart upload
-        StartMultipartUploadRequest startRequest = StartMultipartUploadRequest.builder()
-                .fileName(attachmentInfo.fileName())
-                .mimeType(attachmentInfo.mimeType())
-                .entityType(attachmentInfo.entityType())
-                .entityId(attachmentInfo.entityId())
-                .projectName(attachmentInfo.projectName())
-                .numOfFileParts(1) // Single part since we have all data in memory
-                .path("placeholder")
-                .build();
+            String workspaceId, String userName) throws IOException, InterruptedException {
+        try {
+            // Step 1: Start multipart upload
+            StartMultipartUploadRequest startRequest = StartMultipartUploadRequest.builder()
+                    .fileName(attachmentInfo.fileName())
+                    .mimeType(attachmentInfo.mimeType())
+                    .entityType(attachmentInfo.entityType())
+                    .entityId(attachmentInfo.entityId())
+                    .projectName(attachmentInfo.projectName())
+                    .numOfFileParts(1) // Single part since we have all data in memory
+                    .path("placeholder") // irrelevant; S3 doesn't use it and for Minio we did in another flow
+                    .build();
 
-        StartMultipartUploadResponse startResponse = attachmentService.startMultiPartUpload(startRequest, workspaceId,
-                userName);
+            StartMultipartUploadResponse startResponse = attachmentService.startMultiPartUpload(startRequest,
+                    workspaceId,
+                    userName);
 
-        // Step 2: Upload the data to the presigned URL and get the ETag
-        String uploadUrl = startResponse.preSignUrls().get(0); // First (and only) URL
-        String eTag = uploadDataToPresignedUrl(uploadUrl, bytes);
+            // Step 2: Upload the data to the presigned URL and get the ETag
+            String uploadUrl = startResponse.preSignUrls().get(0); // First (and only) URL
+            String eTag = uploadDataToPresignedUrl(uploadUrl, bytes);
 
-        // Step 3: Complete multipart upload with the actual ETag
-        MultipartUploadPart part = MultipartUploadPart.builder()
-                .partNumber(1)
-                .eTag(eTag) // Use the actual ETag from the upload response
-                .build();
+            // Step 3: Complete multipart upload with the actual ETag
+            MultipartUploadPart part = MultipartUploadPart.builder()
+                    .partNumber(1)
+                    .eTag(eTag) // Use the actual ETag from the upload response
+                    .build();
 
-        CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
-                .fileName(attachmentInfo.fileName())
-                .projectName(attachmentInfo.projectName())
-                .entityType(attachmentInfo.entityType())
-                .entityId(attachmentInfo.entityId())
-                .fileSize((long) bytes.length)
-                .mimeType(attachmentInfo.mimeType())
-                .uploadId(startResponse.uploadId())
-                .uploadedFileParts(Collections.singletonList(part))
-                .build();
+            CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
+                    .fileName(attachmentInfo.fileName())
+                    .projectName(attachmentInfo.projectName())
+                    .entityType(attachmentInfo.entityType())
+                    .entityId(attachmentInfo.entityId())
+                    .fileSize((long) bytes.length)
+                    .mimeType(attachmentInfo.mimeType())
+                    .uploadId(startResponse.uploadId())
+                    .uploadedFileParts(Collections.singletonList(part))
+                    .build();
 
-        attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
+            attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
 
-        log.debug("Completed multipart upload for attachment: {}", attachmentInfo.fileName());
+            log.debug("Completed multipart upload for attachment: {}", attachmentInfo.fileName());
+
+        } catch (IOException | InterruptedException e) {
+            log.error("Failed to upload attachment '{}' via multipart upload: {}",
+                    attachmentInfo.fileName(), e.getMessage());
+            throw e; // Re-throw for caller to handle
+        } catch (Exception e) {
+            log.error("Unexpected error during multipart upload for attachment '{}': {}",
+                    attachmentInfo.fileName(), e.getMessage(), e);
+            // Wrap unexpected exceptions in IOException for consistent error handling
+            throw new IOException("Multipart upload failed: " + e.getMessage(), e);
+        }
     }
 
     /**
