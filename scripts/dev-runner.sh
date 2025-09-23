@@ -198,7 +198,7 @@ stop_backend() {
 
             log_success "Backend stopped"
         else
-            log_warning "Backend PID file exists but process is not running"
+            log_info "Backend PID file exists but process is not running (cleaning up stale PID file)"
         fi
         rm -f "$BACKEND_PID_FILE"
     else
@@ -241,7 +241,7 @@ stop_frontend() {
 
             log_success "Frontend stopped"
         else
-            log_warning "Frontend PID file exists but process is not running"
+            log_info "Frontend PID file exists but process is not running (cleaning up stale PID file)"
         fi
         rm -f "$FRONTEND_PID_FILE"
     else
@@ -293,11 +293,17 @@ show_status() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
+    log_info "Step 1/5: Stopping backend..."
     stop_backend
+    log_info "Step 2/5: Stopping frontend..."
     stop_frontend
+    log_info "Step 3/5: Building backend..."
     build_backend
+    log_info "Step 4/5: Starting backend..."
     start_backend
+    log_info "Step 5/5: Starting frontend..."
     start_frontend
+    log_success "=== Restart Complete ==="
     show_status
 }
 
