@@ -2550,7 +2550,7 @@ class PromptResourceTest {
 
             // Now restore the first version
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
-                            .formatted(prompt1.id(), prompt2V1.id()))
+                    .formatted(promptId1, prompt2V1.id()))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
@@ -2559,7 +2559,8 @@ class PromptResourceTest {
                 assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt version not found for the specified prompt"));
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404,
+                                "Prompt version not found for the specified prompt"));
             }
         }
     }
