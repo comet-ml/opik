@@ -88,7 +88,9 @@ def simulate_session(
     elif not arguments_valid:
         failure_reason = f"invalid_arguments:{validation_message}"
     else:
-        response_text = str(tool_call.response) if tool_call.response is not None else ""
+        response_text = (
+            str(tool_call.response) if tool_call.response is not None else ""
+        )
         if reference_answer:
             ratio = SequenceMatcher(
                 None,

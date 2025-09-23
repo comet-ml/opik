@@ -18,7 +18,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 import copy
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
 from opik import track
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -32,7 +32,11 @@ from .mcp import (
     load_tool_signature_from_manifest,
     response_to_text,
 )
-from .mcp_second_pass import MCPSecondPassCoordinator, FollowUpBuilder, extract_user_query
+from .mcp_second_pass import (
+    MCPSecondPassCoordinator,
+    FollowUpBuilder,
+    extract_user_query,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +69,10 @@ def suppress_mcp_stdout(logger: logging.Logger = logger):
         trimmed = line.strip()
         if not trimmed:
             continue
-        if "MCP Server running on stdio" in trimmed or "Context7 Documentation MCP Server running on stdio" in trimmed:
+        if (
+            "MCP Server running on stdio" in trimmed
+            or "Context7 Documentation MCP Server running on stdio" in trimmed
+        ):
             continue
         logger.debug("MCP stdout: %s", trimmed)
 
@@ -159,7 +166,9 @@ def make_similarity_metric(name: str) -> Callable[[Dict[str, Any], str], ScoreRe
     def _metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
         reference = (dataset_item.get("reference_answer") or "").strip()
         if not reference:
-            return ScoreResult(name=f"{name}_similarity", value=0.0, reason="Missing reference answer.")
+            return ScoreResult(
+                name=f"{name}_similarity", value=0.0, reason="Missing reference answer."
+            )
 
         def _normalize(text: str) -> str:
             return " ".join(text.lower().split())
@@ -199,14 +208,14 @@ def load_manifest_tool_signature(
     tool_name: str,
     *,
     logger: logging.Logger = logger,
-) -> 'ToolSignature':
+) -> "ToolSignature":
     signature = load_tool_signature_from_manifest(manifest, tool_name)
     logger.debug("Loaded signature for %s", tool_name)
     return signature
 
 
 def dump_signature_artifact(
-    signature: 'ToolSignature',
+    signature: "ToolSignature",
     artifacts_dir: Path | str,
     filename: str,
     *,
@@ -343,6 +352,7 @@ class MCPToolInvocation:
             if self.rate_limit_sleep > 0:
                 time.sleep(self.rate_limit_sleep)
             with suppress_mcp_stdout(self._logger):
+
                 @track(name=f"mcp_tool::{name}")
                 def _tracked() -> Any:
                     return call_tool_from_manifest(self.manifest, name, payload)
@@ -357,6 +367,7 @@ class MCPToolInvocation:
         # new stdio subprocess for each call. This currently mirrors the
         # original blocking behaviour for stability.
         with suppress_mcp_stdout(self._logger):
+
             @track(name=f"mcp_tool::{self.tool_name}")
             def _invoke() -> Any:
                 return call_tool(self.tool_name, prepared)
@@ -365,7 +376,9 @@ class MCPToolInvocation:
         text = response_to_text(response)
         preview = text[: self.preview_chars].replace("\n", " ")
         label = self.preview_label or self.tool_name
-        self._logger.debug("MCP tool %s arguments=%s preview=%r", label, prepared, preview)
+        self._logger.debug(
+            "MCP tool %s arguments=%s preview=%r", label, prepared, preview
+        )
 
         summary = text
         if self.summary_builder is not None:

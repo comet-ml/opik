@@ -104,7 +104,9 @@ def _format_tool_panel(tool: Dict[str, Any]) -> Panel:
         formatted_schema = json.dumps(parameters, indent=2, sort_keys=True)
         body_lines.append("\nSchema:\n" + formatted_schema)
 
-    content = Text("\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold")
+    content = Text(
+        "\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold"
+    )
     return Panel(
         content,
         title=f"tool: {name}",

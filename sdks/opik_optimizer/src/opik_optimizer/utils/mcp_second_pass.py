@@ -38,16 +38,11 @@ def _insert_tool_message(
             inserted = True
 
     if not inserted:
-        logger.debug(
-            "No assistant message found; appending summary for %s", tool_name
-        )
+        logger.debug("No assistant message found; appending summary for %s", tool_name)
         with_tool.append(
             {
                 "role": "assistant",
-                "content": (
-                    "Tool result from "
-                    f"`{tool_name}`:\n\n{tool_content}"
-                ),
+                "content": ("Tool result from " f"`{tool_name}`:\n\n{tool_content}"),
             }
         )
 
@@ -117,7 +112,9 @@ class MCPSecondPassCoordinator:
     ) -> Optional[List[Dict[str, Any]]]:
         self._last_summary = None
         self._last_follow_up = None
-        summary = summary_override if summary_override is not None else self.fetch_summary()
+        summary = (
+            summary_override if summary_override is not None else self.fetch_summary()
+        )
         if not summary:
             logger.debug(
                 "No summary available for %s; skipping second pass", self.tool_name
@@ -150,4 +147,6 @@ class MCPSecondPassCoordinator:
         self._last_follow_up = follow_up
         self.reset()
         return messages
+
+
 logger = logging.getLogger(__name__)

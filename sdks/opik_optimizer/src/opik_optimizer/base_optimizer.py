@@ -106,7 +106,6 @@ class BaseOptimizer:
             f"{self.__class__.__name__} does not implement optimize_mcp yet."
         )
 
-
     def get_history(self) -> List[OptimizationRound]:
         """
         Get the optimization history.

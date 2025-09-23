@@ -84,7 +84,9 @@ def extract_prompt_segments(prompt: ChatPrompt) -> List[PromptSegment]:
                     kind="message",
                     role=message.get("role"),
                     content=message.get("content", ""),
-                    metadata={key: value for key, value in message.items() if key != "content"},
+                    metadata={
+                        key: value for key, value in message.items() if key != "content"
+                    },
                 )
             )
 
