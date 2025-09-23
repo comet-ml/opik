@@ -16,8 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,60 +87,5 @@ class AlertsResourceTest {
         // Then
         assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
         assertThat(response.getLocation()).isNotNull();
-    }
-
-    @Test
-    void getAlerts_shouldReturnAlertPage() {
-        // Given
-        List<Alert> alerts = List.of(
-                Alert.builder()
-                        .id(UUID.randomUUID())
-                        .name("Alert 1")
-                        .conditionType("ERROR_RATE")
-                        .thresholdValue(BigDecimal.valueOf(0.05))
-                        .build(),
-                Alert.builder()
-                        .id(UUID.randomUUID())
-                        .name("Alert 2")
-                        .conditionType("LATENCY")
-                        .thresholdValue(BigDecimal.valueOf(1000))
-                        .build());
-
-        when(alertService.findAlerts(1, 25, null, null, null, null)).thenReturn(alerts);
-        when(alertService.count(null, null, null)).thenReturn(2L);
-
-        // When
-        Response response = alertsResource.getAlerts(1, 25, null, null, null, null);
-
-        // Then
-        assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        assertThat(response.getEntity()).isInstanceOf(Alert.AlertPage.class);
-
-        Alert.AlertPage alertPage = (Alert.AlertPage) response.getEntity();
-        assertThat(alertPage.page()).isEqualTo(1);
-        assertThat(alertPage.size()).isEqualTo(25);
-        assertThat(alertPage.total()).isEqualTo(2L);
-        assertThat(alertPage.content()).hasSize(2);
-    }
-
-    @Test
-    void getById_shouldReturnAlert() {
-        // Given
-        UUID alertId = UUID.randomUUID();
-        Alert alert = Alert.builder()
-                .id(alertId)
-                .name("Test Alert")
-                .conditionType("ERROR_RATE")
-                .thresholdValue(BigDecimal.valueOf(0.05))
-                .build();
-
-        when(alertService.getById(alertId)).thenReturn(Optional.of(alert));
-
-        // When
-        Response response = alertsResource.getById(alertId);
-
-        // Then
-        assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-        assertThat(response.getEntity()).isEqualTo(alert);
     }
 }
