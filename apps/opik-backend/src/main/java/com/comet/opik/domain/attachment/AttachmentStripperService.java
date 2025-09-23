@@ -318,7 +318,6 @@ public class AttachmentStripperService {
         int attachmentCounter = 1;
 
         while (matcher.find()) {
-            matchCount++;
             String base64Data = matcher.group(1); // Extract base64 without quotes
 
             // Try to process as attachment

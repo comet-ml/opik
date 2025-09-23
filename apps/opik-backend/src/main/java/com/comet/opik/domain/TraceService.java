@@ -615,7 +615,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process input field
         if (trace.input() != null) {
-            log.debug("DEBUG: Processing input field");
             var strippedInput = attachmentStripperService.stripAttachments(
                     trace.input(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "input");
             if (strippedInput != trace.input()) {
@@ -626,7 +625,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process output field
         if (trace.output() != null) {
-            log.debug("DEBUG: Processing output field");
             var strippedOutput = attachmentStripperService.stripAttachments(
                     trace.output(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "output");
             if (strippedOutput != trace.output()) {
@@ -637,7 +635,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process metadata field
         if (trace.metadata() != null) {
-            log.debug("DEBUG: Processing metadata field");
             var strippedMetadata = attachmentStripperService.stripAttachments(
                     trace.metadata(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "metadata");
             if (strippedMetadata != trace.metadata()) {
