@@ -1,19 +1,20 @@
 import tests.unit.mcp.stub_opik  # noqa: F401
 from pathlib import Path
 
-import importlib
 import json
 import logging
 import sys
 import textwrap
 import types
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 
 root = Path(__file__).resolve().parents[3]
 src_root = root / "src"
 
-if "opik_optimizer" not in sys.modules:
+try:
+    import opik_optimizer  # type: ignore  # noqa: F401
+except ImportError:  # pragma: no cover - fallback for isolated tests
     pkg = types.ModuleType("opik_optimizer")
     pkg.__path__ = [str(src_root / "opik_optimizer")]
     sys.modules["opik_optimizer"] = pkg
@@ -29,27 +30,30 @@ from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (  # noqa
 )
 
 
-mcp = importlib.import_module("opik_optimizer.utils.mcp")
-mcp_workflow = importlib.import_module("opik_optimizer.utils.mcp_workflow")
-ToolSignature = mcp.ToolSignature
-MCPManifest = mcp.MCPManifest
-dump_mcp_signature = mcp.dump_mcp_signature
-extract_description_from_system = mcp.extract_description_from_system
-load_mcp_signature = mcp.load_mcp_signature
-signature_updates = mcp.signature_updates
-system_prompt_from_tool = mcp.system_prompt_from_tool
-tools_from_signatures = mcp.tools_from_signatures
-validate_tool_arguments = mcp.validate_tool_arguments
-extract_tool_arguments = mcp_workflow.extract_tool_arguments
-make_follow_up_builder = mcp_workflow.make_follow_up_builder
-make_argument_summary_builder = mcp_workflow.make_argument_summary_builder
-preview_dataset_tool_invocation = mcp_workflow.preview_dataset_tool_invocation
-make_similarity_metric = mcp_workflow.make_similarity_metric
-MCPToolInvocation = mcp_workflow.MCPToolInvocation
+from opik_optimizer.utils.mcp import (  # noqa: E402
+    MCPManifest,
+    ToolSignature,
+    dump_mcp_signature,
+    extract_description_from_system,
+    load_mcp_signature,
+    signature_updates,
+    system_prompt_from_tool,
+    tools_from_signatures,
+    validate_tool_arguments,
+)
+from opik_optimizer.utils import mcp_workflow  # noqa: E402
+from opik_optimizer.utils.mcp_workflow import (  # noqa: E402
+    MCPToolInvocation,
+    ensure_argument_via_resolver,
+    extract_tool_arguments,
+    make_argument_summary_builder,
+    make_follow_up_builder,
+    make_similarity_metric,
+    preview_dataset_tool_invocation,
+)
 
 
-
-def _sample_tool_entry():
+def _sample_tool_entry() -> Dict[str, Any]:
     return {
         "type": "function",
         "function": {
@@ -70,7 +74,7 @@ def _sample_tool_entry():
     }
 
 
-def test_load_and_dump_signature(tmp_path):
+def test_load_and_dump_signature(tmp_path: Path) -> None:
     path = tmp_path / "signature.json"
     payload = [
         _sample_tool_entry(),
@@ -92,7 +96,7 @@ def test_load_and_dump_signature(tmp_path):
     assert reloaded[0].name == "doc_lookup"
 
 
-def test_signature_updates_and_tool_conversion():
+def test_signature_updates_and_tool_conversion() -> None:
     signature = ToolSignature.from_tool_entry(_sample_tool_entry())
     updates = signature_updates([signature])
     assert updates == {"tool:doc_lookup": "Find documentation snippets."}
@@ -102,7 +106,7 @@ def test_signature_updates_and_tool_conversion():
     assert tools[0]["function"]["description"] == "Find documentation snippets."
 
 
-def test_validate_tool_arguments():
+def test_validate_tool_arguments() -> None:
     signature = ToolSignature.from_tool_entry(_sample_tool_entry())
     ok, message = validate_tool_arguments(signature, {"query": "install"})
     assert ok
@@ -117,7 +121,7 @@ def test_validate_tool_arguments():
     assert "string" in message
 
 
-def test_system_prompt_generation_and_extraction():
+def test_system_prompt_generation_and_extraction() -> None:
     signature = ToolSignature.from_tool_entry(_sample_tool_entry())
     prompt = system_prompt_from_tool(signature)
     extracted = extract_description_from_system(prompt)
@@ -125,7 +129,7 @@ def test_system_prompt_generation_and_extraction():
     assert extracted == signature.description
 
 
-def test_extract_tool_arguments_handles_nested_dicts():
+def test_extract_tool_arguments_handles_nested_dicts() -> None:
     item = {
         "input": {
             "arguments": {"query": "docs"},
@@ -139,14 +143,15 @@ def test_extract_tool_arguments_handles_nested_dicts():
     assert extract_tool_arguments(Payload()) == {"topic": "api"}
 
 
-def test_follow_up_builder_renders_summary_and_query():
+def test_follow_up_builder_renders_summary_and_query() -> None:
     builder = make_follow_up_builder("Summary: {summary}. Question: {user_query}")
     follow_up = builder({"user_query": "How to install?"}, "Use the docs")
+    assert follow_up is not None
     assert "Use the docs" in follow_up
     assert "How to install?" in follow_up
 
 
-def test_make_argument_summary_builder_formats_arguments():
+def test_make_argument_summary_builder_formats_arguments() -> None:
     builder = make_argument_summary_builder(
         heading="RESULT",
         instructions="Use the snippet",
@@ -159,7 +164,7 @@ def test_make_argument_summary_builder_formats_arguments():
     assert "abcdefghij" in summary  # preview truncated
 
 
-def test_preview_dataset_tool_invocation(monkeypatch):
+def test_preview_dataset_tool_invocation(monkeypatch: Any) -> None:
     manifest = MCPManifest.from_dict(
         {
             "name": "stub",
@@ -198,8 +203,8 @@ def test_preview_dataset_tool_invocation(monkeypatch):
     assert captured["payload"] == {"query": "docs"}
 
 
-def test_argument_adapter_resolves_missing_id(monkeypatch):
-    adapter = mcp_workflow.ensure_argument_via_resolver(
+def test_argument_adapter_resolves_missing_id(monkeypatch: Any) -> None:
+    adapter = ensure_argument_via_resolver(
         target_field="context7CompatibleLibraryID",
         resolver_tool="resolver",
         query_fields=("library_query", "fallback_query"),
@@ -209,7 +214,7 @@ def test_argument_adapter_resolves_missing_id(monkeypatch):
         def __init__(self, text: str) -> None:
             self.content = [types.SimpleNamespace(text=text)]
 
-    calls: list[tuple[str, Dict[str, Any]]] = []
+    calls: List[Tuple[str, Dict[str, Any]]] = []
 
     def fake_call(name: str, payload: Dict[str, Any]) -> Any:
         calls.append((name, payload))
@@ -227,14 +232,14 @@ def test_argument_adapter_resolves_missing_id(monkeypatch):
     assert prepared_noop["context7CompatibleLibraryID"] == "/existing"
 
 
-def test_argument_adapter_skips_when_no_queries(monkeypatch):
-    adapter = mcp_workflow.ensure_argument_via_resolver(
+def test_argument_adapter_skips_when_no_queries(monkeypatch: Any) -> None:
+    adapter = ensure_argument_via_resolver(
         target_field="context7CompatibleLibraryID",
         resolver_tool="resolver",
         query_fields=("library_query",),
     )
 
-    calls: list[Any] = []
+    calls: List[Any] = []
 
     def fake_call(name: str, payload: Dict[str, Any]) -> Any:
         calls.append((name, payload))
@@ -245,7 +250,9 @@ def test_argument_adapter_skips_when_no_queries(monkeypatch):
     assert calls == []
 
 
-def test_preview_dataset_tool_invocation_handles_empty_dataset(caplog):
+def test_preview_dataset_tool_invocation_handles_empty_dataset(
+    caplog: Any, capsys: Any
+) -> None:
     manifest = MCPManifest.from_dict(
         {
             "name": "stub",
@@ -256,7 +263,9 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(caplog):
     )
 
     class EmptyDataset:
-        def get_items(self, nb_samples=None):  # pragma: no cover - signature parity
+        def get_items(
+            self, nb_samples: Optional[int] = None
+        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
             return []
 
     caplog.set_level(logging.WARNING, logger="opik_optimizer.utils.mcp_workflow")
@@ -266,10 +275,13 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(caplog):
         dataset=EmptyDataset(),
     )
     assert result is None
-    assert "No dataset items available for preview." in caplog.text
+    out = capsys.readouterr().out.replace("\n", " ")
+    assert "No dataset items available for preview" in out
 
 
-def test_preview_dataset_tool_invocation_handles_errors(caplog):
+def test_preview_dataset_tool_invocation_handles_errors(
+    caplog: Any, capsys: Any
+) -> None:
     manifest = MCPManifest.from_dict(
         {
             "name": "stub",
@@ -280,7 +292,9 @@ def test_preview_dataset_tool_invocation_handles_errors(caplog):
     )
 
     class FailingDataset:
-        def get_items(self, nb_samples=None):  # pragma: no cover - signature parity
+        def get_items(
+            self, nb_samples: Optional[int] = None
+        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
             raise RuntimeError("boom")
 
     caplog.set_level(logging.WARNING, logger="opik_optimizer.utils.mcp_workflow")
@@ -290,10 +304,11 @@ def test_preview_dataset_tool_invocation_handles_errors(caplog):
         dataset=FailingDataset(),
     )
     assert result is None
-    assert "Failed to fetch dataset sample" in caplog.text
+    out = capsys.readouterr().out.replace("\n", " ")
+    assert "Failed to fetch dataset sample" in out
 
 
-def test_system_prompt_masks_secrets_and_compacts_schema():
+def test_system_prompt_masks_secrets_and_compacts_schema() -> None:
     signature = ToolSignature.from_tool_entry(_sample_tool_entry())
     manifest = MCPManifest.from_dict(
         {
@@ -309,7 +324,9 @@ def test_system_prompt_masks_secrets_and_compacts_schema():
     assert "Input Schema:\n{" in prompt_text
 
 
-def test_mcp_tool_invocation_applies_adapter_and_records_summary(monkeypatch):
+def test_mcp_tool_invocation_applies_adapter_and_records_summary(
+    monkeypatch: Any,
+) -> None:
     manifest = MCPManifest.from_dict(
         {
             "name": "ctx",
@@ -323,15 +340,17 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(monkeypatch):
         def __init__(self, text: str) -> None:
             self.content = [types.SimpleNamespace(text=text)]
 
-    calls: list[tuple[str, Dict[str, Any]]] = []
+    calls: List[Tuple[str, Dict[str, Any]]] = []
 
-    def fake_call(manifest_obj, tool_name: str, payload: Dict[str, Any]) -> Any:
+    def fake_call(
+        manifest_obj: MCPManifest, tool_name: str, payload: Dict[str, Any]
+    ) -> Any:
         calls.append((tool_name, payload))
         return FakeResponse(f"{tool_name}-result")
 
     monkeypatch.setattr(mcp_workflow, "call_tool_from_manifest", fake_call)
 
-    recorded: list[str] = []
+    recorded: List[str] = []
 
     class DummyCoordinator:
         def record_summary(self, summary: str) -> None:
@@ -370,14 +389,14 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(monkeypatch):
     ]
 
 
-def test_make_similarity_metric_handles_missing_reference():
+def test_make_similarity_metric_handles_missing_reference() -> None:
     metric = make_similarity_metric("context7")
     score = metric({"reference_answer": ""}, "output")
     assert score.value == 0.0
     assert "Missing reference" in score.reason
 
 
-def test_sync_tool_description_updates_system_prompt():
+def test_sync_tool_description_updates_system_prompt() -> None:
     base_system = textwrap.dedent(
         """
         ### Available Tools
