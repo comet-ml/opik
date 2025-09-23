@@ -13,12 +13,12 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
-    helpers,
+    helpers as langchain_helpers,
     opik_encoder_extension,
     provider_usage_extractors,
 )
 
-from ...api_objects import opik_client
+from ...api_objects import helpers, opik_client
 import opik.context_storage as context_storage
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
@@ -135,8 +135,8 @@ class OpikTracer(BaseTracer):
                 "traceback": run_dict["error"],
             }
         else:
-            output, trace_additional_metadata = helpers.split_big_langgraph_outputs(
-                run_dict["outputs"]
+            output, trace_additional_metadata = (
+                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
             )
             error_info = None
 
@@ -399,8 +399,8 @@ class OpikTracer(BaseTracer):
             if span_data.input == {"input": ""}:
                 span_data.input = run_dict["inputs"]
 
-            filtered_output, additional_metadata = helpers.split_big_langgraph_outputs(
-                run_dict["outputs"]
+            filtered_output, additional_metadata = (
+                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
             )
 
             if additional_metadata:
