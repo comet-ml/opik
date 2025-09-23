@@ -7,6 +7,7 @@ import copy
 import importlib
 import json
 import textwrap
+from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
@@ -426,9 +427,18 @@ def score_query_tool(
         if description_tokens.isdisjoint(value_tokens):
             continue
         response = call_tool_from_manifest(manifest, tool_name, arguments)
-        text = response_to_text(response).lower()
-        if record.get("expected_answer_contains", "").lower() in text:
-            successes += 1
+        text = response_to_text(response)
+        reference = record.get("reference_answer") or record.get(
+            "expected_answer_contains", ""
+        )
+        if reference:
+            ratio = SequenceMatcher(
+                None,
+                " ".join(reference.lower().split()),
+                " ".join(text.lower().split()),
+            ).ratio()
+            if ratio >= 0.6:
+                successes += 1
     return successes / total if total else 0.0
 
 
@@ -454,7 +464,16 @@ def score_url_tool(
         if description_tokens.isdisjoint(host_tokens):
             continue
         response = call_tool_from_manifest(manifest, tool_name, arguments)
-        text = response_to_text(response).lower()
-        if record.get("expected_answer_contains", "").lower() in text:
-            successes += 1
+        text = response_to_text(response)
+        reference = record.get("reference_answer") or record.get(
+            "expected_answer_contains", ""
+        )
+        if reference:
+            ratio = SequenceMatcher(
+                None,
+                " ".join(reference.lower().split()),
+                " ".join(text.lower().split()),
+            ).ratio()
+            if ratio >= 0.6:
+                successes += 1
     return successes / total if total else 0.0

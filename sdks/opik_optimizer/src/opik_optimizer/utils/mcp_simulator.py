@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any, Callable, Dict, Mapping, Optional
 
 from .mcp import ToolSignature, validate_tool_arguments
@@ -45,7 +46,9 @@ def simulate_session(
     dataset_id = dataset_item.get("id", "unknown")
     expected_tool = dataset_item["expected_tool"]
     reference_arguments = dataset_item.get("arguments", {})
-    expected_answer = dataset_item.get("expected_answer_contains")
+    reference_answer = dataset_item.get("reference_answer") or dataset_item.get(
+        "expected_answer_contains"
+    )
 
     signature = signature_map.get(expected_tool)
     if signature is None:
@@ -86,10 +89,15 @@ def simulate_session(
         failure_reason = f"invalid_arguments:{validation_message}"
     else:
         response_text = str(tool_call.response) if tool_call.response is not None else ""
-        if expected_answer and expected_answer.lower() in response_text.lower():
-            score = 1.0
-        elif expected_answer:
-            failure_reason = "missing_expected_answer"
+        if reference_answer:
+            ratio = SequenceMatcher(
+                None,
+                " ".join(reference_answer.lower().split()),
+                " ".join(response_text.lower().split()),
+            ).ratio()
+            score = ratio
+            if ratio < 0.6:
+                failure_reason = "low_similarity"
         else:
             score = 1.0
 
