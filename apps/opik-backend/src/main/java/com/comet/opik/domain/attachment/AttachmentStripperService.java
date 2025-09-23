@@ -152,10 +152,8 @@ public class AttachmentStripperService {
         Matcher matcher = base64Pattern.matcher(jsonString);
         StringBuffer result = new StringBuffer();
         int attachmentCounter = 1;
-        int matchCount = 0;
 
         while (matcher.find()) {
-            matchCount++;
             String base64Data = matcher.group(1); // Extract base64 without quotes
 
             // Try to process as attachment
@@ -200,7 +198,6 @@ public class AttachmentStripperService {
             String userName,
             String projectName,
             String context) {
-        System.out.println("DEBUG: processBase64Attachment called with base64 length: " + base64Data.length());
         try {
             // Decode base64 and detect MIME type using Tika
             byte[] bytes = Base64.getDecoder().decode(base64Data);

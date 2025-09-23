@@ -7327,7 +7327,6 @@ class TracesResourceTest {
             assertThat(retrievedInput).isNotNull();
 
             String retrievedInputString = retrievedInput.toString();
-            System.out.println("Retrieved Input: " + retrievedInputString);
 
             // Verify the base64 data is replaced by attachment references
             assertThat(retrievedInputString).contains("attachment-1.png");
@@ -7746,12 +7745,10 @@ class TracesResourceTest {
                             .build());
 
             // When batch creating the traces
-            System.out.println("Creating batch of " + traces.size() + " traces...");
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Then all traces should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
-            System.out.println("Waiting for async processing...");
             var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
 
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -7818,8 +7815,6 @@ class TracesResourceTest {
                 var attachmentNames = attachmentPage.content().stream()
                         .map(attachment -> attachment.fileName())
                         .toList();
-
-                System.out.println("Trace " + (i + 1) + " - Attachment names: " + attachmentNames);
 
                 // Verify correct number of attachments based on trace content
                 switch (i) {

@@ -129,30 +129,27 @@ class TraceServiceImpl implements TraceService {
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
         UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
+        return Mono.deferContextual(ctx -> IdGenerator
+                .validateVersionAsync(id, TRACE_KEY)
+                .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
+                .flatMap(project -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
-            return IdGenerator
-                    .validateVersionAsync(id, TRACE_KEY)
-                    .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                    .flatMap(project -> {
-                        // Strip attachments from the trace with the generated ID and project ID
-                        Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
-                        Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName,
-                                projectName);
+                    // Strip attachments from the trace with the generated ID and project ID
+                    Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
+                    Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName,
+                            projectName);
 
-                        return lockService.executeWithLock(
-                                new LockService.Lock(id, TRACE_KEY),
-                                Mono.defer(() -> insertTrace(processedTrace, project, id)))
-                                .doOnSuccess(__ -> {
-                                    var savedTrace = processedTrace.toBuilder().projectId(project.id())
-                                            .projectName(projectName).build();
-
-                                    eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                                });
-                    });
-        });
+                    return lockService.executeWithLock(
+                            new LockService.Lock(id, TRACE_KEY),
+                            Mono.defer(() -> insertTrace(processedTrace, project, id)))
+                            .doOnSuccess(__ -> {
+                                var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                        .projectName(projectName).build();
+                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                            });
+                }));
     }
 
     @WithSpan
@@ -534,7 +531,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process input field
         if (trace.input() != null) {
-            log.debug("DEBUG: Processing input field");
             var strippedInput = attachmentStripperService.stripAttachments(
                     trace.input(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "input");
             if (strippedInput != trace.input()) {
@@ -545,7 +541,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process output field
         if (trace.output() != null) {
-            log.debug("DEBUG: Processing output field");
             var strippedOutput = attachmentStripperService.stripAttachments(
                     trace.output(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "output");
             if (strippedOutput != trace.output()) {
@@ -556,7 +551,6 @@ class TraceServiceImpl implements TraceService {
 
         // Process metadata field
         if (trace.metadata() != null) {
-            log.debug("DEBUG: Processing metadata field");
             var strippedMetadata = attachmentStripperService.stripAttachments(
                     trace.metadata(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "metadata");
             if (strippedMetadata != trace.metadata()) {
