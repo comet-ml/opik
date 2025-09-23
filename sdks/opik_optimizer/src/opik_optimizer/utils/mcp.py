@@ -318,7 +318,7 @@ TOOL_USE_GUIDELINES = textwrap.dedent(
 
 
 def _format_json_block(data: Mapping[str, Any]) -> str:
-    return textwrap.indent(json.dumps(data, indent=2), "    ")
+    return json.dumps(data, sort_keys=True)
 
 
 def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPManifest] = None) -> str:
@@ -357,7 +357,7 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
 
         command_line = " ".join(command_line_parts)
 
-        schema_block = _format_json_block(signature.parameters) if signature.parameters else "    {}"
+        schema_block = _format_json_block(signature.parameters) if signature.parameters else "{}"
 
         mcp_header = textwrap.dedent(
             f"""
@@ -374,7 +374,7 @@ def system_prompt_from_tool(signature: ToolSignature, manifest: Optional[MCPMani
             ### Available Tools
             - {signature.name}: {signature.description}
                 Input Schema:
-{schema_block}
+            {schema_block}
             """
         ).strip()
 
