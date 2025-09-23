@@ -144,18 +144,34 @@ class ChatPrompt:
         return retval
 
     def copy(self) -> "ChatPrompt":
+        """Shallow clone preserving model configuration and tools."""
+
+        # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
+        # migrate callers away from generic copies so optimizer metadata stays typed.
         return ChatPrompt(
             system=self.system,
             user=self.user,
             messages=copy.deepcopy(self.messages),
-            tools=self.tools,
+            tools=copy.deepcopy(self.tools),
             function_map=self.function_map,
+            model=self.model,
+            invoke=self.invoke,
+            project_name=self.project_name,
+            **copy.deepcopy(self.model_kwargs),
         )
 
     def set_messages(self, messages: List[Dict[str, Any]]) -> None:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
+
+    # TODO(opik): remove this stop-gap once MetaPromptOptimizer supports MCP.
+    # Provides a second-pass flow so tool results can be appended before
+    # rerunning the model.
+    def with_messages(self, messages: List[Dict[str, Any]]) -> "ChatPrompt":
+        cloned = self.copy()
+        cloned.set_messages(messages)
+        return cloned
 
     @classmethod
     def model_validate(
