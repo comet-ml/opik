@@ -92,9 +92,15 @@ start_backend() {
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
     
     # Check if backend is already running
-    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
-        log_warning "Backend is already running (PID: $(cat "$BACKEND_PID_FILE"))"
-        return 0
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        BACKEND_PID=$(cat "$BACKEND_PID_FILE")
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
+            log_warning "Backend is already running (PID: $BACKEND_PID)"
+            return 0
+        else
+            log_info "Removing stale backend PID file (process $BACKEND_PID no longer exists)"
+            rm -f "$BACKEND_PID_FILE"
+        fi
     fi
     
     # Set environment variables
@@ -152,9 +158,15 @@ start_frontend() {
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
     
     # Check if frontend is already running
-    if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
-        log_warning "Frontend is already running (PID: $(cat "$FRONTEND_PID_FILE"))"
-        return 0
+    if [ -f "$FRONTEND_PID_FILE" ]; then
+        FRONTEND_PID=$(cat "$FRONTEND_PID_FILE")
+        if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+            log_warning "Frontend is already running (PID: $FRONTEND_PID)"
+            return 0
+        else
+            log_info "Removing stale frontend PID file (process $FRONTEND_PID no longer exists)"
+            rm -f "$FRONTEND_PID_FILE"
+        fi
     fi
     
     # Start frontend in background
