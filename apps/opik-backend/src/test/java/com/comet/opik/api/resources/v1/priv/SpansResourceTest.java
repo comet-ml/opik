@@ -10,7 +10,6 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
@@ -6548,101 +6547,36 @@ class SpansResourceTest {
         @Test
         @DisplayName("when span does not exist, then return no content")
         void deleteFeedback__whenSpanDoesNotExist__thenReturnNoContent() {
-
             var id = generator.generate();
-
-            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
-                    TEST_WORKSPACE);
+            var deleteFeedbackScore = podamFactory.manufacturePojo(DeleteFeedbackScore.class);
+            spanResourceClient.deleteSpanFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
         }
 
-        @Test
+        Stream<String> deleteFeedback() {
+            return Stream.of(USER, null, "", "   ");
+        }
+
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void deleteFeedback() {
-            Span expectedSpan = podamFactory.manufacturePojo(Span.class);
-            var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+        void deleteFeedback(String author) {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+            var score = podamFactory.manufacturePojo(FeedbackScore.class);
+            createAndAssert(spanId, score, TEST_WORKSPACE, API_KEY);
+            expectedSpan = expectedSpan.toBuilder().feedbackScores(List.of(score)).build();
+            var actualSpan = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
 
-            var score = FeedbackScore.builder()
-                    .name("name")
-                    .value(BigDecimal.valueOf(1))
-                    .source(ScoreSource.SDK)
+            var deleteFeedbackScore = DeleteFeedbackScore.builder()
+                    .name(score.name())
+                    .author(author)
                     .build();
-            createAndAssert(id, score, TEST_WORKSPACE, API_KEY);
-
-            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
-                    TEST_WORKSPACE);
+            spanResourceClient.deleteSpanFeedbackScore(deleteFeedbackScore, spanId, API_KEY, TEST_WORKSPACE);
 
             expectedSpan = expectedSpan.toBuilder().feedbackScores(null).build();
             var actualEntity = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity.feedbackScores()).isNull();
-        }
-
-        @Test
-        @DisplayName("delete span feedback score with author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
-            // Create a span
-            var span = podamFactory.manufacturePojo(Span.class);
-            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-
-            // Add a feedback score with author (using DeleteFeedbackScore with author for the bug scenario)
-            var feedbackScore = FeedbackScore.builder()
-                    .name("test-score")
-                    .value(BigDecimal.valueOf(0.85))
-                    .source(ScoreSource.SDK)
-                    .build();
-
-            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
-
-            // Verify the feedback score was created
-            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
-                    TEST_WORKSPACE);
-            assertThat(actualSpan.feedbackScores()).hasSize(1);
-
-            // Try to delete the score WITH an author (this is where the bug occurs)
-            // When writeToAuthored is disabled, this should still work
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test-score")
-                    .author(USER) // This is the key part - including author in the delete request
-                    .build();
-
-            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
-
-            // Verify the score was actually deleted
-            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
-            assertThat(spanAfterDeletion.feedbackScores()).isNull();
-        }
-
-        @Test
-        @DisplayName("delete span feedback score without author when writeToAuthored is disabled should work")
-        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
-            // Create a span
-            var span = podamFactory.manufacturePojo(Span.class);
-            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-
-            // Add a feedback score without author
-            var feedbackScore = FeedbackScore.builder()
-                    .name("test-score-2")
-                    .value(BigDecimal.valueOf(0.75))
-                    .source(ScoreSource.SDK)
-                    .build();
-
-            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
-
-            // Verify the feedback score was created
-            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
-                    TEST_WORKSPACE);
-            assertThat(actualSpan.feedbackScores()).hasSize(1);
-
-            // Try to delete the score WITHOUT an author (this should work before and after the fix)
-            var deleteRequest = DeleteFeedbackScore.builder()
-                    .name("test-score-2")
-                    // No author specified
-                    .build();
-
-            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
-
-            // Verify the score was deleted
-            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
-            assertThat(spanAfterDeletion.feedbackScores()).isNull();
         }
     }
 
