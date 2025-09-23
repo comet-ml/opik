@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         files: ^sdks/opik_optimizer
@@ -8,7 +8,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.9
+    rev: v0.13.1
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
@@ -16,8 +16,14 @@ repos:
       - id: ruff-format
         files: ^sdks/opik_optimizer
 
+  - repo: https://github.com/psf/black
+    rev: 25.9.0
+    hooks:
+      - id: black
+        files: ^sdks/opik_optimizer
+
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.18.2
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
