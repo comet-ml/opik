@@ -1818,11 +1818,17 @@ class SpanDAO {
                 .build());
     }
 
-    private JsonNode getJsonNodeOrTruncatedString(RowMetadata rowMetadata, String truncatedFlag, Row row,
-            String value) {
-        return rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))
-                ? TextNode.valueOf(value)
-                : JsonUtils.getJsonNodeFromString(value);
+    private JsonNode getJsonNodeOrTruncatedString(RowMetadata rowMetadata, String truncatedFlag, Row row, String value) {
+        if  (rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))) {
+            return TextNode.valueOf(value);
+        }
+
+        try {
+            return JsonUtils.getJsonNodeFromString(value);
+        } catch (Exception e) {
+            log.warn("Failed to parse JSON, returning as plain text node. Error: {}", e.getMessage());
+            return TextNode.valueOf(value);
+        }
     }
 
     private Publisher<Span> mapToPartialDto(Result result) {

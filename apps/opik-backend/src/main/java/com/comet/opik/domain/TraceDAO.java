@@ -1905,10 +1905,10 @@ class TraceDAOImpl implements TraceDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                t.first_message as first_message,
-                t.last_message as last_message,
-                t.first_message_truncated as first_message_truncated,
-                t.last_message_truncated as last_message_truncated,
+                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message <else> t.first_message as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message <else> t.last_message as last_message<endif>,
+                <if(truncate)> if(t.first_message_length > t.first_message_truncation_threshold, true, false) as first_message_truncated <else> false as first_message_truncated <endif>,
+                <if(truncate)> if(t.last_message_length > t.last_message_truncation_threshold, true, false) as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
                 t.total_estimated_cost as total_estimated_cost,
                 t.usage as usage,
@@ -1933,10 +1933,14 @@ class TraceDAOImpl implements TraceDAO {
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
-                    <if(truncate)> replaceRegexpAll(argMin(t.truncated_input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                    <if(truncate)> replaceRegexpAll(argMax(t.truncated_output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                    <if(truncate)> if(argMin(t.input_length, t.start_time) > argMin(t.truncation_threshold, t.start_time), true, false) as first_message_truncated <else> false as first_message_truncated <endif>,
-                    <if(truncate)> if(argMax(t.output_length, t.end_time) > argMax(t.truncation_threshold, t.end_time), true, false) as last_message_truncated <else> false as last_message_truncated <endif>,
+                    argMin(t.input, t.start_time) as first_message,
+                    argMax(t.output, t.end_time) as last_message,
+                    argMin(t.truncated_input, t.start_time) as truncated_first_message,
+                    argMax(t.truncated_output, t.end_time) as truncated_last_message,
+                    argMin(t.input_length, t.start_time) as first_message_length,
+                    argMax(t.output_length, t.end_time) as last_message_length,
+                    argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
+                    argMax(t.truncation_threshold, t.end_time) as last_message_truncation_threshold,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -2560,9 +2564,16 @@ class TraceDAOImpl implements TraceDAO {
 
     private JsonNode getJsonNodeOrTruncatedString(RowMetadata rowMetadata, String truncatedFlag, Row row,
             String value) {
-        return rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))
-                ? TextNode.valueOf(value)
-                : JsonUtils.getJsonNodeFromString(value);
+        if  (rowMetadata.contains(truncatedFlag) && Boolean.TRUE.equals(row.get(truncatedFlag, Boolean.class))) {
+            return TextNode.valueOf(value);
+        }
+
+        try {
+            return JsonUtils.getJsonNodeFromString(value);
+        } catch (Exception e) {
+            log.warn("Failed to parse JSON, returning as plain text node. Error: {}", e.getMessage());
+            return TextNode.valueOf(value);
+        }
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
