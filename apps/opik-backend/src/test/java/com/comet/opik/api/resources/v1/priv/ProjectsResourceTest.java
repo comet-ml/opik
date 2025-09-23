@@ -2145,6 +2145,25 @@ class ProjectsResourceTest {
         }
 
         @Test
+        @DisplayName("when description exceeds 255 characters, then reject the request")
+        void create__whenDescriptionTooLong__thenRejectCreate() {
+
+            String longDescription = "a".repeat(256);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(Project.builder().name("test-project").description(longDescription).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("description cannot exceed 255 characters");
+            }
+        }
+
+        @Test
         @DisplayName("when project name already exists, then reject the request")
         void create__whenProjectNameAlreadyExists__thenRejectNameCreate() {
 

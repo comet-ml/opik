@@ -23,7 +23,7 @@ on:
         default: false
       build_guardrails:
         type: boolean
-        required: false
+        required: true
         description: Build guardrails backend
         default: true
   workflow_call:

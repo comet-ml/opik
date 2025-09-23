@@ -92,6 +92,7 @@ class OpikMessageProcessor(BaseMessageProcessor):
                 f"{cause.__class__.__name__} - {cause}",
                 extra={"error_tracking_extra": error_tracking_extra},
             )
+            LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
         except pydantic.ValidationError as validation_error:
             error_tracking_extra = _generate_error_tracking_extra(
                 validation_error, message
@@ -112,6 +113,7 @@ class OpikMessageProcessor(BaseMessageProcessor):
                 exc_info=True,
                 extra={"error_tracking_extra": error_tracking_extra},
             )
+            LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
 
     def _process_create_span_message(
         self,
