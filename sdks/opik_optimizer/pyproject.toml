@@ -26,6 +26,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "pytest-conv"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opik_optimizer = ["data/*.json", "data/*.jsonl"]
+
 [project.urls]
 Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
 Repository = "https://github.com/comet-ml/opik"

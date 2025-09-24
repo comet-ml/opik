@@ -156,6 +156,6 @@ To contribute or use the Opik Optimizer from source:
 
 ## Requirements
 
-- Python `>=3.9,<3.13`
+- Python `>=3.10,<3.13`
 - Opik API key (recommended for full functionality, configure via `opik configure`)
 - API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.
