@@ -35,17 +35,17 @@ def test_infer_dataset_keys_heuristics() -> None:
     assert inp in ("question", "text")
 
 
-def test_to_gepa_default_datainst_mapping() -> None:
+def test_build_data_insts_mapping() -> None:
     items: List[Dict[str, Any]] = [
         {"question": "Q1", "answer": "A1", "metadata": {"context": "C1"}},
         {"question": "Q2", "answer": "A2"},
     ]
     opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
-    converted = opt._to_gepa_default_datainst(
+    converted = opt._build_data_insts(
         items, input_key="question", output_key="answer"
     )
     assert len(converted) == 2
-    assert converted[0]["input"] == "Q1"
-    assert converted[0]["answer"] == "A1"
-    assert converted[0]["additional_context"].get("context") == "C1"
-    assert converted[1]["additional_context"] == {}
+    assert converted[0].input_text == "Q1"
+    assert converted[0].answer == "A1"
+    assert converted[0].additional_context.get("context") == "C1"
+    assert converted[1].additional_context == {}

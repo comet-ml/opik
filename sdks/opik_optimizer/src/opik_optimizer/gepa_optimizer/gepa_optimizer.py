@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import nullcontext
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, ContextManager, Dict, List, Optional, Tuple, Union
 
 import opik
 from opik import Dataset
@@ -70,7 +70,9 @@ class GepaOptimizer(BaseOptimizer):
             )
         return data_insts
 
-    def _apply_system_text(self, prompt_obj: chat_prompt.ChatPrompt, system_text: str) -> chat_prompt.ChatPrompt:
+    def _apply_system_text(
+        self, prompt_obj: chat_prompt.ChatPrompt, system_text: str
+    ) -> chat_prompt.ChatPrompt:
         updated = prompt_obj.copy()
         if updated.messages is not None:
             messages = updated.get_messages()
@@ -112,7 +114,9 @@ class GepaOptimizer(BaseOptimizer):
 
         max_metric_calls: int = int(kwargs.get("max_metric_calls", 30))
         reflection_minibatch_size: int = int(kwargs.get("reflection_minibatch_size", 3))
-        candidate_selection_strategy: str = str(kwargs.get("candidate_selection_strategy", "pareto"))
+        candidate_selection_strategy: str = str(
+            kwargs.get("candidate_selection_strategy", "pareto")
+        )
         n_samples: Optional[int] = kwargs.get("n_samples")
 
         prompt = prompt.copy()
@@ -180,9 +184,11 @@ class GepaOptimizer(BaseOptimizer):
             initial_score = 0.0
             with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
                 try:
-                    baseline_suppress = nullcontext()
+                    baseline_suppress: ContextManager[Any] = nullcontext()
                     try:
-                        from ..reporting_utils import suppress_opik_logs as _suppress_logs
+                        from ..reporting_utils import (
+                            suppress_opik_logs as _suppress_logs,
+                        )
 
                         baseline_suppress = _suppress_logs()
                     except Exception:
@@ -197,7 +203,9 @@ class GepaOptimizer(BaseOptimizer):
                         verbose=0,
                     )
                     with baseline_suppress:
-                        initial_score = float(self._evaluate_prompt_logged(**eval_kwargs))
+                        initial_score = float(
+                            self._evaluate_prompt_logged(**eval_kwargs)
+                        )
                     baseline.set_score(initial_score)
                 except Exception:
                     LOGGER.exception("Baseline evaluation failed")
@@ -232,7 +240,9 @@ class GepaOptimizer(BaseOptimizer):
                 "max_metric_calls": max_metric_calls,
                 "display_progress_bar": False,
                 "track_best_outputs": False,
-                "logger": gepa_reporting.RichGEPAOptimizerLogger(self, verbose=self.verbose),
+                "logger": gepa_reporting.RichGEPAOptimizerLogger(
+                    self, verbose=self.verbose
+                ),
             }
 
             optimize_sig = None
@@ -264,7 +274,9 @@ class GepaOptimizer(BaseOptimizer):
         history: List[Dict[str, Any]] = []
 
         for idx, candidate in enumerate(candidates):
-            candidate_prompt = self._extract_system_text_from_candidate(candidate, seed_prompt_text)
+            candidate_prompt = self._extract_system_text_from_candidate(
+                candidate, seed_prompt_text
+            )
             prompt_variant = self._apply_system_text(prompt, candidate_prompt)
             prompt_variant.project_name = self.project_name
             prompt_variant.model = self.model
@@ -300,7 +312,10 @@ class GepaOptimizer(BaseOptimizer):
                     "iteration": idx + 1,
                     "prompt_candidate": candidate_prompt,
                     "scores": [
-                        {"metric_name": f"GEPA-{metric.__name__}", "score": val_scores[idx] if idx < len(val_scores) else None},
+                        {
+                            "metric_name": f"GEPA-{metric.__name__}",
+                            "score": val_scores[idx] if idx < len(val_scores) else None,
+                        },
                         {"metric_name": metric.__name__, "score": score},
                     ],
                     "metadata": {},
@@ -314,8 +329,12 @@ class GepaOptimizer(BaseOptimizer):
             best_idx = getattr(gepa_result, "best_idx", 0) or 0
             best_score = float(val_scores[best_idx]) if val_scores else 0.0
 
-        best_candidate = candidates[best_idx] if candidates else {"system_prompt": seed_prompt_text}
-        best_prompt_text = self._extract_system_text_from_candidate(best_candidate, seed_prompt_text)
+        best_candidate = (
+            candidates[best_idx] if candidates else {"system_prompt": seed_prompt_text}
+        )
+        best_prompt_text = self._extract_system_text_from_candidate(
+            best_candidate, seed_prompt_text
+        )
 
         final_prompt = self._apply_system_text(prompt, best_prompt_text)
         final_prompt.project_name = self.project_name
@@ -331,7 +350,7 @@ class GepaOptimizer(BaseOptimizer):
             extra_metadata={"phase": "final", "selected": True},
             verbose=0,
         )
-        suppress_logs = nullcontext()
+        suppress_logs: ContextManager[Any] = nullcontext()
         try:
             from ..reporting_utils import suppress_opik_logs as _suppress_logs
 
@@ -345,6 +364,32 @@ class GepaOptimizer(BaseOptimizer):
             except Exception:
                 LOGGER.debug("Final evaluation failed", exc_info=True)
 
+        per_item_scores: List[Dict[str, Any]] = []
+        try:
+            analysis_prompt = final_prompt.copy()
+            agent_cls = create_litellm_agent_class(analysis_prompt)
+            agent = agent_cls(analysis_prompt)
+            for item in items:
+                messages = analysis_prompt.get_messages(item)
+                output_text = agent.invoke(messages).strip()
+                metric_result = metric(item, output_text)
+                if hasattr(metric_result, "value"):
+                    score_val = float(metric_result.value)
+                elif hasattr(metric_result, "score"):
+                    score_val = float(metric_result.score)
+                else:
+                    score_val = float(metric_result)
+                per_item_scores.append(
+                    {
+                        "dataset_item_id": item.get("id"),
+                        "score": score_val,
+                        "answer": item.get(output_key),
+                        "output": output_text,
+                    }
+                )
+        except Exception:
+            LOGGER.debug("Per-item diagnostics failed", exc_info=True)
+
         details: Dict[str, Any] = {
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
@@ -355,12 +400,18 @@ class GepaOptimizer(BaseOptimizer):
             "val_scores": val_scores,
             "opik_rescored_scores": rescored,
             "candidate_summary": candidate_rows,
-            "best_candidate_iteration": candidate_rows[best_idx]["iteration"] if candidate_rows else 0,
+            "best_candidate_iteration": candidate_rows[best_idx]["iteration"]
+            if candidate_rows
+            else 0,
             "selected_candidate_index": best_idx,
-            "selected_candidate_gepa_score": val_scores[best_idx] if best_idx < len(val_scores) else None,
+            "selected_candidate_gepa_score": val_scores[best_idx]
+            if best_idx < len(val_scores)
+            else None,
             "selected_candidate_opik_score": best_score,
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
+            "selected_candidate_item_scores": per_item_scores,
+            "dataset_item_ids": [item.get("id") for item in items],
         }
         if experiment_config:
             details["experiment"] = experiment_config
@@ -368,8 +419,12 @@ class GepaOptimizer(BaseOptimizer):
         final_messages = final_prompt.get_messages()
 
         if self.verbose >= 1:
-            gepa_reporting.display_candidate_scores(candidate_rows, verbose=self.verbose)
-            gepa_reporting.display_selected_candidate(best_prompt_text, best_score, verbose=self.verbose)
+            gepa_reporting.display_candidate_scores(
+                candidate_rows, verbose=self.verbose
+            )
+            gepa_reporting.display_selected_candidate(
+                best_prompt_text, best_score, verbose=self.verbose
+            )
 
         if LOGGER.isEnabledFor(logging.DEBUG):
             for idx, row in enumerate(candidate_rows):
@@ -415,7 +470,9 @@ class GepaOptimizer(BaseOptimizer):
                 return f"You are a helpful assistant. Respond to: {message.get('content','')}"
         return "You are a helpful assistant."
 
-    def _extract_system_text_from_candidate(self, candidate: Dict[str, Any], fallback: str) -> str:
+    def _extract_system_text_from_candidate(
+        self, candidate: Dict[str, Any], fallback: str
+    ) -> str:
         for key in ("system_prompt", "system", "prompt"):
             value = candidate.get(key)
             if isinstance(value, str) and value.strip():

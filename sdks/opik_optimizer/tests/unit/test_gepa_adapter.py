@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from pathlib import Path
 
-import types
 import pytest
 
 
@@ -16,7 +16,9 @@ class DummyOptimizer:
         self._gepa_live_metric_calls = 0
 
 
-def test_adapter_evaluate_uses_metric(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_adapter_evaluate_uses_metric(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
     from opik_optimizer.gepa_optimizer.adapter import OpikDataInst, OpikGEPAAdapter
@@ -41,7 +43,8 @@ def test_adapter_evaluate_uses_metric(monkeypatch: pytest.MonkeyPatch, tmp_path)
     )
 
     def metric(dataset_item: Dict[str, Any], llm_output: str) -> DummyMetricResult:
-        score = 1.0 if dataset_item.get("answer") in llm_output else 0.0
+        expected = str(dataset_item.get("answer", ""))
+        score = 1.0 if expected and expected in llm_output else 0.0
         return DummyMetricResult(score)
 
     inst = OpikDataInst(

@@ -174,9 +174,7 @@ def display_candidate_update(
     if verbose < 1:
         return
     iter_label = f"Iter {iteration}" if iteration is not None else "Candidate"
-    agg_str = (
-        f"{aggregate:.4f}" if isinstance(aggregate, (int, float)) else "—"
-    )
+    agg_str = f"{aggregate:.4f}" if isinstance(aggregate, (int, float)) else "—"
     snippet = prompt_snippet.replace("\n", " ")
     if len(snippet) > 100:
         snippet = snippet[:100] + "…"

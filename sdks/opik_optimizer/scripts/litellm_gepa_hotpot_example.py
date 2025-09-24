@@ -16,14 +16,14 @@ _SRC = os.path.abspath(os.path.join(_HERE, "..", "src"))
 if os.path.isdir(_SRC) and _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-import opik
-from opik_optimizer import ChatPrompt
-from opik_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.datasets import hotpot_300
-from opik_optimizer.utils import search_wikipedia
+import opik  # noqa: E402
+from opik_optimizer import ChatPrompt  # noqa: E402
+from opik_optimizer.gepa_optimizer import GepaOptimizer  # noqa: E402
+from opik_optimizer.datasets import hotpot_300  # noqa: E402
+from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
-from opik.evaluation.metrics import LevenshteinRatio
-from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.metrics import LevenshteinRatio  # noqa: E402
+from opik.evaluation.metrics.score_result import ScoreResult  # noqa: E402
 
 
 dataset = hotpot_300()
@@ -95,3 +95,10 @@ print("\nSelected candidate:")
 print("  index:", details.get("selected_candidate_index"))
 print("  GEPA score:", details.get("selected_candidate_gepa_score"))
 print("  Opik score:", details.get("selected_candidate_opik_score"))
+
+print("\nPer-item scores for selected prompt:")
+for record in details.get("selected_candidate_item_scores", []):
+    print(
+        f"  id={record.get('dataset_item_id')} score={record.get('score'):.4f} "
+        f"answer={record.get('answer')} output={record.get('output', '')[:60]}"
+    )

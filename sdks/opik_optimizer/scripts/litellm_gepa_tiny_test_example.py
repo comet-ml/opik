@@ -17,12 +17,12 @@ _SRC = os.path.abspath(os.path.join(_HERE, "..", "src"))
 if os.path.isdir(_SRC) and _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from opik.evaluation.metrics import LevenshteinRatio
-from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.metrics import LevenshteinRatio  # noqa: E402
+from opik.evaluation.metrics.score_result import ScoreResult  # noqa: E402
 
-from opik_optimizer import ChatPrompt, datasets
-from opik_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer import ChatPrompt, datasets  # noqa: E402
+from opik_optimizer.gepa_optimizer import GepaOptimizer  # noqa: E402
+from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:

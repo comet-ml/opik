@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, List
 
 import logging
 
@@ -36,7 +36,9 @@ def _extract_system_text(candidate: Dict[str, str], fallback: str) -> str:
     return fallback
 
 
-def _apply_system_text(prompt_obj: chat_prompt.ChatPrompt, system_text: str) -> chat_prompt.ChatPrompt:
+def _apply_system_text(
+    prompt_obj: chat_prompt.ChatPrompt, system_text: str
+) -> chat_prompt.ChatPrompt:
     updated = prompt_obj.copy()
     if updated.messages is not None:
         messages = updated.get_messages()
@@ -110,7 +112,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
                     }
                 )
 
-        return EvaluationBatch(outputs=outputs, scores=scores, trajectories=trajectories)
+        return EvaluationBatch(
+            outputs=outputs, scores=scores, trajectories=trajectories
+        )
 
     def make_reflective_dataset(
         self,
@@ -126,12 +130,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
-                feedback = (
-                    f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer','')}"
-                )
+                feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer','')}"
                 yield {
                     "Inputs": {
-                        "text": dataset_item.get("input") or dataset_item.get("question") or "",
+                        "text": dataset_item.get("input")
+                        or dataset_item.get("question")
+                        or "",
                     },
                     "Generated Outputs": output_text,
                     "Feedback": feedback,
@@ -139,7 +143,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
 
         reflective_records = list(_records())
         if not reflective_records:
-            LOGGER.debug("No trajectories captured for candidate; returning empty reflective dataset")
+            LOGGER.debug(
+                "No trajectories captured for candidate; returning empty reflective dataset"
+            )
             reflective_records = []
 
         return {component: reflective_records for component in components}
