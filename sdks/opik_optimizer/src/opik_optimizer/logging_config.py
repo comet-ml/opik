@@ -23,8 +23,9 @@ def _coerce_level(level: Union[int, str]) -> int:
     if normalized.isdigit():
         return int(normalized)
 
-    if normalized in logging._nameToLevel:  # type: ignore[attr-defined]
-        return logging._nameToLevel[normalized]  # type: ignore[attr-defined]
+    level_value = getattr(logging, normalized, None)
+    if isinstance(level_value, int):
+        return level_value
 
     raise ValueError(
         f"Unknown log level '{level}'. Expected standard logging level name or integer."
