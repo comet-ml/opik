@@ -153,7 +153,7 @@ const DatasetItemsPage = () => {
         setPage(1);
       }
     },
-    [setSearch, setPage],
+    [setSearch, setPage, page],
   );
 
   const selectedRows: DatasetItem[] = useMemo(() => {
