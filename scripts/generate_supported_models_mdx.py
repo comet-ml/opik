@@ -107,8 +107,14 @@ def process_model_data(json_file_path: str) -> Dict[str, Any]:
             # This ensures we automatically handle new providers without manual updates
             old_provider_prefixes = [f"{provider}/" for provider in PROVIDER_MAPPING.keys()]
 
+            extra_prefixes = [
+                "vertex_ai/"
+            ]
+
+            prefixes_to_remove = old_provider_prefixes + extra_prefixes
+
             # Remove old provider prefixes
-            for prefix in old_provider_prefixes:
+            for prefix in prefixes_to_remove:
                 if clean_model_name.startswith(prefix):
                     clean_model_name = clean_model_name[len(prefix):]
                     break
