@@ -102,6 +102,8 @@ class OpikConfigurator:
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
                 self.current_config.config_file_fullpath,
             )
+           
+        self._log_project_configuration_message()
 
     def _configure_local(self) -> None:
         """
@@ -119,6 +121,7 @@ class OpikConfigurator:
         # Step 1: If the URL is provided and active, update the configuration
         if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
             self._update_config(save_to_file=self.force)
+            self._log_project_configuration_message()
             return
 
         # Step 2: Check if the default local instance is active
@@ -130,6 +133,7 @@ class OpikConfigurator:
                 LOGGER.info(
                     f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
                 )
+                self._log_project_configuration_message()
                 return
 
             # Step 3: Ask user if they want to use the found local instance
@@ -149,6 +153,7 @@ class OpikConfigurator:
             if use_url:
                 self.base_url = OPIK_BASE_URL_LOCAL
                 self._update_config()
+                self._log_project_configuration_message()
                 return
 
         # Step 4: Ask user for URL if no valid local instance is found or approved
@@ -158,6 +163,7 @@ class OpikConfigurator:
             )
         self._ask_for_url()
         self._update_config()
+        self._log_project_configuration_message()
 
     def _set_api_key(self) -> bool:
         """
@@ -404,6 +410,18 @@ class OpikConfigurator:
         except Exception as e:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
+
+    def _log_project_configuration_message(self) -> None:
+        """
+        Log an informative message about project configuration after successful setup.
+        
+        This message helps users understand that traces will be logged to the Default Project
+        by default and provides a link to documentation for changing the project name.
+        """
+        LOGGER.info(
+            "Configuration completed successfully. Traces will be logged to 'Default Project' by default. "
+            "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+        )
 
     def _ask_for_url(self) -> None:
         """
