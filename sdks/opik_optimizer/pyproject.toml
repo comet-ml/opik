@@ -55,3 +55,8 @@ exclude = "src/opik_optimizer/mipro_optimizer/"
 
 [tool.uv]
 managed = false
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::UserWarning:pydantic.main",
+]

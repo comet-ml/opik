@@ -48,7 +48,7 @@ jobs:
               hf-datasets-
 
         - name: Install opik_optimizer
-          run: pip install .
+          run: pip install .[dev]
 
         - name: Install test requirements
           run: |
