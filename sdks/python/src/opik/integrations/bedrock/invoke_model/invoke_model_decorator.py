@@ -84,21 +84,13 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
-        usage = output.get("body", {}).get("usage", None)
-        if usage is not None:
-            # We're not specifying the provider here because the token usage
-            # may have different format for different ACTUAL providers (bedrock in this case is a provider aggregator)
-            opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
-                usage=usage,
-            )
-        else:
-            opik_usage = None
+        
+        # TODO: implement usage extraction. The main difficulty is that invoke_model API is not structured
+        # so the token usage exact location and structure may vary for different models.
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
-            usage=opik_usage,
             provider=opik.LLMProvider.BEDROCK,
-            model=metadata.get("modelId", None),
             metadata=metadata,
         )
 
@@ -137,3 +129,8 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         STREAM_NOT_FOUND = None
 
         return STREAM_NOT_FOUND
+
+
+def _get_actual_provider_inside_bedrock(model_id: str) -> Optional[str]:
+   
+   return None
