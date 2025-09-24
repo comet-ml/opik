@@ -2,8 +2,11 @@ import logging
 import sys
 import types
 from pathlib import Path
+from typing import Generator
 
 import pytest
+
+from opik_optimizer.logging_config import setup_logging
 
 
 try:  # pragma: no cover - executed only when rich is installed normally
@@ -13,13 +16,15 @@ except ModuleNotFoundError:  # pragma: no cover
     rich_logging_pkg = types.ModuleType("rich.logging")
 
     class RichHandler(logging.Handler):
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             super().__init__()
 
-        def emit(self, record):  # pragma: no cover - no output in tests
+        def emit(
+            self, record: logging.LogRecord
+        ) -> None:  # pragma: no cover - no output in tests
             pass
 
-    rich_logging_pkg.RichHandler = RichHandler
+    rich_logging_pkg.RichHandler = RichHandler  # type: ignore[attr-defined]
     sys.modules["rich"] = rich_pkg
     sys.modules["rich.logging"] = rich_logging_pkg
     rich_pkg.logging = rich_logging_pkg  # type: ignore[attr-defined]
@@ -34,11 +39,8 @@ if "opik_optimizer" not in sys.modules:
     sys.modules["opik_optimizer"] = pkg
 
 
-from opik_optimizer.logging_config import setup_logging
-
-
 @pytest.fixture(autouse=True)
-def reset_logging_state(monkeypatch):
+def reset_logging_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     monkeypatch.delenv("OPIK_LOG_LEVEL", raising=False)
     # Ensure each test starts from a clean slate
     setup_logging(level=logging.WARNING, force=True)
@@ -46,7 +48,7 @@ def reset_logging_state(monkeypatch):
     setup_logging(level=logging.WARNING, force=True)
 
 
-def test_setup_logging_accepts_string_level():
+def test_setup_logging_accepts_string_level() -> None:
     setup_logging(level="INFO", force=True)
     package_logger = logging.getLogger("opik_optimizer")
     assert package_logger.level == logging.INFO
@@ -55,7 +57,7 @@ def test_setup_logging_accepts_string_level():
     assert package_logger.level == logging.DEBUG
 
 
-def test_setup_logging_honours_env_override(monkeypatch):
+def test_setup_logging_honours_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPIK_LOG_LEVEL", "ERROR")
     setup_logging(level="INFO", force=True)
     package_logger = logging.getLogger("opik_optimizer")
