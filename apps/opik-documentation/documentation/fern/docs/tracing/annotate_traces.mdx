@@ -20,12 +20,50 @@ You can annotate both traces and spans through the UI, make sure you have select
   <img src="/img/tracing/annotate_traces.png" />
 </Frame>
 
-<Tip>
-  Once a feedback scores has been provided, you can also add a reason to explain why this particular score was provided.
-  This is useful to add additional context to the score.
-</Tip>
-
 You can also add comments to traces and experiments to share insights with other team members.
+
+## Multi-Value Feedback Scores
+
+The annotation interface supports multiple independent scores for the same feedback metric. When team members score the same trace or span, all individual ratings are preserved alongside calculated averages.
+
+### Interface Behavior
+
+In the annotation sidebar, you'll see:
+
+- **Individual scores**: Each evaluator's score with timestamp and attribution
+- **Individual reasons**: Each evaluator can provide their own explanation for their score
+- **Aggregate values**: Automatically calculated mean and count
+- **Score distribution**: Visual representation of rating variance
+- **Feedback score inputs**: Individual input fields for each feedback definition where you can provide scores and reasons
+
+### Score and Reason Management
+
+- **Individual tracking**: All individual scores remain visible with their specific reasons
+- **Contextual explanations**: Each evaluator's reason appears alongside their score
+- **Mean calculation**: Aggregate values calculated from all individual scores
+- **Reasoning comparison**: Compare different evaluators' explanations for the same score
+- **Full attribution**: Shows who provided each score and their reasoning
+
+### Use Cases
+
+This interface pattern is particularly useful for:
+
+- **Quality assurance**: Multiple reviewers can independently assess outputs with detailed explanations
+- **Training scenarios**: Compare evaluations and reasoning between experienced and new team members
+- **Consensus building**: Review reasoning behind disagreements to align evaluation criteria
+- **Bias detection**: Analyze both scores and explanations to identify systematic differences
+- **Documentation**: Preserve reasoning context for future reference and model improvement
+- **Calibration**: Use detailed explanations to standardize evaluation practices across teams
+
+<Frame>
+  <img src="/img/tracing/multivalue_feedback_scores.png" />
+</Frame>
+
+<Tip>
+  Once a feedback scores has been provided, you can also add a reason to explain
+  why this particular score was provided. This is useful to add additional
+  context to the score.
+</Tip>
 
 ## Online evaluation
 
@@ -57,8 +95,9 @@ client.log_traces_feedback_scores(
 ```
 
 <Tip>
-  The `scores` argument supports an optional `reason` field that can be provided to each score. This can be used to
-  provide a human-readable explanation for the feedback score.
+  The `scores` argument supports an optional `reason` field that can be provided
+  to each score. This can be used to provide a human-readable explanation for
+  the feedback score.
 </Tip>
 
 ### Annotating Spans through the SDK
@@ -82,8 +121,8 @@ client.log_spans_feedback_scores(
 ```
 
 <Note>
-  The `FeedbackScoreDict` class supports an optional `reason` field that can be used to provide a human-readable
-  explanation for the feedback score.
+  The `FeedbackScoreDict` class supports an optional `reason` field that can be
+  used to provide a human-readable explanation for the feedback score.
 </Note>
 
 ### Using Opik's built-in evaluation metrics
