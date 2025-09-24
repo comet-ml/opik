@@ -157,8 +157,9 @@ to retrieve the aggregated score statistics:
 
 ```python
 import opik
-from opik.evaluation import evaluate_prompt, report
+from opik.evaluation import evaluate_prompt
 from opik.evaluation.metrics import Hallucination
+
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
 dataset = opik_client.get_or_create_dataset("Evaluation test dataset")
@@ -171,16 +172,14 @@ result = evaluate_prompt(
     dataset=dataset,
     messages=[{"role": "user", "content": "Translate the following text to French: {{input}}"}],
     model="gpt-5",  # or model that you want to evaluate
-    scoring_metrics=[Hallucination()]
+    scoring_metrics=[Hallucination()],
+    verbose=2,  # print detailed statistics report for every metric
 )
 
 # Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
 scores = result.aggregate_evaluation_scores()
 for metric_name, statistics in scores.aggregated_scores.items():
     print(f"{metric_name}: {statistics}")
-
-# Or print the formatted report into the console
-report.display_evaluation_scores_statistics(dataset.name, evaluation_results=result)
 ```
 
 You can use aggregated scores to compare the performance of different models or different versions of the same model.
