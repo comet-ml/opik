@@ -459,6 +459,9 @@ navigation:
           - page: Strands Agents
             path: docs/tracing/integrations/strands-agents.mdx
             slug: strands-agents
+          - page: Vercel AI SDK
+            path: docs/tracing/integrations/vercel-ai-sdk.mdx
+            slug: vercel-ai-sdk
           - page: VoltAgent
             path: docs/tracing/integrations/voltagent.mdx
             slug: voltagent
@@ -554,6 +557,9 @@ navigation:
         skip-slug: true
         collapsed: true
         contents:
+          - page: Cursor
+            path: docs/tracing/integrations/cursor.mdx
+            slug: cursor
           - page: Dify
             path: docs/tracing/integrations/dify.mdx
             slug: dify
