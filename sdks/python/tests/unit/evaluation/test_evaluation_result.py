@@ -29,7 +29,7 @@ def test_group_by_dataset_item_view__happyflow():
         dataset_id="dataset1",
         experiment_name="Test Experiment",
         test_results=test_results_list,
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=3,
     )
 
@@ -95,7 +95,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
         dataset_id="dataset1",
         experiment_name="Test Experiment",
         test_results=test_results_list,
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=1,
     )
 
@@ -160,7 +160,7 @@ def test_group_by_dataset_item_view__failed_and_invalid_scores():
         dataset_id="dataset1",
         experiment_name="Test Experiment",
         test_results=[test_result_obj],
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=1,
     )
 
@@ -180,7 +180,7 @@ def test_group_by_dataset_item_view__empty_results():
         dataset_id="dataset1",
         experiment_name="Empty Test",
         test_results=[],
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=0,
     )
 
@@ -217,7 +217,7 @@ def test_group_by_dataset_item_view__standard_deviation():
         dataset_id="dataset1",
         experiment_name="Test Experiment",
         test_results=test_results_list,
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=3,
     )
 
@@ -248,7 +248,7 @@ def test_group_by_dataset_item_view__standard_deviation():
         dataset_id="dataset2",
         experiment_name="Single Test",
         test_results=[single_test_result],
-        experiment_url="http://test.com",
+        experiment_url="http://test.comet.com",
         trial_count=1,
     )
 
@@ -257,3 +257,350 @@ def test_group_by_dataset_item_view__standard_deviation():
 
     assert single_stats.values == [5.0]
     assert single_stats.std is None  # No std for single value
+
+
+def test_aggregate_evaluation_scores__single_metric_multiple_results():
+    """Test aggregation of a single metric across multiple test results."""
+    test_results_list = []
+    accuracy_values = [0.6, 0.8, 0.7, 0.9, 0.5]
+
+    for trial_id, accuracy_value in enumerate(accuracy_values, 1):
+        score = score_result.ScoreResult(
+            name="accuracy", value=accuracy_value, reason="Test"
+        )
+        test_case_obj = test_case.TestCase(
+            trace_id=f"trace{trial_id}",
+            dataset_item_id=f"item{trial_id}",
+            scoring_inputs={"input": "test"},
+            task_output={"output": f"result{trial_id}"},
+        )
+        test_result_obj = test_result.TestResult(
+            test_case=test_case_obj, score_results=[score], trial_id=trial_id
+        )
+        test_results_list.append(test_result_obj)
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Test Experiment",
+        test_results=test_results_list,
+        experiment_url="http://test.comet.com",
+        trial_count=5,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Verify view properties
+    assert aggregated_view.experiment_id == "exp1"
+    assert aggregated_view.dataset_id == "dataset1"
+    assert aggregated_view.experiment_name == "Test Experiment"
+    assert aggregated_view.experiment_url == "http://test.comet.com"
+    assert aggregated_view.trial_count == 5
+
+    # Verify aggregated scores
+    assert len(aggregated_view.aggregated_scores) == 1
+    accuracy_stats = aggregated_view.aggregated_scores["accuracy"]
+
+    assert accuracy_stats.mean == pytest.approx(
+        0.7, rel=1e-9
+    )  # (0.6+0.8+0.7+0.9+0.5) / 5
+    assert accuracy_stats.max == 0.9
+    assert accuracy_stats.min == 0.5
+    assert accuracy_stats.values == [0.6, 0.8, 0.7, 0.9, 0.5]
+    assert accuracy_stats.std == pytest.approx(0.1581, rel=1e-3)  # Sample std dev
+
+
+def test_aggregate_evaluation_scores__multiple_metrics():
+    """Test aggregation of multiple metrics across test results."""
+    test_results_list = []
+
+    # First test result with accuracy and precision
+    score1 = score_result.ScoreResult(name="accuracy", value=0.8, reason="Good")
+    score2 = score_result.ScoreResult(name="precision", value=0.75, reason="Good")
+    test_case1 = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        scoring_inputs={"input": "test1"},
+        task_output={"output": "result1"},
+    )
+    test_result1 = test_result.TestResult(
+        test_case=test_case1, score_results=[score1, score2], trial_id=1
+    )
+    test_results_list.append(test_result1)
+
+    # Second test result with accuracy and recall
+    score3 = score_result.ScoreResult(name="accuracy", value=0.9, reason="Great")
+    score4 = score_result.ScoreResult(name="recall", value=0.85, reason="Great")
+    test_case2 = test_case.TestCase(
+        trace_id="trace2",
+        dataset_item_id="item2",
+        scoring_inputs={"input": "test2"},
+        task_output={"output": "result2"},
+    )
+    test_result2 = test_result.TestResult(
+        test_case=test_case2, score_results=[score3, score4], trial_id=2
+    )
+    test_results_list.append(test_result2)
+
+    # Third test result with precision and recall
+    score5 = score_result.ScoreResult(name="precision", value=0.82, reason="Good")
+    score6 = score_result.ScoreResult(name="recall", value=0.78, reason="Good")
+    test_case3 = test_case.TestCase(
+        trace_id="trace3",
+        dataset_item_id="item3",
+        scoring_inputs={"input": "test3"},
+        task_output={"output": "result3"},
+    )
+    test_result3 = test_result.TestResult(
+        test_case=test_case3, score_results=[score5, score6], trial_id=3
+    )
+    test_results_list.append(test_result3)
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Multi-metric Test",
+        test_results=test_results_list,
+        experiment_url="http://test.comet.com",
+        trial_count=3,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Should have 3 metrics
+    assert len(aggregated_view.aggregated_scores) == 3
+
+    # Test accuracy aggregation (2 values: 0.8, 0.9)
+    accuracy_stats = aggregated_view.aggregated_scores["accuracy"]
+    assert accuracy_stats.mean == pytest.approx(0.85, rel=1e-9)
+    assert accuracy_stats.max == 0.9
+    assert accuracy_stats.min == 0.8
+    assert accuracy_stats.values == [0.8, 0.9]
+    assert accuracy_stats.std == pytest.approx(0.0707, rel=1e-3)
+
+    # Test precision aggregation (2 values: 0.75, 0.82)
+    precision_stats = aggregated_view.aggregated_scores["precision"]
+    assert precision_stats.mean == pytest.approx(0.785, rel=1e-9)
+    assert precision_stats.max == 0.82
+    assert precision_stats.min == 0.75
+    assert precision_stats.values == [0.75, 0.82]
+
+    # Test recall aggregation (2 values: 0.85, 0.78)
+    recall_stats = aggregated_view.aggregated_scores["recall"]
+    assert recall_stats.mean == pytest.approx(0.815, rel=1e-9)
+    assert recall_stats.max == 0.85
+    assert recall_stats.min == 0.78
+    assert recall_stats.values == [0.85, 0.78]
+
+
+def test_aggregate_evaluation_scores__failed_and_invalid_scores():
+    """Test that failed and invalid scores are excluded from aggregation."""
+    test_results_list = []
+
+    # Create scores with various states
+    valid_score1 = score_result.ScoreResult(
+        name="accuracy", value=0.8, scoring_failed=False
+    )
+    valid_score2 = score_result.ScoreResult(
+        name="accuracy", value=0.9, scoring_failed=False
+    )
+    failed_score = score_result.ScoreResult(
+        name="accuracy", value=0.0, scoring_failed=True
+    )
+    nan_score = score_result.ScoreResult(
+        name="accuracy", value=float("nan"), scoring_failed=False
+    )
+    inf_score = score_result.ScoreResult(
+        name="accuracy", value=float("inf"), scoring_failed=False
+    )
+    neg_inf_score = score_result.ScoreResult(
+        name="accuracy", value=float("-inf"), scoring_failed=False
+    )
+
+    test_case_obj = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        scoring_inputs={"input": "test"},
+        task_output={"output": "result"},
+    )
+
+    test_result_obj = test_result.TestResult(
+        test_case=test_case_obj,
+        score_results=[
+            valid_score1,
+            valid_score2,
+            failed_score,
+            nan_score,
+            inf_score,
+            neg_inf_score,
+        ],
+        trial_id=1,
+    )
+    test_results_list.append(test_result_obj)
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Test Experiment",
+        test_results=test_results_list,
+        experiment_url="http://test.comet.com",
+        trial_count=1,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Should only include valid scores (0.8, 0.9)
+    assert len(aggregated_view.aggregated_scores) == 1
+    accuracy_stats = aggregated_view.aggregated_scores["accuracy"]
+
+    assert accuracy_stats.values == [0.8, 0.9]
+    assert accuracy_stats.mean == pytest.approx(0.85, rel=1e-9)
+    assert accuracy_stats.max == 0.9
+    assert accuracy_stats.min == 0.8
+
+
+def test_aggregate_evaluation_scores__empty_results():
+    """Test aggregation with no test results."""
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Empty Test",
+        test_results=[],
+        experiment_url="http://test.comet.com",
+        trial_count=0,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Verify view properties
+    assert aggregated_view.experiment_id == "exp1"
+    assert aggregated_view.dataset_id == "dataset1"
+    assert aggregated_view.experiment_name == "Empty Test"
+    assert aggregated_view.trial_count == 0
+
+    # Should have no aggregated scores
+    assert len(aggregated_view.aggregated_scores) == 0
+
+
+def test_aggregate_evaluation_scores__single_value_no_std():
+    """Test that single values have no standard deviation."""
+    score = score_result.ScoreResult(name="f1_score", value=0.75, reason="Test")
+    test_case_obj = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        scoring_inputs={"input": "test"},
+        task_output={"output": "result"},
+    )
+    test_result_obj = test_result.TestResult(
+        test_case=test_case_obj, score_results=[score], trial_id=1
+    )
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Single Value Test",
+        test_results=[test_result_obj],
+        experiment_url="http://test.comet.com",
+        trial_count=1,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Verify single value statistics
+    assert len(aggregated_view.aggregated_scores) == 1
+    f1_stats = aggregated_view.aggregated_scores["f1_score"]
+
+    assert f1_stats.mean == 0.75
+    assert f1_stats.max == 0.75
+    assert f1_stats.min == 0.75
+    assert f1_stats.values == [0.75]
+    assert f1_stats.std is None  # No std for a single value
+
+
+def test_aggregate_evaluation_scores__zero_and_negative_values():
+    """Test aggregation with zero and negative score values."""
+    test_results_list = []
+    values = [-0.5, 0.0, 0.3, -0.2, 0.1]
+
+    for trial_id, value in enumerate(values, 1):
+        score = score_result.ScoreResult(
+            name="custom_metric", value=value, reason="Test"
+        )
+        test_case_obj = test_case.TestCase(
+            trace_id=f"trace{trial_id}",
+            dataset_item_id=f"item{trial_id}",
+            scoring_inputs={"input": "test"},
+            task_output={"output": f"result{trial_id}"},
+        )
+        test_result_obj = test_result.TestResult(
+            test_case=test_case_obj, score_results=[score], trial_id=trial_id
+        )
+        test_results_list.append(test_result_obj)
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="Zero/Negative Test",
+        test_results=test_results_list,
+        experiment_url="http://test.comet.com",
+        trial_count=5,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Verify aggregation handles negative and zero values correctly
+    assert len(aggregated_view.aggregated_scores) == 1
+    custom_stats = aggregated_view.aggregated_scores["custom_metric"]
+
+    expected_mean = sum(values) / len(values)  # -0.06
+    assert custom_stats.mean == pytest.approx(expected_mean, rel=1e-9)
+    assert custom_stats.max == 0.3
+    assert custom_stats.min == -0.5
+    assert custom_stats.values == values
+
+
+def test_aggregate_evaluation_scores__all_scores_filtered_out():
+    """Test when all scores are invalid or failed - should result in empty aggregation."""
+    failed_score1 = score_result.ScoreResult(
+        name="accuracy", value=0.5, scoring_failed=True
+    )
+    failed_score2 = score_result.ScoreResult(
+        name="accuracy", value=0.8, scoring_failed=True
+    )
+    nan_score = score_result.ScoreResult(
+        name="precision", value=float("nan"), scoring_failed=False
+    )
+
+    test_case_obj = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        scoring_inputs={"input": "test"},
+        task_output={"output": "result"},
+    )
+
+    test_result_obj = test_result.TestResult(
+        test_case=test_case_obj,
+        score_results=[failed_score1, failed_score2, nan_score],
+        trial_id=1,
+    )
+
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="All Invalid Test",
+        test_results=[test_result_obj],
+        experiment_url="http://test.comet.com",
+        trial_count=1,
+    )
+
+    # Test aggregation
+    aggregated_view = eval_result.aggregate_evaluation_scores()
+
+    # Should have no aggregated scores since all were filtered out
+    assert len(aggregated_view.aggregated_scores) == 0
