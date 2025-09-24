@@ -38,6 +38,7 @@ class GepaOptimizer(BaseOptimizer):
         self.project_name = project_name
         self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
+        self.seed = self.model_kwargs.pop("seed", 42)
         self._gepa_live_metric_calls = 0
 
     # ------------------------------------------------------------------
