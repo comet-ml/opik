@@ -114,7 +114,7 @@ const DatasetItemsPage = () => {
       datasetId,
       page: page as number,
       size: size as number,
-      search: search || undefined,
+      search: search!,
       truncate: true,
     },
     {
@@ -145,7 +145,6 @@ const DatasetItemsPage = () => {
   const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
   const noDataText = "There are no dataset items yet";
 
-  // Handle search change and reset page to 1
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
       setSearch(newSearch);
@@ -330,10 +329,11 @@ const DatasetItemsPage = () => {
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
-            searchText={search || undefined}
+            searchText={search!}
             setSearchText={handleSearchChange}
             placeholder="Search"
-            className="w-96"
+            className="w-[320px]"
+            dimension="sm"
           />
         </div>
         <div className="flex items-center gap-2">
