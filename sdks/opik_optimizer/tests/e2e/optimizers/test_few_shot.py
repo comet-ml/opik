@@ -10,7 +10,7 @@ from opik_optimizer.optimization_config import chat_prompt
 
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY environment variable not set"
+    reason="OPENAI_API_KEY environment variable not set",
 )
 def test_few_shot_optimizer() -> None:
     # Initialize optimizer

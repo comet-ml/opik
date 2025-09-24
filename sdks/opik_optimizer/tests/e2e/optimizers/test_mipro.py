@@ -10,7 +10,7 @@ from opik_optimizer.mipro_optimizer import MiproOptimizer
 
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY environment variable not set"
+    reason="OPENAI_API_KEY environment variable not set",
 )
 def test_mipro_optimizer() -> None:
     # Initialize optimizer
