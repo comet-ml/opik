@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("gepa", reason="gepa package required for GEPA adapter tests")
+
 
 class DummyMetricResult:
     def __init__(self, value: float) -> None:
