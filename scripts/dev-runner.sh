@@ -119,7 +119,7 @@ build_backend() {
 # Function to build frontend
 build_frontend() {
     require_command npm
-    log_info "Building frontend (npm install)..."
+    log_info "Building frontend..."
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
 
     if npm install; then
@@ -147,7 +147,7 @@ lint_frontend() {
 # Function to lint backend
 lint_backend() {
     require_command mvn
-    log_info "Linting backend with spotless..."
+    log_info "Linting backend..."
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
 
     if mvn spotless:apply; then
@@ -229,7 +229,7 @@ start_frontend() {
         fi
     fi
     
-    # Start frontend in background
+    # Start frontend in background with interactive mode disabled
     CI=true nohup npm run start > /tmp/opik-frontend.log 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
@@ -402,10 +402,10 @@ restart_services() {
     stop_infrastructure
     log_info "Step 4/8: Starting infrastructure..."
     start_infrastructure
-    log_info "Step 5/8: Building frontend..."
-    build_frontend
-    log_info "Step 6/8: Building backend..."
+    log_info "Step 5/8: Building backend..."
     build_backend
+    log_info "Step 6/8: Building frontend..."
+    build_frontend
     log_info "Step 7/8: Starting backend..."
     start_backend
     log_info "Step 8/8: Starting frontend..."
@@ -419,15 +419,15 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --build-be     - Build backend (mvn clean install -DskipTests)"
-    echo "  --build-fe     - Build frontend (npm install)"
-    echo "  --start        - Start all services"
+    echo "  --build-be     - Build backend"
+    echo "  --build-fe     - Build frontend"
+    echo "  --start        - Start all services (without building)"
     echo "  --stop         - Stop all services"
-    echo "  --restart      - Stop, build, and start all services (default)"
+    echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
     echo "  --verify       - Verify status of all services"
     echo "  --logs         - Show logs for backend and frontend services"
     echo "  --lint-fe      - Lint frontend code"
-    echo "  --lint-be      - Lint backend code with spotless apply"
+    echo "  --lint-be      - Lint backend code"
     echo "  --help         - Show this help message"
     echo ""
 }
