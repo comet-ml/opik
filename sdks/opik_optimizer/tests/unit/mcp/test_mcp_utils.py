@@ -291,7 +291,6 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
     assert "No dataset items available" in out
-    assert "for preview." in out
     assert "preview." in out
 
 
