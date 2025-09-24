@@ -11,11 +11,10 @@ from opik_optimizer import (
 from opik_optimizer.optimization_config import chat_prompt
 
 
-@pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY environment variable not set",
-)
 def test_metaprompt_optimizer() -> None:
+    # Ensure API key is available for e2e testing
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Prepare dataset (using tiny_test for faster execution)
     dataset = datasets.tiny_test()
 

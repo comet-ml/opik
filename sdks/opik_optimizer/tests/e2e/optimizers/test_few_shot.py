@@ -8,11 +8,10 @@ from opik_optimizer import FewShotBayesianOptimizer, datasets
 from opik_optimizer.optimization_config import chat_prompt
 
 
-@pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY environment variable not set",
-)
 def test_few_shot_optimizer() -> None:
+    # Ensure API key is available for e2e testing
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = FewShotBayesianOptimizer(
         model="openai/gpt-4",

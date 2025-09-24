@@ -8,11 +8,10 @@ from opik_optimizer import TaskConfig, datasets
 from opik_optimizer.mipro_optimizer import MiproOptimizer
 
 
-@pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY environment variable not set",
-)
 def test_mipro_optimizer() -> None:
+    # Ensure API key is available for e2e testing
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = MiproOptimizer(
         model="openai/gpt-4o",
