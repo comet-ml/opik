@@ -51,6 +51,19 @@ def extract_candidate_system_text(candidate: Any) -> str:
 
     return str(candidate)
 
+def _apply_system_text(prompt_obj: "chat_prompt.ChatPrompt", system_text: str) -> None:
+    if not system_text:
+        return
+    if prompt_obj.messages is not None:
+        messages = prompt_obj.get_messages()
+        if messages and messages[0].get("role") == "system":
+            messages[0]["content"] = system_text
+        else:
+            messages.insert(0, {"role": "system", "content": system_text})
+        prompt_obj.set_messages(messages)
+    else:
+        prompt_obj.system = system_text
+
 
 def make_opik_eval_fn(
     optimizer: Any,
@@ -60,6 +73,7 @@ def make_opik_eval_fn(
     optimization_id: Optional[str] = None,
     phase_label: Optional[str] = "gepa_adapter_eval",
     base_prompt: Optional["chat_prompt.ChatPrompt"] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> Callable[[Any], float]:
     """Create a scoring function for GEPA that evaluates a candidate using Opik metric."""
 
@@ -76,7 +90,7 @@ def make_opik_eval_fn(
             if prompt_template is not None:
                 cp = prompt_template.copy()
                 if sys_text:
-                    cp.system = sys_text
+                    _apply_system_text(cp, sys_text)
             else:
                 cp = chat_prompt.ChatPrompt(
                     messages=[{"role": "system", "content": sys_text}],
@@ -84,10 +98,14 @@ def make_opik_eval_fn(
                     model=optimizer.model,
                     **optimizer.model_kwargs,
                 )
-            if _GEPA_DEBUG and getattr(optimizer, "verbose", 0) >= 1:
+            if _GEPA_DEBUG:
                 snippet = (sys_text or "").replace("\n", " ")[:140]
                 logger.debug(
-                    f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}"
+                    "[GEPA_ADAPTER] eval_fn phase=%s candidate_snippet=%r n_samples=%s dataset_item_ids=%s",
+                    phase_label,
+                    snippet,
+                    n_samples,
+                    dataset_item_ids,
                 )
             # Prefer a logging-aware evaluator if available on the optimizer
             # Increment live-metric counter for diagnostics
@@ -96,23 +114,33 @@ def make_opik_eval_fn(
             except Exception:
                 pass
 
+            eval_kwargs: Dict[str, Any] = {
+                "prompt": cp,
+                "dataset": dataset,
+                "metric": metric,
+                "verbose": 0,
+                "optimization_id": optimization_id,
+                "extra_metadata": {"phase": phase_label},
+            }
+            if dataset_item_ids is not None:
+                eval_kwargs["dataset_item_ids"] = list(dataset_item_ids)
+                eval_kwargs["n_samples"] = None
+            else:
+                eval_kwargs["n_samples"] = n_samples
+
             if hasattr(optimizer, "_evaluate_prompt_logged"):
                 s = optimizer._evaluate_prompt_logged(  # type: ignore[attr-defined]
-                    prompt=cp,
-                    dataset=dataset,
-                    metric=metric,
-                    n_samples=n_samples,
-                    verbose=0,
-                    optimization_id=optimization_id,
-                    extra_metadata={"phase": phase_label},
+                    **eval_kwargs
                 )
             else:
+                fallback_kwargs = dict(eval_kwargs)
+                fallback_kwargs.pop("optimization_id", None)
+                fallback_kwargs.pop("extra_metadata", None)
+                fallback_kwargs.setdefault(
+                    "n_threads", getattr(optimizer, "num_threads", 1)
+                )
                 s = optimizer.evaluate_prompt(  # type: ignore[attr-defined]
-                    prompt=cp,
-                    dataset=dataset,
-                    metric=metric,
-                    n_samples=n_samples,
-                    verbose=0,
+                    **fallback_kwargs
                 )
             if hasattr(optimizer, "_record_gepa_candidate"):
                 try:
@@ -274,6 +302,7 @@ def build_protocol_adapter(
     metric: Callable[[Dict[str, Any], str], Any],
     n_samples: Optional[int] = None,
     optimization_id: Optional[str] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> Optional[Any]:
     """
     Build a GEPAAdapter-conforming object that uses Opik's metric during GEPA iterations.
@@ -309,8 +338,15 @@ def build_protocol_adapter(
             self._optimizer = optimizer
             self._dataset = dataset
             self._opt_id = optimization_id
+            self._dataset_item_ids = (
+                list(dataset_item_ids) if dataset_item_ids else None
+            )
             if _GEPA_DEBUG:
-                msg = "Initialized protocol adapter with base prompt and agent."
+                msg = (
+                    "Initialized protocol adapter with base prompt and agent."
+                    f" dataset_item_ids={self._dataset_item_ids}"
+                    f" n_samples={n_samples}"
+                )
                 try:
                     print("[GEPA_ADAPTER] " + msg)
                 except Exception:
@@ -337,6 +373,7 @@ def build_protocol_adapter(
                 try:
                     print(
                         f"[GEPA_ADAPTER] evaluate() called: batch_size={len(batch)} capture_traces={capture_traces} candidate_keys={list(candidate.keys())}"
+                        f" dataset_item_ids={self._dataset_item_ids}"
                     )
                     sys_snippet = (
                         candidate.get("system_prompt") or candidate.get("system") or ""
@@ -356,15 +393,22 @@ def build_protocol_adapter(
             if os.environ.get("OPIK_GEPA_TRACE_EVAL"):
                 agg_score = 0.0
                 try:
+                    eval_kwargs: Dict[str, Any] = dict(
+                        prompt=cp,
+                        dataset=self._dataset,
+                        metric=metric,
+                        optimization_id=self._opt_id,
+                        extra_metadata={"phase": "gepa_inloop_traced"},
+                        verbose=0,
+                    )
+                    if self._dataset_item_ids is not None:
+                        eval_kwargs["dataset_item_ids"] = self._dataset_item_ids
+                    else:
+                        eval_kwargs["n_samples"] = len(batch) or None
+
                     agg_score = float(
                         self._optimizer._evaluate_prompt_logged(  # type: ignore[attr-defined]
-                            prompt=cp,
-                            dataset=self._dataset,
-                            metric=metric,
-                            n_samples=len(batch) or None,
-                            optimization_id=self._opt_id,
-                            extra_metadata={"phase": "gepa_inloop_traced"},
-                            verbose=0,
+                            **eval_kwargs
                         )
                     )
                 except Exception as e:

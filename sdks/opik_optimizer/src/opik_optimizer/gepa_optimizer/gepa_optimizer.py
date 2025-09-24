@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import nullcontext
 from typing import Any, Callable, Dict, List, Optional, Union, Tuple, Set, Sequence
 
 import opik
@@ -104,6 +105,7 @@ class GepaOptimizer(BaseOptimizer):
         metric: Optional[Callable[[Dict[str, Any], str], ScoreResult]] = None,
         n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
+        dataset_item_ids: Optional[List[str]] = None,
     ) -> Any:
         try:
             import gepa
@@ -149,13 +151,20 @@ class GepaOptimizer(BaseOptimizer):
                         model=self.model,
                         **self.model_kwargs,
                     )
-                    s = super(GepaOptimizer, self).evaluate_prompt(  # type: ignore[misc]
+                    eval_kwargs: Dict[str, Any] = dict(
                         prompt=cp,
                         dataset=dataset,  # type: ignore[arg-type]
                         metric=metric,  # type: ignore[arg-type]
                         n_threads=self.num_threads,
                         verbose=0,
-                        n_samples=n_samples,
+                    )
+                    if dataset_item_ids is not None:
+                        eval_kwargs["dataset_item_ids"] = dataset_item_ids
+                    else:
+                        eval_kwargs["n_samples"] = n_samples
+
+                    s = super(GepaOptimizer, self).evaluate_prompt(  # type: ignore[misc]
+                        **eval_kwargs
                     )
                     return float(s)
                 except Exception:
@@ -171,7 +180,7 @@ class GepaOptimizer(BaseOptimizer):
             try:
                 # Use the original prompt structure (preserve user/tools), but swap the system text
                 base_cp = base_prompt.copy()
-                base_cp.system = seed_prompt_text
+                self._apply_system_text(base_cp, seed_prompt_text)
                 base_cp.project_name = self.project_name
                 base_cp.model = self.model
                 base_cp.model_kwargs = self.model_kwargs
@@ -182,6 +191,7 @@ class GepaOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     optimization_id=optimization_id,
+                    dataset_item_ids=dataset_item_ids,
                 )
                 if _GEPA_DEBUG:
                     print(
@@ -206,6 +216,7 @@ class GepaOptimizer(BaseOptimizer):
                     optimization_id,
                     phase_label="gepa_adapter_eval",
                     base_prompt=base_cp,
+                    dataset_item_ids=dataset_item_ids,
                 )
                 adapter_obj = build_adapter_if_available(
                     gepa, self.model, self.reflection_model, eval_fn
@@ -278,6 +289,7 @@ class GepaOptimizer(BaseOptimizer):
                 optimization_id,
                 phase_label="gepa_adapter_eval",
                 base_prompt=base_cp,
+                dataset_item_ids=dataset_item_ids,
             )
             used_live_metric = True
             if _GEPA_DEBUG:
@@ -320,6 +332,38 @@ class GepaOptimizer(BaseOptimizer):
             )
         except Exception:
             pass
+        if _GEPA_DEBUG:
+            debug_fields: Dict[str, Any] = {}
+            for attr in (
+                "num_candidates",
+                "total_metric_calls",
+                "best_idx",
+                "best_candidate",
+                "val_aggregate_scores",
+                "train_aggregate_scores",
+            ):
+                if hasattr(result, attr):
+                    value = getattr(result, attr)
+                    if attr.endswith("scores") and isinstance(value, list):
+                        try:
+                            debug_fields[attr] = [
+                                float(v) if v is not None else None for v in value
+                            ]
+                        except Exception:
+                            debug_fields[attr] = value
+                    else:
+                        debug_fields[attr] = value
+            cand_texts: List[str] = []
+            try:
+                cand_texts = [
+                    (extract_candidate_system_text(cand) or "")
+                    for cand in getattr(result, "candidates", []) or []
+                ]
+            except Exception:
+                cand_texts = []
+            debug_fields["candidate_system_prompts"] = cand_texts
+            logger.debug("[GEPA] optimize() raw result snapshot: %s", debug_fields)
+            print("[GEPA][DEBUG] Raw GEPA result snapshot:", debug_fields)
         return result
 
     def gepa_evaluate_prompt(
@@ -478,6 +522,18 @@ class GepaOptimizer(BaseOptimizer):
             # deterministic sub-sample for reproducibility
             items = items[:n_samples]
 
+        dataset_item_ids: Optional[List[str]] = None
+        if items:
+            ids: List[str] = []
+            for item in items:
+                item_id = item.get("id")
+                if item_id is None:
+                    ids = []
+                    break
+                ids.append(str(item_id))
+            if ids:
+                dataset_item_ids = ids
+
         trainset = self._to_gepa_default_datainst(items, input_key, output_key)
         valset = None  # default: GEPA uses trainset if valset is None
 
@@ -526,16 +582,21 @@ class GepaOptimizer(BaseOptimizer):
             # Baseline evaluation tied to the optimization for tracking
             with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
                 try:
+                    eval_kwargs: Dict[str, Any] = dict(
+                        prompt=prompt,
+                        dataset=dataset,
+                        metric=metric,
+                        optimization_id=opt_id,
+                        extra_metadata={"phase": "baseline"},
+                        verbose=0,
+                    )
+                    if dataset_item_ids is not None:
+                        eval_kwargs["dataset_item_ids"] = dataset_item_ids
+                    else:
+                        eval_kwargs["n_samples"] = n_samples
+
                     initial_score = float(
-                        self._evaluate_prompt_logged(
-                            prompt=prompt,
-                            dataset=dataset,
-                            metric=metric,
-                            n_samples=n_samples,
-                            optimization_id=opt_id,
-                            extra_metadata={"phase": "baseline"},
-                            verbose=0,
-                        )
+                        self._evaluate_prompt_logged(**eval_kwargs)
                     )
                     baseline.set_score(initial_score)
                 except Exception:
@@ -553,6 +614,7 @@ class GepaOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     optimization_id=opt_id,
+                    dataset_item_ids=dataset_item_ids,
                 )
                 try:
                     opt_id = optimization.id if optimization is not None else None
@@ -592,28 +654,50 @@ class GepaOptimizer(BaseOptimizer):
             cand_prompt_text = extract_candidate_system_text(cand) or seed_prompt_text
             # Preserve original user/tools and only swap system text
             cp = prompt.copy()
-            cp.system = cand_prompt_text
+            self._apply_system_text(cp, cand_prompt_text)
             cp.project_name = self.project_name
             cp.model = self.model
             cp.model_kwargs = self.model_kwargs
             try:
                 from ..reporting_utils import suppress_opik_logs as _suppress_logs
 
-                with _suppress_logs():
-                    s = self._evaluate_prompt_logged(
+                suppress_ctx = nullcontext() if _GEPA_DEBUG else _suppress_logs()
+                with suppress_ctx:
+                    eval_kwargs = dict(
                         prompt=cp,
                         dataset=dataset,
                         metric=metric,
-                        n_samples=n_samples,
                         optimization_id=opt_id,
-                        extra_metadata={"phase": "rescoring", "candidate_index": i},
+                        extra_metadata={
+                            "phase": "rescoring",
+                            "candidate_index": i,
+                        },
                         verbose=0,
                     )
+                    if dataset_item_ids is not None:
+                        eval_kwargs["dataset_item_ids"] = dataset_item_ids
+                    else:
+                        eval_kwargs["n_samples"] = n_samples
+
+                    s = self._evaluate_prompt_logged(**eval_kwargs)
             except Exception as e:
                 if _GEPA_DEBUG:
                     logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
             rescored.append(float(s))
+            if _GEPA_DEBUG:
+                snippet = (cand_prompt_text or "").replace("\n", " ")[:160]
+                gepa_val = val_scores[i] if i < len(val_scores) else None
+                print(
+                    "[GEPA][DEBUG] Rescore",
+                    i,
+                    "GEPA=",
+                    gepa_val,
+                    "OPIK=",
+                    float(s),
+                    "prompt=",
+                    snippet,
+                )
 
         # Choose best by Opik metric if we have rescored values; otherwise fallback to GEPA index
         if rescored:
@@ -636,29 +720,35 @@ class GepaOptimizer(BaseOptimizer):
 
         # Prepare final prompt and log one last evaluation to ensure Opik UI reflects the chosen result
         final_cp = prompt.copy()
-        final_cp.system = best_prompt_text
+        self._apply_system_text(final_cp, best_prompt_text)
         final_cp.project_name = self.project_name
         final_cp.model = self.model
         final_cp.model_kwargs = self.model_kwargs
         try:
             from ..reporting_utils import suppress_opik_logs as _suppress_logs
 
-            with _suppress_logs():
-                _ = self._evaluate_prompt_logged(
+            suppress_ctx = nullcontext() if _GEPA_DEBUG else _suppress_logs()
+            with suppress_ctx:
+                eval_kwargs = dict(
                     prompt=final_cp,
                     dataset=dataset,
                     metric=metric,
-                    n_samples=n_samples,
                     optimization_id=opt_id,
                     extra_metadata={"phase": "final", "selected": True},
                     verbose=0,
                 )
+                if dataset_item_ids is not None:
+                    eval_kwargs["dataset_item_ids"] = dataset_item_ids
+                else:
+                    eval_kwargs["n_samples"] = n_samples
+                _ = self._evaluate_prompt_logged(**eval_kwargs)
         except Exception:
             pass
 
         # Build history with both GEPA and Opik rescoring where available
         candidate_rows: List[Dict[str, Any]] = []
         history: List[Dict[str, Any]] = []
+        candidate_system_texts: List[str] = []
         for i, cand in enumerate(candidates):
             cand_prompt = extract_candidate_system_text(cand) if cand else ""
             gepa_s = val_scores[i] if i < len(val_scores) else None
@@ -699,6 +789,7 @@ class GepaOptimizer(BaseOptimizer):
                     "metadata": proposal_meta or {},
                 }
             )
+            candidate_system_texts.append(cand_prompt)
 
         if self.verbose >= 1:
             gepa_reporting.display_candidate_scores(
@@ -725,6 +816,7 @@ class GepaOptimizer(BaseOptimizer):
             "num_candidates": getattr(gepa_result, "num_candidates", None),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
             "val_scores": val_scores,
+            "opik_rescored_scores": rescored,
             "parents": gepa_result.parents,
             "gepa_live_metric_used": used_live_metric_flag,
             "gepa_live_metric_call_count": int(
@@ -733,7 +825,17 @@ class GepaOptimizer(BaseOptimizer):
             "recorded_candidate_count": len(getattr(self, "_gepa_candidate_records", [])),
             "candidate_summary": candidate_rows,
             "best_candidate_iteration": candidate_rows[best_idx]["iteration"],
+            "gepa_candidate_system_prompts": candidate_system_texts,
+            "dataset_item_ids": dataset_item_ids,
+            "selected_candidate_index": best_idx,
+            "selected_candidate_source": candidate_rows[best_idx]["source"],
+            "selected_candidate_gepa_score": val_scores[best_idx]
+            if best_idx < len(val_scores)
+            else None,
+            "selected_candidate_opik_score": score,
         }
+        if _GEPA_DEBUG:
+            details["gepa_candidates_repr"] = [repr(c) for c in candidates]
         if experiment_config:
             details.update({"experiment": experiment_config})
 
@@ -754,6 +856,16 @@ class GepaOptimizer(BaseOptimizer):
             logger.debug(
                 "[GEPA] Selected candidate score=%.4f prompt_snippet=%r",
                 score,
+                (best_prompt_text or "").replace("\n", " ")[:160],
+            )
+            print(
+                "[GEPA][DEBUG] Selected candidate index=",
+                best_idx,
+                "GEPA=",
+                details.get("selected_candidate_gepa_score"),
+                "OPIK=",
+                score,
+                "prompt=",
                 (best_prompt_text or "").replace("\n", " ")[:160],
             )
 
@@ -783,6 +895,21 @@ class GepaOptimizer(BaseOptimizer):
             if m.get("role") == "user":
                 return f"You are a helpful assistant. Respond to: {m.get('content','')}"
         return "You are a helpful assistant."
+
+    def _apply_system_text(
+        self, prompt_obj: chat_prompt.ChatPrompt, system_text: str
+    ) -> None:
+        if not system_text:
+            return
+        if prompt_obj.messages is not None:
+            messages = prompt_obj.get_messages()
+            if messages and messages[0].get("role") == "system":
+                messages[0]["content"] = system_text
+            else:
+                messages.insert(0, {"role": "system", "content": system_text})
+            prompt_obj.set_messages(messages)
+        else:
+            prompt_obj.system = system_text
 
     def _infer_dataset_keys(self, dataset: Dataset) -> Tuple[str, str]:
         """Heuristically infer input/output keys from dataset items."""

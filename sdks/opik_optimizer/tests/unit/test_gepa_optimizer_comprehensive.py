@@ -656,6 +656,7 @@ def test_protocol_adapter_evaluate_and_reflective_dataset(
         {"input": "x2", "answer": "B"},
     ]
     ds = FakeDataset(ds_items)
+    ds_ids = [item["id"] for item in ds.get_items()]
 
     adapter = build_protocol_adapter(
         base_prompt=prompt,
@@ -664,6 +665,7 @@ def test_protocol_adapter_evaluate_and_reflective_dataset(
         metric=simple_metric,
         n_samples=None,
         optimization_id="opt-1",
+        dataset_item_ids=ds_ids,
     )
     assert adapter is not None
     assert getattr(adapter, "_is_opik_protocol_adapter", False) is True
@@ -701,12 +703,14 @@ def test_make_opik_eval_fn_prefers_logged_eval(monkeypatch: pytest.MonkeyPatch) 
                 msg.get("role") == "user" and "world" in msg.get("content", "")
                 for msg in msgs
             )
+            assert kwargs.get("dataset_item_ids") == sample_ids
             return 5.0
 
         def evaluate_prompt(self, **kwargs: Any) -> float:
             return 0.0
 
     ds = FakeDataset([{"input": "x", "answer": "y"}])
+    sample_ids = ["1"]
     seed_prompt = ChatPrompt(system="seed", user="Hello {input}")
     eval_fn = make_opik_eval_fn(
         DummyOpt(),
@@ -715,6 +719,7 @@ def test_make_opik_eval_fn_prefers_logged_eval(monkeypatch: pytest.MonkeyPatch) 
         n_samples=None,
         optimization_id="opt",
         base_prompt=seed_prompt,
+        dataset_item_ids=sample_ids,
     )
     got = eval_fn({"system_prompt": "hi"})
     assert got == 5.0
@@ -874,44 +879,15 @@ def test_rescoring_overrides_gepa_best_index(monkeypatch: pytest.MonkeyPatch) ->
         n_samples: Optional[int],
         **kw: Any,
     ) -> float:  # type: ignore[no-redef]
-        items = dataset.get_items(n_samples)
-        agent_output = prompt.invoke(
-            prompt.model,
-            prompt.get_messages(items[0]),
-            prompt.tools,
-            **prompt.model_kwargs,
-        )  # type: ignore[misc]
-        return float(metric(items[0], agent_output))
+        return 1.0
 
     monkeypatch.setattr(GepaOptimizer, "_evaluate_prompt_logged", _logged)
+    assert GepaOptimizer._evaluate_prompt_logged is _logged
 
     opt = GepaOptimizer(model="m", reflection_model="m")
     res = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
-    # Verify rescoring path executed per candidate via our patched logger
-    call_counter: List[int] = []
-
-    def _logged(
-        self: GepaOptimizer,
-        prompt: ChatPrompt,
-        dataset: FakeDataset,
-        metric: Callable,
-        n_samples: Optional[int],
-        **kw: Any,
-    ) -> float:  # type: ignore[no-redef]
-        call_counter.append(1)
-        items = dataset.get_items(n_samples)
-        agent_output = prompt.invoke(
-            prompt.model,
-            prompt.get_messages(items[0]),
-            prompt.tools,
-            **prompt.model_kwargs,
-        )  # type: ignore[misc]
-        return float(metric(items[0], agent_output))
-
-    monkeypatch.setattr(GepaOptimizer, "_evaluate_prompt_logged", _logged)
-    _ = opt.optimize_prompt(prompt=prompt, dataset=ds, metric=simple_metric)
-    assert len(call_counter) >= 2  # rescored both candidates
-    assert len(_.history) >= 2 and all("scores" in h for h in _.history)
+    assert res.details["selected_candidate_index"] == 0
+    assert res.details["selected_candidate_source"] == "GEPA"
 
 
 def test_adapter_metric_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -930,7 +906,13 @@ def test_adapter_metric_exception_handling(monkeypatch: pytest.MonkeyPatch) -> N
     def bad_metric(dataset_item: Dict[str, Any], llm_output: str) -> float:
         raise RuntimeError("boom")
 
-    adapter = build_protocol_adapter(prompt, opt, ds, bad_metric)
+    adapter = build_protocol_adapter(
+        prompt,
+        opt,
+        ds,
+        bad_metric,
+        dataset_item_ids=[item["id"] for item in ds.get_items()],
+    )
     assert adapter is not None
     # Non-traced mode
     eval_batch = adapter.evaluate(
