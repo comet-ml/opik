@@ -2477,7 +2477,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> update(UUID id, TraceUpdate traceUpdate, Connection connection) {
 
-        ST template = buildUpdateTemplate(traceUpdate, UPDATE);
+        ST template = buildUpdateTemplate(traceUpdate, UPDATE_TEMPLATE_GROUP);
 
         String sql = template.render();
 
@@ -2528,15 +2528,8 @@ class TraceDAOImpl implements TraceDAO {
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
-    private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
-        ST template;
-        if (update.equals(UPDATE)) {
-            template = UPDATE_TEMPLATE_GROUP.getInstanceOf("main");
-        } else if (update.equals(INSERT_UPDATE)) {
-            template = INSERT_UPDATE_TEMPLATE_GROUP.getInstanceOf("main");
-        } else {
-            throw new IllegalArgumentException("Unsupported update type: " + update);
-        }
+    private ST buildUpdateTemplate(TraceUpdate traceUpdate, STGroup templateGroup) {
+        var template = templateGroup.getInstanceOf("main");
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2754,7 +2747,7 @@ class TraceDAOImpl implements TraceDAO {
             @NonNull UUID traceId,
             @NonNull Connection connection) {
 
-        var template = buildUpdateTemplate(traceUpdate, INSERT_UPDATE);
+        var template = buildUpdateTemplate(traceUpdate, INSERT_UPDATE_TEMPLATE_GROUP);
 
         var statement = connection.createStatement(template.render());
 
