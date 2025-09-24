@@ -285,4 +285,28 @@ public class PromptResource {
         return Response.ok(promptVersion).build();
     }
 
+    @POST
+    @Path("/{promptId}/versions/{versionId}/restore")
+    @Operation(operationId = "restorePromptVersion", summary = "Restore prompt version", description = "Restore a prompt version by creating a new version with the content from the specified version", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    @JsonView({PromptVersion.View.Detail.class})
+    public Response restorePromptVersion(@PathParam("promptId") UUID promptId, @PathParam("versionId") UUID versionId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Restoring prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        PromptVersion restoredVersion = promptService.restorePromptVersion(promptId, versionId);
+
+        log.info("Successfully restored prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        return Response.ok(restoredVersion).build();
+    }
+
 }
