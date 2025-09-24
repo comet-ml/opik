@@ -33,6 +33,8 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.DatasetFilter;
+import com.comet.opik.api.filter.DatasetItemField;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.FieldType;
@@ -86,6 +88,7 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.AfterAll;
@@ -4252,10 +4255,13 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
+            // Create filter for the new filter API
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
+
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("items")
-                    .queryParam("filters", searchKey)
+                    .queryParam("filters", toURLEncodedQueryParam(List.of(filter)))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
@@ -4394,9 +4400,15 @@ class DatasetsResourceTest {
             var requestBuilder = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("items")
-                    .queryParam("filters", scenario.searchTerm())
                     .queryParam("page", scenario.page())
                     .queryParam("size", scenario.size());
+
+            // Add filters parameter only if search term is not empty
+            if (StringUtils.isNotEmpty(scenario.searchTerm())) {
+                var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null,
+                        scenario.searchTerm());
+                requestBuilder = requestBuilder.queryParam("filters", toURLEncodedQueryParam(List.of(filter)));
+            }
 
             try (var actualResponse = requestBuilder
                     .request()
@@ -4409,8 +4421,7 @@ class DatasetsResourceTest {
 
                 if (scenario.page() == 1) {
                     // For "No matches" scenario, use empty columns since no results are returned
-                    var expectedColumns = scenario.expectedTotalCount() == 0 ? Set.<Column>of() : columns;
-                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), expectedColumns, scenario.page());
+                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), columns, scenario.page());
                 } else {
                     // For pagination tests, include total count
                     assertDatasetItemPage(actualEntity, scenario.expectedItems(), scenario.expectedTotalCount(),
@@ -5091,8 +5102,18 @@ class DatasetsResourceTest {
         @ValueSource(strings = {"$..test", "$meta_field", "[", "]", "[..]",})
         void findInvalidJsonPaths(String path) {
 
-            var datasetId = GENERATOR.generate();
-            var experimentId = GENERATOR.generate();
+            Dataset dataset = Dataset.builder().name(GENERATOR.generate().toString()).build();
+
+            var datasetId = createAndAssert(dataset);
+
+            Experiment experiment = Experiment.builder()
+                    .id(GENERATOR.generate())
+                    .name(GENERATOR.generate().toString())
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
             var field = RandomStringUtils.randomAlphanumeric(5);
 
             var filters = List
@@ -5100,7 +5121,7 @@ class DatasetsResourceTest {
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experiment.id())))
                     .queryParam("filters", toURLEncodedQueryParam(filters))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)

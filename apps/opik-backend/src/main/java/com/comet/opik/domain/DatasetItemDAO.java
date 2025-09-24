@@ -46,7 +46,6 @@ public interface DatasetItemDAO {
     Mono<Long> save(UUID datasetId, List<DatasetItem> batch);
 
     Mono<Long> delete(List<UUID> ids);
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, String search, boolean truncate);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
@@ -149,7 +148,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
-            <if(search)>AND arrayExists(value -> positionCaseInsensitive(toString(value), :search) > 0, mapValues(data))<endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit OFFSET :offset
@@ -180,7 +179,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
-                <if(search)>AND arrayExists(value -> positionCaseInsensitive(toString(value), :search) > 0, mapValues(data))<endif>
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
@@ -958,73 +957,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    @Override
-    @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, String search,
-            boolean truncate) {
-
-        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
-
-            // Determine if we have a search
-            boolean hasSearch = search != null && !search.trim().isEmpty();
-
-            // Get count and columns using the unified count query
-            Segment segmentCount = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_count");
-
-            // Create the StringTemplate for the count query
-            ST countTemplate = new ST(SELECT_DATASET_ITEMS_COUNT);
-            countTemplate = countTemplate.add("search", hasSearch);
-
-            // Create the count statement
-            var countStatement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId", datasetId)
-                    .bind("workspace_id", workspaceId);
-
-            // Bind search parameter if needed
-            if (hasSearch && search != null) {
-                countStatement.bind("search", search.trim());
-            }
-
-            Mono<Map.Entry<Long, Set<Column>>> countAndColumnsMono = Flux.from(countStatement.execute())
-                    .doFinally(signalType -> endSegment(segmentCount))
-                    .flatMap(results -> DatasetItemResultMapper.mapCountAndColumns(results, "data"))
-                    .reduce(DatasetItemResultMapper::groupResults);
-
-            // Get the items using the unified query
-            return countAndColumnsMono.flatMap(countAndColumns -> {
-                long total = countAndColumns.getKey();
-                Set<Column> columns = countAndColumns.getValue();
-
-                Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page");
-
-                // Create the StringTemplate for the unified query
-                ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
-                template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
-
-                // Add search condition to template
-                template = template.add("search", hasSearch);
-
-                // Create the statement
-                var itemsStatement = connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("datasetId", datasetId)
-                        .bind("limit", size)
-                        .bind("offset", (page - 1) * size);
-
-                // Bind search parameter if needed
-                if (hasSearch && search != null) {
-                    itemsStatement.bind("search", search.trim());
-                }
-
-                return Flux.from(itemsStatement.execute())
-                        .flatMap(DatasetItemResultMapper::mapItem)
-                        .collectList()
-                        .map(items -> new DatasetItemPage(items, page, items.size(), total, columns))
-                        .doFinally(signalType -> endSegment(segment));
-            });
-        }));
-    }
-
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
         var template = new ST(query);
 
@@ -1062,11 +994,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Mono<DatasetItemPage> getItems(
             @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, page, size);
 
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE,
-                "select_dataset_items_experiments_filters_summary");
+        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
+
+        // Choose the appropriate query and segment names based on experiment IDs
+        String query = hasExperimentIds ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS : SELECT_DATASET_ITEMS;
+        String summarySegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters_summary"
+                : "select_dataset_items_filters_summary";
+        String contentSegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters"
+                : "select_dataset_items_filters";
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, summarySegmentName);
 
         Mono<Set<Column>> columnsMono = mapColumnsField(datasetItemSearchCriteria);
         Mono<Long> countMono = getCount(datasetItemSearchCriteria);
@@ -1075,11 +1015,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .doFinally(signalType -> endSegment(segment))
                 .flatMap(results -> asyncTemplate.nonTransaction(connection -> {
 
-                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE,
-                            "select_dataset_items_experiments_filters");
+                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
 
-                    ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
-                            datasetItemSearchCriteria);
+                    ST selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
@@ -1087,10 +1025,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                            .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
-                            .bind("entityType", datasetItemSearchCriteria.entityType().getType())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
+
+                    // Only bind experimentIds and entityType if we have experiment IDs
+                    if (hasExperimentIds) {
+                        selectStatement = selectStatement.bind("experimentIds",
+                                datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
+                                .bind("entityType", datasetItemSearchCriteria.entityType().getType());
+                    }
 
                     bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
@@ -1108,16 +1051,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        // Choose the appropriate count query based on whether we have experiment IDs
+        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
+        String countQuery = hasExperimentIds
+                ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT
+                : SELECT_DATASET_ITEMS_COUNT;
+
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT,
-                    datasetItemSearchCriteria);
+            ST countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
 
             var statement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                    .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new));
+                    .bind("datasetId", datasetItemSearchCriteria.datasetId());
+
+            // Only bind experimentIds if we have them
+            if (hasExperimentIds) {
+                statement = statement.bind("experimentIds",
+                        datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new));
+            }
 
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 

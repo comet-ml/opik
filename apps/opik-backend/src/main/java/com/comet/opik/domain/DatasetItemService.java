@@ -40,8 +40,6 @@ public interface DatasetItemService {
 
     Mono<Void> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, String search, boolean truncate);
-
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
@@ -219,21 +217,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, String search,
-            boolean truncate) {
-        // Verify dataset visibility
-        datasetService.findById(datasetId);
-
-        return dao.getItems(datasetId, page, size, search, truncate)
-                .defaultIfEmpty(DatasetItemPage.empty(page));
-    }
-
-    @Override
-    @WithSpan
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
-        return dao.getItems(datasetItemSearchCriteria, page, size);
+
+        datasetService.findById(datasetItemSearchCriteria.datasetId());
+
+        return dao.getItems(datasetItemSearchCriteria, page, size)
+                .defaultIfEmpty(DatasetItemPage.empty(page));
     }
 }

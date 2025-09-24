@@ -2,6 +2,7 @@ package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.DatasetField;
+import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
@@ -80,6 +81,10 @@ public class FilterQueryBuilder {
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
+    private static final String DATA_ANALYTICS_DB = "toString(data)";
+    private static final String SOURCE_DB = "source";
+    private static final String TRACE_ID_DB = "trace_id";
+    private static final String SPAN_ID_DB = "span_id";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -268,6 +273,19 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
 
+    private static final Map<DatasetItemField, String> DATASET_ITEM_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetItemField, String>builder()
+                    .put(DatasetItemField.ID, ID_DB)
+                    .put(DatasetItemField.DATA, DATA_ANALYTICS_DB)
+                    .put(DatasetItemField.SOURCE, SOURCE_DB)
+                    .put(DatasetItemField.TRACE_ID, TRACE_ID_DB)
+                    .put(DatasetItemField.SPAN_ID, SPAN_ID_DB)
+                    .put(DatasetItemField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetItemField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetItemField.CREATED_BY, CREATED_BY_DB)
+                    .put(DatasetItemField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
     private static final Map<AnnotationQueueField, String> ANNOTATION_QUEUE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<AnnotationQueueField, String>builder()
                     .put(AnnotationQueueField.ID, ID_DB)
@@ -289,8 +307,8 @@ public class FilterQueryBuilder {
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
 
-    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
-            FilterStrategy.TRACE, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
+    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.ofEntries(
+            Map.entry(FilterStrategy.TRACE, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.ID)
                     .add(TraceField.NAME)
                     .add(TraceField.START_TIME)
@@ -306,15 +324,15 @@ public class FilterQueryBuilder {
                     .add(TraceField.GUARDRAILS)
                     .add(TraceField.VISIBILITY_MODE)
                     .add(TraceField.ERROR_INFO)
-                    .build()),
-            FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
+                    .build())),
+            Map.entry(FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
                     .add(TraceField.USAGE_PROMPT_TOKENS)
                     .add(TraceField.USAGE_TOTAL_TOKENS)
                     .add(TraceField.TOTAL_ESTIMATED_COST)
                     .add(TraceField.LLM_SPAN_COUNT)
-                    .build()),
-            FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
+                    .build())),
+            Map.entry(FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)
                     .add(SpanField.NAME)
                     .add(SpanField.START_TIME)
@@ -334,22 +352,23 @@ public class FilterQueryBuilder {
                     .add(SpanField.DURATION)
                     .add(SpanField.ERROR_INFO)
                     .add(SpanField.TYPE)
-                    .build()),
-            FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
+                    .build())),
+            Map.entry(FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
                     .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
                     .add(TraceThreadField.FEEDBACK_SCORES)
-                    .build(),
-            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
-                    .add(ExperimentsComparisonValidKnownField.OUTPUT)
                     .build()),
-            FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
+            Map.entry(FilterStrategy.EXPERIMENT_ITEM,
+                    EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
+                            .add(ExperimentsComparisonValidKnownField.OUTPUT)
+                            .build())),
+            Map.entry(FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
                     .add(ExperimentField.METADATA)
                     .add(ExperimentField.DATASET_ID)
                     .add(ExperimentField.PROMPT_IDS)
-                    .build(),
-            FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
+                    .build()),
+            Map.entry(FilterStrategy.PROMPT, ImmutableSet.<Field>builder()
                     .add(PromptField.ID)
                     .add(PromptField.NAME)
                     .add(PromptField.DESCRIPTION)
@@ -359,8 +378,8 @@ public class FilterQueryBuilder {
                     .add(PromptField.LAST_UPDATED_BY)
                     .add(PromptField.TAGS)
                     .add(PromptField.VERSION_COUNT)
-                    .build(),
-            FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
+                    .build()),
+            Map.entry(FilterStrategy.DATASET, EnumSet.copyOf(ImmutableSet.<DatasetField>builder()
                     .add(DatasetField.ID)
                     .add(DatasetField.NAME)
                     .add(DatasetField.DESCRIPTION)
@@ -371,8 +390,8 @@ public class FilterQueryBuilder {
                     .add(DatasetField.LAST_UPDATED_BY)
                     .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
                     .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
-                    .build()),
-            FilterStrategy.ANNOTATION_QUEUE, EnumSet.copyOf(ImmutableSet.<AnnotationQueueField>builder()
+                    .build())),
+            Map.entry(FilterStrategy.ANNOTATION_QUEUE, EnumSet.copyOf(ImmutableSet.<AnnotationQueueField>builder()
                     .add(AnnotationQueueField.ID)
                     .add(AnnotationQueueField.PROJECT_ID)
                     .add(AnnotationQueueField.NAME)
@@ -384,8 +403,8 @@ public class FilterQueryBuilder {
                     .add(AnnotationQueueField.CREATED_BY)
                     .add(AnnotationQueueField.LAST_UPDATED_AT)
                     .add(AnnotationQueueField.LAST_UPDATED_BY)
-                    .build()),
-            FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
+                    .build())),
+            Map.entry(FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
                     .add(TraceThreadField.FIRST_MESSAGE)
@@ -397,6 +416,17 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
+                    .build())),
+            Map.entry(FilterStrategy.DATASET_ITEM, ImmutableSet.<DatasetItemField>builder()
+                    .add(DatasetItemField.ID)
+                    .add(DatasetItemField.DATA)
+                    .add(DatasetItemField.SOURCE)
+                    .add(DatasetItemField.TRACE_ID)
+                    .add(DatasetItemField.SPAN_ID)
+                    .add(DatasetItemField.CREATED_AT)
+                    .add(DatasetItemField.LAST_UPDATED_AT)
+                    .add(DatasetItemField.CREATED_BY)
+                    .add(DatasetItemField.LAST_UPDATED_BY)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -484,6 +514,7 @@ public class FilterQueryBuilder {
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
+            case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
             default -> {
 

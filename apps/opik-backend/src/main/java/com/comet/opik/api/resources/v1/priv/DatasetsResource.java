@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.DatasetFilter;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -70,6 +71,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -306,10 +308,21 @@ public class DatasetsResource {
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
+        var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+
+        var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
+                .datasetId(id)
+                .experimentIds(Set.of()) // Empty set for regular dataset items
+                .filters(queryFilters)
+                .entityType(EntityType.TRACE)
+                .truncate(truncate)
+                .build();
+
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dataset items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'", id, page,
                 size, filters, workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, filters, truncate)
+
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,

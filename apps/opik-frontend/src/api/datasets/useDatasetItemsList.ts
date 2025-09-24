@@ -26,17 +26,26 @@ const getDatasetItemsList = async (
     truncate = false,
   }: UseDatasetItemsListParams,
 ) => {
+  const params: Record<string, any> = {
+    size,
+    page,
+    truncate,
+  };
+
+  // Add search as filters parameter if provided
+  if (search) {
+    params.filters = JSON.stringify([{
+      field: "data",
+      operator: "contains",
+      value: search
+    }]);
+  }
+
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}${datasetId}/items`,
     {
       signal,
-      params: {
-        size,
-        page,
-        truncate,
-        // Only send free text search as filters parameter
-        ...(search && { filters: search }),
-      },
+      params,
     },
   );
 
