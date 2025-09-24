@@ -765,16 +765,16 @@ redirects:
     destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
   # TypeScript SDK integration redirects
   - source: "/docs/opik/reference/typescript-sdk/integrations/vercel-ai-sdk"
-    destination: "/docs/opik/tracing/integrations/vercel-ai-sdk"
+    destination: "/docs/opik/integrations/vercel-ai-sdk"
     permanent: true
   - source: "/docs/opik/reference/typescript-sdk/integrations/langchain"
-    destination: "/docs/opik/tracing/integrations/langchainjs"
+    destination: "/docs/opik/integrations/langchainjs"
     permanent: true
   - source: "/docs/opik/reference/typescript-sdk/integrations/openai"
-    destination: "/docs/opik/tracing/integrations/openai-typescript"
+    destination: "/docs/opik/integrations/openai-typescript"
     permanent: true
   - source: "/docs/opik/reference/typescript-sdk/integrations/workers-ai"
-    destination: "/docs/opik/tracing/integrations/cloudflare-workers-ai"
+    destination: "/docs/opik/integrations/cloudflare-workers-ai"
     permanent: true
   - source: "/docs/opik/prompt_engineering/agent_optimization"
     destination: "/docs/opik/agent_optimization/overview"
