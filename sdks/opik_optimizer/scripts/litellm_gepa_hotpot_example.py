@@ -7,6 +7,14 @@ Notes:
 """
 
 from typing import Any, Dict
+import os
+import sys
+
+# Prefer local src/ over installed package during development
+_HERE = os.path.abspath(os.path.dirname(__file__))
+_SRC = os.path.abspath(os.path.join(_HERE, "..", "src"))
+if os.path.isdir(_SRC) and _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
 
 import opik
 from opik_optimizer import ChatPrompt
@@ -74,3 +82,13 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
+
+# Debug dumps (GEPA internal + Opik)
+details = result.details or {}
+print("\n--- GEPA Debug ---")
+print("gepa_live_metric_used:", details.get("gepa_live_metric_used"))
+print("gepa_live_metric_call_count:", details.get("gepa_live_metric_call_count"))
+print("num_candidates:", details.get("num_candidates"))
+val_scores = details.get("val_scores")
+if isinstance(val_scores, list):
+    print("val_aggregate_scores:", [f"{s:.4f}" for s in val_scores])

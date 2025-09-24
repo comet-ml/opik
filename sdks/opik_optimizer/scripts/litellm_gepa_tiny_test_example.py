@@ -8,6 +8,14 @@ Requires:
 """
 
 from typing import Any, Dict
+import os
+import sys
+
+# Prefer local src/ over installed package during development
+_HERE = os.path.abspath(os.path.dirname(__file__))
+_SRC = os.path.abspath(os.path.join(_HERE, "..", "src"))
+if os.path.isdir(_SRC) and _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -71,6 +79,20 @@ def main() -> None:
     )
 
     result.display()
+    # Debug dumps
+    details = result.details or {}
+    print("\n--- GEPA Debug ---")
+    print("gepa_live_metric_used:", details.get("gepa_live_metric_used"))
+    print("gepa_live_metric_call_count:", details.get("gepa_live_metric_call_count"))
+    print("num_candidates:", details.get("num_candidates"))
+    val_scores = details.get("val_scores")
+    if isinstance(val_scores, list):
+        print("val_aggregate_scores:", [f"{s:.4f}" for s in val_scores])
+    print(
+        "initial_score:",
+        f"{result.initial_score:.4f}" if result.initial_score is not None else None,
+    )
+    print("final_score:", f"{result.score:.4f}")
 
 
 if __name__ == "__main__":
