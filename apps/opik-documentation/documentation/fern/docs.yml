@@ -952,30 +952,93 @@ redirects:
   - source: "/docs/opik/opentelemetry/python-sdk"
     destination: "/docs/opik/integrations/opentelemetry-python-sdk"
     permanent: true
-  - source: "/docs/opik/ruby-otel-sdk"
-    destination: "/docs/opik/integrations/opentelemetry-ruby-sdk"
-    permanent: true
-  - source: "/docs/opik/ruby-otel-sdk/overview"
+  - source: "/docs/opik/reference/ruby-otel-sdk/overview"
     destination: "/docs/opik/integrations/opentelemetry-ruby-sdk"
     permanent: true
   # Cookbook redirects
+  - source: "/docs/opik/cookbook/openai"
+    destination: "/docs/opik/integrations/openai"
+    permanent: true
+  - source: "/docs/opik/cookbook/openai-agents"
+    destination: "/docs/opik/integrations/openai-agents"
+    permanent: true
+  - source: "/docs/opik/cookbook/litellm"
+    destination: "/docs/opik/integrations/litellm"
+    permanent: true
+  - source: "/docs/opik/cookbook/langchain"
+    destination: "/docs/opik/integrations/langchain"
+    permanent: true
+  - source: "/docs/opik/cookbook/ai-suite"
+    destination: "/docs/opik/integrations/ai-suite"
+    permanent: true
+  - source: "/docs/opik/cookbook/anthropic"
+    destination: "/docs/opik/integrations/anthropic"
+    permanent: true
+  - source: "/docs/opik/cookbook/bedrock"
+    destination: "/docs/opik/integrations/bedrock"
+    permanent: true
+  - source: "/docs/opik/cookbook/crewai"
+    destination: "/docs/opik/integrations/crewai"
+    permanent: true
+  - source: "/docs/opik/cookbook/dspy"
+    destination: "/docs/opik/integrations/dspy"
+    permanent: true
+  - source: "/docs/opik/cookbook/gemini"
+    destination: "/docs/opik/integrations/gemini"
+    permanent: true
+  - source: "/docs/opik/cookbook/google_adk_integration"
+    destination: "/docs/opik/integrations/adk"
+    permanent: true
+  - source: "/docs/opik/cookbook/gretel"
+    destination: "/docs/opik/integrations/gretel"
+    permanent: true
+  - source: "/docs/opik/cookbook/groq"
+    destination: "/docs/opik/integrations/groq"
+    permanent: true
+  - source: "/docs/opik/cookbook/guardrails-ai"
+    destination: "/docs/opik/integrations/guardrails-ai"
+    permanent: true
+  - source: "/docs/opik/cookbook/haystack"
+    destination: "/docs/opik/integrations/haystack"
+    permanent: true
+  - source: "/docs/opik/cookbook/instructor"
+    destination: "/docs/opik/integrations/instructor"
+    permanent: true
+  - source: "/docs/opik/cookbook/langgraph"
+    destination: "/docs/opik/integrations/langgraph"
+    permanent: true
+  - source: "/docs/opik/cookbook/llama-index"
+    destination: "/docs/opik/integrations/llama_index"
+    permanent: true
+  - source: "/docs/opik/cookbook/ollama"
+    destination: "/docs/opik/integrations/ollama"
+    permanent: true
+  - source: "/docs/opik/cookbook/predibase"
+    destination: "/docs/opik/integrations/predibase"
+    permanent: true
+  - source: "/docs/opik/cookbook/pydantic-ai"
+    destination: "/docs/opik/integrations/pydantic-ai"
+    permanent: true
+  - source: "/docs/opik/cookbook/ragas"
+    destination: "/docs/opik/integrations/ragas"
+    permanent: true
+  - source: "/docs/opik/cookbook/smolagents"
+    destination: "/docs/opik/integrations/smolagents"
+    permanent: true
+  - source: "/docs/opik/cookbook/vertexai"
+    destination: "/docs/opik/integrations/gemini"
+    permanent: true
   - source: "/docs/opik/cookbook/evaluate_hallucination_metric"
     destination: "/docs/opik/evaluation/evaluate_hallucination_metric"
     permanent: true
   - source: "/docs/opik/cookbook/evaluate_moderation_metric"
     destination: "/docs/opik/evaluation/evaluate_moderation_metric"
     permanent: true
-  - source: "/docs/opik/cookbook/vertexai"
-    destination: "/docs/opik/integrations/gemini"
-    permanent: true
   - source: "/docs/opik/cookbook/dynamic_tracing_cookbook"
     destination: "/docs/opik/tracing/dynamic_tracing_control"
     permanent: true
   - source: "/docs/opik/cookbook/quickstart_notebook"
     destination: "/docs/opik/quickstart_notebook"
-    permanent: true
-  - source: "/docs/opik/cookbook/gretel"
-    destination: "/docs/opik/integrations/gretel"
     permanent: true
   - source: "/docs/opik/cookbook/huggingface_datasets_integration"
     destination: "/docs/opik/integrations/huggingface-datasets"
