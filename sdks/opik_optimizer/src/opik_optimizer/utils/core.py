@@ -358,11 +358,25 @@ def python_type_to_json_type(python_type: type) -> str:
         return "string"  # default fallback
 
 
-def search_wikipedia(query: str) -> list[str]:
+def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
+
+    Args:
+        query: The search query string
+        use_api: If True, directly use Wikipedia API instead of ColBERTv2.
+                If False (default), try ColBERTv2 first with API fallback.
     """
+    if use_api:
+        # Directly use Wikipedia API when requested
+        try:
+            return _search_wikipedia_api(query)
+        except Exception as api_error:
+            print(f"Wikipedia API failed: {api_error}")
+            return [f"Wikipedia search unavailable. Query was: {query}"]
+
+    # Default behavior: Try ColBERTv2 first with API fallback
     from .colbert import ColBERTv2
 
     # Try ColBERTv2 first with a short timeout

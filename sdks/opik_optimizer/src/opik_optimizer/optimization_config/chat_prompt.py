@@ -152,6 +152,7 @@ class ChatPrompt:
             copy.deepcopy(self.model_kwargs) if self.model_kwargs is not None else {}
         )
         return ChatPrompt(
+            name=self.name,
             system=self.system,
             user=self.user,
             messages=copy.deepcopy(self.messages),

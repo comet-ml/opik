@@ -425,6 +425,84 @@ update_optimization(
 <ParamField path="optimization" type="Optimization" />
 <ParamField path="status" type="str" />
 
+## GepaOptimizer
+
+```python
+GepaOptimizer(
+    model: str,
+    project_name: Optional[str] = None,
+    reflection_model: Optional[str] = None,
+    verbose: int = 1,
+    model_kwargs: Any
+)
+```
+
+Wraps the external GEPA package to optimize a single system prompt for single-turn tasks.
+
+**Parameters:**
+
+<ParamField path="model" type="str">
+  LiteLLM model name used as the task model.
+  Example: <code>openai/gpt-4o-mini</code>
+  See the LiteLLM support docs for configuration.
+  </ParamField>
+<ParamField path="project_name" type="Optional[str]" optional={true}>
+  Optional project name to group runs in Opik.
+</ParamField>
+<ParamField path="reflection_model" type="Optional[str]" optional={true}>
+  LiteLLM model name used for GEPA's reflection step. Defaults to <code>model</code> if not set.
+</ParamField>
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">
+  Controls internal logging/progress bars (0=off, 1=on).
+</ParamField>
+<ParamField path="model_kwargs" type="Any">
+  Extra LiteLLM parameters such as <code>temperature</code>, <code>max_tokens</code>, etc.
+  You may also pass <code>num_threads</code> (default: 6) to control evaluation parallelism.
+</ParamField>
+
+### Methods
+
+#### optimize_prompt
+
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset | str,
+    metric: Callable[[dict, str], ScoreResult],
+    experiment_config: Optional[dict] = None,
+    # GEPA-specific options (via kwargs)
+    max_metric_calls: int = 30,
+    reflection_minibatch_size: int = 3,
+    candidate_selection_strategy: str = "pareto",  # or "best"
+    n_samples: Optional[int] = None,
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset | str">
+  Opik dataset object or dataset name.
+</ParamField>
+<ParamField path="metric" type="Callable[[dict, str], ScoreResult]">
+  Metric function that returns an Opik <code>ScoreResult</code>.
+</ParamField>
+<ParamField path="experiment_config" type="Optional[dict]" optional={true}>
+  Optional configuration/metadata logged with the run.
+</ParamField>
+<ParamField path="max_metric_calls" type="int" optional={true} defaultValue="30">
+  Total budget of metric calls consumed by GEPA during the run.
+</ParamField>
+<ParamField path="reflection_minibatch_size" type="int" optional={true} defaultValue="3">
+  Number of items considered per reflection step.
+</ParamField>
+<ParamField path="candidate_selection_strategy" type="str" optional={true} defaultValue="pareto">
+  Strategy to pick candidates within GEPA (e.g., <code>pareto</code> or <code>best</code>).
+</ParamField>
+<ParamField path="n_samples" type="Optional[int]" optional={true}>
+  If set, sub-sample the dataset to this many items for train/val.
+</ParamField>
+
 ## ChatPrompt
 
 ```python
