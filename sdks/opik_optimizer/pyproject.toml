@@ -12,6 +12,8 @@ dependencies = [
     "datasets",
     "deap>=1.4.3",
     "diskcache",
+    "dspy<3",
+    "ujson",
     "hf_xet",
     "litellm",
     "opik>=1.7.17",
@@ -20,10 +22,16 @@ dependencies = [
     "pydantic",
     "pyrate-limiter",
     "tqdm",
+    "rich",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-conv"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    # "google-adk",
+    "langgraph",
+]
 
 [project.urls]
 Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
