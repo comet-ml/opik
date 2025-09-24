@@ -240,6 +240,7 @@ classes_to_document = [
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
+    opik_optimizer.GepaOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
     # opik_optimizer.datasets
