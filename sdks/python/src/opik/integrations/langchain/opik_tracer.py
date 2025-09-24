@@ -13,6 +13,7 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
+    helpers as langchain_helpers,
     opik_encoder_extension,
     provider_usage_extractors,
 )
@@ -125,6 +126,8 @@ class OpikTracer(BaseTracer):
         run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
+        trace_additional_metadata: Dict[str, Any] = {}
+
         if run_dict["error"] is not None:
             output = None
             error_info = {
@@ -132,7 +135,9 @@ class OpikTracer(BaseTracer):
                 "traceback": run_dict["error"],
             }
         else:
-            output = run_dict["outputs"]
+            output, trace_additional_metadata = (
+                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
+            )
             error_info = None
 
         span_data = self._span_data_map[run.id]
@@ -155,6 +160,9 @@ class OpikTracer(BaseTracer):
             # workaround for `.astream()` method usage
             if trace_data.input == {"input": ""}:
                 trace_data.input = run_dict["inputs"]
+
+            if trace_additional_metadata:
+                trace_data.update(metadata=trace_additional_metadata)
 
             trace_data.init_end_time().update(output=output, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.as_parameters)
@@ -391,8 +399,15 @@ class OpikTracer(BaseTracer):
             if span_data.input == {"input": ""}:
                 span_data.input = run_dict["inputs"]
 
+            filtered_output, additional_metadata = (
+                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
+            )
+
+            if additional_metadata:
+                span_data.update(metadata=additional_metadata)
+
             span_data.init_end_time().update(
-                output=run_dict["outputs"],
+                output=filtered_output,
                 usage=(
                     usage_info.usage.provider_usage.model_dump()
                     if isinstance(usage_info.usage, llm_usage.OpikUsage)
