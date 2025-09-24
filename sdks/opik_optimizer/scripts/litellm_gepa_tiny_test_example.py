@@ -58,7 +58,7 @@ def main() -> None:
                 },
             }
         ],
-        function_map={"search_wikipedia": search_wikipedia},
+        function_map={"search_wikipedia": lambda query: search_wikipedia(query, use_api=True)},
     )
 
     optimizer = GepaOptimizer(
