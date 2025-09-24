@@ -51,7 +51,7 @@ class AttachmentStripperServiceTest {
         objectMapper = new ObjectMapper();
 
         // Mock S3Config to return default threshold
-        when(s3Config.getStripAttachmentsMinSize()).thenReturn(1000);
+        when(s3Config.getStripAttachmentsMinSize()).thenReturn(5000);
         lenient().when(s3Config.isMinIO()).thenReturn(true); // Use MinIO mode for unit tests (direct upload)
 
         // Mock direct upload for MinIO mode

@@ -16,7 +16,7 @@ public final class AttachmentPayloadUtilsTest {
      * Default size for large attachments that should trigger attachment processing.
      * This should be well above the minimum threshold used by AttachmentStripperService.
      */
-    public static final int DEFAULT_LARGE_SIZE = 2500;
+    public static final int DEFAULT_LARGE_SIZE = 5000;
 
     /**
      * Default size for small attachments that should NOT trigger attachment processing.
@@ -166,7 +166,7 @@ public final class AttachmentPayloadUtilsTest {
      * Creates a short base64 string that should NOT trigger attachment processing.
      * This is useful for testing the minimum length threshold.
      *
-     * @return a short base64 encoded string (less than 1000 characters)
+     * @return a short base64 encoded string (less than 5000 characters)
      */
     public static String createShortBase64() {
         byte[] shortData = "This is a short string that won't trigger attachment processing".getBytes();

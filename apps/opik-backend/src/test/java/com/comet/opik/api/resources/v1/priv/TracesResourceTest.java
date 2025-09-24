@@ -7422,7 +7422,7 @@ class TracesResourceTest {
         @DisplayName("when trace contains base64 attachments, then attachments are stripped and stored")
         void create__whenTraceContainsBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
             // Given a trace with base64 encoded attachments in its input
-            // Create longer base64 strings that exceed the 1000 character threshold using utility
+            // Create longer base64 strings that exceed the 5000 character threshold using utility
             String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
             String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
 
