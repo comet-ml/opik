@@ -290,7 +290,8 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
     )
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
-    assert "No dataset items available for" in out
+    assert "No dataset items available" in out
+    assert "for preview." in out
     assert "preview." in out
 
 
@@ -320,7 +321,9 @@ def test_preview_dataset_tool_invocation_handles_errors(
     )
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
-    assert "Failed to fetch dataset sample" in out
+    assert "Failed to fetch dataset" in out
+    assert "sample" in out
+    assert "for preview:" in out
 
 
 def test_system_prompt_masks_secrets_and_compacts_schema() -> None:
