@@ -11,7 +11,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Mono;
 
 import java.util.Set;
@@ -129,6 +129,12 @@ class CommentDAOImpl implements CommentDAO {
             ;
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString SELECT_COMMENT_BY_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(entity_id) ::= <<" +
+                    SELECT_COMMENT_BY_ID +
+                    ">>");
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
@@ -149,7 +155,7 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Comment> findById(UUID entityId, @NonNull UUID commentId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var template = new ST(SELECT_COMMENT_BY_ID);
+            var template = SELECT_COMMENT_BY_ID_TEMPLATE_GROUP.getInstanceOf("main");
             if (entityId != null) {
                 template.add("entity_id", entityId);
             }

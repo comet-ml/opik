@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -335,6 +335,17 @@ class ExperimentItemDAO {
             ;
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    INSERT +
+                    ">>");
+
+    private static final STGroupString STREAM_TEMPLATE_GROUP = new STGroupString(
+            "main(lastRetrievedId, truncate, truncationSize) ::= <<" +
+                    STREAM +
+                    ">>");
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
 
@@ -378,7 +389,7 @@ class ExperimentItemDAO {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
-        var template = new ST(INSERT)
+        var template = INSERT_TEMPLATE_GROUP.getInstanceOf("main")
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -444,7 +455,7 @@ class ExperimentItemDAO {
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
 
-        var template = new ST(STREAM);
+        var template = STREAM_TEMPLATE_GROUP.getInstanceOf("main");
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
         }

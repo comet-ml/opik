@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -100,6 +101,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             ;
             """;
 
+    private static final STGroupString BATCH_INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    BATCH_INSERT +
+                    ">>");
+
     private static final String UPDATE = """
             INSERT INTO annotation_queues (
             	id,
@@ -136,6 +142,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             ;
             """;
 
+    private static final STGroupString UPDATE_TEMPLATE_GROUP = new STGroupString(
+            "main(name, description, instructions, comments_enabled, feedback_definitions) ::= <<" +
+                    UPDATE +
+                    ">>");
+
     public static final String BATCH_ITEMS_INSERT = """
             INSERT INTO annotation_queue_items (
                 queue_id,
@@ -159,6 +170,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 }>
             """;
 
+    private static final STGroupString BATCH_ITEMS_INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    BATCH_ITEMS_INSERT +
+                    ">>");
+
     public static final String DELETE_ITEMS_BY_IDS = """
             DELETE FROM annotation_queue_items
             WHERE workspace_id = :workspace_id
@@ -166,6 +182,12 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND queue_id = :queue_id
             AND item_id IN :item_ids
             """;
+
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString DELETE_ITEMS_BY_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main() ::= <<" +
+                    DELETE_ITEMS_BY_IDS +
+                    ">>");
 
     private static final String DELETE_BATCH = """
             DELETE FROM annotation_queues
@@ -354,6 +376,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             <if(offset)> OFFSET :offset <endif>
             """;
 
+    private static final STGroupString FIND_TEMPLATE_GROUP = new STGroupString(
+            "main(id, name, filters, sort_fields, limit, offset) ::= <<" +
+                    FIND +
+                    ">>");
+
     private static final String COUNT = """
             WITH queues_final AS
             (
@@ -368,6 +395,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             SELECT count(id) as count
             FROM queues_final
             """;
+
+    private static final STGroupString COUNT_TEMPLATE_GROUP = new STGroupString(
+            "main(name, filters) ::= <<" +
+                    COUNT +
+                    ">>");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -436,7 +468,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(DELETE_ITEMS_BY_IDS);
+                    var template = DELETE_ITEMS_BY_IDS_TEMPLATE_GROUP.getInstanceOf("main");
 
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", projectId.toString())
@@ -467,8 +499,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {
-        var template = new ST(FIND);
-        template.add("id", id.toString());
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("id", id.toString());
 
         var statement = connection
                 .createStatement(template.render())
@@ -487,7 +519,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private Mono<? extends Result> createBatch(List<AnnotationQueue> annotationQueues, Connection connection) {
         var queryItems = getQueryItemPlaceHolder(annotationQueues.size());
-        var template = new ST(BATCH_INSERT).add("items", queryItems);
+        var template = BATCH_INSERT_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("items", queryItems);
 
         Statement statement = connection.createStatement(template.render());
 
@@ -515,7 +548,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     private Publisher<? extends Result> createItems(UUID queueId, Set<UUID> itemIds, UUID projectId,
             Connection connection) {
         var queryItems = getQueryItemPlaceHolder(itemIds.size());
-        var template = new ST(BATCH_ITEMS_INSERT).add("items", queryItems);
+        var template = BATCH_ITEMS_INSERT_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("items", queryItems);
 
         var statement = connection.createStatement(template.render());
         statement.bind("queue_id", queueId.toString())
@@ -532,7 +566,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private Publisher<? extends Result> update(UUID id, AnnotationQueueUpdate update, Connection connection) {
 
-        var template = newUpdateTemplate(update, UPDATE);
+        var template = newUpdateTemplate(update);
 
         var statement = connection.createStatement(template.render());
         statement.bind("id", id);
@@ -604,7 +638,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         int offset = (page - 1) * size;
 
-        var template = newFindTemplate(FIND, searchCriteria);
+        var template = newFindTemplate(searchCriteria);
 
         template.add("sort_fields", sorting);
         template.add("limit", size);
@@ -627,7 +661,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private Publisher<? extends Result> countTotal(AnnotationQueueSearchCriteria searchCriteria,
             Connection connection) {
-        var template = newFindTemplate(COUNT, searchCriteria);
+        var template = newCountTemplate(searchCriteria);
 
         var statement = connection.createStatement(template.render());
         bindSearchCriteria(statement, searchCriteria);
@@ -635,8 +669,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    private ST newFindTemplate(String query, AnnotationQueueSearchCriteria searchCriteria) {
-        var template = new ST(query);
+    private ST newFindTemplate(AnnotationQueueSearchCriteria searchCriteria) {
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main");
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
@@ -647,8 +681,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return template;
     }
 
-    private ST newUpdateTemplate(AnnotationQueueUpdate update, String sql) {
-        var template = new ST(sql);
+    private ST newCountTemplate(AnnotationQueueSearchCriteria searchCriteria) {
+        var template = COUNT_TEMPLATE_GROUP.getInstanceOf("main");
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(searchCriteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_QUEUE))
+                .ifPresent(annotationQueueFilters -> template.add("filters", annotationQueueFilters));
+
+        return template;
+    }
+
+    private ST newUpdateTemplate(AnnotationQueueUpdate update) {
+        var template = UPDATE_TEMPLATE_GROUP.getInstanceOf("main");
 
         Optional.ofNullable(update.name())
                 .ifPresent(name -> template.add("name", update.name()));

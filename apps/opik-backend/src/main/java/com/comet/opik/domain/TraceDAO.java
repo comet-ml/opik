@@ -43,6 +43,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroup;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -2331,6 +2333,72 @@ class TraceDAOImpl implements TraceDAO {
             AND project_id IN :project_ids
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(end_time) ::= <<" +
+                    INSERT +
+                    ">>");
+
+    private static final STGroupString UPDATE_TEMPLATE_GROUP = new STGroupString(
+            "main(name, input, output, tags, metadata, end_time, error_info, thread_id) ::= <<" +
+                    UPDATE +
+                    ">>");
+
+    private static final STGroupString DELETE_BY_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(project_id) ::= <<" +
+                    DELETE_BY_ID +
+                    ">>");
+
+    private static final STGroupString SELECT_BY_PROJECT_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(filters, trace_aggregation_filters, feedback_scores_filters, annotation_queue_filters, trace_thread_filters, feedback_scores_empty_filters, sort_fields, last_received_id, exclude_feedback_scores, exclude_fields, exclude_input, exclude_output, exclude_metadata, exclude_comments, exclude_usage, exclude_total_estimated_cost, exclude_guardrails_validations, exclude_span_count, exclude_llm_span_count, truncate, truncationSize, offset, sort_has_span_statistics, sort_has_feedback_scores) ::= <<"
+                    +
+                    SELECT_BY_PROJECT_ID +
+                    ">>");
+
+    private static final STGroupString COUNT_BY_PROJECT_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(filters, trace_aggregation_filters, feedback_scores_filters, annotation_queue_filters, trace_thread_filters, feedback_scores_empty_filters) ::= <<"
+                    +
+                    COUNT_BY_PROJECT_ID +
+                    ">>");
+
+    private static final STGroupString INSERT_UPDATE_TEMPLATE_GROUP = new STGroupString(
+            "main(name, input, output, tags, metadata, end_time, error_info, thread_id) ::= <<" +
+                    INSERT_UPDATE +
+                    ">>");
+
+    private static final STGroupString BATCH_INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    BATCH_INSERT +
+                    ">>");
+
+    private static final STGroupString TRACE_COUNT_BY_WORKSPACE_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(excluded_project_ids, demo_data_created_at) ::= <<" +
+                    TRACE_COUNT_BY_WORKSPACE_ID +
+                    ">>");
+
+    private static final STGroupString TRACE_DAILY_BI_INFORMATION_TEMPLATE_GROUP = new STGroupString(
+            "main(excluded_project_ids, demo_data_created_at) ::= <<" +
+                    TRACE_DAILY_BI_INFORMATION +
+                    ">>");
+
+    private static final STGroupString SELECT_TRACES_STATS_TEMPLATE_GROUP = new STGroupString(
+            "main(project_stats, trace_aggregation_filters, feedback_scores_empty_filters, annotation_queue_filters, filters, feedback_scores_filters) ::= <<"
+                    +
+                    SELECT_TRACES_STATS +
+                    ">>");
+
+    private static final STGroupString SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main(project_id, limit, offset, filters, truncationSize, truncate, trace_thread_filters, feedback_scores_filters, feedback_scores_empty_filters, annotation_queue_filters) ::= <<"
+                    +
+                    SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS +
+                    ">>");
+
+    private static final STGroupString SELECT_TRACES_THREADS_BY_PROJECT_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main(project_id, limit, offset, filters, truncationSize, truncate, sort_fields, trace_thread_filters, stream, feedback_scores_filters, feedback_scores_empty_filters, annotation_queue_filters) ::= <<"
+                    +
+                    SELECT_TRACES_THREADS_BY_PROJECT_IDS +
+                    ">>");
+
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2393,7 +2461,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildInsertTemplate(Trace trace) {
-        ST template = new ST(INSERT);
+        ST template = INSERT_TEMPLATE_GROUP.getInstanceOf("main");
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
@@ -2461,7 +2529,14 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
-        ST template = new ST(update);
+        ST template;
+        if (update.equals(UPDATE)) {
+            template = UPDATE_TEMPLATE_GROUP.getInstanceOf("main");
+        } else if (update.equals(INSERT_UPDATE)) {
+            template = INSERT_UPDATE_TEMPLATE_GROUP.getInstanceOf("main");
+        } else {
+            throw new IllegalArgumentException("Unsupported update type: " + update);
+        }
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2519,7 +2594,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Deleting traces, count '{}'{}", ids.size(),
                 projectId != null ? " for project id '" + projectId + "'" : "");
 
-        var template = new ST(DELETE_BY_ID);
+        var template = DELETE_BY_ID_TEMPLATE_GROUP.getInstanceOf("main");
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template.add("project_id", id));
 
@@ -2710,7 +2785,7 @@ class TraceDAOImpl implements TraceDAO {
 
         int offset = (page - 1) * size;
 
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID_TEMPLATE_GROUP, traceSearchCriteria);
 
         bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -2801,7 +2876,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
-        var template = newFindTemplate(COUNT_BY_PROJECT_ID, traceSearchCriteria);
+        var template = newFindTemplate(COUNT_BY_PROJECT_ID_TEMPLATE_GROUP, traceSearchCriteria);
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId());
@@ -2814,8 +2889,8 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private ST newFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
-        var template = new ST(query);
+    private ST newFindTemplate(STGroup templateGroup, TraceSearchCriteria traceSearchCriteria) {
+        var template = templateGroup.getInstanceOf("main");
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
@@ -2892,7 +2967,7 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
 
-            var template = new ST(BATCH_INSERT)
+            var template = BATCH_INSERT_TEMPLATE_GROUP.getInstanceOf("main")
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -2956,7 +3031,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        ST template = TRACE_COUNT_BY_WORKSPACE_ID_TEMPLATE_GROUP.getInstanceOf("main");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2994,7 +3069,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+        ST template = TRACE_DAILY_BI_INFORMATION_TEMPLATE_GROUP.getInstanceOf("main");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3027,7 +3102,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS_TEMPLATE_GROUP, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
@@ -3049,7 +3124,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        ST template = TRACE_COUNT_BY_WORKSPACE_ID_TEMPLATE_GROUP.getInstanceOf("main");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3089,7 +3164,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    ST template = new ST(SELECT_TRACES_STATS);
+                    ST template = SELECT_TRACES_STATS_TEMPLATE_GROUP.getInstanceOf("main");
 
                     template.add("project_stats", true);
 
@@ -3108,7 +3183,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
-        var template = newFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria);
+        var template = newFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS_TEMPLATE_GROUP, traceSearchCriteria);
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId());
@@ -3132,7 +3207,7 @@ class TraceDAOImpl implements TraceDAO {
 
                     int offset = (page - 1) * size;
 
-                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS_TEMPLATE_GROUP, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -3174,7 +3249,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate.stream(connection -> {
 
-            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS_TEMPLATE_GROUP, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
@@ -3369,7 +3444,7 @@ class TraceDAOImpl implements TraceDAO {
             Connection connection) {
         log.info("Searching traces by '{}'", criteria);
 
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID_TEMPLATE_GROUP, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 

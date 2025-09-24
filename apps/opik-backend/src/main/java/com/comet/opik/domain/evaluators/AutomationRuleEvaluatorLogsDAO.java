@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -71,6 +72,17 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString INSERT_STATEMENT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    INSERT_STATEMENT +
+                    ">>");
+
+    private static final STGroupString FIND_ALL_TEMPLATE_GROUP = new STGroupString(
+            "main(level, ruleId, limit, offset) ::= <<" +
+                    FIND_ALL +
+                    ">>");
+
     private final @NonNull ConnectionFactory connectionFactory;
 
     public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
@@ -79,7 +91,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
                     log.info("Finding logs with criteria: {}", criteria);
 
-                    var template = new ST(FIND_ALL);
+                    var template = FIND_ALL_TEMPLATE_GROUP.getInstanceOf("main");
 
                     bindTemplateParameters(criteria, template);
 
@@ -133,7 +145,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(INSERT_STATEMENT);
+                    var template = INSERT_STATEMENT_TEMPLATE_GROUP.getInstanceOf("main");
 
                     List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);

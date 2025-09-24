@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -353,6 +354,27 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString FIND_TEMPLATE_GROUP = new STGroupString(
+            "main(id, name, dataset_id, dataset_deleted, limit, offset, entity_type) ::= <<" +
+                    FIND +
+                    ">>");
+
+    private static final STGroupString COUNT_TEMPLATE_GROUP = new STGroupString(
+            "main(id, name, dataset_id, dataset_deleted, entity_type) ::= <<" +
+                    COUNT +
+                    ">>");
+
+    private static final STGroupString FIND_OPTIMIZATIONS_DATASET_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main(experiment_ids) ::= <<" +
+                    FIND_OPTIMIZATIONS_DATASET_IDS +
+                    ">>");
+
+    private static final STGroupString UPDATE_BY_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(status, name) ::= <<" +
+                    UPDATE_BY_ID +
+                    ">>");
+
     private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
@@ -364,8 +386,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Mono<Optimization> getById(@NonNull UUID id) {
-        var template = new ST(FIND);
-        template.add("id", id.toString());
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("id", id.toString());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(
@@ -381,8 +403,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_OPTIMIZATIONS_DATASET_IDS);
-                    template.add("experiment_ids", ids);
+                    ST template = FIND_OPTIMIZATIONS_DATASET_IDS_TEMPLATE_GROUP.getInstanceOf("main")
+                            .add("experiment_ids", ids);
                     var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids);
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -481,7 +503,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Mono<Long> getCount(OptimizationSearchCriteria searchCriteria) {
-        var template = new ST(COUNT);
+        var template = COUNT_TEMPLATE_GROUP.getInstanceOf("main");
 
         bindTemplateParams(template, searchCriteria);
 
@@ -499,7 +521,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
             OptimizationSearchCriteria searchCriteria) {
-        var template = new ST(FIND);
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main");
 
         bindTemplateParams(template, searchCriteria);
 
@@ -634,7 +656,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private ST buildUpdateTemplate(OptimizationUpdate update) {
-        ST template = new ST(UPDATE_BY_ID);
+        ST template = UPDATE_BY_ID_TEMPLATE_GROUP.getInstanceOf("main");
 
         Optional.ofNullable(update.name())
                 .ifPresent(name -> template.add("name", name));
