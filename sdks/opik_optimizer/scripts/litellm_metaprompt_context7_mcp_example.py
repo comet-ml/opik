@@ -19,6 +19,10 @@ from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 # ---------------------------------------------------------------------------
 
 # MCP Server Configuration
+# Note: to get a CONTEXT7_API_KEY go to
+# https://context7.com/, then Dashboard, and request key
+# It's free!
+
 MCP_SERVER_CONFIG: Dict[str, Any] = {
     "name": "context7-docs",
     "command": "npx",
