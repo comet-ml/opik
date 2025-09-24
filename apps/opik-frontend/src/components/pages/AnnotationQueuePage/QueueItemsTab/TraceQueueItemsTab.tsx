@@ -72,6 +72,7 @@ import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/Queu
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
 import { formatDate, formatDuration } from "@/lib/date";
+import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
 import { createFilter } from "@/lib/filters";
@@ -438,23 +439,20 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
   const handleRowClick = useCallback(
     (row: Trace) => {
       if (!row) return;
 
-      navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
-        params: {
-          workspaceName,
-          projectId: annotationQueue.project_id,
-        },
-        search: {
-          type: "traces",
-          trace: row.id,
-        },
-      });
+      const url = generateTracesURL(
+        workspaceName,
+        annotationQueue.project_id,
+        "traces",
+        row.id,
+      );
+      window.open(url, "_blank");
     },
-    [navigate, workspaceName, annotationQueue.project_id],
+    [workspaceName, annotationQueue.project_id],
   );
 
   const columns = useMemo(() => {

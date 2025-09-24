@@ -68,9 +68,9 @@ import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/Queu
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useThreadsList from "@/api/traces/useThreadsList";
 import { formatDate } from "@/lib/date";
+import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import useAppStore from "@/store/AppStore";
-import { useNavigate } from "@tanstack/react-router";
 import { createFilter } from "@/lib/filters";
 import SelectBox, {
   SelectBoxProps,
@@ -217,7 +217,6 @@ interface ThreadQueueItemsTabProps {
 const ThreadQueueItemsTab: React.FunctionComponent<
   ThreadQueueItemsTabProps
 > = ({ annotationQueue }) => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [search = "", setSearch] = useQueryParam("thread_search", StringParam, {
@@ -394,23 +393,20 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
   const handleRowClick = useCallback(
     (row: Thread) => {
       if (!row) return;
 
-      navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
-        params: {
-          workspaceName,
-          projectId: annotationQueue.project_id,
-        },
-        search: {
-          type: "threads",
-          thread: row.id,
-        },
-      });
+      const url = generateTracesURL(
+        workspaceName,
+        annotationQueue.project_id,
+        "threads",
+        row.id,
+      );
+      window.open(url, "_blank");
     },
-    [navigate, workspaceName, annotationQueue.project_id],
+    [workspaceName, annotationQueue.project_id],
   );
 
   const columns = useMemo(() => {
