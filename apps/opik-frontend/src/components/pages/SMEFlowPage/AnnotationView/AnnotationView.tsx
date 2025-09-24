@@ -2,7 +2,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
-import InputOutputViewer from "./InputOutputViewer";
+import TraceDataViewer from "./TraceDataViewer";
 import SMEFlowLayout from "../SMEFlowLayout";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -10,6 +10,8 @@ import CommentAndScoreViewer from "@/components/pages/SMEFlowPage/AnnotationView
 import ValidationAlert from "./ValidationAlert";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useSMEFlow } from "../SMEFlowContext";
+import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
+import ThreadDataViewer from "./ThreadDataViewer";
 
 interface AnnotationViewProps {
   header: React.ReactNode;
@@ -23,6 +25,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   header,
 }) => {
   const {
+    annotationQueue,
     currentIndex,
     queueItems,
     validationState,
@@ -67,6 +70,8 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     },
     [validationState.canSubmit, handleSubmit],
   );
+
+  const isThread = annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD;
 
   return (
     <SMEFlowLayout
@@ -115,7 +120,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
         )}
         <Card className="flex h-full flex-row items-stretch p-6">
           <div className="flex-[2] overflow-y-auto">
-            <InputOutputViewer />
+            {isThread ? <ThreadDataViewer /> : <TraceDataViewer />}
           </div>
           <Separator orientation="vertical" className="mx-3" />
           <div className="flex-[1] overflow-y-auto">
