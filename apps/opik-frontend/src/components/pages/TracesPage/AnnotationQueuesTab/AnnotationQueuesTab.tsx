@@ -34,6 +34,7 @@ import TagCell from "@/components/shared/DataTableCells/TagCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
+import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
@@ -138,6 +139,12 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     cell: ListCell as never,
     accessorFn: (row) => row.reviewers?.map((r) => r.username) ?? [],
   },
+  {
+    id: "progress",
+    label: "Progress",
+    type: COLUMN_TYPE.string,
+    cell: AnnotationQueueProgressCell as never,
+  },
 ];
 
 const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
@@ -157,6 +164,7 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
+  "progress",
   "last_updated_at",
   "scope",
   "items_count",

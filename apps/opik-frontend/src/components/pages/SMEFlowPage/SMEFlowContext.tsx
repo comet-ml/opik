@@ -348,6 +348,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       originalScores: [],
     });
 
+  const [cachedAnnotationStates, setCachedAnnotationStates] = useState<
+    Record<string, AnnotationState>
+  >({});
+
   const {
     data: annotationQueue,
     isLoading,
@@ -459,10 +463,19 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [setCurrentView, unprocessedIds, allItemIds]);
 
   const handleNext = useCallback(() => {
+    if (currentItem && hasUnsavedChanges(currentAnnotationState)) {
+      setCachedAnnotationStates((prev) => ({
+        ...prev,
+        [getAnnotationQueueItemId(currentItem)]: cloneDeep(
+          currentAnnotationState,
+        ),
+      }));
+    }
+
     if (currentIndex < queueItems.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
-  }, [currentIndex, queueItems.length]);
+  }, [currentIndex, queueItems.length, currentItem, currentAnnotationState]);
 
   const getNextUnprocessedIndex = useCallback(
     (currentIndex: number) => {
@@ -698,6 +711,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       submitTraceFeedbackScores(currentAnnotationState, currentItem as Trace);
     }
 
+    setCachedAnnotationStates((prev) =>
+      omit(prev, getAnnotationQueueItemId(currentItem)),
+    );
+
     handleNextUnprocessed();
   }, [
     currentItem,
@@ -717,6 +734,13 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
         scores: [],
         originalScores: [],
       });
+      return;
+    }
+
+    const cachedState =
+      cachedAnnotationStates[getAnnotationQueueItemId(currentItem)];
+    if (cachedState) {
+      setCurrentAnnotationState(cachedState);
       return;
     }
 
@@ -746,6 +770,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     currentItem,
     currentUserName,
     annotationQueue?.feedback_definition_names,
+    cachedAnnotationStates,
   ]);
 
   const validationState = useMemo((): ValidationState => {

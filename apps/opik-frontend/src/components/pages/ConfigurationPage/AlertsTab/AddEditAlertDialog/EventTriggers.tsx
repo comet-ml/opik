@@ -52,7 +52,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                     <FormItem>
                       <ProjectsSelectBox
                         value={field.value}
-                        onChange={field.onChange}
+                        onValueChange={field.onChange}
                         multiselect={true}
                         className="h-8"
                       />
@@ -106,7 +106,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                     <FormItem>
                       <ProjectsSelectBox
                         value={field.value}
-                        onChange={field.onChange}
+                        onValueChange={field.onChange}
                         multiselect={true}
                         className="h-8"
                       />
@@ -163,7 +163,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                     <FormItem>
                       <ProjectsSelectBox
                         value={field.value}
-                        onChange={field.onChange}
+                        onValueChange={field.onChange}
                         multiselect={true}
                         className="h-8"
                       />

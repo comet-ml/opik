@@ -32,6 +32,7 @@ import ListCell from "@/components/shared/DataTableCells/ListCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
+import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
@@ -39,6 +40,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
+import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 import {
@@ -59,6 +61,7 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -79,7 +82,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     cell: IdCell as never,
   },
   {
-    id: "project",
+    id: COLUMN_PROJECT_ID,
     label: "Project",
     type: COLUMN_TYPE.string,
     cell: ResourceCell as never,
@@ -149,6 +152,12 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     cell: ListCell as never,
     accessorFn: (row) => row.reviewers?.map((r) => r.username) ?? [],
   },
+  {
+    id: "progress",
+    label: "Progress",
+    type: COLUMN_TYPE.string,
+    cell: AnnotationQueueProgressCell as never,
+  },
 ];
 
 const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
@@ -168,10 +177,11 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
+  "progress",
   "last_updated_at",
   "scope",
   "items_count",
-  "project",
+  COLUMN_PROJECT_ID,
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
@@ -180,7 +190,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "last_updated_at",
   "scope",
   "items_count",
-  "project",
+  COLUMN_PROJECT_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
@@ -200,6 +210,14 @@ const FILTERS_CONFIG = {
         ],
         placeholder: "Select scope",
       },
+    },
+    [COLUMN_PROJECT_ID]: {
+      keyComponent: ProjectsSelectBox,
+      keyComponentProps: {
+        className: "w-full min-w-72",
+      },
+      defaultOperator: "=",
+      operators: [{ label: "=", value: "=" }],
     },
   },
 };

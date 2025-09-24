@@ -14,7 +14,7 @@ const SMEFlowLayout: React.FC<SMEFlowLayoutProps> = ({
   return (
     <div className="m-auto flex h-full min-h-[400px] w-[90vw] min-w-[1040px] flex-col overflow-x-auto overflow-y-hidden">
       {header && <div className="py-10">{header}</div>}
-      <div className="flex-auto overflow-y-auto overflow-x-hidden">
+      <div className="flex-auto overflow-y-auto overflow-x-hidden pb-4">
         {children}
       </div>
       {footer && (

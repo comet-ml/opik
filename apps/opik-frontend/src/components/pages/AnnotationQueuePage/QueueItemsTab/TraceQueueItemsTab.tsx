@@ -6,7 +6,6 @@ import {
   useQueryParam,
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import {
   CellContext,
@@ -248,7 +247,6 @@ type TraceQueueItemsTabProps = {
 const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   annotationQueue,
 }) => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [search = "", setSearch] = useQueryParam("trace_search", StringParam, {
