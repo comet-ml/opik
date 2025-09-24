@@ -1,5 +1,9 @@
 package com.comet.opik.domain.attachment;
 
+import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.EntityType;
@@ -68,6 +72,9 @@ public class AttachmentStripperService {
     // Base64 pattern compiled once during construction
     private final Pattern base64Pattern;
 
+    // Minimum base64 size to look for
+    private final int minBase64Size;
+
     @Inject
     public AttachmentStripperService(@NonNull AttachmentService attachmentService,
             @NonNull IdGenerator idGenerator,
@@ -101,9 +108,132 @@ public class AttachmentStripperService {
 
         // Compile the regex pattern once during construction based on configuration
         int minLength = s3Config.getStripAttachmentsMinSize();
+        this.minBase64Size = minLength;
         this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minLength + ",}={0,2})");
 
         log.info("AttachmentStripperService initialized with minBase64Length: {}", minLength);
+    }
+
+    /**
+     * Strips attachments from a Trace entity.
+     *
+     * TODO: This one and the similar ones below should be refactored to use the same method if
+     * we can make all these types to share the same interface (shouldn't they?)
+     */
+    public Trace stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
+        Trace.TraceBuilder builder = trace.toBuilder();
+
+        if (trace.input() != null) {
+            JsonNode processedInput = stripAttachments(trace.input(), trace.id(), EntityType.TRACE,
+                    workspaceId, userName, projectName, "input");
+            builder.input(processedInput);
+        }
+
+        if (trace.output() != null) {
+            JsonNode processedOutput = stripAttachments(trace.output(), trace.id(), EntityType.TRACE,
+                    workspaceId, userName, projectName, "output");
+            builder.output(processedOutput);
+        }
+
+        if (trace.metadata() != null) {
+            JsonNode processedMetadata = stripAttachments(trace.metadata(), trace.id(), EntityType.TRACE,
+                    workspaceId, userName, projectName, "metadata");
+            builder.metadata(processedMetadata);
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Strips attachments from a TraceUpdate entity.
+     *
+     * TODO: This one and the similar ones below should be refactored to use the same method if
+     * we can make all these types to share the same interface (shouldn't they?)
+     */
+    public TraceUpdate stripAttachmentsFromTraceUpdate(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
+            String userName, String projectName) {
+        TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
+
+        if (traceUpdate.input() != null) {
+            JsonNode processedInput = stripAttachments(traceUpdate.input(), traceId, EntityType.TRACE,
+                    workspaceId, userName, projectName, "input");
+            builder.input(processedInput);
+        }
+
+        if (traceUpdate.output() != null) {
+            JsonNode processedOutput = stripAttachments(traceUpdate.output(), traceId, EntityType.TRACE,
+                    workspaceId, userName, projectName, "output");
+            builder.output(processedOutput);
+        }
+
+        if (traceUpdate.metadata() != null) {
+            JsonNode processedMetadata = stripAttachments(traceUpdate.metadata(), traceId, EntityType.TRACE,
+                    workspaceId, userName, projectName, "metadata");
+            builder.metadata(processedMetadata);
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Strips attachments from a Span entity.
+     *
+     * TODO: This one and the similar ones below should be refactored to use the same method if
+     * we can make all these types to share the same interface (shouldn't they?)
+     */
+    public Span stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
+        Span.SpanBuilder builder = span.toBuilder();
+
+        if (span.input() != null) {
+            JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
+                    workspaceId, userName, projectName, "input");
+            builder.input(processedInput);
+        }
+
+        if (span.output() != null) {
+            JsonNode processedOutput = stripAttachments(span.output(), span.id(), EntityType.SPAN,
+                    workspaceId, userName, projectName, "output");
+            builder.output(processedOutput);
+        }
+
+        if (span.metadata() != null) {
+            JsonNode processedMetadata = stripAttachments(span.metadata(), span.id(), EntityType.SPAN,
+                    workspaceId, userName, projectName, "metadata");
+            builder.metadata(processedMetadata);
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Strips attachments from a SpanUpdate entity.
+     *
+     * TODO: This one and the similar ones below should be refactored to use the same method if
+     * we can make all these types to share the same interface (shouldn't they?)
+     */
+    public SpanUpdate stripAttachmentsFromSpanUpdate(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
+            String userName, String projectName) {
+        SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
+
+        if (spanUpdate.input() != null) {
+            JsonNode processedInput = stripAttachments(spanUpdate.input(), spanId, EntityType.SPAN,
+                    workspaceId, userName, projectName, "input");
+            builder.input(processedInput);
+        }
+
+        if (spanUpdate.output() != null) {
+            JsonNode processedOutput = stripAttachments(spanUpdate.output(), spanId, EntityType.SPAN,
+                    workspaceId, userName, projectName, "output");
+            builder.output(processedOutput);
+        }
+
+        if (spanUpdate.metadata() != null) {
+            JsonNode processedMetadata = stripAttachments(spanUpdate.metadata(), spanId, EntityType.SPAN,
+                    workspaceId, userName, projectName, "metadata");
+            builder.metadata(processedMetadata);
+        }
+
+        return builder.build();
     }
 
     /**
@@ -112,15 +242,6 @@ public class AttachmentStripperService {
      * Uses a simplified string-based approach for maximum simplicity and robustness.
      * Attachments are uploaded using either direct upload (MinIO) or multipart upload (S3) based on configuration.
      * Generated filenames include context to avoid conflicts between input, output, and metadata attachments.
-     *
-     * @param node the JSON node to process
-     * @param entityId the entity ID (trace or span ID) to link attachments to
-     * @param entityType the entity type (TRACE or SPAN)
-     * @param workspaceId the workspace ID
-     * @param userName the user name
-     * @param projectName the project name
-     * @param context the context where attachments are found (input, output, metadata)
-     * @return processed JSON node with attachments replaced by references
      */
     public JsonNode stripAttachments(JsonNode node,
             UUID entityId,
@@ -165,15 +286,6 @@ public class AttachmentStripperService {
      *
      * Uses regex to find base64 strings longer than the minimum threshold, processes each one
      * as a potential attachment, and replaces valid attachments with reference strings.
-     *
-     * @param jsonString the JSON string to process
-     * @param entityId the entity ID (trace or span ID) to link attachments to
-     * @param entityType the entity type (TRACE or SPAN)
-     * @param workspaceId the workspace ID
-     * @param userName the user name
-     * @param projectName the project name
-     * @param context the context where attachments are found (input, output, metadata)
-     * @return the processed JSON string with attachment references
      */
     private String processBase64InJsonString(String jsonString,
             UUID entityId,
@@ -182,6 +294,12 @@ public class AttachmentStripperService {
             String userName,
             String projectName,
             String context) {
+
+        // Early exit: if the entire JSON string is smaller than our minimum base64 size,
+        // it can't possibly contain any base64 attachments worth processing
+        if (jsonString.length() < minBase64Size) {
+            return jsonString;
+        }
 
         // Use the pre-compiled pattern from construction
         Matcher matcher = base64Pattern.matcher(jsonString);
@@ -356,13 +474,6 @@ public class AttachmentStripperService {
      * 1. Starts a multipart upload to get presigned URLs
      * 2. Uploads the data to the presigned URL using HTTP PUT
      * 3. Completes the multipart upload with the ETag from the upload response
-     *
-     * @param attachmentInfo the attachment information including filename, MIME type, and entity details
-     * @param bytes the binary data to upload
-     * @param workspaceId the workspace ID
-     * @param userName the user name
-     * @throws IOException if network/IO errors occur during upload
-     * @throws InterruptedException if the upload is interrupted
      */
     private void uploadAttachmentViaMultipart(AttachmentInfo attachmentInfo, byte[] bytes,
             String workspaceId, String userName) throws IOException, InterruptedException {
@@ -424,12 +535,6 @@ public class AttachmentStripperService {
      *
      * Performs a synchronous HTTP PUT request to upload binary data to the provided presigned URL.
      * The ETag from the response headers is required for completing the multipart upload.
-     *
-     * @param presignedUrl the presigned URL to upload to
-     * @param data the binary data to upload
-     * @return the ETag from the upload response headers
-     * @throws IOException if the HTTP request fails
-     * @throws InterruptedException if the HTTP request is interrupted
      */
     private String uploadDataToPresignedUrl(String presignedUrl, byte[] data) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newHttpClient();

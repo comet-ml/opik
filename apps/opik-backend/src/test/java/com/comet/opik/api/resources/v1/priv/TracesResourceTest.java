@@ -8748,6 +8748,135 @@ class TracesResourceTest {
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
+
+        @Test
+        @DisplayName("when updating trace with different attachments, then old attachments are deleted and new ones are stored")
+        void update__whenUpdatingTraceWithDifferentAttachments__thenOldAttachmentsAreDeletedAndNewOnesAreStored()
+                throws Exception {
+            // Step 1: Create a trace with 3 JPG attachments
+            String base64Jpg1 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg2 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg3 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Original trace with 3 JPG images\", " +
+                            "\"image1\": \"%s\", " +
+                            "\"image2\": \"%s\", " +
+                            "\"image3\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"operation\": \"image_processing\"}",
+                    base64Jpg1, base64Jpg2, base64Jpg3);
+
+            var originalTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed 3 images\"}"))
+                    .metadata(JsonUtils.readTree("{\"format\": \"jpg\", \"count\": 3}"))
+                    .build();
+
+            // Create the trace
+            UUID traceId = traceResourceClient.createTrace(originalTrace, API_KEY, TEST_WORKSPACE);
+            assertThat(traceId).isNotNull();
+
+            // Wait for async processing and attachment stripping
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+                assertThat(retrievedTrace).isNotNull();
+                // Ensure the trace is fully processed
+                String inputString = retrievedTrace.input().toString();
+                assertThat(inputString).doesNotContain(base64Jpg1);
+                assertThat(inputString).doesNotContain(base64Jpg2);
+                assertThat(inputString).doesNotContain(base64Jpg3);
+            });
+
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            // Step 2: Verify we have 3 JPG attachments initially
+            var initialAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(initialAttachmentPage).isNotNull();
+            assertThat(initialAttachmentPage.content()).hasSize(3);
+
+            // Verify all initial attachments are JPEGs
+            var initialAttachmentNames = initialAttachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            assertThat(initialAttachmentNames).allSatisfy(name -> assertThat(name).contains(".jpg"));
+
+            // Step 3: Update the trace with 2 PNG attachments (different type and count)
+            String base64Png1 = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Png2 = AttachmentPayloadUtilsTest.createLargePngBase64();
+
+            String updatedInputJson = String.format(
+                    "{\"message\": \"Updated trace with 2 PNG images\", " +
+                            "\"png_image1\": \"%s\", " +
+                            "\"png_image2\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"operation\": \"png_processing\"}",
+                    base64Png1, base64Png2);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(updatedInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed 2 PNG images\"}"))
+                    .metadata(JsonUtils.readTree("{\"format\": \"png\", \"count\": 2}"))
+                    .build();
+
+            // Perform the update
+            traceResourceClient.updateTrace(traceId, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Wait for async processing and attachment stripping for the update
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Trace updatedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+                assertThat(updatedTrace).isNotNull();
+
+                String updatedInputString = updatedTrace.input().toString();
+                // Verify original JPG base64 data is not present
+                assertThat(updatedInputString).doesNotContain(base64Jpg1);
+                assertThat(updatedInputString).doesNotContain(base64Jpg2);
+                assertThat(updatedInputString).doesNotContain(base64Jpg3);
+
+                // Verify new PNG base64 data is not present (should be replaced by references)
+                assertThat(updatedInputString).doesNotContain(base64Png1);
+                assertThat(updatedInputString).doesNotContain(base64Png2);
+
+                // Verify PNG attachment references are present
+                assertThat(updatedInputString).contains("input-attachment-1.png");
+                assertThat(updatedInputString).contains("input-attachment-2.png");
+            });
+
+            // Step 4: Verify we now have 2 PNG attachments (old JPGs should be deleted)
+            var finalAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(finalAttachmentPage).isNotNull();
+            assertThat(finalAttachmentPage.content()).hasSize(2);
+
+            // Verify all final attachments are PNGs
+            var finalAttachmentNames = finalAttachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            assertThat(finalAttachmentNames).allSatisfy(name -> assertThat(name).contains(".png"));
+
+            // Step 5: Verify the updated trace exists and was updated
+            Trace finalTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(finalTrace).isNotNull();
+            assertThat(finalTrace.id()).isEqualTo(traceId);
+        }
     }
 
     @Nested

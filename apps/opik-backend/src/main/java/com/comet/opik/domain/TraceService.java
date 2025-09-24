@@ -20,6 +20,7 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -121,6 +122,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull AttachmentStripperService attachmentStripperService;
+    private final @NonNull AttachmentService attachmentService;
 
     @Override
     @WithSpan
@@ -138,7 +140,8 @@ class TraceServiceImpl implements TraceService {
 
                     // Strip attachments from the trace with the generated ID and project ID
                     Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
-                    Trace processedTrace = stripAttachmentsFromTrace(traceWithId, workspaceId, userName,
+                    Trace processedTrace = attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
+                            userName,
                             projectName);
 
                     return lockService.executeWithLock(
@@ -175,7 +178,8 @@ class TraceServiceImpl implements TraceService {
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                     .flatMapMany(Flux::fromIterable)
-                    .map(trace -> stripAttachmentsFromTrace(trace, workspaceId, userName, trace.projectName()))
+                    .map(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId, userName,
+                            trace.projectName()))
                     .collectList()
                     .subscribeOn(Schedulers.boundedElastic());
 
@@ -309,16 +313,46 @@ class TraceServiceImpl implements TraceService {
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
         return IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.defer(() -> template.nonTransaction(
-                        connection -> dao.partialInsert(project.id(), traceUpdate, id, connection))));
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    String projectName = project.name();
+
+                    return template.nonTransaction(connection -> {
+                        // Strip attachments from the new trace data before inserting
+                        TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                                traceUpdate, id, workspaceId, userName, projectName);
+
+                        return dao.partialInsert(project.id(), processedUpdate, id, connection);
+                    });
+                }));
     }
 
     private Mono<Void> updateOrFail(TraceUpdate traceUpdate, UUID id, Trace trace, Project project) {
-        if (project.id().equals(trace.projectId())) {
-            return template.nonTransaction(connection -> dao.update(traceUpdate, id, connection));
+        if (!project.id().equals(trace.projectId())) {
+            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
-        return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            return template.nonTransaction(connection -> {
+                // Step 1: Delete existing attachments for this trace
+                return attachmentService.deleteByEntityIds(EntityType.TRACE, Set.of(id))
+                        .then(Mono.fromCallable(() -> {
+                            // Step 2: Strip attachments from the updated trace data
+                            TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                                    traceUpdate, id, workspaceId, userName, projectName);
+
+                            // Step 3: Update the trace with processed data
+                            return dao.update(processedUpdate, id, connection);
+                        }))
+                        .flatMap(Function.identity())
+                        .then();
+            });
+        });
     }
 
     private Mono<Project> getProjectByName(String projectName) {
@@ -514,52 +548,6 @@ class TraceServiceImpl implements TraceService {
     public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.threadsSearch(limit, it));
-    }
-
-    /**
-     * Strips attachments from trace input, output, and metadata fields.
-     *
-     * @param trace The trace to process
-     * @param workspaceId The workspace ID
-     * @param userName The user name
-     * @param projectName The project name
-     * @return A new trace with attachments stripped and replaced by references
-     */
-    private Trace stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
-        Trace.TraceBuilder builder = trace.toBuilder();
-        boolean hasChanges = false;
-
-        // Process input field
-        if (trace.input() != null) {
-            var strippedInput = attachmentStripperService.stripAttachments(
-                    trace.input(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "input");
-            if (strippedInput != trace.input()) {
-                builder.input(strippedInput);
-                hasChanges = true;
-            }
-        }
-
-        // Process output field
-        if (trace.output() != null) {
-            var strippedOutput = attachmentStripperService.stripAttachments(
-                    trace.output(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "output");
-            if (strippedOutput != trace.output()) {
-                builder.output(strippedOutput);
-                hasChanges = true;
-            }
-        }
-
-        // Process metadata field
-        if (trace.metadata() != null) {
-            var strippedMetadata = attachmentStripperService.stripAttachments(
-                    trace.metadata(), trace.id(), EntityType.TRACE, workspaceId, userName, projectName, "metadata");
-            if (strippedMetadata != trace.metadata()) {
-                builder.metadata(strippedMetadata);
-                hasChanges = true;
-            }
-        }
-
-        return hasChanges ? builder.build() : trace;
     }
 
 }
