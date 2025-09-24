@@ -15,7 +15,7 @@ from opik.environment import get_tqdm_for_current_environment
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
-from opik_optimizer import utils
+from ..utils.core import create_litellm_agent_class
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
@@ -25,8 +25,8 @@ from ..optimizable_agent import OptimizableAgent
 from . import reporting
 import re
 
-from ..utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
-from ..utils.mcp_workflow import (
+from ..mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
+from ..mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
     MCPSecondPassCoordinator,
     extract_tool_arguments,
@@ -485,7 +485,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt.model_kwargs = self.model_kwargs
 
         if agent_class is None:
-            self.agent_class = utils.create_litellm_agent_class(prompt)
+            self.agent_class = create_litellm_agent_class(prompt)
         else:
             self.agent_class = agent_class
 

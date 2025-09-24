@@ -6,8 +6,8 @@ import textwrap
 from pathlib import Path
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
-from opik_optimizer.utils import mcp as mcp_utils
-from opik_optimizer.utils import mcp_workflow as mcp_flow
+from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool
+from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 
 # ---------------------------------------------------------------------------
 # 1. Configure the Context7 MCP server manifest and tool name
@@ -137,7 +137,7 @@ mcp_flow.preview_dataset_tool_invocation(
 # optimize the tool invocation.
 # ---------------------------------------------------------------------------
 system_prompt = textwrap.dedent(
-    mcp_utils.system_prompt_from_tool(signature, MCP_MANIFEST)
+    system_prompt_from_tool(signature, MCP_MANIFEST)
 ).strip()
 prompt = ChatPrompt(
     system=system_prompt,
@@ -193,7 +193,7 @@ else:
     final_tool_entry["function"]["description"] = signature.description
 
 tuned_system_prompt = textwrap.dedent(
-    mcp_utils.system_prompt_from_tool(signature, MCP_MANIFEST)
+    system_prompt_from_tool(signature, MCP_MANIFEST)
 ).strip()
 
 # ---------------------------------------------------------------------------
