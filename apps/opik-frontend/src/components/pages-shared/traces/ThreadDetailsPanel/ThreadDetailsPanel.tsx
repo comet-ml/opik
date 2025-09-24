@@ -31,7 +31,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
-import TraceMessages from "@/components/pages-shared/traces/ThreadDetailsPanel/TraceMessages";
+import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,

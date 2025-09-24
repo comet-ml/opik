@@ -5,17 +5,18 @@ import isUndefined from "lodash/isUndefined";
 
 import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
-import LikeFeedback from "@/components/pages-shared/traces/ThreadDetailsPanel/LikeFeedback";
+import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
-import { toString } from "@/lib/utils";
+import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+import isFunction from "lodash/isFunction";
 
 type TraceMessageProps = {
   trace: Trace;
-  handleOpenTrace: (id: string) => void;
+  handleOpenTrace?: (id: string) => void;
 };
 
 const TraceMessage: React.FC<TraceMessageProps> = ({
@@ -23,6 +24,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   handleOpenTrace,
 }) => {
   const jsonViewTheme = useJsonViewTheme();
+  const withActions = isFunction(handleOpenTrace);
 
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
@@ -71,7 +73,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.output, jsonViewTheme]);
 
   return (
-    <div className="border-b pt-4 first:pt-0" data-trace-message-id={trace.id}>
+    <div
+      className={cn("pt-4 first:pt-0", withActions && "border-b")}
+      data-trace-message-id={trace.id}
+    >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
@@ -82,17 +87,19 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           {output}
         </div>
       </div>
-      <div className="mb-2 mt-1 flex items-center gap-0.5 p-0.5">
-        <LikeFeedback state={userFeedback} traceId={trace.id} />
-        <Separator orientation="vertical" className="mx-1 h-3" />
-        <Button
-          variant="ghost"
-          size="2xs"
-          onClick={() => handleOpenTrace(trace.id)}
-        >
-          View trace
-        </Button>
-      </div>
+      {withActions && (
+        <div className="mb-2 mt-1 flex items-center gap-0.5 p-0.5">
+          <LikeFeedback state={userFeedback} traceId={trace.id} />
+          <Separator orientation="vertical" className="mx-1 h-3" />
+          <Button
+            variant="ghost"
+            size="2xs"
+            onClick={() => handleOpenTrace(trace.id)}
+          >
+            View trace
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
