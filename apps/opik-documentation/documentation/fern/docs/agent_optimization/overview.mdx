@@ -106,6 +106,7 @@ The following algorithms have been implemented:
 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
 | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.     |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
+| [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer) (Beta)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |
 
 <Tip>
   If you would like us to implement another optimization algorithm, reach out to us on
@@ -138,6 +139,7 @@ Each optimization algorithm is evaluated against different use-cases and dataset
 | 3    | Mipro Optimization (w/ no tools) | 55.91%        | 19.70% | 39.70% | 92.70%   | 89.28%   |
 | 4    | MetaPrompt Optimization          | 52.01%        | 25.00% | 26.93% | 91.79%   | 64.31%   |
 | 5    | No optimization                  | 11.99%        | 1.69%  | 24.06% | 12.38%   | 9.81%    |
+| TBD  | GEPA Optimization                | TBD           | TBD    | TBD    | TBD      | TBD      |
 
 The results above are benchmarks tested against `gpt-4o-mini`, we are using various metrics
 depending on the dataset including Levenshtein Ratio, Answer Relevance and Hallucination. The
