@@ -1154,10 +1154,12 @@ class TestConfigureLocal:
 
         mock_ask_for_url.assert_not_called()
         mock_is_instance_active.assert_called_once_with(OPIK_BASE_URL_LOCAL)
-        
+
         # Check the logging messages - should be called twice
         expected_calls = [
-            (f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}.",),
+            (
+                f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}.",
+            ),
             (
                 "Configuration completed successfully. Traces will be logged to 'Default Project' by default. "
                 "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
@@ -1407,20 +1409,26 @@ class TestLogProjectConfigurationMessage:
         Test that _log_project_configuration_message is called when cloud configuration doesn't update config.
         """
         configurator = OpikConfigurator(api_key="test_key", workspace="test_workspace")
-        
+
         # Mock the methods to simulate no config update needed
-        with patch.object(configurator, "_set_api_key", return_value=False), \
-             patch.object(configurator, "_set_workspace", return_value=False), \
-             patch.object(configurator, "_log_project_configuration_message") as mock_log_message:
-            
+        with patch.object(
+            configurator, "_set_api_key", return_value=False
+        ), patch.object(
+            configurator, "_set_workspace", return_value=False
+        ), patch.object(
+            configurator, "_log_project_configuration_message"
+        ) as mock_log_message:
             configurator._configure_cloud()
-            
+
             # Assert that the log message method was called
             mock_log_message.assert_called_once()
 
     @patch("opik.configurator.configure.LOGGER.info")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
-    @patch("opik.configurator.configure.opik_rest_helpers.is_instance_active", return_value=True)
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
     def test_configure_local_calls_log_message_on_provided_url(
         self, mock_is_instance_active, mock_update_config, mock_logger_info
     ):
@@ -1428,16 +1436,21 @@ class TestLogProjectConfigurationMessage:
         Test that _log_project_configuration_message is called when local configuration uses provided URL.
         """
         configurator = OpikConfigurator(url="http://custom-url.com")
-        
-        with patch.object(configurator, "_log_project_configuration_message") as mock_log_message:
+
+        with patch.object(
+            configurator, "_log_project_configuration_message"
+        ) as mock_log_message:
             configurator._configure_local()
-            
+
             # Assert that the log message method was called
             mock_log_message.assert_called_once()
 
     @patch("opik.configurator.configure.LOGGER.info")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
-    @patch("opik.configurator.configure.opik_rest_helpers.is_instance_active", return_value=True)
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
     def test_configure_local_calls_log_message_on_existing_config(
         self, mock_is_instance_active, mock_update_config, mock_logger_info
     ):
@@ -1446,9 +1459,11 @@ class TestLogProjectConfigurationMessage:
         """
         configurator = OpikConfigurator()
         configurator.current_config.url_override = OPIK_BASE_URL_LOCAL
-        
-        with patch.object(configurator, "_log_project_configuration_message") as mock_log_message:
+
+        with patch.object(
+            configurator, "_log_project_configuration_message"
+        ) as mock_log_message:
             configurator._configure_local()
-            
+
             # Assert that the log message method was called
             mock_log_message.assert_called_once()

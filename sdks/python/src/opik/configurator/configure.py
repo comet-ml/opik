@@ -102,7 +102,7 @@ class OpikConfigurator:
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
                 self.current_config.config_file_fullpath,
             )
-           
+
         self._log_project_configuration_message()
 
     def _configure_local(self) -> None:
@@ -414,7 +414,7 @@ class OpikConfigurator:
     def _log_project_configuration_message(self) -> None:
         """
         Log an informative message about project configuration after successful setup.
-        
+
         This message helps users understand that traces will be logged to the Default Project
         by default and provides a link to documentation for changing the project name.
         """
