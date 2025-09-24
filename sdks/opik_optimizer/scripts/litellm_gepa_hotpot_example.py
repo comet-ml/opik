@@ -58,7 +58,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": opik.track(type="tool")(lambda query: search_wikipedia(query, use_api=True))},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, use_api=True)
+        )
+    },
 )
 
 
