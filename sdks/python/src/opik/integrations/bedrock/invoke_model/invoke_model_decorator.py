@@ -1,27 +1,34 @@
+import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from typing_extensions import override
 
+import opik
 import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from . import helpers
-from .converse import stream_wrappers as converse_stream_wrappers
+from .. import helpers
+from . import stream_wrappers
+
+import botocore.response
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS = ["inputText"]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
+# Keys to extract from kwargs for input logging
+KWARGS_KEYS_TO_LOG_AS_INPUTS = ["body", "modelId"]
+# Keys to extract from response for output logging
+RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["body"]
 
 
-class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
+class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of AWS bedrock client `invoke_agent` function.
+    calls of AWS bedrock client `invoke_model` and `invoke_model_with_response_stream` functions.
 
     Besides special processing for input arguments and response content, it
-    overrides _generators_handler() method to work correctly with bedrock's streams
+    overrides _streams_handler() method to work correctly with bedrock's streams
     """
 
     @override
@@ -34,22 +41,34 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_agent(**kwargs)"
+        ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_model(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
-        input, metadata = dict_utils.split_dict_by_keys(
-            kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
+        body_dict = json.loads(kwargs["body"])
+
+        kwargs_copy = kwargs.copy()
+        kwargs_copy["body"] = body_dict
+
+        body_dict, metadata = dict_utils.split_dict_by_keys(
+            body_dict, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
+        # Extract input data and metadata
+        input_data, metadata = dict_utils.split_dict_by_keys(
+            kwargs_copy, KWARGS_KEYS_TO_LOG_AS_INPUTS
+        )
+
         metadata["created_from"] = "bedrock"
-        tags = ["bedrock"]
+        tags = ["bedrock", "invoke_model"]
 
         result = arguments_helpers.StartSpanParameters(
             name=name,
-            input=input,
+            input=input_data,
             type=track_options.type,
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
+            model=kwargs.get("modelId", None),
+            provider=opik.LLMProvider.BEDROCK,
         )
 
         return result
@@ -61,11 +80,25 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
+        output = cast(Dict[str, Any], output)
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
+        usage = output.get("body", {}).get("usage", None)
+        if usage is not None:
+            # We're not specifying the provider here because the token usage
+            # may have different format for different ACTUAL providers (bedrock in this case is a provider aggregator)
+            opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
+                usage=usage,
+            )
+        else:
+            opik_usage = None
+
         result = arguments_helpers.EndSpanParameters(
             output=output,
+            usage=opik_usage,
+            provider=opik.LLMProvider.BEDROCK,
+            model=metadata.get("modelId", None),
             metadata=metadata,
         )
 
@@ -78,7 +111,7 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        helpers.ConverseStreamOutput,
+        helpers.InvokeModelStreamOutput,
         None,
     ]:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
@@ -90,21 +123,16 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
 
         assert generations_aggregator is not None
 
-        if isinstance(output, dict) and "completion" in output:
+        if "body" in output and isinstance(
+            output["body"], botocore.response.StreamingBody
+        ):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-
-            wrapped_stream = converse_stream_wrappers.wrap_stream(
-                stream=output["completion"],
-                capture_output=capture_output,
+            return stream_wrappers.wrap_invoke_model_response(
+                output=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
-                generations_aggregator=generations_aggregator,
-                response_metadata=output["ResponseMetadata"],
                 finally_callback=self._after_call,
             )
-
-            output["completion"] = wrapped_stream
-            return cast(helpers.ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 

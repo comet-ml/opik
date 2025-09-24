@@ -8,7 +8,8 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from . import helpers, stream_wrappers
+from . import stream_wrappers
+from .. import helpers
 
 LOGGER = logging.getLogger(__name__)
 
