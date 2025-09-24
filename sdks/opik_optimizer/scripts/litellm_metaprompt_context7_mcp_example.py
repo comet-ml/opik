@@ -4,6 +4,7 @@ import copy
 import os
 import textwrap
 from pathlib import Path
+from typing import Any, Dict
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool, MCPManifest
@@ -18,7 +19,7 @@ from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 # ---------------------------------------------------------------------------
 
 # MCP Server Configuration
-MCP_SERVER_CONFIG = {
+MCP_SERVER_CONFIG: Dict[str, Any] = {
     "name": "context7-docs",
     "command": "npx",
     "args": [
@@ -43,14 +44,14 @@ TOOL_NAME = "get-library-docs"
 context7_metric = mcp_flow.make_similarity_metric("context7")
 
 # Context7-specific argument adapter settings
-ARGUMENT_ADAPTER_CONFIG = {
+ARGUMENT_ADAPTER_CONFIG: Dict[str, Any] = {
     "target_field": "context7CompatibleLibraryID",
     "resolver_tool": "resolve-library-id",
     "query_fields": ("library_query", "context7LibraryQuery"),
 }
 
 # Context7-specific summary builder settings
-SUMMARY_BUILDER_CONFIG = {
+SUMMARY_BUILDER_CONFIG: Dict[str, Any] = {
     "heading": "CONTEXT7_DOC_RESULT",
     "instructions": (
         "In your final reply, explicitly mention the library ID and key terms from the documentation snippet."
@@ -69,7 +70,7 @@ FOLLOW_UP_TEMPLATE = (
 )
 
 # Context7-specific tool invocation settings
-TOOL_INVOCATION_CONFIG = {
+TOOL_INVOCATION_CONFIG: Dict[str, Any] = {
     "rate_limit_sleep": 5.0,
     "preview_label": "context7/get-library-docs",
     "summary_var_name": "context7_tool_summary",
@@ -88,24 +89,24 @@ MCP_MANIFEST = MCPManifest.from_dict(MCP_SERVER_CONFIG)
 
 # Create argument adapter
 argument_adapter = mcp_flow.ensure_argument_via_resolver(
-    target_field=ARGUMENT_ADAPTER_CONFIG["target_field"],
-    resolver_tool=ARGUMENT_ADAPTER_CONFIG["resolver_tool"],
+    target_field=str(ARGUMENT_ADAPTER_CONFIG["target_field"]),
+    resolver_tool=str(ARGUMENT_ADAPTER_CONFIG["resolver_tool"]),
     query_fields=ARGUMENT_ADAPTER_CONFIG["query_fields"],
 )
 
 # Create summary builder
 summary_builder = mcp_flow.make_argument_summary_builder(
-    heading=SUMMARY_BUILDER_CONFIG["heading"],
-    instructions=SUMMARY_BUILDER_CONFIG["instructions"],
+    heading=str(SUMMARY_BUILDER_CONFIG["heading"]),
+    instructions=str(SUMMARY_BUILDER_CONFIG["instructions"]),
     argument_labels=SUMMARY_BUILDER_CONFIG["argument_labels"],
-    preview_chars=SUMMARY_BUILDER_CONFIG["preview_chars"],
+    preview_chars=int(SUMMARY_BUILDER_CONFIG["preview_chars"]),
 )
 
 # Create second pass coordinator
 second_pass = mcp_flow.create_second_pass_coordinator(
     TOOL_NAME,
     FOLLOW_UP_TEMPLATE,
-    summary_var_name=TOOL_INVOCATION_CONFIG["summary_var_name"],
+    summary_var_name=str(TOOL_INVOCATION_CONFIG["summary_var_name"]),
 )
 
 # Create tool invocation
@@ -115,8 +116,8 @@ tool_invocation = mcp_flow.MCPToolInvocation(
     summary_handler=second_pass,
     summary_builder=summary_builder,
     argument_adapter=argument_adapter,
-    rate_limit_sleep=TOOL_INVOCATION_CONFIG["rate_limit_sleep"],
-    preview_label=TOOL_INVOCATION_CONFIG["preview_label"],
+    rate_limit_sleep=float(TOOL_INVOCATION_CONFIG["rate_limit_sleep"]),
+    preview_label=str(TOOL_INVOCATION_CONFIG["preview_label"]),
 )
 
 # ---------------------------------------------------------------------------
