@@ -32,7 +32,7 @@ dev = [
     "pytest-cov",
     # "google-adk",
     "langgraph",
-    "gepa",
+    "gepa>=0.0.7",
 ]
 
 [tool.setuptools.packages.find]
