@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, Iterable, List
 
 import logging
 
@@ -130,7 +130,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
-                feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer','')}"
+                feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer', '')}"
                 yield {
                     "Inputs": {
                         "text": dataset_item.get("input")

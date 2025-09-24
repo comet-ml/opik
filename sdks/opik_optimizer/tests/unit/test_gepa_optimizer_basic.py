@@ -41,9 +41,7 @@ def test_build_data_insts_mapping() -> None:
         {"question": "Q2", "answer": "A2"},
     ]
     opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
-    converted = opt._build_data_insts(
-        items, input_key="question", output_key="answer"
-    )
+    converted = opt._build_data_insts(items, input_key="question", output_key="answer")
     assert len(converted) == 2
     assert converted[0].input_text == "Q1"
     assert converted[0].answer == "A1"

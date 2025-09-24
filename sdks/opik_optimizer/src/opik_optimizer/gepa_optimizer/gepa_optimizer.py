@@ -467,7 +467,7 @@ class GepaOptimizer(BaseOptimizer):
                 return str(message.get("content", "")).strip()
         for message in messages:
             if message.get("role") == "user":
-                return f"You are a helpful assistant. Respond to: {message.get('content','')}"
+                return f"You are a helpful assistant. Respond to: {message.get('content', '')}"
         return "You are a helpful assistant."
 
     def _extract_system_text_from_candidate(
