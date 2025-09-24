@@ -43,6 +43,65 @@ require_command() {
     fi
 }
 
+# Function to find JAR files in target directory
+find_jar_files() {
+    local jar_files=()
+    while IFS= read -r -d '' jar; do
+        jar_files+=("$jar")
+    done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
+    
+    if [ "${#jar_files[@]}" -eq 0 ]; then
+        return 1  # No JAR files found
+    elif [ "${#jar_files[@]}" -eq 1 ]; then
+        JAR_FILE="${jar_files[0]}"
+        log_info "Using JAR file: $JAR_FILE"
+    else
+        log_warning "Multiple backend JAR files found in target/:"
+        for jar in "${jar_files[@]}"; do
+            log_warning "  - $jar"
+        done
+        
+        # Sort JAR files by version (assuming semantic versioning in filename)
+        JAR_FILE=$(printf '%s\n' "${jar_files[@]}" | sort -V | tail -n 1)
+        log_warning "Automatically selected JAR with highest version: $JAR_FILE"
+        log_warning "To use a different JAR, clean up target/ directory and rebuild"
+    fi
+    
+    return 0  # JAR file found and selected
+}
+
+# Function to start infrastructure
+start_infrastructure() {
+    log_info "Starting infrastructure services (MySQL, Redis, ClickHouse, etc.)..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    
+    if ./opik.sh --infra --port-mapping; then
+        log_success "Infrastructure services started successfully"
+    else
+        log_error "Failed to start infrastructure services"
+        exit 1
+    fi
+}
+
+# Function to stop infrastructure
+stop_infrastructure() {
+    log_info "Stopping infrastructure services..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    
+    if ./opik.sh --infra --stop; then
+        log_success "Infrastructure services stopped"
+    else
+        log_warning "Failed to stop some infrastructure services"
+    fi
+}
+
+# Function to verify infrastructure
+verify_infrastructure() {
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    ./opik.sh --infra --verify >/dev/null 2>&1
+    return $?
+}
+
 # Function to build backend
 build_backend() {
     require_command mvn
@@ -53,6 +112,20 @@ build_backend() {
         log_success "Backend build completed successfully"
     else
         log_error "Backend build failed"
+        exit 1
+    fi
+}
+
+# Function to build frontend
+build_frontend() {
+    require_command npm
+    log_info "Building frontend (npm install)..."
+    cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
+
+    if npm install; then
+        log_success "Frontend build completed successfully"
+    else
+        log_error "Frontend build failed"
         exit 1
     fi
 }
@@ -98,7 +171,7 @@ start_backend() {
             log_warning "Backend is already running (PID: $BACKEND_PID)"
             return 0
         else
-            log_info "Removing stale backend PID file (process $BACKEND_PID no longer exists)"
+            log_warning "Removing stale backend PID file (process $BACKEND_PID no longer exists)"
             rm -f "$BACKEND_PID_FILE"
         fi
     fi
@@ -107,28 +180,15 @@ start_backend() {
     export CORS=true
 
     # Find and validate the JAR file
-    # Use portable method to populate array (works with older Bash versions)
-    JAR_FILES=()
-    while IFS= read -r -d '' jar; do
-        JAR_FILES+=("$jar")
-    done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
-    if [ "${#JAR_FILES[@]}" -eq 0 ]; then
-        log_error "No backend JAR file found in target/. Please build the backend first."
-        exit 1
-    elif [ "${#JAR_FILES[@]}" -eq 1 ]; then
-        JAR_FILE="${JAR_FILES[0]}"
-        log_info "Using JAR file: $JAR_FILE"
-    else
-        log_warning "Multiple backend JAR files found in target/:"
-        for jar in "${JAR_FILES[@]}"; do
-            log_warning "  - $jar"
-        done
+    if ! find_jar_files; then
+        log_warning "No backend JAR file found in target/. Building backend automatically..."
+        build_backend
         
-        # Sort JAR files by version (assuming semantic versioning in filename)
-        # This will work for patterns like opik-backend-1.0-SNAPSHOT.jar, opik-backend-1.1-SNAPSHOT.jar, etc.
-        JAR_FILE=$(printf '%s\n' "${JAR_FILES[@]}" | sort -V | tail -n 1)
-        log_info "Automatically selected JAR with highest version: $JAR_FILE"
-        log_info "To use a different JAR, clean up target/ directory and rebuild"
+        # Re-scan for JAR files after build
+        if ! find_jar_files; then
+            log_error "Backend build completed but no JAR file found. Build may have failed."
+            exit 1
+        fi
     fi
     
     # Start backend in background using the JAR file
@@ -164,13 +224,13 @@ start_frontend() {
             log_warning "Frontend is already running (PID: $FRONTEND_PID)"
             return 0
         else
-            log_info "Removing stale frontend PID file (process $FRONTEND_PID no longer exists)"
+            log_warning "Removing stale frontend PID file (process $FRONTEND_PID no longer exists)"
             rm -f "$FRONTEND_PID_FILE"
         fi
     fi
     
     # Start frontend in background
-    nohup npm run start > /tmp/opik-frontend.log 2>&1 &
+    CI=true nohup npm run start > /tmp/opik-frontend.log 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
 
@@ -210,7 +270,7 @@ stop_backend() {
 
             log_success "Backend stopped"
         else
-            log_info "Backend PID file exists but process is not running (cleaning up stale PID file)"
+            log_warning "Backend PID file exists but process is not running (cleaning up stale PID file)"
         fi
         rm -f "$BACKEND_PID_FILE"
     else
@@ -244,7 +304,7 @@ stop_frontend() {
                 # Also kill any child processes that may still be running
                 CHILD_PIDS=$(pgrep -P "$FRONTEND_PID" 2>/dev/null || true)
                 if [ -n "$CHILD_PIDS" ]; then
-                    log_info "Killing remaining child processes (PIDs: $CHILD_PIDS)..."
+                    log_warning "Killing remaining child processes (PIDs: $CHILD_PIDS)..."
                     for PID in $CHILD_PIDS; do
                         kill -9 "$PID" 2>/dev/null || true
                     done
@@ -253,47 +313,76 @@ stop_frontend() {
 
             log_success "Frontend stopped"
         else
-            log_info "Frontend PID file exists but process is not running (cleaning up stale PID file)"
+            log_warning "Frontend PID file exists but process is not running (cleaning up stale PID file)"
         fi
         rm -f "$FRONTEND_PID_FILE"
     else
         log_warning "Frontend is not running"
     fi
 
-    # Clean up any orphaned processes by checking for processes in our project directory
-    # This is safer than using broad pkill patterns
-    OPIK_FRONTEND_PROCESSES=$(pgrep -f "npm.*start|node.*vite" | xargs)
-    if [ -n "$OPIK_FRONTEND_PROCESSES" ]; then
-        log_info "Cleaning up remaining frontend processes related to $FRONTEND_DIR..."
-        for PID in $OPIK_FRONTEND_PROCESSES; do
+    # Clean up any orphaned processes by looking for processes with our frontend directory path
+    # This is safe and compatible across Unix systems
+    ORPHANED_PIDS=$(pgrep -f "$FRONTEND_DIR" 2>/dev/null || true)
+    
+    if [ -n "$ORPHANED_PIDS" ]; then
+        log_warning "Found potential orphaned processes related to $FRONTEND_DIR..."
+        for PID in $ORPHANED_PIDS; do
             if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-                kill -TERM "$PID" 2>/dev/null || true
-                sleep 1
-                # Force kill if still running
-                if kill -0 "$PID" 2>/dev/null; then
-                    kill -9 "$PID" 2>/dev/null || true
+                # Get process info to verify it's actually our frontend process
+                PROCESS_INFO=$(ps -p "$PID" -o comm,args --no-headers 2>/dev/null || true)
+                
+                # Only kill if it's an npm/node/vite process AND contains our directory path
+                if [[ "$PROCESS_INFO" =~ (npm|node|vite) ]] && [[ "$PROCESS_INFO" =~ $FRONTEND_DIR ]]; then
+                    log_warning "Cleaning up orphaned process: PID $PID - $PROCESS_INFO"
+                    kill -TERM "$PID" 2>/dev/null || true
+                    sleep 1
+                    # Force kill if still running
+                    if kill -0 "$PID" 2>/dev/null; then
+                        kill -9 "$PID" 2>/dev/null || true
+                    fi
                 fi
             fi
         done
     fi
 }
 
-# Function to show status
-show_status() {
+# Function to verify services
+verify_services() {
     log_info "=== Opik Development Status ==="
     
+    # Infrastructure status
+    local infra_running=false
+    if verify_infrastructure; then
+        echo -e "Infrastructure: ${GREEN}RUNNING${NC} (Docker containers)"
+        infra_running=true
+    else
+        echo -e "Infrastructure: ${RED}STOPPED${NC} (Docker containers)"
+    fi
+    
     # Backend status
+    local backend_running=false
     if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
         echo -e "Backend: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+        backend_running=true
     else
         echo -e "Backend: ${RED}STOPPED${NC}"
     fi
     
     # Frontend status
+    local frontend_running=false
     if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
         echo -e "Frontend: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
+        frontend_running=true
     else
         echo -e "Frontend: ${RED}STOPPED${NC}"
+    fi
+
+    # Show access information if all services are running
+    if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
+        echo ""
+        echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
+        echo -e "${BLUE}📊  Access the UI:     http://localhost:5174${NC}"
+        echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
     fi
 
     echo ""
@@ -305,18 +394,24 @@ show_status() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/5: Stopping backend..."
-    stop_backend
-    log_info "Step 2/5: Stopping frontend..."
+    log_info "Step 1/8: Stopping frontend..."
     stop_frontend
-    log_info "Step 3/5: Building backend..."
+    log_info "Step 2/8: Stopping backend..."
+    stop_backend
+    log_info "Step 3/8: Stopping infrastructure..."
+    stop_infrastructure
+    log_info "Step 4/8: Starting infrastructure..."
+    start_infrastructure
+    log_info "Step 5/8: Building frontend..."
+    build_frontend
+    log_info "Step 6/8: Building backend..."
     build_backend
-    log_info "Step 4/5: Starting backend..."
+    log_info "Step 7/8: Starting backend..."
     start_backend
-    log_info "Step 5/5: Starting frontend..."
+    log_info "Step 8/8: Starting frontend..."
     start_frontend
     log_success "=== Restart Complete ==="
-    show_status
+    verify_services
 }
 
 # Function to show usage
@@ -324,12 +419,13 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --build        - Build backend (mvn clean install -DskipTests)"
-    echo "  --start        - Start both backend and frontend"
-    echo "  --stop         - Stop both backend and frontend"
-    echo "  --restart      - Stop, build, and start both services (default)"
-    echo "  --status       - Show status of both services"
-    echo "  --logs         - Show logs for both services"
+    echo "  --build-be     - Build backend (mvn clean install -DskipTests)"
+    echo "  --build-fe     - Build frontend (npm install)"
+    echo "  --start        - Start all services"
+    echo "  --stop         - Stop all services"
+    echo "  --restart      - Stop, build, and start all services (default)"
+    echo "  --verify       - Verify status of all services"
+    echo "  --logs         - Show logs for backend and frontend services"
     echo "  --lint-fe      - Lint frontend code"
     echo "  --lint-be      - Lint backend code with spotless apply"
     echo "  --help         - Show this help message"
@@ -357,24 +453,29 @@ show_logs() {
 
 # Main script logic
 case "${1:-}" in
-    "--build")
+    "--build-be")
         build_backend
         ;;
+    "--build-fe")
+        build_frontend
+        ;;
     "--start")
+        start_infrastructure
         start_backend
         start_frontend
-        show_status
+        verify_services
         ;;
     "--stop")
-        stop_backend
         stop_frontend
+        stop_backend
+        stop_infrastructure
         log_success "All services stopped"
         ;;
     "--restart")
         restart_services
         ;;
-    "--status")
-        show_status
+    "--verify")
+        verify_services
         ;;
     "--logs")
         show_logs
