@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroup;
 import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -638,7 +639,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         int offset = (page - 1) * size;
 
-        var template = newFindTemplate(searchCriteria);
+        var template = newFindTemplate(FIND_TEMPLATE_GROUP, searchCriteria);
 
         template.add("sort_fields", sorting);
         template.add("limit", size);
@@ -661,7 +662,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private Publisher<? extends Result> countTotal(AnnotationQueueSearchCriteria searchCriteria,
             Connection connection) {
-        var template = newCountTemplate(searchCriteria);
+        var template = newFindTemplate(COUNT_TEMPLATE_GROUP, searchCriteria);
 
         var statement = connection.createStatement(template.render());
         bindSearchCriteria(statement, searchCriteria);
@@ -669,20 +670,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    private ST newFindTemplate(AnnotationQueueSearchCriteria searchCriteria) {
-        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main");
-
-        Optional.ofNullable(searchCriteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(searchCriteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_QUEUE))
-                .ifPresent(annotationQueueFilters -> template.add("filters", annotationQueueFilters));
-
-        return template;
-    }
-
-    private ST newCountTemplate(AnnotationQueueSearchCriteria searchCriteria) {
-        var template = COUNT_TEMPLATE_GROUP.getInstanceOf("main");
+    private ST newFindTemplate(STGroup templateGroup, AnnotationQueueSearchCriteria searchCriteria) {
+        var template = templateGroup.getInstanceOf("main");
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
