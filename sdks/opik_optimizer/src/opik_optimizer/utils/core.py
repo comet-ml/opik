@@ -2,18 +2,13 @@
 
 from typing import (
     Any,
-    Dict,
     Final,
     Literal,
-    Optional,
-    Type,
     TYPE_CHECKING,
-    List,
-    Callable,
 )
+from collections.abc import Callable
 
 import inspect
-import typing
 import base64
 import json
 import logging
@@ -47,8 +42,8 @@ class OptimizationContextManager:
         client: Opik,
         dataset_name: str,
         objective_name: str,
-        name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        name: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Initialize the optimization context.
@@ -65,9 +60,9 @@ class OptimizationContextManager:
         self.objective_name = objective_name
         self.name = name
         self.metadata = metadata
-        self.optimization: Optional[Optimization] = None
+        self.optimization: Optimization | None = None
 
-    def __enter__(self) -> Optional[Optimization]:
+    def __enter__(self) -> Optimization | None:
         """Create and return the optimization."""
         try:
             self.optimization = self.client.create_optimization(
@@ -90,9 +85,9 @@ class OptimizationContextManager:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> Literal[False]:
         """Update optimization status based on context exit."""
         if self.optimization is None:
@@ -229,8 +224,8 @@ def optimization_context(
     client: Opik,
     dataset_name: str,
     objective_name: str,
-    name: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    name: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> OptimizationContextManager:
     """
     Create a context manager for handling optimization lifecycle.
@@ -260,7 +255,7 @@ def ensure_ending_slash(url: str) -> str:
 
 
 def get_optimization_run_url_by_id(
-    dataset_id: Optional[str], optimization_id: Optional[str]
+    dataset_id: str | None, optimization_id: str | None
 ) -> str:
     if dataset_id is None or optimization_id is None:
         raise ValueError(
@@ -278,7 +273,7 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def create_litellm_agent_class(prompt: "ChatPrompt") -> Type["OptimizableAgent"]:
+def create_litellm_agent_class(prompt: "ChatPrompt") -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
     """
@@ -292,7 +287,7 @@ def create_litellm_agent_class(prompt: "ChatPrompt") -> Type["OptimizableAgent"]
             project_name = prompt.project_name
 
             def invoke(
-                self, messages: List[Dict[str, str]], seed: Optional[int] = None
+                self, messages: list[dict[str, str]], seed: int | None = None
             ) -> str:
                 return prompt.invoke(
                     self.model, messages, prompt.tools, **self.model_kwargs
@@ -309,13 +304,13 @@ def create_litellm_agent_class(prompt: "ChatPrompt") -> Type["OptimizableAgent"]
 
 
 def function_to_tool_definition(
-    func: Callable, description: Optional[str] = None
-) -> Dict[str, Any]:
+    func: Callable, description: str | None = None
+) -> dict[str, Any]:
     sig = inspect.signature(func)
     doc = description or func.__doc__ or ""
 
-    properties: Dict[str, Dict[str, str]] = {}
-    required: List[str] = []
+    properties: dict[str, dict[str, str]] = {}
+    required: list[str] = []
 
     for name, param in sig.parameters.items():
         param_type = (
@@ -352,7 +347,7 @@ def python_type_to_json_type(python_type: type) -> str:
         return "boolean"
     elif python_type in [dict]:
         return "object"
-    elif python_type in [list, typing.List]:
+    elif python_type in [list, list]:
         return "array"
     else:
         return "string"  # default fallback
@@ -401,7 +396,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
     """
     try:
         # First, search for pages using the search API
-        search_params: Dict[str, str | int] = {
+        search_params: dict[str, str | int] = {
             "action": "query",
             "format": "json",
             "list": "search",

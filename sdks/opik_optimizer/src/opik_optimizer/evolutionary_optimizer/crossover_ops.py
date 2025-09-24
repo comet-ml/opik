@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import logging
 import random
@@ -23,7 +23,7 @@ class CrossoverOps:
 
     def _deap_crossover_chunking_strategy(
         self, messages_1_str: str, messages_2_str: str
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         chunks1 = [
             chunk.strip() for chunk in messages_1_str.split(".") if chunk.strip()
         ]
@@ -46,7 +46,7 @@ class CrossoverOps:
 
     def _deap_crossover_word_level(
         self, messages_1_str: str, messages_2_str: str
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         words1 = messages_1_str.split()
         words2 = messages_2_str.split()
         if not words1 or not words2:
@@ -59,7 +59,7 @@ class CrossoverOps:
         child2_words = words2[:point] + words1[point:]
         return " ".join(child1_words), " ".join(child2_words)
 
-    def _deap_crossover(self, ind1: Any, ind2: Any) -> Tuple[Any, Any]:
+    def _deap_crossover(self, ind1: Any, ind2: Any) -> tuple[Any, Any]:
         """Crossover operation that preserves semantic meaning.
         Attempts chunk-level crossover first, then falls back to word-level.
         """
@@ -67,8 +67,8 @@ class CrossoverOps:
             "      Recombining prompts by mixing and matching words and sentences.",
             verbose=self.verbose,
         )
-        messages_1_orig: List[Dict[str, str]] = ind1
-        messages_2_orig: List[Dict[str, str]] = ind2
+        messages_1_orig: list[dict[str, str]] = ind1
+        messages_2_orig: list[dict[str, str]] = ind2
 
         for i, message_1 in enumerate(messages_1_orig):
             role: str = message_1["role"]
@@ -91,14 +91,14 @@ class CrossoverOps:
 
         return creator.Individual(messages_1_orig), creator.Individual(messages_2_orig)
 
-    def _llm_deap_crossover(self, ind1: Any, ind2: Any) -> Tuple[Any, Any]:
+    def _llm_deap_crossover(self, ind1: Any, ind2: Any) -> tuple[Any, Any]:
         """Perform crossover by asking an LLM to blend two parent prompts."""
         reporting.display_message(
             "      Recombining prompts using an LLM.", verbose=self.verbose
         )
 
-        parent1_messages: List[Dict[str, str]] = ind1
-        parent2_messages: List[Dict[str, str]] = ind2
+        parent1_messages: list[dict[str, str]] = ind1
+        parent2_messages: list[dict[str, str]] = ind2
         current_output_style_guidance = self.output_style_guidance
 
         user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
@@ -129,7 +129,7 @@ class CrossoverOps:
             except Exception:
                 # Continue with heuristic extraction below
                 json_response = None
-            children: List[List[Dict[str, str]]] = []
+            children: list[list[dict[str, str]]] = []
             if isinstance(json_response, list):
                 children = [c for c in json_response if isinstance(c, list)]
 
@@ -160,13 +160,13 @@ class CrossoverOps:
             )
             return self._deap_crossover(ind1, ind2)
 
-    def _extract_json_arrays(self, text: str) -> List[str]:
+    def _extract_json_arrays(self, text: str) -> list[str]:
         """Extract top-level JSON array substrings from arbitrary text.
         This helps when models return multiple arrays like `[...],\n[...]`.
         """
-        arrays: List[str] = []
+        arrays: list[str] = []
         depth = 0
-        start: Optional[int] = None
+        start: int | None = None
         in_str = False
         escape = False
         for i, ch in enumerate(text):

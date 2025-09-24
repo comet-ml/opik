@@ -5,7 +5,8 @@ import secrets
 import time
 from functools import lru_cache
 from importlib import resources
-from typing import Any, Dict, Iterable, List
+from typing import Any
+from collections.abc import Iterable
 
 
 @lru_cache(maxsize=None)
@@ -35,9 +36,9 @@ def generate_uuid7_str() -> str:
     return str(uuid.UUID(int=uuid_int))
 
 
-def attach_uuids(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def attach_uuids(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Copy records and assign a fresh UUIDv7 `id` to each."""
-    payload: List[Dict[str, Any]] = []
+    payload: list[dict[str, Any]] = []
     for record in records:
         rec = dict(record)
         rec["id"] = generate_uuid7_str()

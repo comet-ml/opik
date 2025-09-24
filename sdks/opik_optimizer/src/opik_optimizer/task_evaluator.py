@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 import opik
 from opik.evaluation import evaluator as opik_evaluator
@@ -38,14 +39,14 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
 
 def evaluate(
     dataset: opik.Dataset,
-    evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
     metric: Callable,
     num_threads: int,
-    optimization_id: Optional[str] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    project_name: Optional[str] = None,
-    n_samples: Optional[int] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
 ) -> float:
     """
@@ -107,7 +108,7 @@ def evaluate(
         return 0.0
 
     # We may allow score aggregation customization.
-    score_results: List[score_result.ScoreResult] = [
+    score_results: list[score_result.ScoreResult] = [
         test_result.score_results[0] for test_result in result.test_results
     ]
     if not score_results:

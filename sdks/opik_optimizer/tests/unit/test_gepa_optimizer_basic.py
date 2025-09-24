@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -26,7 +26,7 @@ def test_infer_dataset_keys_heuristics() -> None:
     class DummyDataset:
         name = "dummy"
 
-        def get_items(self, *args: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+        def get_items(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
             return [
                 {"id": "1", "question": "Q?", "answer": "A", "metadata": {}},
             ]
@@ -39,7 +39,7 @@ def test_infer_dataset_keys_heuristics() -> None:
 
 
 def test_build_data_insts_mapping() -> None:
-    items: List[Dict[str, Any]] = [
+    items: list[dict[str, Any]] = [
         {"question": "Q1", "answer": "A1", "metadata": {"context": "C1"}},
         {"question": "Q2", "answer": "A2"},
     ]

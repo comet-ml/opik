@@ -1,4 +1,4 @@
-from typing import Optional, Any, List, Dict
+from typing import Any
 
 from opik_optimizer import (
     OptimizableAgent,
@@ -51,11 +51,11 @@ class ADKAgent(OptimizableAgent):
         self.prompt = prompt
         self.agent = create_agent(self.project_name)
 
-    def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:
+    def invoke_dataset_item(self, dataset_item: dict[str, str]) -> str:
         messages = self.prompt.get_messages(dataset_item)
         return self.invoke(messages)
 
-    def invoke(self, messages: List[Dict[str, str]], seed: Optional[int] = None) -> str:
+    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         APP_NAME = "agent_comparison_app"
         USER_ID = "test_user_456"
         SESSION_ID_TOOL_AGENT = "session_tool_agent_xyz"

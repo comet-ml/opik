@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from importlib import resources
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Union
 
 try:  # pragma: no cover - optional dependency
     import opik  # type: ignore
@@ -19,7 +19,7 @@ DATA_FILENAME = "context7_eval.jsonl"
 DATASET_NAME = "context7_eval"
 
 
-def _load_examples() -> List[Dict[str, Any]]:
+def _load_examples() -> list[dict[str, Any]]:
     text = (
         resources.files(DATA_PACKAGE)
         .joinpath(DATA_FILENAME)
@@ -36,17 +36,17 @@ def _dataset_name(test_mode: bool) -> str:
 @dataclass
 class _ListDataset:
     name: str
-    _items: List[Dict[str, Any]]
+    _items: list[dict[str, Any]]
 
     def __post_init__(self) -> None:
         for idx, item in enumerate(self._items):
             item.setdefault("id", f"{self.name}-{idx}")
         self.id = self.name
 
-    def copy(self) -> "_ListDataset":
+    def copy(self) -> _ListDataset:
         return _ListDataset(self.name, [dict(item) for item in self._items])
 
-    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
         if nb_samples is None:
             return [dict(item) for item in self._items]
         return [dict(item) for item in self._items[:nb_samples]]

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import json
 import logging
@@ -128,7 +128,7 @@ class MutationOps:
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
         """Perform structural mutation (reordering, combining, splitting)."""
-        mutated_messages: List[Dict[str, str]] = []
+        mutated_messages: list[dict[str, str]] = []
 
         for message in prompt.get_messages():
             content = message["content"]
@@ -178,7 +178,7 @@ class MutationOps:
     def _word_level_mutation_prompt(
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
-        mutated_messages: List[Dict[str, str]] = []
+        mutated_messages: list[dict[str, str]] = []
         for message in prompt.get_messages():
             mutated_messages.append(
                 {

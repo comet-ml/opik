@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -6,7 +6,7 @@ from opik_optimizer.optimization_config import chat_prompt
 
 
 class TaskEvaluationResult(BaseModel):
-    metrics: List[Dict[Literal["metric_name", "score", "timestamp"], Any]]
+    metrics: list[dict[Literal["metric_name", "score", "timestamp"], Any]]
     duration_seconds: float
 
 
@@ -19,25 +19,25 @@ class TaskResult(BaseModel):
     model_name: str
     timestamp_start: float
     status: Literal["Pending", "Running", "Success", "Failed"]
-    initial_prompt: Optional[chat_prompt.ChatPrompt] = None
-    initial_evaluation: Optional[TaskEvaluationResult] = None
-    optimized_prompt: Optional[chat_prompt.ChatPrompt] = None
-    optimized_evaluation: Optional[TaskEvaluationResult] = None
-    error_message: Optional[str] = None
-    timestamp_end: Optional[float] = None
-    llm_calls_total_optimization: Optional[int] = None
-    optimization_raw_result: Optional[Any] = None
+    initial_prompt: chat_prompt.ChatPrompt | None = None
+    initial_evaluation: TaskEvaluationResult | None = None
+    optimized_prompt: chat_prompt.ChatPrompt | None = None
+    optimized_evaluation: TaskEvaluationResult | None = None
+    error_message: str | None = None
+    timestamp_end: float | None = None
+    llm_calls_total_optimization: int | None = None
+    optimization_raw_result: Any | None = None
 
     @classmethod
     def model_validate(
         cls,
         obj: Any,
         *,
-        strict: Optional[bool] = None,
-        from_attributes: Optional[bool] = None,
-        context: Optional[Any] = None,
-        by_alias: Optional[bool] = None,
-        by_name: Optional[bool] = None,
+        strict: bool | None = None,
+        from_attributes: bool | None = None,
+        context: Any | None = None,
+        by_alias: bool | None = None,
+        by_name: bool | None = None,
     ) -> "TaskResult":
         """Custom validation method to handle nested objects during deserialization."""
         # Handle ChatPrompt objects
@@ -67,7 +67,7 @@ class TaskResult(BaseModel):
             )
 
         # Use the parent class's model_validate method to create the instance
-        return super(TaskResult, cls).model_validate(
+        return super().model_validate(
             obj,
             strict=strict,
             from_attributes=from_attributes,

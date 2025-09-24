@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any
 
 
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -12,7 +12,7 @@ from opik_optimizer.datasets import hotpot_300
 from pydantic_ai_agent import PydanticAIAgent
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 

@@ -12,6 +12,7 @@ from .optimizable_agent import OptimizableAgent
 from .optimization_config.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
 from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from .gepa_optimizer import GepaOptimizer
 from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .optimization_config.configs import TaskConfig
@@ -28,6 +29,7 @@ __all__ = [
     "BaseOptimizer",
     "ChatPrompt",
     "FewShotBayesianOptimizer",
+    "GepaOptimizer",
     "MetaPromptOptimizer",
     "EvolutionaryOptimizer",
     "OptimizationResult",

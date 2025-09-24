@@ -7,7 +7,7 @@ Requires:
   set OPENAI_API_KEY for LiteLLM-backed models
 """
 
-from typing import Any, Dict
+from typing import Any
 import os
 import sys
 
@@ -25,7 +25,7 @@ from opik_optimizer.gepa_optimizer import GepaOptimizer  # noqa: E402
 from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return LevenshteinRatio().score(reference=dataset_item["label"], output=llm_output)
 
 

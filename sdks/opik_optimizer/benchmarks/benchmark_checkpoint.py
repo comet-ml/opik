@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import Any, List
+from typing import Any
 
 from benchmark_task import TaskResult
 
@@ -21,9 +21,9 @@ class BenchmarkCheckpointManager:
         checkpoint_folder: str,
         run_id: str,
         test_mode: bool,
-        demo_datasets: List[str],
-        optimizers: List[str],
-        models: List[str],
+        demo_datasets: list[str],
+        optimizers: list[str],
+        models: list[str],
     ):
         self.checkpoint_timestamp = time.time()
         self.checkpoint_folder = os.path.abspath(checkpoint_folder)
@@ -38,7 +38,7 @@ class BenchmarkCheckpointManager:
         self.optimizers = optimizers
         self.models = models
 
-        self.task_results: List[TaskResult] = []
+        self.task_results: list[TaskResult] = []
 
     def save(self) -> None:
         with open(self.checkpoint_file, "w") as f:
@@ -58,7 +58,7 @@ class BenchmarkCheckpointManager:
                 f"Checkpoint file {self.checkpoint_file} does not exist"
             )
 
-        with open(self.checkpoint_file, "r") as f:
+        with open(self.checkpoint_file) as f:
             checkpoint_data = json.load(f)
 
             self.test_mode = checkpoint_data["test_mode"]

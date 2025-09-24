@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from io import StringIO
-from typing import Any, List
+from typing import Any
 
 from rich.panel import Panel
 from rich.text import Text
@@ -165,7 +165,7 @@ def initializing_population(verbose: int = 1) -> Any:
                 )
                 console.print("│")
 
-        def end(self, population_prompts: List[chat_prompt.ChatPrompt]) -> None:
+        def end(self, population_prompts: list[chat_prompt.ChatPrompt]) -> None:
             if verbose >= 1:
                 console.print(
                     f"│ Successfully initialized population with {len(population_prompts)} prompts."
@@ -215,11 +215,13 @@ def evaluate_initial_population(verbose: int = 1) -> Any:
             if verbose >= 1:
                 if score >= baseline_score:
                     console.print(
-                        Text(f"\r  Prompt {index+1} score was: {score}.", style="green")
+                        Text(
+                            f"\r  Prompt {index + 1} score was: {score}.", style="green"
+                        )
                     )
                 else:
                     console.print(
-                        Text(f"\r  Prompt {index+1} score was: {score}.", style="dim")
+                        Text(f"\r  Prompt {index + 1} score was: {score}.", style="dim")
                     )
 
     # Use our log suppression context manager and yield the reporter

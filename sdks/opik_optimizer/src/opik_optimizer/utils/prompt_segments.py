@@ -10,7 +10,8 @@ the optimizer stack.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
+from collections.abc import Iterable
 
 import copy
 
@@ -27,15 +28,15 @@ class PromptSegment:
 
     segment_id: str
     kind: str
-    role: Optional[str]
+    role: str | None
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
     def is_tool(self) -> bool:
         return self.segment_id.startswith(PROMPT_SEGMENT_PREFIX_TOOL)
 
 
-def _normalise_tool(tool: Dict[str, Any]) -> Dict[str, Any]:
+def _normalise_tool(tool: dict[str, Any]) -> dict[str, Any]:
     """Return tools in the ``{"function": {...}}`` structure for consistency."""
 
     if "function" in tool:
@@ -51,7 +52,7 @@ def _normalise_tool(tool: Dict[str, Any]) -> Dict[str, Any]:
     return normalised
 
 
-def extract_prompt_segments(prompt: ChatPrompt) -> List[PromptSegment]:
+def extract_prompt_segments(prompt: ChatPrompt) -> list[PromptSegment]:
     """Extract individual editable segments from ``prompt``.
 
     The extraction preserves order for chat messages while assigning
@@ -63,7 +64,7 @@ def extract_prompt_segments(prompt: ChatPrompt) -> List[PromptSegment]:
     * ``tool:<name>`` for tool descriptions
     """
 
-    segments: List[PromptSegment] = []
+    segments: list[PromptSegment] = []
 
     if prompt.system is not None:
         segments.append(
@@ -126,7 +127,7 @@ def extract_prompt_segments(prompt: ChatPrompt) -> List[PromptSegment]:
 
 def apply_segment_updates(
     prompt: ChatPrompt,
-    updates: Dict[str, str],
+    updates: dict[str, str],
 ) -> ChatPrompt:
     """Return a new ``ChatPrompt`` with selected segments replaced.
 
@@ -137,9 +138,9 @@ def apply_segment_updates(
     system = updates.get("system", prompt.system)
     user = updates.get("user", prompt.user)
 
-    messages: Optional[List[Dict[str, Any]]] = None
+    messages: list[dict[str, Any]] | None = None
     if prompt.messages is not None:
-        new_messages: List[Dict[str, Any]] = []
+        new_messages: list[dict[str, Any]] = []
         for idx, message in enumerate(prompt.messages):
             segment_id = f"{PROMPT_SEGMENT_PREFIX_MESSAGE}{idx}"
             replacement = updates.get(segment_id)
@@ -179,7 +180,7 @@ def apply_segment_updates(
     )
 
 
-def segment_ids_for_tools(segments: Iterable[PromptSegment]) -> List[str]:
+def segment_ids_for_tools(segments: Iterable[PromptSegment]) -> list[str]:
     """Convenience helper returning IDs of tool segments."""
 
     return [segment.segment_id for segment in segments if segment.is_tool()]

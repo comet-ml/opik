@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Union, Optional
 
 from rich.logging import RichHandler
 
@@ -9,10 +8,10 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # Store configured state to prevent reconfiguration
 _logging_configured = False
-_configured_level: Optional[int] = None
+_configured_level: int | None = None
 
 
-def _coerce_level(level: Union[int, str]) -> int:
+def _coerce_level(level: int | str) -> int:
     if isinstance(level, int):
         return level
 
@@ -33,7 +32,7 @@ def _coerce_level(level: Union[int, str]) -> int:
 
 
 def setup_logging(
-    level: Union[int, str] = logging.WARNING,
+    level: int | str = logging.WARNING,
     format_string: str = DEFAULT_LOG_FORMAT,
     date_format: str = DEFAULT_DATE_FORMAT,
     force: bool = False,

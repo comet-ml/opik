@@ -10,7 +10,7 @@ import os
 
 import dspy
 from opik.evaluation.metrics.score_result import ScoreResult
-from typing import Any, Dict
+from typing import Any
 
 # Setup cache on disk:
 import litellm
@@ -48,7 +48,7 @@ dspy.settings.configure(
 
 
 # This are useful methods of logging optimization data:
-def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return Equals().score(reference=dataset_item["answer"], output=llm_output)
 
 

@@ -39,6 +39,7 @@ target/
 **/.mypy_cache
 **/.ruff_cache
 **/.pytest_cache
+**/.litellm_cache
 
 # Vagrant
 **/.vagrant

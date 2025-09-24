@@ -7,7 +7,8 @@ import sys
 import textwrap
 import types
 from contextvars import ContextVar
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Optional
+from collections.abc import Callable, Mapping
 
 import pytest
 
@@ -57,7 +58,7 @@ from opik_optimizer.mcp_utils.mcp_workflow import (  # noqa: E402
 from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
 
 
-def _sample_tool_entry() -> Dict[str, Any]:
+def _sample_tool_entry() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
@@ -184,17 +185,17 @@ def test_preview_dataset_tool_invocation(monkeypatch: pytest.MonkeyPatch) -> Non
 
     class DummyDataset:
         def get_items(
-            self, nb_samples: Optional[int] = None
-        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
+            self, nb_samples: int | None = None
+        ) -> list[dict[str, Any]]:  # pragma: no cover - signature parity
             return [{"arguments": {"query": "docs"}}]
 
     class DummyResponse:
         content = "tool output"
 
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def fake_call(
-        manifest_obj: MCPManifest, name: str, payload: Dict[str, Any]
+        manifest_obj: MCPManifest, name: str, payload: dict[str, Any]
     ) -> DummyResponse:
         captured["manifest"] = manifest_obj
         captured["name"] = name
@@ -226,9 +227,9 @@ def test_argument_adapter_resolves_missing_id(monkeypatch: pytest.MonkeyPatch) -
         def __init__(self, text: str) -> None:
             self.content = [types.SimpleNamespace(text=text)]
 
-    calls: List[Tuple[str, Dict[str, Any]]] = []
+    calls: list[tuple[str, dict[str, Any]]] = []
 
-    def fake_call(name: str, payload: Dict[str, Any]) -> Any:
+    def fake_call(name: str, payload: dict[str, Any]) -> Any:
         calls.append((name, payload))
         return Response("/resolved/id")
 
@@ -253,9 +254,9 @@ def test_argument_adapter_skips_when_no_queries(
         query_fields=("library_query",),
     )
 
-    calls: List[Tuple[str, Dict[str, Any]]] = []
+    calls: list[tuple[str, dict[str, Any]]] = []
 
-    def fake_call(name: str, payload: Dict[str, Any]) -> Any:
+    def fake_call(name: str, payload: dict[str, Any]) -> Any:
         calls.append((name, payload))
         raise AssertionError("Resolver should not be invoked")
 
@@ -278,8 +279,8 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
 
     class EmptyDataset:
         def get_items(
-            self, nb_samples: Optional[int] = None
-        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
+            self, nb_samples: int | None = None
+        ) -> list[dict[str, Any]]:  # pragma: no cover - signature parity
             return []
 
     caplog.set_level(logging.WARNING, logger="opik_optimizer.mcp_utils.mcp_workflow")
@@ -308,8 +309,8 @@ def test_preview_dataset_tool_invocation_handles_errors(
 
     class FailingDataset:
         def get_items(
-            self, nb_samples: Optional[int] = None
-        ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
+            self, nb_samples: int | None = None
+        ) -> list[dict[str, Any]]:  # pragma: no cover - signature parity
             raise RuntimeError("boom")
 
     caplog.set_level(logging.WARNING, logger="opik_optimizer.mcp_utils.mcp_workflow")
@@ -357,24 +358,24 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
         def __init__(self, text: str) -> None:
             self.content = [types.SimpleNamespace(text=text)]
 
-    calls: List[Tuple[str, Dict[str, Any]]] = []
+    calls: list[tuple[str, dict[str, Any]]] = []
 
     def fake_call(
-        manifest_obj: MCPManifest, tool_name: str, payload: Dict[str, Any]
+        manifest_obj: MCPManifest, tool_name: str, payload: dict[str, Any]
     ) -> Any:
         calls.append((tool_name, payload))
         return FakeResponse(f"{tool_name}-result")
 
     monkeypatch.setattr(mcp_workflow, "call_tool_from_manifest", fake_call)
 
-    recorded: List[str] = []
+    recorded: list[str] = []
 
     class DummyCoordinator(MCPSecondPassCoordinator):
         def __init__(self) -> None:
             # Create a dummy follow-up builder
             def dummy_follow_up_builder(
-                dataset_item: Dict[str, Any], summary: str
-            ) -> Optional[str]:
+                dataset_item: dict[str, Any], summary: str
+            ) -> str | None:
                 return None
 
             super().__init__(
@@ -382,8 +383,8 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
                 summary_var=ContextVar[Optional[str]]("dummy_summary", default=None),
                 follow_up_builder=dummy_follow_up_builder,
             )
-            self._last_summary: Optional[str] = None
-            self._last_follow_up: Optional[str] = None
+            self._last_summary: str | None = None
+            self._last_follow_up: str | None = None
 
         @property
         def tool_name(self) -> str:
@@ -396,19 +397,19 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
             recorded.append(summary)
             self._summary_var.set(summary)
 
-        def fetch_summary(self) -> Optional[str]:
+        def fetch_summary(self) -> str | None:
             return self._summary_var.get()
 
-        def get_last_summary(self) -> Optional[str]:
+        def get_last_summary(self) -> str | None:
             return self._last_summary
 
         def build_second_pass_messages(
             self,
             *,
-            base_messages: List[Dict[str, Any]],
-            dataset_item: Dict[str, Any],
-            summary_override: Optional[str] = None,
-        ) -> Optional[List[Dict[str, Any]]]:
+            base_messages: list[dict[str, Any]],
+            dataset_item: dict[str, Any],
+            summary_override: str | None = None,
+        ) -> list[dict[str, Any]] | None:
             self._last_summary = None
             self._last_follow_up = None
             summary = (
@@ -424,8 +425,8 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
             return base_messages
 
     def adapter(
-        arguments: Dict[str, Any], call_tool: Callable[[str, Dict[str, Any]], Any]
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any], call_tool: Callable[[str, dict[str, Any]], Any]
+    ) -> dict[str, Any]:
         call_tool("resolver", {"query": arguments["library_query"]})
         arguments = dict(arguments)
         arguments["context7CompatibleLibraryID"] = "resolved"

@@ -1,5 +1,5 @@
 from unittest.mock import Mock, patch
-from typing import Any, Dict
+from typing import Any
 
 import opik
 from opik_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
@@ -21,7 +21,7 @@ def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
     mock_dataset.name = "test_dataset"
     mock_dataset.get_items.return_value = [{"id": "item_1"}]
 
-    def mock_metric(dataset_item: Dict[str, Any], llm_output: str) -> float:
+    def mock_metric(dataset_item: dict[str, Any], llm_output: str) -> float:
         return 0.85
 
     # Create original prompt

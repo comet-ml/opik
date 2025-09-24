@@ -4,7 +4,6 @@ import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
-from typing import List, Optional
 
 import benchmark_checkpoint
 import benchmark_config
@@ -129,7 +128,7 @@ def run_optimization(
 
 
 class BenchmarkRunner:
-    run_id: Optional[str] = None
+    run_id: str | None = None
 
     def __init__(
         self, max_workers: int, seed: int, test_mode: bool, checkpoint_dir: str
@@ -142,11 +141,11 @@ class BenchmarkRunner:
 
     def run_benchmarks(
         self,
-        demo_datasets: List[str],
-        optimizers: List[str],
-        models: List[str],
-        retry_failed_run_id: Optional[str],
-        resume_run_id: Optional[str],
+        demo_datasets: list[str],
+        optimizers: list[str],
+        models: list[str],
+        retry_failed_run_id: str | None,
+        resume_run_id: str | None,
     ) -> None:
         # Create unique id
         if resume_run_id and retry_failed_run_id:
@@ -183,7 +182,7 @@ class BenchmarkRunner:
 
         # Start scheduling the tasks
         start_time = time.time()
-        task_results: List[TaskResult] = []
+        task_results: list[TaskResult] = []
         with self.benchmark_logger.create_live_panel() as live:
             live.update(self.benchmark_logger._generate_live_display_message())
 
@@ -261,7 +260,7 @@ class BenchmarkRunner:
                                 self.benchmark_logger._generate_live_display_message()
                             )
 
-                completed_futures: List[str] = []
+                completed_futures: list[str] = []
                 while True:
                     try:
                         for future_info in futures:

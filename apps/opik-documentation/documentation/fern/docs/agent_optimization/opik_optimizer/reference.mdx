@@ -430,78 +430,116 @@ update_optimization(
 ```python
 GepaOptimizer(
     model: str,
-    project_name: Optional[str] = None,
-    reflection_model: Optional[str] = None,
+    project_name: Optional = None,
+    reflection_model: Optional = None,
     verbose: int = 1,
     model_kwargs: Any
 )
 ```
 
-Wraps the external GEPA package to optimize a single system prompt for single-turn tasks.
 
 **Parameters:**
 
-<ParamField path="model" type="str">
-  LiteLLM model name used as the task model.
-  Example: <code>openai/gpt-4o-mini</code>
-  See the LiteLLM support docs for configuration.
-  </ParamField>
-<ParamField path="project_name" type="Optional[str]" optional={true}>
-  Optional project name to group runs in Opik.
-</ParamField>
-<ParamField path="reflection_model" type="Optional[str]" optional={true}>
-  LiteLLM model name used for GEPA's reflection step. Defaults to <code>model</code> if not set.
-</ParamField>
-<ParamField path="verbose" type="int" optional={true} defaultValue="1">
-  Controls internal logging/progress bars (0=off, 1=on).
-</ParamField>
-<ParamField path="model_kwargs" type="Any">
-  Extra LiteLLM parameters such as <code>temperature</code>, <code>max_tokens</code>, etc.
-  You may also pass <code>num_threads</code> (default: 6) to control evaluation parallelism.
-</ParamField>
+<ParamField path="model" type="str">LiteLLM model name</ParamField>
+<ParamField path="project_name" type="Optional" optional={true} />
+<ParamField path="reflection_model" type="Optional" optional={true} />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
 
 ### Methods
-
-#### optimize_prompt
-
+#### evaluate_prompt
 ```python
-optimize_prompt(
+evaluate_prompt(
     prompt: ChatPrompt,
-    dataset: Dataset | str,
-    metric: Callable[[dict, str], ScoreResult],
-    experiment_config: Optional[dict] = None,
-    # GEPA-specific options (via kwargs)
-    max_metric_calls: int = 30,
-    reflection_minibatch_size: int = 3,
-    candidate_selection_strategy: str = "pareto",  # or "best"
-    n_samples: Optional[int] = None,
+    dataset: Dataset,
+    metric: Callable,
+    n_threads: int,
+    verbose: int = 1,
+    dataset_item_ids: Optional = None,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    seed: Optional = None,
+    agent_class: Optional = None
 )
 ```
+
 
 **Parameters:**
 
 <ParamField path="prompt" type="ChatPrompt" />
-<ParamField path="dataset" type="Dataset | str">
-  Opik dataset object or dataset name.
-</ParamField>
-<ParamField path="metric" type="Callable[[dict, str], ScoreResult]">
-  Metric function that returns an Opik <code>ScoreResult</code>.
-</ParamField>
-<ParamField path="experiment_config" type="Optional[dict]" optional={true}>
-  Optional configuration/metadata logged with the run.
-</ParamField>
-<ParamField path="max_metric_calls" type="int" optional={true} defaultValue="30">
-  Total budget of metric calls consumed by GEPA during the run.
-</ParamField>
-<ParamField path="reflection_minibatch_size" type="int" optional={true} defaultValue="3">
-  Number of items considered per reflection step.
-</ParamField>
-<ParamField path="candidate_selection_strategy" type="str" optional={true} defaultValue="pareto">
-  Strategy to pick candidates within GEPA (e.g., <code>pareto</code> or <code>best</code>).
-</ParamField>
-<ParamField path="n_samples" type="Optional[int]" optional={true}>
-  If set, sub-sample the dataset to this many items for train/val.
-</ParamField>
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="n_threads" type="int" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1" />
+<ParamField path="dataset_item_ids" type="Optional" optional={true} />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="seed" type="Optional" optional={true} />
+<ParamField path="agent_class" type="Optional" optional={true} />
+
+#### get_history
+```python
+get_history()
+```
+
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="Any" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Union,
+    metric: Callable,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Union">Opik dataset name, or Opik dataset</ParamField>
+<ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
+#### update_optimization
+```python
+update_optimization(
+    optimization: Optimization,
+    status: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="optimization" type="Optimization" />
+<ParamField path="status" type="str" />
 
 ## ChatPrompt
 

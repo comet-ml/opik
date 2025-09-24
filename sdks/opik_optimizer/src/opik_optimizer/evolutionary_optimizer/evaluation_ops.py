@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING, Type
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 
 from .. import task_evaluator
@@ -8,19 +9,19 @@ import opik
 
 class EvaluationOps:
     if TYPE_CHECKING:
-        agent_class: Type[Any]
+        agent_class: type[Any]
         num_threads: int
 
     def _evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         dataset: opik.Dataset,
         metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        optimization_id: Optional[str] = None,
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        optimization_id: str | None = None,
         verbose: int = 0,
         **kwargs: Any,
     ) -> float:
@@ -52,7 +53,7 @@ class EvaluationOps:
         except Exception:
             return 0.0
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = new_prompt.get_messages(dataset_item)
             model_output = agent.invoke(messages)
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}

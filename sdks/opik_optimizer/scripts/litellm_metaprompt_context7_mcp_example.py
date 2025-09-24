@@ -4,7 +4,7 @@ import copy
 import os
 import textwrap
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool, MCPManifest
@@ -23,7 +23,7 @@ from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 # https://context7.com/, then Dashboard, and request key
 # It's free!
 
-MCP_SERVER_CONFIG: Dict[str, Any] = {
+MCP_SERVER_CONFIG: dict[str, Any] = {
     "name": "context7-docs",
     "command": "npx",
     "args": [
@@ -48,14 +48,14 @@ TOOL_NAME = "get-library-docs"
 context7_metric = mcp_flow.make_similarity_metric("context7")
 
 # Context7-specific argument adapter settings
-ARGUMENT_ADAPTER_CONFIG: Dict[str, Any] = {
+ARGUMENT_ADAPTER_CONFIG: dict[str, Any] = {
     "target_field": "context7CompatibleLibraryID",
     "resolver_tool": "resolve-library-id",
     "query_fields": ("library_query", "context7LibraryQuery"),
 }
 
 # Context7-specific summary builder settings
-SUMMARY_BUILDER_CONFIG: Dict[str, Any] = {
+SUMMARY_BUILDER_CONFIG: dict[str, Any] = {
     "heading": "CONTEXT7_DOC_RESULT",
     "instructions": (
         "In your final reply, explicitly mention the library ID and key terms from the documentation snippet."
@@ -74,7 +74,7 @@ FOLLOW_UP_TEMPLATE = (
 )
 
 # Context7-specific tool invocation settings
-TOOL_INVOCATION_CONFIG: Dict[str, Any] = {
+TOOL_INVOCATION_CONFIG: dict[str, Any] = {
     "rate_limit_sleep": 5.0,
     "preview_label": "context7/get-library-docs",
     "summary_var_name": "context7_tool_summary",

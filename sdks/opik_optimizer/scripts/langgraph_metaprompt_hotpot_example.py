@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -13,7 +13,7 @@ from opik_optimizer import (
 from langgraph_agent import LangGraphAgent
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     """
     Calculate the Levenshtein ratio score between dataset answer and LLM output.
     """

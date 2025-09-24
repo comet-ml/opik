@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 import uuid
 import dspy
 import re
@@ -61,7 +59,7 @@ def opik_metric_to_dspy(metric, output):
 
 
 def create_dspy_training_set(
-    data: list[dict], input: str, n_samples: Optional[int] = None
+    data: list[dict], input: str, n_samples: int | None = None
 ) -> list[dspy.Example]:
     """
     Turn a list of dicts into a list of dspy Examples
@@ -80,7 +78,7 @@ def create_dspy_training_set(
     return output
 
 
-def get_tool_prompts(tool_names, text: str) -> Dict[str, str]:
+def get_tool_prompts(tool_names, text: str) -> dict[str, str]:
     """
     Extract the embedded tool prompts from a text.
     """
