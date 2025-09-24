@@ -1033,6 +1033,7 @@ Return only the new prompt list object.
                 "crossover_rate": self.crossover_rate,
             },
             verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
         )
 
         # Step 1. Step variables and define fitness function
@@ -1419,6 +1420,7 @@ Return only the new prompt list object.
             best_score=final_primary_score,
             best_prompt=final_best_prompt.get_messages(),
             verbose=self.verbose,
+            tools=getattr(final_best_prompt, "tools", None),
         )
         return OptimizationResult(
             optimizer=self.__class__.__name__,

@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from typing import Any, Iterator
 
+from rich.panel import Panel
 from rich.text import Text
 
 from ..optimization_config import chat_prompt
@@ -134,6 +135,18 @@ class CandidateGenerationReporter:
             )
         )
         console.print(Text("│"))
+
+
+def display_tool_description(description: str, label: str, color: str) -> None:
+    if not description.strip():
+        return
+    console.print(
+        Panel(
+            description.strip(),
+            title=label,
+            border_style=color,
+        )
+    )
 
 
 @contextmanager

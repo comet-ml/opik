@@ -116,6 +116,26 @@ result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
 
+## MCP Tool Tuning (_Beta_)
+
+This repository now includes utilities and examples for tuning MCP tool signatures without rewriting entire prompt templates. The proof of concept uses the official MCP Python SDK to launch servers from `mcp.json` manifests, retrieve tool metadata, and run evaluation loops.
+
+Install the MCP Python SDK first:
+
+```bash
+pip install mcp
+```
+
+Then run the example scripts after updating the in-file `MCP_MANIFEST` constants to point at your MCP servers:
+
+```bash
+python scripts/litellm_metaprompt_context7_mcp_example.py
+```
+
+Each script connects to the server, runs a `MetaPromptOptimizer` pass to improve the MCP tool description, and persists the tuned tool signature to `artifacts/`.
+
+Underlying utilities live in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`, and datasets in `src/opik_optimizer/data/`. These building blocks will be used for a fuller optimiser integration after the proof of concept.
+
 ## Development
 
 To contribute or use the Opik Optimizer from source:
@@ -136,6 +156,6 @@ To contribute or use the Opik Optimizer from source:
 
 ## Requirements
 
-- Python `>=3.9,<3.13`
+- Python `>=3.10,<3.13`
 - Opik API key (recommended for full functionality, configure via `opik configure`)
 - API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.

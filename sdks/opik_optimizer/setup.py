@@ -12,9 +12,9 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     package_data={
-        "opik_optimizer": ["data/*.json"],
+        "opik_optimizer": ["data/*.json", "data/*.jsonl"],
     },
-    python_requires=">=3.9,<3.13",
+    python_requires=">=3.10,<3.13",
     install_requires=[
         "datasets",
         "deap>=1.4.3",

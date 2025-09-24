@@ -450,6 +450,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             best_score=best_score,
             best_prompt=best_prompt,
             verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
         )
 
         return optimization_result.OptimizationResult(
@@ -557,6 +558,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "n_samples": n_samples,
             },
             verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
         )
 
         utils.disable_experiment_reporting()

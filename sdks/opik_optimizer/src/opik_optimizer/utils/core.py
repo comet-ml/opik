@@ -32,8 +32,8 @@ ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from .optimizable_agent import OptimizableAgent
-    from .optimization_config.chat_prompt import ChatPrompt
+    from opik_optimizer.optimizable_agent import OptimizableAgent
+    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
 
 
 class OptimizationContextManager:
@@ -282,7 +282,7 @@ def create_litellm_agent_class(prompt: "ChatPrompt") -> Type["OptimizableAgent"]
     """
     Create a LiteLLMAgent from a chat prompt.
     """
-    from .optimizable_agent import OptimizableAgent
+    from opik_optimizer.optimizable_agent import OptimizableAgent
 
     if prompt.invoke is not None:
 
