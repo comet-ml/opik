@@ -330,6 +330,9 @@ navigation:
           - page: Evaluate threads
             path: docs/evaluation/evaluate_threads.mdx
             slug: evaluate_threads
+          - page: Annotation Queues
+            path: docs/evaluation/annotation_queues.mdx
+            slug: annotation_queues
           - page: Log experiments with REST API
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
