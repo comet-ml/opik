@@ -105,18 +105,10 @@ def process_model_data(json_file_path: str) -> Dict[str, Any]:
             
             # Generate prefixes to remove from PROVIDER_MAPPING keys
             # This ensures we automatically handle new providers without manual updates
-            provider_prefixes = [f"{provider}/" for provider in PROVIDER_MAPPING.keys()]
-            
-            # Additional common prefixes that may appear in model names
-            # These are company/organization prefixes and regional prefixes found in the JSON
-            additional_prefixes = [
-                "ai21.", "amazon.", "anthropic.", "cohere.", "meta.", "mistral.", "stability.",
-                "us.", "eu.", "apac.", "vertex_ai/"
-            ]
-            
-            prefixes_to_remove = provider_prefixes + additional_prefixes
-            
-            for prefix in prefixes_to_remove:
+            old_provider_prefixes = [f"{provider}/" for provider in PROVIDER_MAPPING.keys()]
+
+            # Remove old provider prefixes
+            for prefix in old_provider_prefixes:
                 if clean_model_name.startswith(prefix):
                     clean_model_name = clean_model_name[len(prefix):]
                     break
