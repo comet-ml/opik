@@ -472,6 +472,14 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
             slug: mipro_optimizer
+          - page: GEPA Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
+            slug: gepa_optimizer
+          - page: Tool Optimization (MCP & Function Calling)
+            icon: fa-regular fa-tools
+            path: docs/agent_optimization/algorithms/tool_optimization.mdx
+            slug: tool_optimization
       - section: Optimization Best Practices
         slug: /best_practices
         contents:
