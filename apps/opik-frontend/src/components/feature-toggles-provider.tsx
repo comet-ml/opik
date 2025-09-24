@@ -39,11 +39,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data)
-      setFeatures({
-        ...data,
-        [FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED]: true,
-      });
+    if (data) setFeatures(data);
   }, [data]);
 
   const value = useMemo(() => {

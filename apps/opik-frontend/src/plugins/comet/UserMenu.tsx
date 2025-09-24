@@ -14,7 +14,7 @@ import {
   UserPlus,
   Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -38,7 +38,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore, { useSetAppUser } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -57,7 +57,6 @@ const UserMenu = () => {
     useThemeOptions();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const setAppUser = useSetAppUser();
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -85,15 +84,6 @@ const UserMenu = () => {
   );
 
   const inviteMembersURL = useInviteMembersURL();
-
-  useEffect(() => {
-    if (user && user.loggedIn) {
-      setAppUser({
-        apiKey: user.apiKeys[0],
-        userName: user.userName,
-      });
-    }
-  }, [user, setAppUser]);
 
   if (
     !user ||

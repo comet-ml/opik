@@ -33,7 +33,7 @@ const InputOutputViewer: React.FunctionComponent = () => {
   }, [currentItem]);
 
   return (
-    <div>
+    <div className="pr-4">
       <Accordion
         type="multiple"
         className="w-full"

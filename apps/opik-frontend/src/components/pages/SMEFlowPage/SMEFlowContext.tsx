@@ -6,15 +6,19 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import cloneDeep from "lodash/cloneDeep";
+import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useSearch } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
-import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import { createFilter } from "@/lib/filters";
-import { AnnotationQueue } from "@/types/annotation-queues";
+import {
+  AnnotationQueue,
+  ANNOTATION_QUEUE_SCOPE,
+} from "@/types/annotation-queues";
 import {
   Trace,
   Thread,
@@ -27,20 +31,69 @@ import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMut
 import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
 import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
 import useUpdateThreadCommentMutation from "@/api/traces/useUpdateThreadCommentMutation";
+import useTraceCommentsBatchDeleteMutation from "@/api/traces/useTraceCommentsBatchDeleteMutation";
+import useThreadCommentsBatchDeleteMutation from "@/api/traces/useThreadCommentsBatchDeleteMutation";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
+import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
-import { isObjectThread } from "@/lib/traces";
 import { ThreadStatus } from "@/types/thread";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
+import { hasValuesByAuthor } from "@/lib/feedback-scores";
+import omit from "lodash/omit";
 
 const isItemProcessed = (
   item: Trace | Thread,
   feedbackScoreNames: string[],
+  userName: string | undefined,
 ): boolean => {
-  return (item.feedback_scores || []).some((score) =>
-    feedbackScoreNames.includes(score.name),
-  );
+  if (!userName) return false;
+
+  return (item.feedback_scores || []).some((score) => {
+    if (!feedbackScoreNames.includes(score.name)) return false;
+
+    return hasValuesByAuthor(score)
+      ? Boolean(score.value_by_author?.[userName])
+      : score.last_updated_by === userName;
+  });
+};
+
+const getFeedbackScoresByUser = (
+  feedbackScores: TraceFeedbackScore[],
+  userName: string | undefined,
+  feedbackDefinitionNames: string[],
+): TraceFeedbackScore[] => {
+  if (!userName) return [];
+
+  return feedbackScores
+    .filter(
+      (feedbackScore) =>
+        feedbackScore && feedbackDefinitionNames.includes(feedbackScore.name),
+    )
+    .map((feedbackScore): TraceFeedbackScore | undefined => {
+      if (!userName) return feedbackScore;
+
+      if (hasValuesByAuthor(feedbackScore)) {
+        const userValue = feedbackScore.value_by_author?.[userName];
+        if (userValue) {
+          const rawValue = userValue.value;
+          return {
+            name: feedbackScore.name,
+            value: isNumber(rawValue) ? rawValue : 0,
+            reason: userValue.reason ?? "",
+            category_name: userValue.category_name ?? "",
+            source: userValue.source,
+            created_by: userName,
+            last_updated_at: userValue.last_updated_at,
+            last_updated_by: userName,
+          };
+        }
+      } else if (userName === feedbackScore.last_updated_by) {
+        return omit(feedbackScore, "value_by_author");
+      }
+    })
+    .filter((score): score is TraceFeedbackScore => score !== undefined);
 };
 
 const getLastCommentByUser = (
@@ -72,14 +125,110 @@ export interface ValidationState {
   errors: ValidationError[];
 }
 
+const hasUnsavedChanges = (
+  currentAnnotationState: AnnotationState,
+): boolean => {
+  console.log(123, currentAnnotationState);
+  const hasCommentChanges =
+    currentAnnotationState.comment?.text?.trim() !==
+    (currentAnnotationState.originalComment?.text?.trim() || "");
+
+  const hasFeedbackScoreChanges =
+    currentAnnotationState.scores.length !==
+      currentAnnotationState.originalScores.length ||
+    currentAnnotationState.scores.some((score) => {
+      const originalScore = currentAnnotationState.originalScores.find(
+        (original) => original.name === score.name,
+      );
+
+      return (
+        !originalScore ||
+        originalScore.value !== score.value ||
+        originalScore.reason !== score.reason ||
+        originalScore.category_name !== score.category_name
+      );
+    });
+
+  return hasCommentChanges || hasFeedbackScoreChanges;
+};
+
+// Comment operation helpers
+type CommentOperation =
+  | { type: "none" }
+  | { type: "create"; text: string }
+  | { type: "update"; commentId: string; text: string }
+  | { type: "delete"; commentId: string };
+
+const getCommentOperation = (state: AnnotationState): CommentOperation => {
+  const currentText = state.comment?.text?.trim();
+  const originalId = state.originalComment?.id;
+  const originalText = state.originalComment?.text;
+
+  if (!currentText && !originalId) {
+    return { type: "none" };
+  }
+
+  if (!currentText && originalId) {
+    return {
+      type: "delete",
+      commentId: originalId,
+    };
+  }
+
+  if (currentText && !originalId) {
+    return {
+      type: "create",
+      text: currentText,
+    };
+  }
+
+  if (currentText && originalId && originalText) {
+    const textChanged = currentText !== originalText;
+    return textChanged
+      ? {
+          type: "update",
+          commentId: originalId,
+          text: currentText,
+        }
+      : { type: "none" };
+  }
+
+  return { type: "none" };
+};
+
+const getDeletedScores = (state: AnnotationState) => {
+  return state.originalScores.filter(
+    (originalScore) =>
+      !state.scores.some(
+        (currentScore) => currentScore.name === originalScore.name,
+      ),
+  );
+};
+
+const getChangedScores = (state: AnnotationState) => {
+  return state.scores.filter((score) => {
+    const originalScore = state.originalScores.find(
+      (original) => original.name === score.name,
+    );
+
+    return (
+      !originalScore ||
+      originalScore.value !== score.value ||
+      originalScore.reason !== score.reason ||
+      originalScore.category_name !== score.category_name
+    );
+  });
+};
+
 const validateCurrentItem = (
   item: Trace | Thread | undefined,
+  isThread: boolean,
 ): ValidationError[] => {
   const errors: ValidationError[] = [];
 
   if (!item) return errors;
 
-  if (isObjectThread(item) && (item as Thread).status === ThreadStatus.ACTIVE) {
+  if (isThread && (item as Thread).status === ThreadStatus.ACTIVE) {
     errors.push({
       type: "active_thread",
       message:
@@ -97,6 +246,11 @@ export type AnnotationState = {
     id?: string;
   };
   scores: TraceFeedbackScore[];
+  originalComment?: {
+    text?: string;
+    id?: string;
+  };
+  originalScores: TraceFeedbackScore[];
 };
 
 export enum WORKFLOW_STATUS {
@@ -116,6 +270,7 @@ interface SMEFlowContextValue {
   currentIndex: number;
   currentItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
+  isLastUnprocessedItem: boolean;
 
   // Computed state
   processedCount: number;
@@ -134,12 +289,12 @@ interface SMEFlowContextValue {
   handleStartAnnotating: () => void;
   handleNext: () => void;
   handlePrevious: () => void;
-  handleSubmit: () => Promise<void>;
+  handleSubmit: () => void;
   setCurrentIndex: (index: number) => void;
   setCurrentAnnotationState: (state: AnnotationState) => void;
-  updateLocalComment: (text: string) => void;
-  updateLocalFeedbackScore: (update: UpdateFeedbackScoreData) => void;
-  deleteLocalFeedbackScore: (name: string) => void;
+  updateComment: (text: string) => void;
+  updateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
+  deleteFeedbackScore: (name: string) => void;
 
   // Loading states
   isLoading: boolean;
@@ -176,14 +331,22 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   const { mutate: createThreadComment } = useCreateThreadCommentMutation();
   const { mutate: updateTraceComment } = useUpdateTraceCommentMutation();
   const { mutate: updateThreadComment } = useUpdateThreadCommentMutation();
+  const { mutate: deleteTraceComments } = useTraceCommentsBatchDeleteMutation();
+  const { mutate: deleteThreadComments } =
+    useThreadCommentsBatchDeleteMutation();
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
   const { mutate: setThreadFeedbackScore } =
     useThreadFeedbackScoreSetMutation();
+  const { mutate: deleteTraceFeedbackScore } =
+    useTraceFeedbackScoreDeleteMutation();
+  const { mutate: deleteThreadFeedbackScore } =
+    useThreadFeedbackScoreDeleteMutation();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentAnnotationState, setCurrentAnnotationState] =
     useState<AnnotationState>({
       scores: [],
+      originalScores: [],
     });
 
   const {
@@ -255,23 +418,33 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     );
   }, [annotationQueue?.scope, tracesData?.content, threadsData?.content]);
 
-  const { unprocessedItems, processedCount, totalCount, canStartAnnotation } =
-    useMemo(() => {
-      const feedbackScoreNames =
-        annotationQueue?.feedback_definition_names ?? [];
-      const unprocessedItems = queueItems.filter(
-        (item) => !isItemProcessed(item, feedbackScoreNames),
-      );
-      const totalCount = unprocessedItems.length;
-      const processedCount = totalCount - unprocessedItems.length;
+  const {
+    unprocessedItems,
+    processedCount,
+    totalCount,
+    canStartAnnotation,
+    unprocessedIds,
+    allItemIds,
+  } = useMemo(() => {
+    const feedbackScoreNames = annotationQueue?.feedback_definition_names ?? [];
+    const unprocessedItems = queueItems.filter(
+      (item) => !isItemProcessed(item, feedbackScoreNames, currentUserName),
+    );
+    const totalCount = queueItems.length;
+    const processedCount = totalCount - unprocessedItems.length;
 
-      return {
-        unprocessedItems,
-        processedCount,
-        totalCount,
-        canStartAnnotation: unprocessedItems.length > 0,
-      };
-    }, [annotationQueue?.feedback_definition_names, queueItems]);
+    const unprocessedIds = unprocessedItems.map((item) => item.id);
+    const allItemIds = queueItems.map((item) => item.id);
+
+    return {
+      unprocessedItems,
+      processedCount,
+      totalCount,
+      canStartAnnotation: unprocessedItems.length > 0,
+      unprocessedIds,
+      allItemIds,
+    };
+  }, [annotationQueue?.feedback_definition_names, queueItems, currentUserName]);
 
   const currentItem = useMemo(() => {
     return queueItems[currentIndex] || undefined;
@@ -281,12 +454,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
   const handleStartAnnotating = useCallback(() => {
     setCurrentView(WORKFLOW_STATUS.ANNOTATING);
-    if (unprocessedItems.length > 0) {
-      setCurrentIndex(
-        queueItems.map((i) => i.id).indexOf(unprocessedItems[0].id),
-      );
+    if (unprocessedIds.length > 0) {
+      setCurrentIndex(allItemIds.indexOf(unprocessedIds[0]));
     }
-  }, [setCurrentView, unprocessedItems, queueItems]);
+  }, [setCurrentView, unprocessedIds, allItemIds]);
 
   const handleNext = useCallback(() => {
     if (currentIndex < queueItems.length - 1) {
@@ -294,24 +465,63 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     }
   }, [currentIndex, queueItems.length]);
 
+  const getNextUnprocessedIndex = useCallback(
+    (currentIndex: number) => {
+      if (unprocessedIds.length === 0) {
+        return Math.min(currentIndex + 1, queueItems.length - 1);
+      }
+
+      const currentId = queueItems[currentIndex]?.id;
+      const currentUnprocessedIdx = unprocessedIds.indexOf(currentId);
+
+      if (
+        currentUnprocessedIdx === -1 ||
+        currentUnprocessedIdx === unprocessedIds.length - 1
+      ) {
+        const firstUnprocessedId = unprocessedIds[0];
+        return allItemIds.indexOf(firstUnprocessedId);
+      }
+
+      const nextUnprocessedId = unprocessedIds[currentUnprocessedIdx + 1];
+      return allItemIds.indexOf(nextUnprocessedId);
+    },
+    [queueItems, unprocessedIds, allItemIds],
+  );
+
+  const isLastUnprocessedItem = useMemo(() => {
+    if (unprocessedIds.length === 0) return true;
+
+    const currentId = currentItem?.id;
+    if (!currentId) return false;
+
+    const currentUnprocessedIdx = unprocessedIds.indexOf(currentId);
+    return currentUnprocessedIdx === unprocessedIds.length - 1;
+  }, [unprocessedIds, currentItem?.id]);
+
+  const handleNextUnprocessed = useCallback(() => {
+    const nextIndex = getNextUnprocessedIndex(currentIndex);
+    if (nextIndex !== -1) {
+      setCurrentIndex(nextIndex);
+    }
+  }, [currentIndex, getNextUnprocessedIndex]);
+
   const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
   }, [currentIndex]);
 
-  const updateLocalComment = useCallback((text: string) => {
+  const updateComment = useCallback((text: string) => {
     setCurrentAnnotationState((prev) => ({
       ...prev,
       comment: {
-        id: prev.comment?.id,
+        id: prev.comment?.id || prev.originalComment?.id,
         text,
       },
     }));
   }, []);
 
-  // TODO lala check
-  const updateLocalFeedbackScore = useCallback(
+  const updateFeedbackScore = useCallback(
     (update: UpdateFeedbackScoreData) => {
       setCurrentAnnotationState((prev) => {
         const existingScoreIndex = prev.scores.findIndex(
@@ -341,143 +551,174 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     [currentUserName],
   );
 
-  // TODO lala check
-  const deleteLocalFeedbackScore = useCallback((name: string) => {
+  const deleteFeedbackScore = useCallback((name: string) => {
     setCurrentAnnotationState((prev) => ({
       ...prev,
       scores: prev.scores.filter((score) => score.name !== name),
     }));
   }, []);
 
-  const submitComment = useCallback(
-    (comment: { text?: string; id?: string }, item: Trace | Thread) => {
-      if (!comment.text?.trim()) return Promise.resolve();
+  const isThread = annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.THREAD;
 
-      const isNew = !comment.id;
-      const isThread = isObjectThread(item);
+  const submitTraceComment = useCallback(
+    (state: AnnotationState, trace: Trace) => {
+      const operation = getCommentOperation(state);
 
-      if (isThread) {
-        if (isNew) {
-          createThreadComment({
-            threadId: getAnnotationQueueItemId(item),
-            projectId: item.project_id,
-            text: comment.text,
-          });
-        } else {
-          updateThreadComment({
-            commentId: comment.id!,
-            projectId: item.project_id,
-            text: comment.text,
-          });
-        }
-      } else {
-        if (isNew) {
+      switch (operation.type) {
+        case "create":
           createTraceComment({
-            traceId: item.id,
-            text: comment.text,
+            traceId: trace.id,
+            text: operation.text,
           });
-        } else {
+          break;
+
+        case "update":
           updateTraceComment({
-            commentId: comment.id!,
-            traceId: item.id,
-            text: comment.text,
+            commentId: operation.commentId,
+            traceId: trace.id,
+            text: operation.text,
           });
-        }
+          break;
+
+        case "delete":
+          deleteTraceComments({
+            ids: [operation.commentId],
+            traceId: trace.id,
+          });
+          break;
+
+        case "none":
+          break;
       }
     },
-    [
-      createTraceComment,
-      updateTraceComment,
-      createThreadComment,
-      updateThreadComment,
-    ],
+    [createTraceComment, updateTraceComment, deleteTraceComments],
   );
 
-  // Helper function to submit feedback scores
-  const submitFeedbackScores = useCallback(
-    (scores: TraceFeedbackScore[], item: Trace | Thread) => {
-      if (scores.length === 0) return Promise.resolve();
+  const submitThreadComment = useCallback(
+    (state: AnnotationState, thread: Thread) => {
+      const operation = getCommentOperation(state);
 
-      const promises = scores.map((score) => {
-        return new Promise<void>((resolve, reject) => {
-          if ("project_name" in item) {
-            // It's a Trace
-            setTraceFeedbackScore(
-              {
-                traceId: item.id,
-                name: score.name,
-                categoryName: score.category_name,
-                value: score.value,
-                reason: score.reason,
-              },
-              {
-                onSuccess: () => resolve(),
-                onError: (error) => reject(error),
-              },
-            );
-          } else {
-            // It's a Thread
-            setThreadFeedbackScore(
-              {
-                threadId: item.id,
-                projectId: item.project_id,
-                projectName: annotationQueue?.project_name || "",
-                name: score.name,
-                categoryName: score.category_name,
-                value: score.value,
-                reason: score.reason,
-              },
-              {
-                onSuccess: () => resolve(),
-                onError: (error) => reject(error),
-              },
-            );
-          }
+      switch (operation.type) {
+        case "create":
+          createThreadComment({
+            threadId: getAnnotationQueueItemId(thread),
+            projectId: thread.project_id,
+            text: operation.text,
+          });
+          break;
+
+        case "update":
+          updateThreadComment({
+            commentId: operation.commentId,
+            projectId: thread.project_id,
+            text: operation.text,
+          });
+          break;
+
+        case "delete":
+          deleteThreadComments({
+            ids: [operation.commentId],
+            threadId: getAnnotationQueueItemId(thread),
+            projectId: thread.project_id,
+          });
+          break;
+
+        case "none":
+          break;
+      }
+    },
+    [createThreadComment, updateThreadComment, deleteThreadComments],
+  );
+
+  const submitTraceFeedbackScores = useCallback(
+    (state: AnnotationState, trace: Trace) => {
+      const deletedScores = getDeletedScores(state);
+      const changedScores = getChangedScores(state);
+
+      // TODO lala need to wait one by one
+      deletedScores.forEach((score) => {
+        deleteTraceFeedbackScore({
+          traceId: trace.id,
+          name: score.name,
         });
       });
 
-      return Promise.all(promises);
+      changedScores.forEach((score) => {
+        setTraceFeedbackScore({
+          traceId: trace.id,
+          name: score.name,
+          categoryName: score.category_name,
+          value: score.value,
+          reason: score.reason,
+        });
+      });
     },
-    [
-      setTraceFeedbackScore,
-      setThreadFeedbackScore,
-      annotationQueue?.project_name,
-    ],
+    [setTraceFeedbackScore, deleteTraceFeedbackScore],
   );
 
-  const handleSubmit = useCallback(async () => {
+  const submitThreadFeedbackScores = useCallback(
+    (state: AnnotationState, thread: Thread) => {
+      if (!annotationQueue) return;
+
+      const deletedScores = getDeletedScores(state);
+      const changedScores = getChangedScores(state);
+
+      if (deletedScores.length) {
+        deleteThreadFeedbackScore({
+          threadId: thread.id,
+          projectId: thread.project_id,
+          projectName: annotationQueue.project_name,
+          names: deletedScores.map((s) => s.name),
+        });
+      }
+
+      if (changedScores.length) {
+        setThreadFeedbackScore({
+          threadId: thread.id,
+          projectId: thread.project_id,
+          projectName: annotationQueue.project_name,
+          scores: changedScores.map((score) => ({
+            name: score.name,
+            categoryName: score.category_name,
+            value: score.value,
+            reason: score.reason,
+          })),
+        });
+      }
+    },
+    [annotationQueue, setThreadFeedbackScore, deleteThreadFeedbackScore],
+  );
+
+  const handleSubmit = useCallback(() => {
     if (!currentItem || !annotationQueue) return;
 
-    try {
-      // Submit comment if exists
-      if (currentAnnotationState.comment) {
-        await submitComment(currentAnnotationState.comment, currentItem);
-      }
-
-      // Submit feedback scores
-      if (currentAnnotationState.scores.length > 0) {
-        await submitFeedbackScores(currentAnnotationState.scores, currentItem);
-      }
-
-      // TODO lala check if this ast item and we need to move user to complete state
-      // Move to next item or complete
-      handleNext();
-    } catch (error) {
-      console.error("Failed to submit annotation:", error);
-      // Error handling is already done by the mutation hooks (toast notifications)
+    if (isThread) {
+      submitThreadComment(currentAnnotationState, currentItem as Thread);
+      submitThreadFeedbackScores(currentAnnotationState, currentItem as Thread);
+    } else {
+      submitTraceComment(currentAnnotationState, currentItem as Trace);
+      submitTraceFeedbackScores(currentAnnotationState, currentItem as Trace);
     }
+
+    handleNextUnprocessed();
   }, [
     currentItem,
     annotationQueue,
+    isThread,
     currentAnnotationState,
-    submitComment,
-    submitFeedbackScores,
-    handleNext,
+    submitTraceComment,
+    submitThreadComment,
+    submitTraceFeedbackScores,
+    submitThreadFeedbackScores,
+    handleNextUnprocessed,
   ]);
 
   useEffect(() => {
     if (!currentItem) {
-      setCurrentAnnotationState({ scores: [] });
+      setCurrentAnnotationState({
+        scores: [],
+        originalScores: [],
+      });
       return;
     }
 
@@ -486,7 +727,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       currentUserName,
     );
 
-    const feedbackScores = currentItem.feedback_scores || [];
+    const userFeedbackScores = getFeedbackScoresByUser(
+      currentItem.feedback_scores || [],
+      currentUserName,
+      annotationQueue?.feedback_definition_names ?? [],
+    );
 
     setCurrentAnnotationState({
       comment: lastComment
@@ -495,17 +740,41 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
             id: lastComment.id,
           }
         : undefined,
-      scores: feedbackScores,
+      scores: userFeedbackScores,
+      originalComment: lastComment ? cloneDeep(lastComment) : undefined,
+      originalScores: cloneDeep(userFeedbackScores),
     });
-  }, [currentItem, currentUserName]);
+  }, [
+    currentItem,
+    currentUserName,
+    annotationQueue?.feedback_definition_names,
+  ]);
 
   const validationState = useMemo((): ValidationState => {
-    const errors = validateCurrentItem(currentItem);
+    const errors = validateCurrentItem(currentItem, isThread);
+    const hasChanges = hasUnsavedChanges(currentAnnotationState);
     return {
-      canSubmit: errors.length === 0,
+      canSubmit: errors.length === 0 && hasChanges,
       errors,
     };
-  }, [currentItem]);
+  }, [currentItem, isThread, currentAnnotationState]);
+
+  useEffect(() => {
+    if (
+      !isItemsLoading &&
+      queueItems.length > 0 &&
+      unprocessedItems.length === 0 &&
+      currentView !== WORKFLOW_STATUS.COMPLETED
+    ) {
+      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    }
+  }, [
+    isItemsLoading,
+    queueItems.length,
+    unprocessedItems.length,
+    currentView,
+    setCurrentView,
+  ]);
 
   const contextValue: SMEFlowContextValue = {
     // Queue data
@@ -516,6 +785,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     currentIndex,
     currentItem,
     currentView: currentView || WORKFLOW_STATUS.INITIAL,
+    isLastUnprocessedItem,
 
     // Computed state
     processedCount,
@@ -537,9 +807,9 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     handleSubmit,
     setCurrentIndex,
     setCurrentAnnotationState,
-    updateLocalComment,
-    updateLocalFeedbackScore,
-    deleteLocalFeedbackScore,
+    updateComment,
+    updateFeedbackScore,
+    deleteFeedbackScore,
 
     // Loading states
     isLoading,
