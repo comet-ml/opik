@@ -113,7 +113,6 @@ def process_model_data(json_file_path: str) -> Dict[str, Any]:
 
             prefixes_to_remove = old_provider_prefixes + extra_prefixes
 
-            # Remove old provider prefixes
             for prefix in prefixes_to_remove:
                 if clean_model_name.startswith(prefix):
                     clean_model_name = clean_model_name[len(prefix):]
