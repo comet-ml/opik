@@ -115,6 +115,14 @@ class GepaOptimizer(BaseOptimizer):
         candidate_selection_strategy: str = str(kwargs.get("candidate_selection_strategy", "pareto"))
         n_samples: Optional[int] = kwargs.get("n_samples")
 
+        prompt = prompt.copy()
+        if self.project_name:
+            prompt.project_name = self.project_name
+        if prompt.model is None:
+            prompt.model = self.model
+        if not prompt.model_kwargs:
+            prompt.model_kwargs = dict(self.model_kwargs)
+
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
@@ -172,6 +180,13 @@ class GepaOptimizer(BaseOptimizer):
             initial_score = 0.0
             with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
                 try:
+                    baseline_suppress = nullcontext()
+                    try:
+                        from ..reporting_utils import suppress_opik_logs as _suppress_logs
+
+                        baseline_suppress = _suppress_logs()
+                    except Exception:
+                        pass
                     eval_kwargs = dict(
                         prompt=prompt,
                         dataset=dataset,
@@ -181,7 +196,8 @@ class GepaOptimizer(BaseOptimizer):
                         extra_metadata={"phase": "baseline"},
                         verbose=0,
                     )
-                    initial_score = float(self._evaluate_prompt_logged(**eval_kwargs))
+                    with baseline_suppress:
+                        initial_score = float(self._evaluate_prompt_logged(**eval_kwargs))
                     baseline.set_score(initial_score)
                 except Exception:
                     LOGGER.exception("Baseline evaluation failed")
@@ -343,6 +359,8 @@ class GepaOptimizer(BaseOptimizer):
             "selected_candidate_index": best_idx,
             "selected_candidate_gepa_score": val_scores[best_idx] if best_idx < len(val_scores) else None,
             "selected_candidate_opik_score": best_score,
+            "gepa_live_metric_used": True,
+            "gepa_live_metric_call_count": self._gepa_live_metric_calls,
         }
         if experiment_config:
             details["experiment"] = experiment_config
@@ -352,6 +370,22 @@ class GepaOptimizer(BaseOptimizer):
         if self.verbose >= 1:
             gepa_reporting.display_candidate_scores(candidate_rows, verbose=self.verbose)
             gepa_reporting.display_selected_candidate(best_prompt_text, best_score, verbose=self.verbose)
+
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            for idx, row in enumerate(candidate_rows):
+                LOGGER.debug(
+                    "candidate=%s source=%s gepa=%s opik=%s",
+                    idx,
+                    row.get("source"),
+                    row.get("gepa_score"),
+                    row.get("opik_score"),
+                )
+            LOGGER.debug(
+                "selected candidate idx=%s gepa=%s opik=%.4f",
+                best_idx,
+                details.get("selected_candidate_gepa_score"),
+                best_score,
+            )
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

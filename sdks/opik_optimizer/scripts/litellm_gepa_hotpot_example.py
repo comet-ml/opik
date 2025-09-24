@@ -75,20 +75,23 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=60,  # slight budget increase
-    reflection_minibatch_size=5,  # small bump
+    max_metric_calls=60,
+    reflection_minibatch_size=5,
     candidate_selection_strategy="best",
-    n_samples=12,  # test on a few more items
+    n_samples=12,
 )
 
-result.display()
-
-# Debug dumps (GEPA internal + Opik)
 details = result.details or {}
-print("\n--- GEPA Debug ---")
-print("gepa_live_metric_used:", details.get("gepa_live_metric_used"))
-print("gepa_live_metric_call_count:", details.get("gepa_live_metric_call_count"))
-print("num_candidates:", details.get("num_candidates"))
-val_scores = details.get("val_scores")
-if isinstance(val_scores, list):
-    print("val_aggregate_scores:", [f"{s:.4f}" for s in val_scores])
+summary = details.get("candidate_summary", [])
+
+print("\n=== GEPA Candidate Scores ===")
+for idx, row in enumerate(summary):
+    print(
+        f"#{idx:02d} source={row.get('source')} GEPA={row.get('gepa_score')} "
+        f"Opik={row.get('opik_score')}"
+    )
+
+print("\nSelected candidate:")
+print("  index:", details.get("selected_candidate_index"))
+print("  GEPA score:", details.get("selected_candidate_gepa_score"))
+print("  Opik score:", details.get("selected_candidate_opik_score"))
