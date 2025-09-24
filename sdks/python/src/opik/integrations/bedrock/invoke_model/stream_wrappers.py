@@ -18,13 +18,13 @@ __original_streaming_body_read = botocore.response.StreamingBody.read
 
 
 def wrap_invoke_model_response(
-    output: helpers.InvokeModelStreamOutput,
+    output: helpers.InvokeModelOutput,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> helpers.InvokeModelStreamOutput:
-    response_metadata: Dict[str, Any] = output["ResponseMetadata"]
-    streaming_body: botocore.response.StreamingBody = output["body"]
+) -> helpers.InvokeModelOutput:
+    response_metadata = output["ResponseMetadata"]
+    streaming_body = output["body"]
 
     @functools.wraps(__original_streaming_body_read)
     def wrapped_read(self: botocore.response.StreamingBody, *args, **kwargs):  # type: ignore

@@ -5,7 +5,6 @@ from typing_extensions import override
 
 import opik
 import opik.dict_utils as dict_utils
-import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
@@ -84,7 +83,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
-        
+
         # TODO: implement usage extraction. The main difficulty is that invoke_model API is not structured
         # so the token usage exact location and structure may vary for different models.
 
@@ -103,7 +102,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        helpers.InvokeModelStreamOutput,
+        helpers.InvokeModelOutput,
         None,
     ]:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
@@ -132,5 +131,4 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
 
 
 def _get_actual_provider_inside_bedrock(model_id: str) -> Optional[str]:
-   
-   return None
+    return None

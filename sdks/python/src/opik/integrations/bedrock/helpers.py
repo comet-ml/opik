@@ -1,6 +1,7 @@
 from typing import Any, Dict, TypedDict
 
 from botocore import eventstream
+import botocore.response
 
 
 class ConverseStreamOutput(TypedDict):
@@ -8,6 +9,6 @@ class ConverseStreamOutput(TypedDict):
     ResponseMetadata: Dict[str, Any]
 
 
-class InvokeModelStreamOutput(TypedDict):
-    body: eventstream.EventStream
+class InvokeModelOutput(TypedDict):
+    body: botocore.response.StreamingBody
     ResponseMetadata: Dict[str, Any]
