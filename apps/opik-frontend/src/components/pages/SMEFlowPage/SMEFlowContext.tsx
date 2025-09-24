@@ -129,7 +129,7 @@ const hasUnsavedChanges = (
   currentAnnotationState: AnnotationState,
 ): boolean => {
   const hasCommentChanges =
-    currentAnnotationState.comment?.text?.trim() !==
+    (currentAnnotationState.comment?.text?.trim() || "") !==
     (currentAnnotationState.originalComment?.text?.trim() || "");
 
   const hasFeedbackScoreChanges =
@@ -634,7 +634,6 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       const deletedScores = getDeletedScores(state);
       const changedScores = getChangedScores(state);
 
-      // TODO lala need to wait one by one
       deletedScores.forEach((score) => {
         deleteTraceFeedbackScore({
           traceId: trace.id,
