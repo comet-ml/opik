@@ -1,8 +1,11 @@
 from typing import Any, Dict, List
 
+import pytest
 
-from opik_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+pytest.importorskip("gepa", reason="gepa package required for GEPA optimizer tests")
+
+from opik_optimizer.gepa_optimizer import GepaOptimizer  # noqa: E402
+from opik_optimizer.optimization_config.chat_prompt import ChatPrompt  # noqa: E402
 
 
 def test_extract_system_text_prefers_system_message() -> None:
