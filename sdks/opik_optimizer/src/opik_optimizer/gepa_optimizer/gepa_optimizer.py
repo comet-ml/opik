@@ -289,8 +289,11 @@ class GepaOptimizer(BaseOptimizer):
             prompt_variant.project_name = self.project_name
             prompt_variant.model = self.model
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-            filtered_model_kwargs = {k: v for k, v in self.model_kwargs.items() 
-                                   if k not in ['num_prompts_per_round', 'rounds']}
+            filtered_model_kwargs = {
+                k: v
+                for k, v in self.model_kwargs.items()
+                if k not in ["num_prompts_per_round", "rounds"]
+            }
             prompt_variant.model_kwargs = filtered_model_kwargs
 
             eval_kwargs = dict(
@@ -351,8 +354,11 @@ class GepaOptimizer(BaseOptimizer):
         final_prompt.project_name = self.project_name
         final_prompt.model = self.model
         # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-        filtered_model_kwargs = {k: v for k, v in self.model_kwargs.items() 
-                               if k not in ['num_prompts_per_round', 'rounds']}
+        filtered_model_kwargs = {
+            k: v
+            for k, v in self.model_kwargs.items()
+            if k not in ["num_prompts_per_round", "rounds"]
+        }
         final_prompt.model_kwargs = filtered_model_kwargs
 
         final_eval_kwargs = dict(
