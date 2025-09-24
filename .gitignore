@@ -20,7 +20,9 @@ target/
 /apps/opik-python-backend/images/
 
 # Opik opimizer related
+/sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/
+/sdks/opik_optimizer/node_modules
 
 # FE related
 /apps/opik-frontend/dist
@@ -34,6 +36,9 @@ target/
 
 # testing
 /apps/opik-frontend/coverage
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
 
 # Vagrant
 **/.vagrant
