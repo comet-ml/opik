@@ -1,3 +1,4 @@
+import json
 import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Union
@@ -90,6 +91,48 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = "") -> None:
             console.print(Text(prefix) + Text.from_ansi(line))
 
 
+def _format_tool_panel(tool: Dict[str, Any]) -> Panel:
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "")
+    parameters = function_block.get("parameters", {})
+
+    body_lines: List[str] = []
+    if description:
+        body_lines.append(description)
+    if parameters:
+        formatted_schema = json.dumps(parameters, indent=2, sort_keys=True)
+        body_lines.append("\nSchema:\n" + formatted_schema)
+
+    content = Text(
+        "\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold"
+    )
+    return Panel(
+        content,
+        title=f"tool: {name}",
+        title_align="left",
+        border_style="cyan",
+        width=PANEL_WIDTH,
+        padding=(1, 2),
+    )
+
+
+def _display_tools(tools: Optional[List[Dict[str, Any]]]) -> None:
+    if not tools:
+        return
+
+    console = get_console()
+    console.print(Text("\nTools registered:\n", style="bold"))
+    for tool in tools:
+        panel = _format_tool_panel(tool)
+        with console.capture() as capture:
+            console.print(panel)
+        rendered_panel = capture.get()
+        for line in rendered_panel.splitlines():
+            console.print(Text.from_ansi(line))
+    console.print("")
+
+
 def get_link_text(
     pre_text: str,
     link_text: str,
@@ -142,6 +185,7 @@ def display_result(
     best_score: float,
     best_prompt: List[Dict[str, str]],
     verbose: int = 1,
+    tools: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     if verbose < 1:
         return
@@ -199,9 +243,15 @@ def display_result(
         )
     )
 
+    if tools:
+        _display_tools(tools)
+
 
 def display_configuration(
-    messages: List[Dict[str, str]], optimizer_config: Dict[str, Any], verbose: int = 1
+    messages: List[Dict[str, str]],
+    optimizer_config: Dict[str, Any],
+    verbose: int = 1,
+    tools: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Displays the LLM messages and optimizer configuration using Rich panels."""
 
@@ -213,6 +263,7 @@ def display_configuration(
     console.print(Text("> Let's optimize the prompt:\n"))
 
     display_messages(messages)
+    _display_tools(tools)
 
     # Panel for configuration
     console.print(
