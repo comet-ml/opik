@@ -23,7 +23,7 @@ const StartPreference: React.FC = () => {
         <OnboardingStep.AnswerCard option={OPTIONS.TRACE_APP} />
 
         <Link
-          to="/$workspaceName/prompts"
+          to="/$workspaceName/playground"
           params={{ workspaceName }}
           className="w-full"
         >
