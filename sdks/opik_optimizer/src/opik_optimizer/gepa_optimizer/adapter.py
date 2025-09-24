@@ -59,8 +59,12 @@ def make_opik_eval_fn(
     n_samples: Optional[int],
     optimization_id: Optional[str] = None,
     phase_label: Optional[str] = "gepa_adapter_eval",
+    base_prompt: Optional["chat_prompt.ChatPrompt"] = None,
 ) -> Callable[[Any], float]:
     """Create a scoring function for GEPA that evaluates a candidate using Opik metric."""
+
+    # Capture a template prompt that retains user messages, tools, and function wiring.
+    prompt_template = base_prompt.copy() if base_prompt is not None else None
 
     def _eval_fn(candidate: Any, **_: Any) -> float:
         try:
@@ -69,12 +73,17 @@ def make_opik_eval_fn(
             if not sys_text:
                 sys_text = str(candidate)
 
-            cp = chat_prompt.ChatPrompt(
-                messages=[{"role": "system", "content": sys_text}],
-                project_name=getattr(optimizer, "project_name", None),
-                model=optimizer.model,
-                **optimizer.model_kwargs,
-            )
+            if prompt_template is not None:
+                cp = prompt_template.copy()
+                if sys_text:
+                    cp.system = sys_text
+            else:
+                cp = chat_prompt.ChatPrompt(
+                    messages=[{"role": "system", "content": sys_text}],
+                    project_name=getattr(optimizer, "project_name", None),
+                    model=optimizer.model,
+                    **optimizer.model_kwargs,
+                )
             if _GEPA_DEBUG and getattr(optimizer, "verbose", 0) >= 1:
                 snippet = (sys_text or "").replace("\n", " ")[:140]
                 logger.debug(

@@ -693,14 +693,28 @@ def test_make_opik_eval_fn_prefers_logged_eval(monkeypatch: pytest.MonkeyPatch) 
 
         def _evaluate_prompt_logged(self, **kwargs: Any) -> float:
             self._gepa_live_metric_calls += 1
+            prompt = kwargs.get("prompt")
+            assert prompt is not None
+            # Ensure user message is preserved for dataset substitution
+            msgs = prompt.get_messages({"input": "world"})
+            assert any(
+                msg.get("role") == "user" and "world" in msg.get("content", "")
+                for msg in msgs
+            )
             return 5.0
 
         def evaluate_prompt(self, **kwargs: Any) -> float:
             return 0.0
 
     ds = FakeDataset([{"input": "x", "answer": "y"}])
+    seed_prompt = ChatPrompt(system="seed", user="Hello {input}")
     eval_fn = make_opik_eval_fn(
-        DummyOpt(), ds, simple_metric, n_samples=None, optimization_id="opt"
+        DummyOpt(),
+        ds,
+        simple_metric,
+        n_samples=None,
+        optimization_id="opt",
+        base_prompt=seed_prompt,
     )
     got = eval_fn({"system_prompt": "hi"})
     assert got == 5.0

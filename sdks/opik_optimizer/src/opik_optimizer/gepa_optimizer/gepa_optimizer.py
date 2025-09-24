@@ -205,6 +205,7 @@ class GepaOptimizer(BaseOptimizer):
                     n_samples,
                     optimization_id,
                     phase_label="gepa_adapter_eval",
+                    base_prompt=base_cp,
                 )
                 adapter_obj = build_adapter_if_available(
                     gepa, self.model, self.reflection_model, eval_fn
@@ -276,6 +277,7 @@ class GepaOptimizer(BaseOptimizer):
                 n_samples,
                 optimization_id,
                 phase_label="gepa_adapter_eval",
+                base_prompt=base_cp,
             )
             used_live_metric = True
             if _GEPA_DEBUG:
