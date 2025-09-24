@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from contextlib import nullcontext
-from typing import Any, Callable, ContextManager, Dict, List, Optional, Tuple, Union
+from typing import Any, ContextManager
+from collections.abc import Callable
 
 import opik
 from opik import Dataset
@@ -28,8 +29,8 @@ class GepaOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = None,
-        reflection_model: Optional[str] = None,
+        project_name: str | None = None,
+        reflection_model: str | None = None,
         verbose: int = 1,
         **model_kwargs: Any,
     ) -> None:
@@ -45,13 +46,13 @@ class GepaOptimizer(BaseOptimizer):
 
     def _build_data_insts(
         self,
-        dataset_items: List[Dict[str, Any]],
+        dataset_items: list[dict[str, Any]],
         input_key: str,
         output_key: str,
-    ) -> List[OpikDataInst]:
-        data_insts: List[OpikDataInst] = []
+    ) -> list[OpikDataInst]:
+        data_insts: list[OpikDataInst] = []
         for item in dataset_items:
-            additional_context: Dict[str, str] = {}
+            additional_context: dict[str, str] = {}
             metadata = item.get("metadata") or {}
             if isinstance(metadata, dict):
                 context_value = metadata.get("context")
@@ -85,7 +86,7 @@ class GepaOptimizer(BaseOptimizer):
             updated.system = system_text
         return updated
 
-    def _infer_dataset_keys(self, dataset: Dataset) -> Tuple[str, str]:
+    def _infer_dataset_keys(self, dataset: Dataset) -> tuple[str, str]:
         items = dataset.get_items(1)
         if not items:
             return "text", "label"
@@ -103,9 +104,9 @@ class GepaOptimizer(BaseOptimizer):
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
-        dataset: Union[str, Dataset],
-        metric: Callable[[Dict[str, Any], str], ScoreResult],
-        experiment_config: Optional[Dict[str, Any]] = None,
+        dataset: str | Dataset,
+        metric: Callable[[dict[str, Any], str], ScoreResult],
+        experiment_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         if isinstance(dataset, str):
@@ -117,7 +118,7 @@ class GepaOptimizer(BaseOptimizer):
         candidate_selection_strategy: str = str(
             kwargs.get("candidate_selection_strategy", "pareto")
         )
-        n_samples: Optional[int] = kwargs.get("n_samples")
+        n_samples: int | None = kwargs.get("n_samples")
 
         prompt = prompt.copy()
         if self.project_name:
@@ -140,8 +141,8 @@ class GepaOptimizer(BaseOptimizer):
 
         base_prompt = prompt.copy()
 
-        opt_id: Optional[str] = None
-        ds_id: Optional[str] = getattr(dataset, "id", None)
+        opt_id: str | None = None
+        ds_id: str | None = getattr(dataset, "id", None)
 
         opik_client = opik.Opik(project_name=self.project_name)
 
@@ -228,7 +229,7 @@ class GepaOptimizer(BaseOptimizer):
             except Exception as exc:  # pragma: no cover
                 raise ImportError("gepa package is required for GepaOptimizer") from exc
 
-            kwargs_gepa: Dict[str, Any] = {
+            kwargs_gepa: dict[str, Any] = {
                 "seed_candidate": {"system_prompt": seed_prompt_text},
                 "trainset": data_insts,
                 "valset": data_insts,
@@ -266,12 +267,12 @@ class GepaOptimizer(BaseOptimizer):
         # Rescoring & result assembly
         # ------------------------------------------------------------------
 
-        candidates: List[Dict[str, str]] = getattr(gepa_result, "candidates", []) or []
-        val_scores: List[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
+        candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
+        val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
 
-        rescored: List[float] = []
-        candidate_rows: List[Dict[str, Any]] = []
-        history: List[Dict[str, Any]] = []
+        rescored: list[float] = []
+        candidate_rows: list[dict[str, Any]] = []
+        history: list[dict[str, Any]] = []
 
         for idx, candidate in enumerate(candidates):
             candidate_prompt = self._extract_system_text_from_candidate(
@@ -364,7 +365,7 @@ class GepaOptimizer(BaseOptimizer):
             except Exception:
                 LOGGER.debug("Final evaluation failed", exc_info=True)
 
-        per_item_scores: List[Dict[str, Any]] = []
+        per_item_scores: list[dict[str, Any]] = []
         try:
             analysis_prompt = final_prompt.copy()
             agent_cls = create_litellm_agent_class(analysis_prompt)
@@ -390,7 +391,7 @@ class GepaOptimizer(BaseOptimizer):
         except Exception:
             LOGGER.debug("Per-item diagnostics failed", exc_info=True)
 
-        details: Dict[str, Any] = {
+        details: dict[str, Any] = {
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
             "optimizer": self.__class__.__name__,
@@ -471,7 +472,7 @@ class GepaOptimizer(BaseOptimizer):
         return "You are a helpful assistant."
 
     def _extract_system_text_from_candidate(
-        self, candidate: Dict[str, Any], fallback: str
+        self, candidate: dict[str, Any], fallback: str
     ) -> str:
         for key in ("system_prompt", "system", "prompt"):
             value = candidate.get(key)
@@ -483,12 +484,12 @@ class GepaOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
-        metric: Callable[[Dict[str, Any], str], ScoreResult],
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict[str, Any]] = None,
-        optimization_id: Optional[str] = None,
-        extra_metadata: Optional[Dict[str, Any]] = None,
+        metric: Callable[[dict[str, Any], str], ScoreResult],
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
+        extra_metadata: dict[str, Any] | None = None,
         verbose: int = 1,
     ) -> float:
         if prompt.model is None:
@@ -499,7 +500,7 @@ class GepaOptimizer(BaseOptimizer):
         agent_class = create_litellm_agent_class(prompt)
         agent = agent_class(prompt)
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
             raw = agent.invoke(messages)
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: raw.strip()}

@@ -3,7 +3,7 @@ import importlib
 import sys
 import types
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 
 root = Path(__file__).resolve().parents[3]
@@ -103,8 +103,8 @@ def test_simulate_session_with_custom_invoker_detects_wrong_tool() -> None:
 
     def bad_invoker(
         signature: MCPToolSignature,
-        arguments: Dict[str, Any],
-        dataset_item: Dict[str, Any],
+        arguments: dict[str, Any],
+        dataset_item: dict[str, Any],
     ) -> MCPToolCallResult:
         return mcp_simulator_module.ToolCallResult(
             tool_name="other_tool",

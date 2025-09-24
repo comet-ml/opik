@@ -18,7 +18,8 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Sequence
+from typing import Any
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 from opik import track
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -41,11 +42,11 @@ from .mcp_second_pass import (
 logger = logging.getLogger(__name__)
 
 
-ToolCall = Callable[[str, Dict[str, Any]], Any]
-ArgumentAdapter = Callable[[Dict[str, Any], ToolCall], Dict[str, Any]]
+ToolCall = Callable[[str, dict[str, Any]], Any]
+ArgumentAdapter = Callable[[dict[str, Any], ToolCall], dict[str, Any]]
 SummaryBuilder = Callable[[str, Mapping[str, Any]], str]
-FallbackArgumentsProvider = Callable[[Any], Dict[str, Any]]
-FallbackInvoker = Callable[[Dict[str, Any]], str]
+FallbackArgumentsProvider = Callable[[Any], dict[str, Any]]
+FallbackInvoker = Callable[[dict[str, Any]], str]
 
 
 def _default_rate_limit() -> float:
@@ -88,7 +89,7 @@ def ensure_argument_via_resolver(
 ) -> ArgumentAdapter:
     """Return an adapter that resolves ``target_field`` via an MCP tool."""
 
-    def _adapter(arguments: Dict[str, Any], call_tool: ToolCall) -> Dict[str, Any]:
+    def _adapter(arguments: dict[str, Any], call_tool: ToolCall) -> dict[str, Any]:
         prepared = dict(arguments)
         if prepared.get(target_field):
             return prepared
@@ -106,7 +107,7 @@ def ensure_argument_via_resolver(
     return _adapter
 
 
-def extract_tool_arguments(item: Any) -> Dict[str, Any]:
+def extract_tool_arguments(item: Any) -> dict[str, Any]:
     """Best-effort extraction of tool arguments from dataset records.
 
     The helper understands the common structures we use in tests and
@@ -136,7 +137,7 @@ def create_second_pass_coordinator(
     tool_name: str,
     follow_up_template: str,
     *,
-    summary_var_name: Optional[str] = None,
+    summary_var_name: str | None = None,
 ) -> MCPSecondPassCoordinator:
     summary_var = create_summary_var(summary_var_name or f"{tool_name}_summary")
     follow_up_builder = make_follow_up_builder(follow_up_template)
@@ -155,7 +156,7 @@ def make_follow_up_builder(template: str) -> FollowUpBuilder:
     template can stay simple (e.g. ``"Use the summary: {summary}"``).
     """
 
-    def _builder(dataset_item: Dict[str, Any], summary: str) -> Optional[str]:
+    def _builder(dataset_item: dict[str, Any], summary: str) -> str | None:
         user_query = extract_user_query(dataset_item) or ""
         rendered = template.format(summary=summary, user_query=user_query).strip()
         return rendered or None
@@ -163,10 +164,10 @@ def make_follow_up_builder(template: str) -> FollowUpBuilder:
     return _builder
 
 
-def make_similarity_metric(name: str) -> Callable[[Dict[str, Any], str], ScoreResult]:
+def make_similarity_metric(name: str) -> Callable[[dict[str, Any], str], ScoreResult]:
     """Return a Levenshtein-ratio style metric closure for demos."""
 
-    def _metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    def _metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         reference = (dataset_item.get("reference_answer") or "").strip()
         if not reference:
             return ScoreResult(
@@ -211,14 +212,14 @@ def load_manifest_tool_signature(
     tool_name: str,
     *,
     logger: logging.Logger = logger,
-) -> "ToolSignature":
+) -> ToolSignature:
     signature = load_tool_signature_from_manifest(manifest, tool_name)
     logger.debug("Loaded signature for %s", tool_name)
     return signature
 
 
 def dump_signature_artifact(
-    signature: "ToolSignature",
+    signature: ToolSignature,
     artifacts_dir: Path | str,
     filename: str,
     *,
@@ -250,8 +251,8 @@ def apply_tool_entry_from_prompt(
     signature: ToolSignature,
     prompt: Any,
     default_entry: Mapping[str, Any],
-) -> Dict[str, Any]:
-    tool_entry: Dict[str, Any] = copy.deepcopy(dict(default_entry))
+) -> dict[str, Any]:
+    tool_entry: dict[str, Any] = copy.deepcopy(dict(default_entry))
     prompt_tools = getattr(prompt, "tools", None)
     if prompt_tools:
         tool_entry = copy.deepcopy(dict(prompt_tools[0]))
@@ -281,10 +282,10 @@ def preview_dataset_tool_invocation(
     tool_name: str,
     dataset: Any,
     logger: logging.Logger = logger,
-    argument_adapter: Optional[ArgumentAdapter] = None,
-    resolver_manifest: Optional[MCPManifest] = None,
+    argument_adapter: ArgumentAdapter | None = None,
+    resolver_manifest: MCPManifest | None = None,
     preview_chars: int = 200,
-) -> Optional[str]:
+) -> str | None:
     """Execute a best-effort preview tool call using a dataset sample."""
 
     resolver_manifest = resolver_manifest or manifest
@@ -305,11 +306,11 @@ def preview_dataset_tool_invocation(
         logger.warning("No sample arguments available for preview.")
         return None
 
-    def _resolver_call(name: str, payload: Dict[str, Any]) -> Any:
+    def _resolver_call(name: str, payload: dict[str, Any]) -> Any:
         with suppress_mcp_stdout(logger):
             return call_tool_from_manifest(resolver_manifest, name, payload)
 
-    prepared_args: Dict[str, Any] = dict(sample_args)
+    prepared_args: dict[str, Any] = dict(sample_args)
     if argument_adapter:
         prepared_args = argument_adapter(sample_args, _resolver_call)
 
@@ -322,7 +323,7 @@ def preview_dataset_tool_invocation(
     )
 
 
-def create_summary_var(name: str) -> ContextVar[Optional[str]]:
+def create_summary_var(name: str) -> ContextVar[str | None]:
     """Return a ``ContextVar`` used to share tool summaries."""
 
     return ContextVar(name, default=None)
@@ -339,10 +340,10 @@ class MCPToolInvocation:
 
     manifest: MCPManifest
     tool_name: str
-    summary_handler: Optional[MCPSecondPassCoordinator] = None
-    summary_builder: Optional[SummaryBuilder] = None
-    argument_adapter: Optional[ArgumentAdapter] = None
-    preview_label: Optional[str] = None
+    summary_handler: MCPSecondPassCoordinator | None = None
+    summary_builder: SummaryBuilder | None = None
+    argument_adapter: ArgumentAdapter | None = None
+    preview_label: str | None = None
     preview_chars: int = 160
     rate_limit_sleep: float = DEFAULT_MCP_RATELIMIT_SLEEP
     _logger: logging.Logger = field(default_factory=lambda: logger)
@@ -351,7 +352,7 @@ class MCPToolInvocation:
         return self.invoke(arguments)
 
     def invoke(self, arguments: Mapping[str, Any]) -> str:
-        def call_tool(name: str, payload: Dict[str, Any]) -> Any:
+        def call_tool(name: str, payload: dict[str, Any]) -> Any:
             if self.rate_limit_sleep > 0:
                 time.sleep(self.rate_limit_sleep)
             with suppress_mcp_stdout(self._logger):
@@ -455,13 +456,13 @@ class MCPExecutionConfig:
     coordinator: MCPSecondPassCoordinator
     tool_name: str
     fallback_arguments: FallbackArgumentsProvider = extract_tool_arguments
-    fallback_invoker: Optional[FallbackInvoker] = None
+    fallback_invoker: FallbackInvoker | None = None
     allow_tool_use_on_second_pass: bool = False
 
 
 def preview_second_pass(
     prompt: Any,
-    dataset_item: Dict[str, Any],
+    dataset_item: dict[str, Any],
     coordinator: MCPSecondPassCoordinator,
     agent_factory: Callable[[Any], Any],
 ) -> None:

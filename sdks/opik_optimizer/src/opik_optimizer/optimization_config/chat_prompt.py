@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any
+from collections.abc import Callable
 
 import copy
 
@@ -10,7 +11,7 @@ from opik import track
 class Tool(BaseModel):
     name: str = Field(..., description="Name of the tool")
     description: str = Field(..., description="Description of the tool")
-    parameters: Dict[str, Any] = Field(
+    parameters: dict[str, Any] = Field(
         ..., description="JSON Schema defining the input parameters for the tool"
     )
 
@@ -33,14 +34,14 @@ class ChatPrompt:
     def __init__(
         self,
         name: str = "chat-prompt",
-        system: Optional[str] = None,
-        user: Optional[str] = None,
-        messages: Optional[List[Dict[str, str]]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        function_map: Optional[Dict[str, Callable]] = None,
-        model: Optional[str] = None,
-        invoke: Optional[Callable] = None,
-        project_name: Optional[str] = "Default Project",
+        system: str | None = None,
+        user: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        function_map: dict[str, Callable] | None = None,
+        model: str | None = None,
+        invoke: Callable | None = None,
+        project_name: str | None = "Default Project",
         **model_kwargs: Any,
     ) -> None:
         if system is None and user is None and messages is None:
@@ -97,8 +98,8 @@ class ChatPrompt:
 
     def get_messages(
         self,
-        dataset_item: Optional[Dict[str, str]] = None,
-    ) -> List[Dict[str, str]]:
+        dataset_item: dict[str, str] | None = None,
+    ) -> list[dict[str, str]]:
         # This is a copy, so we can alter the messages:
         messages = self._standardize_prompts()
 
@@ -113,8 +114,8 @@ class ChatPrompt:
                         )
         return messages
 
-    def _standardize_prompts(self, **kwargs: Any) -> List[Dict[str, str]]:
-        standardize_messages: List[Dict[str, str]] = []
+    def _standardize_prompts(self, **kwargs: Any) -> list[dict[str, str]]:
+        standardize_messages: list[dict[str, str]] = []
 
         if self.system is not None:
             standardize_messages.append({"role": "system", "content": self.system})
@@ -128,13 +129,13 @@ class ChatPrompt:
 
         return copy.deepcopy(standardize_messages)
 
-    def to_dict(self) -> Dict[str, Union[str, List[Dict[str, str]]]]:
+    def to_dict(self) -> dict[str, str | list[dict[str, str]]]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
 
         Returns:
             Dict containing the serializable representation of this ChatPrompt
         """
-        retval: Dict[str, Union[str, List[Dict[str, str]]]] = {}
+        retval: dict[str, str | list[dict[str, str]]] = {}
         if self.system is not None:
             retval["system"] = self.system
         if self.user is not None:
@@ -164,7 +165,7 @@ class ChatPrompt:
             **model_kwargs,
         )
 
-    def set_messages(self, messages: List[Dict[str, Any]]) -> None:
+    def set_messages(self, messages: list[dict[str, Any]]) -> None:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
@@ -172,7 +173,7 @@ class ChatPrompt:
     # TODO(opik): remove this stop-gap once MetaPromptOptimizer supports MCP.
     # Provides a second-pass flow so tool results can be appended before
     # rerunning the model.
-    def with_messages(self, messages: List[Dict[str, Any]]) -> "ChatPrompt":
+    def with_messages(self, messages: list[dict[str, Any]]) -> "ChatPrompt":
         cloned = self.copy()
         cloned.set_messages(messages)
         return cloned
@@ -182,11 +183,11 @@ class ChatPrompt:
         cls,
         obj: Any,
         *,
-        strict: Optional[bool] = None,
-        from_attributes: Optional[bool] = None,
-        context: Optional[Any] = None,
-        by_alias: Optional[bool] = None,
-        by_name: Optional[bool] = None,
+        strict: bool | None = None,
+        from_attributes: bool | None = None,
+        context: Any | None = None,
+        by_alias: bool | None = None,
+        by_name: bool | None = None,
     ) -> "ChatPrompt":
         """Custom validation method to handle nested objects during deserialization."""
         return ChatPrompt(

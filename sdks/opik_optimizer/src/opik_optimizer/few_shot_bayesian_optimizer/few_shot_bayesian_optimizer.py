@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any
+from collections.abc import Callable
 
 import json
 import logging
@@ -56,7 +57,7 @@ Respond only with the JSON object. Do not include any explanation or extra text.
 
 
 class FewShotPromptTemplate(BaseModel):
-    message_list_with_placeholder: List[Dict[str, str]]
+    message_list_with_placeholder: list[dict[str, str]]
     example_template: str
 
 
@@ -119,10 +120,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _call_model(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         seed: int,
-        model_kwargs: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        model_kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Args:
             model: The model to use for the call
@@ -159,8 +160,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return response
 
     def _split_dataset(
-        self, dataset: List[Dict[str, Any]], train_ratio: float
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        self, dataset: list[dict[str, Any]], train_ratio: float
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
         Split the dataset into training and validation sets.
 
@@ -194,7 +195,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         model: str,
         prompt: chat_prompt.ChatPrompt,
-        few_shot_examples: List[Dict[str, Any]],
+        few_shot_examples: list[dict[str, Any]],
     ) -> FewShotPromptTemplate:
         """
         Generate a few-shot prompt template that can be used to insert examples into the prompt.
@@ -215,7 +216,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "examples": few_shot_examples,
         }
 
-        messages: List[Dict[str, str]] = [
+        messages: list[dict[str, str]] = [
             {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE},
             {"role": "user", "content": json.dumps(user_message)},
         ]
@@ -244,9 +245,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         metric: Callable,
         baseline_score: float,
         n_trials: int = 10,
-        optimization_id: Optional[str] = None,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        optimization_id: str | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
@@ -490,9 +491,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset: Dataset,
         metric: Callable,
         n_trials: int = 10,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        agent_class: type[OptimizableAgent] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
     ) -> optimization_result.OptimizationResult:
         """
         Args:
@@ -616,10 +617,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        optimization_id: Optional[str] = None,
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> float:
         """
@@ -675,14 +676,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _build_task_from_messages(
         self,
         prompt: chat_prompt.ChatPrompt,
-        messages: List[Dict[str, str]],
-        few_shot_examples: Optional[str] = None,
-    ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+        messages: list[dict[str, str]],
+        few_shot_examples: str | None = None,
+    ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
         agent = self.agent_class(new_prompt)
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """
             Process a single dataset item through the LLM task.
 

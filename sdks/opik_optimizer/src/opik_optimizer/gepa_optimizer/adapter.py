@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any
+from collections.abc import Callable, Iterable
 
 import logging
 
@@ -24,11 +25,11 @@ class OpikDataInst:
 
     input_text: str
     answer: str
-    additional_context: Dict[str, str]
-    opik_item: Dict[str, Any]
+    additional_context: dict[str, str]
+    opik_item: dict[str, Any]
 
 
-def _extract_system_text(candidate: Dict[str, str], fallback: str) -> str:
+def _extract_system_text(candidate: dict[str, str], fallback: str) -> str:
     for key in ("system_prompt", "system", "prompt"):
         value = candidate.get(key)
         if isinstance(value, str) and value.strip():
@@ -52,14 +53,14 @@ def _apply_system_text(
     return updated
 
 
-class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]]):
+class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]):
     """Minimal GEPA adapter that routes evaluation through Opik's metric."""
 
     def __init__(
         self,
         base_prompt: chat_prompt.ChatPrompt,
         optimizer: Any,
-        metric: Callable[[Dict[str, Any], str], Any],
+        metric: Callable[[dict[str, Any], str], Any],
         system_fallback: str,
     ) -> None:
         self._base_prompt = base_prompt
@@ -69,19 +70,19 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
 
     def evaluate(
         self,
-        batch: List[OpikDataInst],
-        candidate: Dict[str, str],
+        batch: list[OpikDataInst],
+        candidate: dict[str, str],
         capture_traces: bool = False,
-    ) -> EvaluationBatch[Dict[str, Any], Dict[str, Any]]:
+    ) -> EvaluationBatch[dict[str, Any], dict[str, Any]]:
         system_text = _extract_system_text(candidate, self._system_fallback)
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
         agent_class = create_litellm_agent_class(prompt_variant)
         agent = agent_class(prompt_variant)
 
-        outputs: List[Dict[str, Any]] = []
-        scores: List[float] = []
-        trajectories: List[Dict[str, Any]] | None = [] if capture_traces else None
+        outputs: list[dict[str, Any]] = []
+        scores: list[float] = []
+        trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
 
         for inst in batch:
             dataset_item = inst.opik_item
@@ -118,14 +119,14 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, Dict[str, Any], Dict[str, Any]])
 
     def make_reflective_dataset(
         self,
-        candidate: Dict[str, str],
-        eval_batch: EvaluationBatch[Dict[str, Any], Dict[str, Any]],
-        components_to_update: List[str],
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        candidate: dict[str, str],
+        eval_batch: EvaluationBatch[dict[str, Any], dict[str, Any]],
+        components_to_update: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
         components = components_to_update or ["system_prompt"]
         trajectories = eval_batch.trajectories or []
 
-        def _records() -> Iterable[Dict[str, Any]]:
+        def _records() -> Iterable[dict[str, Any]]:
             for traj in trajectories:
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")

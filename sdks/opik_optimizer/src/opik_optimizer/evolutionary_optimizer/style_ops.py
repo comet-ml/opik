@@ -1,4 +1,4 @@
-from typing import Optional, Dict, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any
 
 import logging
 
@@ -19,7 +19,7 @@ class StyleOps:
 
     def _infer_output_style_from_dataset(
         self, dataset: opik.Dataset, prompt: chat_prompt.ChatPrompt, n_examples: int = 5
-    ) -> Optional[str]:
+    ) -> str | None:
         """Analyzes dataset examples to infer the desired output style using the LLM."""
         with reporting.infer_output_style(
             verbose=self.verbose
@@ -42,17 +42,17 @@ class StyleOps:
 
             if len(items_to_process) < min(n_examples, 2):
                 report_infer_output_style.error(
-                    f"Not enough dataset items (found {len(items_to_process)}) to reliably infer output style. Need at least {min(n_examples,2)}."
+                    f"Not enough dataset items (found {len(items_to_process)}) to reliably infer output style. Need at least {min(n_examples, 2)}."
                 )
                 return None
 
             examples_str = ""
             for i, item_content in enumerate(items_to_process):
-                filtered_content: Dict[str, str] = {
+                filtered_content: dict[str, str] = {
                     x: y for x, y in item_content.items() if x != "id"
                 }
                 examples_str += (
-                    f"Example {i+1}:\nDataset Item:\n{filtered_content}\n---\n"
+                    f"Example {i + 1}:\nDataset Item:\n{filtered_content}\n---\n"
                 )
 
             user_prompt_for_style_inference = evo_prompts.style_inference_user_prompt(

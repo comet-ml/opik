@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any
+from collections.abc import Callable, Mapping
 
 from .mcp import ToolSignature, validate_tool_arguments
 
@@ -21,20 +22,20 @@ class SimulationReport:
     dataset_id: str
     expected_tool: str
     tool_called: bool
-    called_tool: Optional[str]
+    called_tool: str | None
     arguments_valid: bool
     score: float
     response: Any
-    failure_reason: Optional[str]
+    failure_reason: str | None
 
 
-InvokeFn = Callable[[ToolSignature, Mapping[str, Any], Dict[str, Any]], ToolCallResult]
+InvokeFn = Callable[[ToolSignature, Mapping[str, Any], dict[str, Any]], ToolCallResult]
 
 
 def simulate_session(
-    signature_map: Dict[str, ToolSignature],
-    dataset_item: Dict[str, Any],
-    invoke_tool: Optional[InvokeFn] = None,
+    signature_map: dict[str, ToolSignature],
+    dataset_item: dict[str, Any],
+    invoke_tool: InvokeFn | None = None,
 ) -> SimulationReport:
     """Simulate a tool invocation for ``dataset_item`` using ``signature_map``.
 

@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List
+from typing import Any
+from collections.abc import Callable
 
 from opik.evaluation.metrics import (
     AnswerRelevance,
@@ -17,7 +18,7 @@ class BenchmarkDatasetConfig(BaseModel):
 
     name: str
     display_name: str
-    metrics: List[Callable]
+    metrics: list[Callable]
 
 
 class BenchmarkProjectConfig(BaseModel):
@@ -28,7 +29,7 @@ class BenchmarkProjectConfig(BaseModel):
 
 class BenchmarkOptimizerConfig(BaseModel):
     class_name: str
-    params: Dict[str, Any]
+    params: dict[str, Any]
 
 
 class BenchmarkExperimentConfig(BaseModel):
@@ -37,21 +38,21 @@ class BenchmarkExperimentConfig(BaseModel):
     model_name: str
     timestamp: str
     test_mode: bool
-    environment: Dict[str, Any]
-    parameters: Dict[str, Any]
-    metrics: List[str]
+    environment: dict[str, Any]
+    parameters: dict[str, Any]
+    metrics: list[str]
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
 
 
-def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return Equals().score(reference=dataset_item["answer"], output=llm_output)
 
 
 def create_answer_relevance_metric(name_input_col: str) -> Callable:
-    def answer_relevance(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    def answer_relevance(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return AnswerRelevance(require_context=False).score(
             input=dataset_item[name_input_col], output=llm_output
         )
@@ -60,7 +61,7 @@ def create_answer_relevance_metric(name_input_col: str) -> Callable:
 
 
 def create_context_precision(name_input_col: str) -> Callable:
-    def context_precision(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    def context_precision(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return ContextPrecision().score(
             input=dataset_item[name_input_col], output=llm_output
         )
@@ -69,7 +70,7 @@ def create_context_precision(name_input_col: str) -> Callable:
 
 
 def create_context_recall(name_input_col: str) -> Callable:
-    def context_recall(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    def context_recall(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return ContextRecall().score(
             input=dataset_item[name_input_col], output=llm_output
         )
@@ -77,7 +78,7 @@ def create_context_recall(name_input_col: str) -> Callable:
     return context_recall
 
 
-def hallucination(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def hallucination(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return Hallucination().score(input=dataset_item["question"], output=llm_output)
 
 
@@ -128,7 +129,7 @@ DATASET_CONFIG = {
     ),
 }
 
-OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
+OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
     "few_shot": BenchmarkOptimizerConfig(
         class_name="FewShotBayesianOptimizer",
         params={

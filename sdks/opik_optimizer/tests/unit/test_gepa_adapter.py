@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -44,7 +44,7 @@ def test_adapter_evaluate_uses_metric(
         lambda _prompt: lambda prompt: DummyAgent(prompt),
     )
 
-    def metric(dataset_item: Dict[str, Any], llm_output: str) -> DummyMetricResult:
+    def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
         expected = str(dataset_item.get("answer", ""))
         score = 1.0 if expected and expected in llm_output else 0.0
         return DummyMetricResult(score)

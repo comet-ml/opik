@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 import sys
 import types
@@ -32,26 +33,26 @@ if "opik" not in sys.modules:
         def __init__(self, name: str) -> None:
             self.name = name
             self.id = name
-            self._items: List[Dict[str, Any]] = []
+            self._items: list[dict[str, Any]] = []
 
-        def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
+        def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
             if nb_samples is None:
                 return [dict(item) for item in self._items]
             return [dict(item) for item in self._items[:nb_samples]]
 
-        def insert(self, data: List[Dict[str, Any]]) -> None:
+        def insert(self, data: list[dict[str, Any]]) -> None:
             for item in data:
                 current = dict(item)
                 current.setdefault("id", f"{self.name}-{len(self._items)}")
                 self._items.append(current)
 
-        def copy(self) -> "_Dataset":
+        def copy(self) -> _Dataset:
             copied = _Dataset(self.name)
             copied._items = [dict(item) for item in self._items]
             return copied
 
     class Opik:
-        _DATASETS: Dict[str, _Dataset] = {}
+        _DATASETS: dict[str, _Dataset] = {}
 
         def get_or_create_dataset(self, name: str) -> _Dataset:
             if name not in self._DATASETS:
@@ -66,7 +67,7 @@ if "opik" not in sys.modules:
             name: str,
             value: float,
             reason: str,
-            metadata: Optional[Dict[str, Any]] = None,
+            metadata: dict[str, Any] | None = None,
         ) -> None:
             self.name = name
             self.value = value
