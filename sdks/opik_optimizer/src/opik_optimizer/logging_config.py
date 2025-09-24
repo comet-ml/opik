@@ -1,18 +1,15 @@
-"""Rich logging configuration for opik_optimizer."""
-
-from __future__ import annotations
-
 import logging
 import os
-from typing import Union
+from typing import Union, Optional
 
 from rich.logging import RichHandler
 
 DEFAULT_LOG_FORMAT = "%(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# Store configured state to prevent reconfiguration
 _logging_configured = False
-_configured_level: int | None = None
+_configured_level: Optional[int] = None
 
 
 def _coerce_level(level: Union[int, str]) -> int:
@@ -26,8 +23,9 @@ def _coerce_level(level: Union[int, str]) -> int:
     if normalized.isdigit():
         return int(normalized)
 
-    if normalized in logging._nameToLevel:  # type: ignore[attr-defined]
-        return logging._nameToLevel[normalized]  # type: ignore[attr-defined]
+    level_value = getattr(logging, normalized, None)
+    if isinstance(level_value, int):
+        return level_value
 
     raise ValueError(
         f"Unknown log level '{level}'. Expected standard logging level name or integer."
@@ -40,8 +38,15 @@ def setup_logging(
     date_format: str = DEFAULT_DATE_FORMAT,
     force: bool = False,
 ) -> None:
-    """Configure logging for the opik_optimizer package using Rich."""
+    """
+    Configures logging for the opik_optimizer package using rich.
 
+    Args:
+        level: The desired logging level (e.g., logging.DEBUG, logging.INFO, logging.WARNING).
+        format_string: The format string for log messages.
+        date_format: The format string for the date/time in log messages.
+        force: If True, reconfigure logging even if already configured.
+    """
     env_level = os.getenv("OPIK_LOG_LEVEL")
     target_level = _coerce_level(env_level if env_level is not None else level)
 
@@ -51,29 +56,37 @@ def setup_logging(
     )
 
     if _logging_configured and not should_reconfigure:
+        # Use logger after getting it
         return
 
+    # Configure opik_optimizer package logger
     package_logger = logging.getLogger("opik_optimizer")
 
+    # Avoid adding handlers repeatedly if force=True replaces them
     if not package_logger.handlers or should_reconfigure:
+        # Remove existing handlers if forcing re-configuration
         if package_logger.handlers:
             for handler in package_logger.handlers[:]:
                 package_logger.removeHandler(handler)
 
         console_handler = RichHandler(
             rich_tracebacks=True,
-            markup=True,
-            log_time_format=f"[{date_format}]",
+            markup=True,  # Enable rich markup in log messages
+            log_time_format=f"[{date_format}]",  # Apply date format
         )
-        if format_string:
-            console_handler.setFormatter(
-                logging.Formatter(format_string, datefmt=date_format)
-            )
+        # RichHandler manages formatting, so we don't need a separate formatter
+        # formatter = logging.Formatter(format_string, datefmt=date_format)
+        # console_handler.setFormatter(formatter)
         package_logger.addHandler(console_handler)
 
-    package_logger.setLevel(target_level)
-    package_logger.propagate = False
+        if format_string:
+            formatter = logging.Formatter(format_string, datefmt=date_format)
+            console_handler.setFormatter(formatter)
 
+    package_logger.setLevel(target_level)
+    package_logger.propagate = False  # Don't duplicate messages in root logger
+
+    # Set levels for noisy libraries like LiteLLM and httpx
     logging.getLogger("LiteLLM").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
@@ -86,10 +99,11 @@ def setup_logging(
     _logging_configured = True
     _configured_level = target_level
 
+    # Use level name provided by rich handler by default
     package_logger.info(
-        "Opik Agent Optimizer logging configured to level: [bold cyan]%s[/bold cyan]",
-        logging.getLevelName(target_level),
+        f"Opik Agent Optimizer logging configured to level: [bold cyan]{logging.getLevelName(target_level)}[/bold cyan]"
     )
 
 
+# Ensure logger obtained after setup can be used immediately if needed
 logger = logging.getLogger(__name__)

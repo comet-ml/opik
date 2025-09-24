@@ -7,23 +7,38 @@ authors = [
 ]
 license = {text = "Apache 2.0"}
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "datasets",
     "deap>=1.4.3",
     "diskcache",
+    "dspy<3",
+    "ujson",
     "hf_xet",
     "litellm",
+    "mcp>=1.0.0",
     "opik>=1.7.17",
     "optuna",
     "pandas",
     "pydantic",
     "pyrate-limiter",
     "tqdm",
+    "rich",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-conv"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    # "google-adk",
+    "langgraph",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opik_optimizer = ["data/*.json", "data/*.jsonl"]
 
 [project.urls]
 Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"

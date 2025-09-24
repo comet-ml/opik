@@ -3,7 +3,7 @@ import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { Button } from "@/components/ui/button";
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
@@ -16,6 +16,7 @@ import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import RestoreVersionDialog from "./RestoreVersionDialog";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -24,6 +25,8 @@ interface PromptTabInterface {
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openUseThisPrompt, setOpenUseThisPrompt] = useState(false);
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
+  const [versionToRestore, setVersionToRestore] =
+    useState<PromptVersion | null>(null);
 
   const [activeVersionId, setActiveVersionId] = useQueryParam(
     "activeVersionId",
@@ -58,6 +61,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current = editPromptResetKeyRef.current + 1;
     setOpenEditPrompt(value);
+  };
+
+  const handleRestoreVersionClick = (version: PromptVersion) => {
+    setVersionToRestore(version);
   };
 
   useEffect(() => {
@@ -139,6 +146,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             versions={versions || []}
             activeVersionId={activeVersionId || ""}
             onVersionClick={(version) => setActiveVersionId(version.id)}
+            onRestoreVersionClick={handleRestoreVersionClick}
+            latestVersionId={prompt.latest_version?.id}
           />
         </div>
       </div>
@@ -155,6 +164,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        onSetActiveVersionId={setActiveVersionId}
+      />
+
+      <RestoreVersionDialog
+        open={!!versionToRestore}
+        setOpen={(v) => setVersionToRestore(v ? versionToRestore : null)}
+        versionToRestore={versionToRestore}
         onSetActiveVersionId={setActiveVersionId}
       />
     </div>
