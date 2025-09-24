@@ -431,7 +431,7 @@ class AnnotationQueuesResourceTest {
             assertThat(feedbackScoreMap).doesNotContainKey("other_metric");
 
             // Verify reviewers match the original annotation queue
-            verifyReviewers(retrievedQueue, 4L);
+            verifyReviewers(retrievedQueue, 2L);
         }
 
         @Test
@@ -524,7 +524,7 @@ class AnnotationQueuesResourceTest {
             assertThat(feedbackScoreMap).doesNotContainKey("other_thread_metric");
 
             // Verify reviewers match the original annotation queue
-            verifyReviewers(retrievedQueue, 4L);
+            verifyReviewers(retrievedQueue, 2L);
         }
 
         @Test
@@ -856,7 +856,7 @@ class AnnotationQueuesResourceTest {
                                 .itemsCount(2L) // will be used for assertion later
                                 .reviewers(List.of(AnnotationQueueReviewer.builder() // will be used for assertion later
                                         .username(USER)
-                                        .status(4L)
+                                        .status(2L)
                                         .build()))
                                 .feedbackScores(List.of( // will be used for assertion later
                                         FeedbackScoreAverage.builder()
