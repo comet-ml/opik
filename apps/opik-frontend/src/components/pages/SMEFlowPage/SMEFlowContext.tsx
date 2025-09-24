@@ -128,7 +128,6 @@ export interface ValidationState {
 const hasUnsavedChanges = (
   currentAnnotationState: AnnotationState,
 ): boolean => {
-  console.log(123, currentAnnotationState);
   const hasCommentChanges =
     currentAnnotationState.comment?.text?.trim() !==
     (currentAnnotationState.originalComment?.text?.trim() || "");
