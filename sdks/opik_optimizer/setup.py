@@ -19,6 +19,8 @@ setup(
         "datasets",
         "deap>=1.4.3",
         "diskcache",
+        "dspy<3",
+        "ujson",
         "hf_xet",
         "litellm",
         "opik>=1.7.17",
@@ -27,10 +29,16 @@ setup(
         "pydantic",
         "pyrate-limiter",
         "tqdm",
+        "rich",
     ],
-    # dev requirements
+    # dev requirements and optional dependencies
     extras_require={
-        "dev": ["pytest", "pytest-conv"],
+        "dev": [
+            "pytest",
+            "pytest-cov",
+            # "google-adk",
+            "langgraph",
+        ],
     },
     classifiers=[
         "Development Status :: 3 - Alpha",

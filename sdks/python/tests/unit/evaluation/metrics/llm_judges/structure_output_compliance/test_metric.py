@@ -80,7 +80,7 @@ class TestStructuredOutputComplianceMetric:
             FewShotExampleStructuredOutputCompliance(
                 title="Valid Example",
                 output='{"name": "Alice", "age": 25}',
-                schema="User(name: str, age: int)",
+                output_schema="User(name: str, age: int)",
                 score=True,
                 reason="Valid format",
             )

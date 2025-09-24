@@ -1379,7 +1379,9 @@ class DatasetsResourceTest {
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name(null).build(),
                             "name must not be blank"),
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name("").build(),
-                            "name must not be blank"));
+                            "name must not be blank"),
+                    arguments(factory.manufacturePojo(Dataset.class).toBuilder().description("a".repeat(256)).build(),
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest
@@ -2928,7 +2930,11 @@ class DatasetsResourceTest {
                             "name must not be blank"),
                     arguments(
                             factory.manufacturePojo(DatasetUpdate.class).toBuilder().description("").build(),
-                            "description must not be blank"));
+                            "description must not be blank"),
+                    arguments(
+                            factory.manufacturePojo(DatasetUpdate.class).toBuilder().description("a".repeat(256))
+                                    .build(),
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest

@@ -48,6 +48,7 @@ public interface Field {
     String SOURCE_QUERY_PARAM = "source";
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";
+    String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
 
     @JsonValue
     String getQueryParamField();
