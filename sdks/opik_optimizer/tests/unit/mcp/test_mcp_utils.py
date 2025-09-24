@@ -33,7 +33,7 @@ from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (  # noqa
 )
 
 
-from opik_optimizer.utils.mcp import (  # noqa: E402
+from opik_optimizer.mcp_utils.mcp import (  # noqa: E402
     MCPManifest,
     ToolSignature,
     dump_mcp_signature,
@@ -44,8 +44,8 @@ from opik_optimizer.utils.mcp import (  # noqa: E402
     tools_from_signatures,
     validate_tool_arguments,
 )
-from opik_optimizer.utils import mcp_workflow  # noqa: E402
-from opik_optimizer.utils.mcp_workflow import (  # noqa: E402
+from opik_optimizer.mcp_utils import mcp_workflow  # noqa: E402
+from opik_optimizer.mcp_utils.mcp_workflow import (  # noqa: E402
     MCPToolInvocation,
     ensure_argument_via_resolver,
     extract_tool_arguments,
@@ -54,7 +54,7 @@ from opik_optimizer.utils.mcp_workflow import (  # noqa: E402
     make_similarity_metric,
     preview_dataset_tool_invocation,
 )
-from opik_optimizer.utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
+from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
 
 
 def _sample_tool_entry() -> Dict[str, Any]:
@@ -282,7 +282,7 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
         ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
             return []
 
-    caplog.set_level(logging.WARNING, logger="opik_optimizer.utils.mcp_workflow")
+    caplog.set_level(logging.WARNING, logger="opik_optimizer.mcp_utils.mcp_workflow")
     result = preview_dataset_tool_invocation(
         manifest=manifest,
         tool_name="doc_lookup",
@@ -290,7 +290,8 @@ def test_preview_dataset_tool_invocation_handles_empty_dataset(
     )
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
-    assert "No dataset items available for" in out
+    assert "No dataset items available" in out
+    assert "for preview." in out
     assert "preview." in out
 
 
@@ -312,7 +313,7 @@ def test_preview_dataset_tool_invocation_handles_errors(
         ) -> List[Dict[str, Any]]:  # pragma: no cover - signature parity
             raise RuntimeError("boom")
 
-    caplog.set_level(logging.WARNING, logger="opik_optimizer.utils.mcp_workflow")
+    caplog.set_level(logging.WARNING, logger="opik_optimizer.mcp_utils.mcp_workflow")
     result = preview_dataset_tool_invocation(
         manifest=manifest,
         tool_name="doc_lookup",
@@ -320,7 +321,9 @@ def test_preview_dataset_tool_invocation_handles_errors(
     )
     assert result is None
     out = capsys.readouterr().out.replace("\n", " ")
-    assert "Failed to fetch dataset sample" in out
+    assert "Failed to fetch dataset" in out
+    assert "sample" in out
+    assert "for preview:" in out
 
 
 def test_system_prompt_masks_secrets_and_compacts_schema() -> None:

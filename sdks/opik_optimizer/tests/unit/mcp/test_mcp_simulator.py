@@ -28,14 +28,14 @@ if "opik_optimizer.utils" not in sys.modules:
 context_dataset_module = importlib.import_module(
     "opik_optimizer.datasets.context7_eval"
 )
-mcp_module = importlib.import_module("opik_optimizer.utils.mcp")
-mcp_simulator_module = importlib.import_module("opik_optimizer.utils.mcp_simulator")
+mcp_module = importlib.import_module("opik_optimizer.mcp_utils.mcp")
+mcp_simulator_module = importlib.import_module("opik_optimizer.mcp_utils.mcp_simulator")
 
 load_context7_dataset = context_dataset_module.load_context7_dataset
 simulate_session = mcp_simulator_module.simulate_session
 if TYPE_CHECKING:
-    from opik_optimizer.utils.mcp import ToolSignature as MCPToolSignature
-    from opik_optimizer.utils.mcp_simulator import (
+    from opik_optimizer.mcp_utils.mcp import ToolSignature as MCPToolSignature
+    from opik_optimizer.mcp_utils.mcp_simulator import (
         ToolCallResult as MCPToolCallResult,
     )
 else:  # pragma: no cover - typing fallback
