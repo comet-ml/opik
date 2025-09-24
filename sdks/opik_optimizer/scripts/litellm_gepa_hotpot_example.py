@@ -6,7 +6,7 @@ Notes:
 - Makes `dspy` optional; falls back to a no-op search tool if not installed.
 """
 
-from typing import Any, Dict
+from typing import Any
 import os
 import sys
 
@@ -29,7 +29,7 @@ from opik.evaluation.metrics.score_result import ScoreResult  # noqa: E402
 dataset = hotpot_300()
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 

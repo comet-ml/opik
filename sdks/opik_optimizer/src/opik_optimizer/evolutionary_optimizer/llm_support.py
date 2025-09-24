@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import logging
 import os
@@ -34,7 +34,7 @@ class LlmSupport:
     if TYPE_CHECKING:
         model: str
         llm_call_counter: int
-        project_name: Optional[str]
+        project_name: str | None
         disable_litellm_monitoring: bool
         temperature: float
         max_tokens: int
@@ -45,13 +45,13 @@ class LlmSupport:
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         is_reasoning: bool = False,
-        optimization_id: Optional[str] = None,
+        optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response string."""
         # Build base call params
-        llm_config_params: Dict[str, Any] = {
+        llm_config_params: dict[str, Any] = {
             "temperature": getattr(self, "temperature", 0.3),
             "max_tokens": getattr(self, "max_tokens", 1000),
             "top_p": getattr(self, "top_p", 1.0),
@@ -69,7 +69,7 @@ class LlmSupport:
             ) or disable_monitoring_env.lower() in ("1", "true", "yes")
 
             if not disable_monitoring:
-                metadata_for_opik: Dict[str, Any] = {}
+                metadata_for_opik: dict[str, Any] = {}
                 pn = getattr(self, "project_name", None)
                 if pn:
                     metadata_for_opik["project_name"] = pn
@@ -99,7 +99,7 @@ class LlmSupport:
         for attempt in range(max_retries + 1):
             try:
                 logger.debug(
-                    f"Calling model '{self.model}' with messages: {messages}, params: {llm_config_params} (attempt {attempt+1})"
+                    f"Calling model '{self.model}' with messages: {messages}, params: {llm_config_params} (attempt {attempt + 1})"
                 )
                 response = litellm.completion(
                     model=self.model, messages=messages, **llm_config_params

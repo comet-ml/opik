@@ -2,7 +2,7 @@ import logging
 import sys
 import types
 from pathlib import Path
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
 

@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from rich.table import Table
 from rich.text import Text
@@ -102,7 +102,7 @@ def start_gepa_optimization(verbose: int = 1) -> Any:
 
 
 def display_candidate_scores(
-    rows: List[Dict[str, Any]],
+    rows: list[dict[str, Any]],
     *,
     verbose: int = 1,
     title: str = "GEPA Candidate Scores",
@@ -164,9 +164,9 @@ def _format_score(value: Any) -> str:
 
 
 def display_candidate_update(
-    iteration: Optional[int],
+    iteration: int | None,
     phase: str,
-    aggregate: Optional[float],
+    aggregate: float | None,
     prompt_snippet: str,
     *,
     verbose: int = 1,

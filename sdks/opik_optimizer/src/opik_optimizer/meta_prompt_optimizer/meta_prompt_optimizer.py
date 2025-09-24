@@ -3,7 +3,8 @@ import json
 import logging
 import os
 import textwrap
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, cast
+from collections.abc import Callable
 
 import litellm
 import opik
@@ -135,10 +136,10 @@ class MetaPromptOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str,
-        reasoning_model: Optional[str] = None,
+        reasoning_model: str | None = None,
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        num_threads: Optional[int] = None,
+        num_threads: int | None = None,
         verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
@@ -169,7 +170,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             print("num_threads is deprecated; use n_threads instead")
             n_threads = num_threads
         self.num_threads = n_threads
-        self.dataset: Optional[Dataset] = None
+        self.dataset: Dataset | None = None
         self._opik_client = opik_client.get_client_cached()
         self.llm_call_counter = 0
         self.enable_context = enable_context
@@ -184,9 +185,9 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _call_model(
         self,
         project_name: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         is_reasoning: bool = False,
-        optimization_id: Optional[str] = None,
+        optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
         self.llm_call_counter += 1
@@ -216,7 +217,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             }
 
             # Prepare metadata that we want to be part of the LLM call context.
-            metadata_for_opik: Dict[str, Any] = {}
+            metadata_for_opik: dict[str, Any] = {}
             if project_name:
                 metadata_for_opik["project_name"] = (
                     project_name  # Top-level for general use
@@ -278,12 +279,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
         use_full_dataset: bool = True,
-        optimization_id: Optional[str] = None,
-        mcp_config: Optional[MCPExecutionConfig] = None,
+        optimization_id: str | None = None,
+        mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
     ) -> float:
         """
@@ -340,7 +341,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         if optimization_id:
             experiment_config["optimization_id"] = optimization_id
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
@@ -444,10 +445,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
+        agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         mcp_config = kwargs.pop("mcp_config", None)
@@ -561,12 +562,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         *,
         tool_name: str,
         second_pass: MCPSecondPassCoordinator,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
-        fallback_invoker: Optional[Callable[[Dict[str, Any]], str]] = None,
-        fallback_arguments: Optional[Callable[[Any], Dict[str, Any]]] = None,
+        agent_class: type[OptimizableAgent] | None = None,
+        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -615,18 +616,17 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        optimization_id: Optional[str],
+        optimization_id: str | None,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict],
-        n_samples: Optional[int],
+        experiment_config: dict | None,
+        n_samples: int | None,
         auto_continue: bool,
-        mcp_config: Optional[MCPExecutionConfig] = None,
-        candidate_generator: Optional[
-            Callable[..., List[chat_prompt.ChatPrompt]]
-        ] = None,
-        candidate_generator_kwargs: Optional[Dict[str, Any]] = None,
+        mcp_config: MCPExecutionConfig | None = None,
+        candidate_generator: None
+        | (Callable[..., list[chat_prompt.ChatPrompt]]) = None,
+        candidate_generator_kwargs: dict[str, Any] | None = None,
         tool_panel_style: str = "bright_magenta",
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -668,7 +668,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             best_score = initial_score
             best_prompt = current_prompt
-            rounds: List[OptimizationRound] = []
+            rounds: list[OptimizationRound] = []
 
             baseline_reporter.set_score(initial_score)
 
@@ -700,7 +700,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     continue
 
                 # Step 2. Score each candidate prompt
-                prompt_scores: List[Tuple[chat_prompt.ChatPrompt, float]] = []
+                prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
                 for candidate_count, prompt in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
                         verbose=self.verbose
@@ -810,17 +810,17 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_best_prompt: chat_prompt.ChatPrompt,
         current_best_score: float,
         best_prompt_overall: chat_prompt.ChatPrompt,
-        evaluated_candidates: List[Tuple[chat_prompt.ChatPrompt, float]],
+        evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
         previous_best_score: float,
         improvement_this_round: float,
     ) -> OptimizationRound:
         """Create an OptimizationRound object with the current round's data."""
-        generated_prompts_log: List[Dict[str, Any]] = []
+        generated_prompts_log: list[dict[str, Any]] = []
         for prompt, score in evaluated_candidates:
             improvement_vs_prev = self._calculate_improvement(
                 score, previous_best_score
             )
-            tool_entries: List[Any] = []
+            tool_entries: list[Any] = []
             if getattr(prompt, "tools", None):
                 tool_entries = copy.deepcopy(list(prompt.tools or []))
 
@@ -846,14 +846,14 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric: Callable,
-        initial_prompt: List[Dict[str, str]],
-        best_prompt: List[Dict[str, str]],
+        initial_prompt: list[dict[str, str]],
+        best_prompt: list[dict[str, str]],
         best_score: float,
         initial_score: float,
-        rounds: List[OptimizationRound],
-        dataset_id: Optional[str],
-        optimization_id: Optional[str],
-        best_tools: Optional[List[Dict[str, Any]]],
+        rounds: list[OptimizationRound],
+        dataset_id: str | None,
+        optimization_id: str | None,
+        best_tools: list[dict[str, Any]] | None,
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
@@ -923,11 +923,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_prompt: chat_prompt.ChatPrompt,
         best_score: float,
         round_num: int,
-        previous_rounds: List[OptimizationRound],
+        previous_rounds: list[OptimizationRound],
         metric: Callable,
-        optimization_id: Optional[str] = None,
-        project_name: Optional[str] = None,
-    ) -> List[chat_prompt.ChatPrompt]:
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+    ) -> list[chat_prompt.ChatPrompt]:
         """Generate candidate prompts using meta-prompting."""
         with reporting.display_candidate_generation_report(
             self.num_prompts_per_round, verbose=self.verbose
@@ -1028,7 +1028,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
 
                 # Extract and log valid prompts
-                valid_prompts: List[chat_prompt.ChatPrompt] = []
+                valid_prompts: list[chat_prompt.ChatPrompt] = []
                 for item in json_result["prompts"]:
                     if (
                         isinstance(item, dict)
@@ -1084,14 +1084,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_prompt: chat_prompt.ChatPrompt,
         best_score: float,
         round_num: int,
-        previous_rounds: List[OptimizationRound],
+        previous_rounds: list[OptimizationRound],
         metric: Callable,
         tool_segment_id: str,
         tool_name: str,
-        optimization_id: Optional[str] = None,
-        project_name: Optional[str] = None,
+        optimization_id: str | None = None,
+        project_name: str | None = None,
         panel_style: str = "bright_magenta",
-    ) -> List[chat_prompt.ChatPrompt]:
+    ) -> list[chat_prompt.ChatPrompt]:
         segments = {
             segment.segment_id: segment
             for segment in extract_prompt_segments(current_prompt)
@@ -1167,7 +1167,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 candidate_generation_report.set_generated_prompts()
 
-                candidates: List[chat_prompt.ChatPrompt] = []
+                candidates: list[chat_prompt.ChatPrompt] = []
                 for item in prompts_payload:
                     if not isinstance(item, dict):
                         continue
@@ -1200,7 +1200,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             except Exception as exc:
                 raise ValueError(f"Error generating MCP prompt candidates: {exc}")
 
-    def _build_history_context(self, previous_rounds: List[OptimizationRound]) -> str:
+    def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
         """Build context from previous optimization rounds."""
         if not previous_rounds:
             return ""
@@ -1226,7 +1226,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _get_evaluation_subset(
         self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get a random subset of the dataset for evaluation.
 
         Returns:

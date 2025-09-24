@@ -1,5 +1,3 @@
-from typing import Optional, List, Dict
-
 # Centralized prompt templates used by EvolutionaryOptimizer. This file contains
 # only string builders and constants; it has no side effects.
 
@@ -31,7 +29,7 @@ Return ONLY this descriptive string.
 """
 
 
-def semantic_mutation_system_prompt(output_style_guidance: Optional[str]) -> str:
+def semantic_mutation_system_prompt(output_style_guidance: str | None) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -57,7 +55,7 @@ def rephrase_system_prompt() -> str:
     )
 
 
-def fresh_start_system_prompt(output_style_guidance: Optional[str]) -> str:
+def fresh_start_system_prompt(output_style_guidance: str | None) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -69,7 +67,7 @@ def fresh_start_system_prompt(output_style_guidance: Optional[str]) -> str:
     )
 
 
-def variation_system_prompt(output_style_guidance: Optional[str]) -> str:
+def variation_system_prompt(output_style_guidance: str | None) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -105,7 +103,7 @@ Each prompt variation should aim to get the target LLM to produce answers matchi
 """
 
 
-def llm_crossover_system_prompt(output_style_guidance: Optional[str]) -> str:
+def llm_crossover_system_prompt(output_style_guidance: str | None) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -132,7 +130,7 @@ Return a JSON object that is a list of both child prompts. Each child prompt is 
 """
 
 
-def radical_innovation_system_prompt(output_style_guidance: Optional[str]) -> str:
+def radical_innovation_system_prompt(output_style_guidance: str | None) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -146,9 +144,9 @@ Return only the new prompt string, with no preamble or explanation.
 
 
 def llm_crossover_user_prompt(
-    parent1_messages: List[Dict[str, str]],
-    parent2_messages: List[Dict[str, str]],
-    output_style_guidance: Optional[str],
+    parent1_messages: list[dict[str, str]],
+    parent2_messages: list[dict[str, str]],
+    output_style_guidance: str | None,
 ) -> str:
     style = (
         output_style_guidance
@@ -170,7 +168,7 @@ Follow the instructions provided in the system prompt regarding the JSON output 
 """
 
 
-def mutation_strategy_prompts(output_style_guidance: Optional[str]) -> Dict[str, str]:
+def mutation_strategy_prompts(output_style_guidance: str | None) -> dict[str, str]:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -209,9 +207,9 @@ def mutation_strategy_prompts(output_style_guidance: Optional[str]) -> Dict[str,
 
 
 def semantic_mutation_user_prompt(
-    prompt_messages: List[Dict[str, str]],
+    prompt_messages: list[dict[str, str]],
     task_description: str,
-    output_style_guidance: Optional[str],
+    output_style_guidance: str | None,
     strategy_instruction: str,
 ) -> str:
     style = (
@@ -228,8 +226,8 @@ Return only the modified prompt message list, nothing else. Make sure to return 
 
 def radical_innovation_user_prompt(
     task_description: str,
-    output_style_guidance: Optional[str],
-    existing_prompt_messages: List[Dict[str, str]],
+    output_style_guidance: str | None,
+    existing_prompt_messages: list[dict[str, str]],
 ) -> str:
     style = (
         output_style_guidance
@@ -250,7 +248,7 @@ Return only the new prompt list object.
 
 def fresh_start_user_prompt(
     task_description: str,
-    output_style_guidance: Optional[str],
+    output_style_guidance: str | None,
     num_to_generate: int,
 ) -> str:
     style = (
@@ -274,9 +272,9 @@ Your response MUST be a valid JSON list of AI messages. Do NOT include any other
 
 
 def variation_user_prompt(
-    initial_prompt_messages: List[Dict[str, str]],
+    initial_prompt_messages: list[dict[str, str]],
     task_description: str,
-    output_style_guidance: Optional[str],
+    output_style_guidance: str | None,
     num_variations: int,
 ) -> str:
     style = (

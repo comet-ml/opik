@@ -1,7 +1,8 @@
 import os
 import random
 from datetime import datetime
-from typing import Callable, Dict, List, Literal, Optional, Union
+from typing import Literal
+from collections.abc import Callable
 import logging
 
 import dspy
@@ -37,7 +38,7 @@ class MiproOptimizer(BaseOptimizer):
     def __init__(
         self,
         model,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         verbose: int = 1,
         **model_kwargs,
     ):
@@ -54,13 +55,13 @@ class MiproOptimizer(BaseOptimizer):
 
     def evaluate_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: str | Dataset,
         metric: Callable,
         task_config: TaskConfig,
-        prompt: Optional[Union[str, dspy.Module, OptimizationResult]] = None,
+        prompt: str | dspy.Module | OptimizationResult | None = None,
         n_samples: int = 10,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
         verbose: int = 1,
         **kwargs,
     ) -> float:
@@ -238,14 +239,14 @@ class MiproOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: str | Dataset,
         metric: Callable,
         task_config: TaskConfig,
         num_candidates: int = 10,
-        experiment_config: Optional[Dict] = None,
-        num_trials: Optional[int] = 3,
-        n_samples: Optional[int] = 10,
-        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
+        experiment_config: dict | None = None,
+        num_trials: int | None = 3,
+        n_samples: int | None = 10,
+        auto: Literal["light", "medium", "heavy"] | None = "light",
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
@@ -271,15 +272,15 @@ class MiproOptimizer(BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: str | Dataset,
         metric: Callable,
         task_config: TaskConfig,
         num_candidates: int = 10,
-        experiment_config: Optional[Dict] = None,
-        optimization_id: Optional[str] = None,
-        num_trials: Optional[int] = 3,
-        n_samples: Optional[int] = 10,
-        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
+        experiment_config: dict | None = None,
+        optimization_id: str | None = None,
+        num_trials: int | None = 3,
+        n_samples: int | None = 10,
+        auto: Literal["light", "medium", "heavy"] | None = "light",
         **kwargs,
     ) -> OptimizationResult:
         logger.info("Preparing MIPRO optimization...")
@@ -306,11 +307,11 @@ class MiproOptimizer(BaseOptimizer):
         metric,
         task_config,
         num_candidates: int = 10,
-        experiment_config: Optional[Dict] = None,
-        optimization_id: Optional[str] = None,
-        num_trials: Optional[int] = 3,
-        n_samples: Optional[int] = 10,
-        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
+        experiment_config: dict | None = None,
+        optimization_id: str | None = None,
+        num_trials: int | None = 3,
+        n_samples: int | None = 10,
+        auto: Literal["light", "medium", "heavy"] | None = "light",
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:

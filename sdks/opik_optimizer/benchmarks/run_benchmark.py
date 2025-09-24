@@ -1,5 +1,4 @@
 import argparse
-from typing import List, Optional
 
 import benchmark_config
 import benchmark_runner
@@ -11,15 +10,15 @@ DEFAULT_CHECKPOINT_DIR: str = "./benchmark_results"
 
 
 def run_benchmark(
-    demo_datasets: Optional[List[str]] = None,
-    optimizers: Optional[List[str]] = None,
-    models: Optional[List[str]] = None,
+    demo_datasets: list[str] | None = None,
+    optimizers: list[str] | None = None,
+    models: list[str] | None = None,
     max_workers: int = DEFAULT_MAX_WORKERS,
     seed: int = DEFAULT_SEED,
     test_mode: bool = False,
     checkpoint_dir: str = DEFAULT_CHECKPOINT_DIR,
-    retry_failed_run_id: Optional[str] = None,
-    resume_run_id: Optional[str] = None,
+    retry_failed_run_id: str | None = None,
+    resume_run_id: str | None = None,
 ) -> None:
     if demo_datasets is not None and not isinstance(demo_datasets, list):
         raise ValueError("demo_datasets must be a list of strings")

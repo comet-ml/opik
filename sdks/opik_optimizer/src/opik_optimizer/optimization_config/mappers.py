@@ -1,4 +1,5 @@
-from typing import Dict, Callable, Optional, Any, Union
+from typing import Any
+from collections.abc import Callable
 
 EVALUATED_LLM_TASK_OUTPUT = "llm_output"
 
@@ -8,8 +9,8 @@ class Mapper:
 
     def __init__(
         self,
-        name: Optional[str] = None,
-        transform: Optional[Callable[[Any], Any]] = None,
+        name: str | None = None,
+        transform: Callable[[Any], Any] | None = None,
     ):
         if name is not None and transform is not None:
             raise ValueError("Only one of name or transform can be provided")
@@ -27,9 +28,9 @@ class Mapper:
 
 def from_dataset_field(
     *,
-    name: Optional[str] = None,
-    transform: Optional[Callable[[Dict[str, Any]], Any]] = None,
-) -> Union[str, Callable[[Dict[str, Any]], Any]]:
+    name: str | None = None,
+    transform: Callable[[dict[str, Any]], Any] | None = None,
+) -> str | Callable[[dict[str, Any]], Any]:
     if name is not None and transform is not None:
         raise ValueError("Only one of name or transform can be provided")
 
@@ -47,8 +48,8 @@ def from_llm_response_text() -> str:
 
 
 def from_agent_output(
-    *, name: Optional[str] = None, transform: Optional[Callable[[Any], Any]] = None
-) -> Union[str, Callable[[Any], Any]]:
+    *, name: str | None = None, transform: Callable[[Any], Any] | None = None
+) -> str | Callable[[Any], Any]:
     if name is not None and transform is not None:
         raise ValueError("Only one of name or transform can be provided")
 

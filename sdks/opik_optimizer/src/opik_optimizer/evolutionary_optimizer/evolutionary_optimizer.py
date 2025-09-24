@@ -1,7 +1,8 @@
 import json
 import logging
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast, Type, TYPE_CHECKING
+from typing import Any, cast, TYPE_CHECKING
+from collections.abc import Callable
 import sys
 import warnings
 
@@ -95,13 +96,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
         mutation_rate: float = DEFAULT_MUTATION_RATE,
         crossover_rate: float = DEFAULT_CROSSOVER_RATE,
         tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        num_threads: Optional[int] = None,
+        num_threads: int | None = None,
         elitism_size: int = DEFAULT_ELITISM_SIZE,
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
         enable_llm_crossover: bool = DEFAULT_ENABLE_LLM_CROSSOVER,
-        seed: Optional[int] = DEFAULT_SEED,
-        output_style_guidance: Optional[str] = None,
+        seed: int | None = DEFAULT_SEED,
+        output_style_guidance: str | None = None,
         infer_output_style: bool = False,
         verbose: int = 1,
         n_threads: int = DEFAULT_NUM_THREADS,
@@ -162,13 +163,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.infer_output_style = infer_output_style
         self.llm_call_counter = 0
         self._opik_client = opik_client.get_client_cached()
-        self._current_optimization_id: Optional[str] = None
+        self._current_optimization_id: str | None = None
         self._current_generation = 0
-        self._best_fitness_history: List[float] = []
+        self._best_fitness_history: list[float] = []
         self._generations_without_improvement = 0
-        self._current_population: List[Any] = []
+        self._current_population: list[Any] = []
         self._generations_without_overall_improvement = 0
-        self._best_primary_score_history: List[float] = []
+        self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
 
         if self.seed is not None:
@@ -235,7 +236,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def _attach_helper_methods(self) -> None:
         """Bind selected methods from mixin modules onto this instance."""
 
-        def bind(cls: Any, names: List[str]) -> None:
+        def bind(cls: Any, names: list[str]) -> None:
             for name in names:
                 func = getattr(cls, name)
                 setattr(self, name, func.__get__(self, self.__class__))
@@ -368,9 +369,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def _restart_population(
         self,
         hof: tools.HallOfFame,
-        population: List[Any],
+        population: list[Any],
         best_prompt_so_far: chat_prompt.ChatPrompt,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Return a fresh, evaluated population seeded by elites."""
         if self.enable_moo:
             elites = list(hof)
@@ -397,12 +398,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def _run_generation(
         self,
         generation_idx: int,
-        population: List[Any],
+        population: list[Any],
         prompt: chat_prompt.ChatPrompt,
         hof: tools.HallOfFame,
         report: Any,
         best_primary_score_overall: float,
-    ) -> tuple[List[Any], int]:
+    ) -> tuple[list[Any], int]:
         """Execute mating, mutation, evaluation and HoF update."""
         best_gen_score = 0.0
 
@@ -468,7 +469,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         return offspring, len(invalid)
 
-    def _population_best_score(self, population: List[Any]) -> float:
+    def _population_best_score(self, population: list[Any]) -> float:
         """Return highest primary-objective score among *valid* individuals."""
         valid_scores = [
             ind.fitness.values[0] for ind in population if ind.fitness.valid
@@ -480,10 +481,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
+        agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -520,7 +521,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
-        opik_optimization_run: Optional[optimization.Optimization] = None
+        opik_optimization_run: optimization.Optimization | None = None
         try:
             opik_optimization_run = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
@@ -542,7 +543,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         reporting.display_configuration(
             prompt.get_messages(),
             {
-                "optimizer": f"{ 'DEAP MOO' if self.enable_moo else 'DEAP SO' } Evolutionary Optimization",
+                "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
                 "population_size": self.population_size,
                 "generations": self.num_generations,
                 "mutation_rate": self.mutation_rate,
@@ -554,7 +555,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Step 1. Step variables and define fitness function
         self.llm_call_counter = 0
-        self._history: List[OptimizationRound] = []
+        self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
         self._generations_without_improvement = 0
@@ -564,8 +565,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         if self.enable_moo:
 
             def _deap_evaluate_individual_fitness(
-                messages: List[Dict[str, str]],
-            ) -> Tuple[float, float]:
+                messages: list[dict[str, str]],
+            ) -> tuple[float, float]:
                 primary_fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -582,8 +583,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         else:
             # Single-objective
             def _deap_evaluate_individual_fitness(
-                messages: List[Dict[str, str]],
-            ) -> Tuple[float, float]:
+                messages: list[dict[str, str]],
+            ) -> tuple[float, float]:
                 fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -640,7 +641,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self.output_style_guidance = self.DEFAULT_OUTPUT_STYLE_GUIDANCE
 
         # Step 4. Initialize population
-        initial_prompts: List[chat_prompt.ChatPrompt] = self._initialize_population(
+        initial_prompts: list[chat_prompt.ChatPrompt] = self._initialize_population(
             prompt=prompt
         )
 
@@ -660,7 +661,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         with reporting.evaluate_initial_population(
             verbose=self.verbose
         ) as report_initial_population:
-            fitnesses: List[Any] = list(map(self.toolbox.evaluate, deap_population))
+            fitnesses: list[Any] = list(map(self.toolbox.evaluate, deap_population))
             _best_score = max(
                 best_primary_score_overall, max([x[0] for x in fitnesses])
             )
@@ -819,7 +820,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     hof, key=lambda ind: ind.fitness.values[0], reverse=True
                 )
                 for i, sol in enumerate(sorted_hof):
-                    final_results_log += f"  Solution {i+1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompt='{str(sol)[:100]}...'\n"
+                    final_results_log += f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompt='{str(sol)[:100]}...'\n"
                 best_overall_solution = sorted_hof[0]
                 final_best_prompt = chat_prompt.ChatPrompt(
                     messages=best_overall_solution

@@ -1,6 +1,6 @@
 import inspect
 import re
-from typing import Any, Dict, List, Optional, get_type_hints
+from typing import Any, get_type_hints
 import opik_optimizer
 
 from pydantic import BaseModel
@@ -8,36 +8,36 @@ from pydantic import BaseModel
 
 class ParameterInfo(BaseModel):
     path: str
-    type: Optional[str]
-    default: Optional[Any]
+    type: str | None
+    default: Any | None
     required: bool
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class MethodInfo(BaseModel):
     name: str
-    docstring: Optional[str]
-    parameters: List[ParameterInfo]
+    docstring: str | None
+    parameters: list[ParameterInfo]
 
 
 class ClassInfo(BaseModel):
-    class_docstring: Optional[str]
-    init_parameters: List[ParameterInfo]
-    public_methods: List[MethodInfo]
+    class_docstring: str | None
+    init_parameters: list[ParameterInfo]
+    public_methods: list[MethodInfo]
 
 
 class ClassInspector:
     def __init__(self, cls: type):
         self.cls = cls
 
-    def get_docstring(self) -> Optional[str]:
+    def get_docstring(self) -> str | None:
         return inspect.getdoc(self.cls)
 
-    def parse_param_descriptions(self, docstring: str) -> Dict[str, str]:
+    def parse_param_descriptions(self, docstring: str) -> dict[str, str]:
         """
         Parses the 'Args:' section of a docstring and extracts parameter descriptions.
         """
-        param_desc: Dict[str, str] = {}
+        param_desc: dict[str, str] = {}
         if not docstring:
             return param_desc
 
@@ -59,7 +59,7 @@ class ClassInspector:
 
         return param_desc
 
-    def get_pydantic_model_fields(self) -> List[ParameterInfo]:
+    def get_pydantic_model_fields(self) -> list[ParameterInfo]:
         fields = []
         for name, model_field in self.cls.model_fields.items():  # type: ignore
             default = model_field.default if model_field.default is not None else None
@@ -87,8 +87,8 @@ class ClassInspector:
     def parse_signature(
         self,
         func: Any,
-        docstring: Optional[str] = None,
-    ) -> List[ParameterInfo]:
+        docstring: str | None = None,
+    ) -> list[ParameterInfo]:
         sig = inspect.signature(func)
         try:
             type_hints = get_type_hints(func, globalns=vars(inspect.getmodule(func)))
@@ -125,7 +125,7 @@ class ClassInspector:
 
         return parameters
 
-    def get_public_methods(self) -> List[MethodInfo]:
+    def get_public_methods(self) -> list[MethodInfo]:
         if issubclass(self.cls, BaseModel):
             return []
 
@@ -177,7 +177,7 @@ class ClassInspector:
         return field
 
     def format_method_signature(
-        self, name: str, parameters: List[ParameterInfo]
+        self, name: str, parameters: list[ParameterInfo]
     ) -> str:
         if len(parameters) == 0:
             lines = [f"{name}()"]
@@ -240,6 +240,7 @@ classes_to_document = [
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
+    opik_optimizer.GepaOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
     # opik_optimizer.datasets

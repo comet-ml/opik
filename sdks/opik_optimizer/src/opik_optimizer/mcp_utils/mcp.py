@@ -13,22 +13,15 @@ from pathlib import Path
 from types import TracebackType
 from typing import (
     Any,
-    Coroutine,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Tuple,
-    Type,
     TypeVar,
     cast,
 )
+from collections.abc import Coroutine, Iterable, Mapping
 
-ClientSession: Optional[Type[Any]] = None
-StdioClientFactory: Optional[Type[Any]] = None
-StdioServerParameters: Optional[Type[Any]] = None
-types_mod: Optional[Any] = None
+ClientSession: type[Any] | None = None
+StdioClientFactory: type[Any] | None = None
+StdioServerParameters: type[Any] | None = None
+types_mod: Any | None = None
 
 _T = TypeVar("_T")
 
@@ -43,11 +36,11 @@ class ToolSignature:
     name: str
     description: str
     parameters: Mapping[str, Any]
-    examples: Optional[List[Dict[str, Any]]] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
+    examples: list[dict[str, Any]] | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_tool_entry(cls, entry: Mapping[str, Any]) -> "ToolSignature":
+    def from_tool_entry(cls, entry: Mapping[str, Any]) -> ToolSignature:
         if TOOL_ENTRY_KEY not in entry:
             raise ValueError("Tool entry missing 'function' block")
 
@@ -71,7 +64,7 @@ class ToolSignature:
             extra=extra,
         )
 
-    def to_tool_entry(self) -> Dict[str, Any]:
+    def to_tool_entry(self) -> dict[str, Any]:
         entry = copy.deepcopy(self.extra)
         entry.update(
             {
@@ -86,11 +79,11 @@ class ToolSignature:
             entry[TOOL_ENTRY_KEY]["examples"] = self.examples
         return entry
 
-    def segment_update(self) -> Tuple[str, str]:
+    def segment_update(self) -> tuple[str, str]:
         return (f"tool:{self.name}", self.description)
 
 
-def load_mcp_signature(path: Path) -> List[ToolSignature]:
+def load_mcp_signature(path: Path) -> list[ToolSignature]:
     data = json.loads(Path(path).read_text())
 
     if isinstance(data, dict) and "tools" in data:
@@ -107,17 +100,17 @@ def dump_mcp_signature(signatures: Iterable[ToolSignature], path: Path) -> None:
     Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True))
 
 
-def tools_from_signatures(signatures: Iterable[ToolSignature]) -> List[Dict[str, Any]]:
+def tools_from_signatures(signatures: Iterable[ToolSignature]) -> list[dict[str, Any]]:
     return [signature.to_tool_entry() for signature in signatures]
 
 
-def signature_updates(signatures: Iterable[ToolSignature]) -> Dict[str, str]:
+def signature_updates(signatures: Iterable[ToolSignature]) -> dict[str, str]:
     return dict(signature.segment_update() for signature in signatures)
 
 
 def validate_tool_arguments(
     signature: ToolSignature, arguments: Mapping[str, Any]
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """Validate ``arguments`` against required fields in the signature schema."""
 
     schema_required = signature.parameters.get("required", [])
@@ -152,7 +145,7 @@ class MCPDependencyError(RuntimeError):
     """Raised when the Model Context Protocol SDK is unavailable."""
 
 
-def _load_sdk() -> Tuple[Any, Any, Any, Any]:
+def _load_sdk() -> tuple[Any, Any, Any, Any]:
     candidates = (
         (
             "mcp.client.session",
@@ -188,7 +181,7 @@ def _load_sdk() -> Tuple[Any, Any, Any, Any]:
 
 try:
     (ClientSession, StdioClientFactory, StdioServerParameters, types_mod) = _load_sdk()
-    _SDK_ERROR: Optional[Exception] = None
+    _SDK_ERROR: Exception | None = None
 except MCPDependencyError as exc:  # pragma: no cover
     ClientSession = None  # type: ignore[assignment]
     StdioClientFactory = None  # type: ignore[assignment]
@@ -201,11 +194,11 @@ except MCPDependencyError as exc:  # pragma: no cover
 class MCPManifest:
     name: str
     command: str
-    args: List[str]
-    env: Dict[str, str]
+    args: list[str]
+    env: dict[str, str]
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "MCPManifest":
+    def from_dict(cls, data: Mapping[str, Any]) -> MCPManifest:
         command = data.get("command")
         if not command:
             raise ValueError("mcp.json missing 'command'")
@@ -217,7 +210,7 @@ class MCPManifest:
         )
 
     @classmethod
-    def from_json(cls, path: Path) -> "MCPManifest":
+    def from_json(cls, path: Path) -> MCPManifest:
         return cls.from_dict(json.loads(Path(path).read_text()))
 
 
@@ -232,23 +225,23 @@ class MCPClient:
         ):
             raise MCPDependencyError("MCP SDK is not available")
         self.manifest = manifest
-        self._transport_cm: Optional[Any] = None
-        self._session: Optional[Any] = None
-        self._read_stream: Optional[Any] = None
-        self._write_stream: Optional[Any] = None
+        self._transport_cm: Any | None = None
+        self._session: Any | None = None
+        self._read_stream: Any | None = None
+        self._write_stream: Any | None = None
 
-    async def __aenter__(self) -> "MCPClient":
-        server_params = cast(Type[Any], StdioServerParameters)(
+    async def __aenter__(self) -> MCPClient:
+        server_params = cast(type[Any], StdioServerParameters)(
             command=self.manifest.command,
             args=self.manifest.args,
             env=self.manifest.env or None,
         )
 
-        transport_factory = cast(Type[Any], StdioClientFactory)
+        transport_factory = cast(type[Any], StdioClientFactory)
         transport_cm = transport_factory(server_params)
         self._transport_cm = transport_cm
         self._read_stream, self._write_stream = await transport_cm.__aenter__()
-        session_cls = cast(Type[Any], ClientSession)
+        session_cls = cast(type[Any], ClientSession)
         self._session = session_cls(self._read_stream, self._write_stream)
 
         if hasattr(self._session, "__aenter__"):
@@ -260,10 +253,10 @@ class MCPClient:
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc: Optional[BaseException],
-        tb: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool | None:
         if self._session is not None:
             if hasattr(self._session, "__aexit__"):
                 await self._session.__aexit__(exc_type, exc, tb)
@@ -307,7 +300,7 @@ def list_tools_from_manifest(manifest: MCPManifest) -> Any:
 
 
 def call_tool_from_manifest(
-    manifest: MCPManifest, tool_name: str, arguments: Dict[str, Any]
+    manifest: MCPManifest, tool_name: str, arguments: dict[str, Any]
 ) -> Any:
     async def _inner() -> Any:
         async with MCPClient(manifest) as client:
@@ -357,7 +350,7 @@ def _format_json_block(data: Mapping[str, Any]) -> str:
 
 
 def system_prompt_from_tool(
-    signature: ToolSignature, manifest: Optional[MCPManifest] = None
+    signature: ToolSignature, manifest: MCPManifest | None = None
 ) -> str:
     parameters = signature.parameters or {}
     parameter_lines = []
@@ -373,7 +366,7 @@ def system_prompt_from_tool(
     if manifest is not None:
         command_line_parts = [manifest.command]
         if manifest.args:
-            sanitized_args: List[str] = []
+            sanitized_args: list[str] = []
             skip_next = False
             for idx, token in enumerate(manifest.args):
                 if skip_next:
@@ -440,7 +433,7 @@ def system_prompt_from_tool(
     return "\n\n".join(section for section in sections if section).strip()
 
 
-def extract_description_from_system(system_prompt: str) -> Optional[str]:
+def extract_description_from_system(system_prompt: str) -> str | None:
     if (
         PROMPT_TOOL_HEADER not in system_prompt
         or PROMPT_TOOL_FOOTER not in system_prompt

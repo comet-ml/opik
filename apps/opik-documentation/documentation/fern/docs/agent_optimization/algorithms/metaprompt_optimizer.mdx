@@ -181,6 +181,16 @@ optimizer = MetaPromptOptimizer(
    - Track changes systematically
    - Validate improvements
 
+## MCP Tool Calling Support
+
+The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools and function calls.
+
+<Note>
+  MCP tool calling optimization is a specialized feature that allows the optimizer to understand and optimize prompts that use external tools and functions through the Model Context Protocol. This is particularly useful for complex agent workflows that require tool usage.
+</Note>
+
+For comprehensive information about tool optimization, see the [Tool Optimization Guide](/agent_optimization/algorithms/tool_optimization).
+
 ## Research and References
 
 - [Meta-Prompting for Language Models](https://arxiv.org/abs/2401.12954)

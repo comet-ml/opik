@@ -1,4 +1,4 @@
-from typing import Any, List, Set, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import json
 import logging
@@ -24,7 +24,7 @@ class PopulationOps:
         toolbox: Any
     # Hints for mixin attributes provided by the primary optimizer class
     _gens_since_pop_improvement: int
-    _best_primary_score_history: List[float]
+    _best_primary_score_history: list[float]
     DEFAULT_RESTART_THRESHOLD: float
     DEFAULT_RESTART_GENERATIONS: int
     enable_moo: bool
@@ -34,7 +34,7 @@ class PopulationOps:
 
     def _initialize_population(
         self, prompt: chat_prompt.ChatPrompt
-    ) -> List[chat_prompt.ChatPrompt]:
+    ) -> list[chat_prompt.ChatPrompt]:
         """Initialize the population with diverse variations of the initial prompt,
         including some 'fresh start' prompts based purely on task description.
         All generated prompts should aim to elicit answers matching self.output_style_guidance.
@@ -170,8 +170,8 @@ class PopulationOps:
                     )
 
             # Ensure population is of the required size using unique prompts
-            final_population_set: Set[str] = set()
-            final_population_list: List[chat_prompt.ChatPrompt] = []
+            final_population_set: set[str] = set()
+            final_population_list: list[chat_prompt.ChatPrompt] = []
             for p in population:
                 if json.dumps(p.get_messages()) not in final_population_set:
                     final_population_set.add(json.dumps(p.get_messages()))
@@ -196,9 +196,9 @@ class PopulationOps:
     def _restart_population(
         self,
         hof: tools.HallOfFame,
-        population: List[Any],
+        population: list[Any],
         best_prompt_so_far: chat_prompt.ChatPrompt,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Return a fresh, evaluated population seeded by elites."""
         if self.enable_moo:
             elites = list(hof)

@@ -4,21 +4,22 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 
-FollowUpBuilder = Callable[[Dict[str, Any], str], Optional[str]]
+FollowUpBuilder = Callable[[dict[str, Any], str], Optional[str]]
 
 
 def _insert_tool_message(
     *,
-    messages: List[Dict[str, Any]],
+    messages: list[dict[str, Any]],
     tool_name: str,
     tool_content: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Insert a tool message immediately after the first assistant reply."""
 
-    with_tool: List[Dict[str, Any]] = []
+    with_tool: list[dict[str, Any]] = []
     inserted = False
     for message in messages:
         with_tool.append(message)
@@ -48,7 +49,7 @@ def _insert_tool_message(
     return with_tool
 
 
-def extract_user_query(dataset_item: Dict[str, Any]) -> Optional[str]:
+def extract_user_query(dataset_item: dict[str, Any]) -> str | None:
     """Best-effort extraction of a user query from dataset item structures."""
 
     user_query = dataset_item.get("user_query")
@@ -76,14 +77,14 @@ class MCPSecondPassCoordinator:
         self,
         *,
         tool_name: str,
-        summary_var: ContextVar[Optional[str]],
+        summary_var: ContextVar[str | None],
         follow_up_builder: FollowUpBuilder,
     ) -> None:
         self._tool_name = tool_name
         self._summary_var = summary_var
         self._follow_up_builder = follow_up_builder
-        self._last_summary: Optional[str] = None
-        self._last_follow_up: Optional[str] = None
+        self._last_summary: str | None = None
+        self._last_follow_up: str | None = None
 
     @property
     def tool_name(self) -> str:
@@ -96,19 +97,19 @@ class MCPSecondPassCoordinator:
         logger.debug("Recording summary for %s", self.tool_name)
         self._summary_var.set(summary)
 
-    def fetch_summary(self) -> Optional[str]:
+    def fetch_summary(self) -> str | None:
         return self._summary_var.get()
 
-    def get_last_summary(self) -> Optional[str]:
+    def get_last_summary(self) -> str | None:
         return self._last_summary
 
     def build_second_pass_messages(
         self,
         *,
-        base_messages: List[Dict[str, Any]],
-        dataset_item: Dict[str, Any],
-        summary_override: Optional[str] = None,
-    ) -> Optional[List[Dict[str, Any]]]:
+        base_messages: list[dict[str, Any]],
+        dataset_item: dict[str, Any],
+        summary_override: str | None = None,
+    ) -> list[dict[str, Any]] | None:
         self._last_summary = None
         self._last_follow_up = None
         summary = (
