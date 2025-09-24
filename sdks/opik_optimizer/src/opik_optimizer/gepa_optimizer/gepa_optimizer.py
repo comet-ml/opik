@@ -215,7 +215,13 @@ class GepaOptimizer(BaseOptimizer):
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
             adapter_prompt.project_name = self.project_name
             adapter_prompt.model = self.model
-            adapter_prompt.model_kwargs = self.model_kwargs
+            # Filter out GEPA-specific parameters that shouldn't be passed to LLM
+            filtered_model_kwargs = {
+                k: v
+                for k, v in self.model_kwargs.items()
+                if k not in ["num_prompts_per_round", "rounds"]
+            }
+            adapter_prompt.model_kwargs = filtered_model_kwargs
 
             adapter = OpikGEPAAdapter(
                 base_prompt=adapter_prompt,
