@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.base.Preconditions;
@@ -145,7 +146,8 @@ class TraceDAOImpl implements TraceDAO {
                 created_by,
                 last_updated_by,
                 thread_id,
-                visibility_mode
+                visibility_mode,
+                truncation_threshold
             )
             VALUES
                 <items:{item |
@@ -165,7 +167,8 @@ class TraceDAOImpl implements TraceDAO {
                         :user_name,
                         :user_name,
                         :thread_id<item.index>,
-                        if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>)
+                        if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>),
+                        :truncation_threshold<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -195,7 +198,8 @@ class TraceDAOImpl implements TraceDAO {
                 created_by,
                 last_updated_by,
                 thread_id,
-                visibility_mode
+                visibility_mode,
+                truncation_threshold
             )
             SELECT
                 new_trace.id as id,
@@ -253,7 +257,8 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
-                ) as visibility_mode
+                ) as visibility_mode,
+                new_trace.truncation_threshold as truncation_threshold
             FROM (
                 SELECT
                     :id as id,
@@ -271,7 +276,8 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :thread_id as thread_id,
-                    if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode
+                    if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode,
+                    :truncation_threshold as truncation_threshold
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -291,7 +297,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold
             )
             SELECT
             	id,
@@ -309,7 +315,8 @@ class TraceDAOImpl implements TraceDAO {
             	created_by,
                 :user_name as last_updated_by,
                 <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
-                visibility_mode
+                visibility_mode,
+                :truncation_threshold as truncation_threshold
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -721,6 +728,18 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), trace_annotation_queue_ids AS (
+                 SELECT trace_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_trace_id
+                 GROUP BY trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -737,6 +756,10 @@ class TraceDAOImpl implements TraceDAO {
             , traces_final AS (
                 SELECT
                     t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
+                    truncated_input,
+                    truncated_output,
+                    input_length,
+                    output_length,
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -749,10 +772,14 @@ class TraceDAOImpl implements TraceDAO {
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
                 <endif>
+                <if(annotation_queue_filters)>
+                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT
@@ -788,9 +815,11 @@ class TraceDAOImpl implements TraceDAO {
             )
             SELECT
                   t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> substring(replaceRegexpAll(metadata, '<truncate>', '"[image]"'), 1, <truncationSize>) as metadata <else> metadata <endif><endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(truncated_input, '<truncate>', '"[image]"') as input <else> input as input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(truncated_output, '<truncate>', '"[image]"') as output <else> output as output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
+                  <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                   <if(!exclude_feedback_scores)>
                   , fsagg.feedback_scores_list as feedback_scores_list
                   , fsagg.feedback_scores as feedback_scores
@@ -910,6 +939,18 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_annotation_queue_ids AS (
+                 SELECT trace_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_trace_id
+                 GROUP BY trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -945,9 +986,13 @@ class TraceDAOImpl implements TraceDAO {
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
+                    <if(annotation_queue_filters)>
+                    LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
+                    <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(filters)> AND <filters> <endif>
+                    <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
                     AND id in (
                         SELECT
@@ -1017,7 +1062,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold
             )
             SELECT
                 new_trace.id as id,
@@ -1082,7 +1127,8 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
-                ) as visibility_mode
+                ) as visibility_mode,
+                new_trace.truncation_threshold as truncation_threshold
             FROM (
                 SELECT
                     :id as id,
@@ -1100,7 +1146,8 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
-                    <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode
+                    <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode,
+                    :truncation_threshold as truncation_threshold
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -1288,6 +1335,18 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_annotation_queue_ids AS (
+                 SELECT trace_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                 ) AS annotation_queue_ids_with_trace_id
+                 GROUP BY trace_id
             )
             <if(project_stats)>
             ,    error_count_current AS (
@@ -1344,9 +1403,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
+                <if(annotation_queue_filters)>
+                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(filters)> AND <filters> <endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT
@@ -1586,6 +1649,18 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS feedback_scores_list
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
+            ), thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1634,8 +1709,8 @@ class TraceDAOImpl implements TraceDAO {
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        argMin(t.input, t.start_time) as first_message,
+                        argMax(t.output, t.end_time) as last_message,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
                         sumMap(s.usage) as usage,
@@ -1652,6 +1727,9 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -1675,6 +1753,7 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS t
             """;
 
@@ -1686,7 +1765,11 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH traces_final AS (
                 SELECT
-                    *
+                    *,
+                    truncated_input,
+                    truncated_output,
+                    input_length,
+                    output_length
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1865,6 +1948,18 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), thread_annotation_queue_ids AS (
+                 SELECT thread_id,
+                        groupArray(id) AS annotation_queue_ids
+                 FROM (
+                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                    FROM annotation_queue_items aqi
+                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                    WHERE aq.scope = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                 ) AS annotation_queue_ids_with_thread_id
+                 GROUP BY thread_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1885,8 +1980,10 @@ class TraceDAOImpl implements TraceDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                t.first_message as first_message,
-                t.last_message as last_message,
+                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message <else> t.first_message as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message <else> t.last_message as last_message<endif>,
+                <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
+                <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
                 t.total_estimated_cost as total_estimated_cost,
                 t.usage as usage,
@@ -1911,8 +2008,14 @@ class TraceDAOImpl implements TraceDAO {
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
-                    <if(truncate)> substring(replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                    <if(truncate)> substring(replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"'), 1, <truncationSize>) as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    argMin(t.input, t.start_time) as first_message,
+                    argMax(t.output, t.end_time) as last_message,
+                    argMin(t.truncated_input, t.start_time) as truncated_first_message,
+                    argMax(t.truncated_output, t.end_time) as truncated_last_message,
+                    argMin(t.input_length, t.start_time) as first_message_length,
+                    argMax(t.output_length, t.end_time) as last_message_length,
+                    argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
+                    argMax(t.truncation_threshold, t.end_time) as last_message_truncation_threshold,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -1930,6 +2033,9 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            <if(annotation_queue_filters)>
+            LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+            <endif>
             WHERE workspace_id = :workspace_id
             <if(feedback_scores_filters)>
             AND thread_model_id IN (
@@ -1953,6 +2059,7 @@ class TraceDAOImpl implements TraceDAO {
             )
             <endif>
             <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+            <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
@@ -2280,6 +2387,8 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
         return statement;
     }
 
@@ -2347,6 +2456,8 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             statement.bind("thread_id", traceUpdate.threadId());
         }
+
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
@@ -2456,11 +2567,13 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                                value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                                value))
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
@@ -2621,7 +2734,7 @@ class TraceDAOImpl implements TraceDAO {
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
-        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
@@ -2712,6 +2825,9 @@ class TraceDAOImpl implements TraceDAO {
                                     traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
+                            .ifPresent(traceAnnotationFilters -> template.add("annotation_queue_filters",
+                                    traceAnnotationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
@@ -2729,6 +2845,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
@@ -2812,6 +2929,8 @@ class TraceDAOImpl implements TraceDAO {
                 } else {
                     statement.bindNull("visibility_mode" + i, String.class);
                 }
+
+                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
                 i++;
             }
@@ -3016,8 +3135,7 @@ class TraceDAOImpl implements TraceDAO {
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-                    template = template.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
+
                     template = template.add("offset", offset);
 
                     var finalTemplate = template;
@@ -3058,7 +3176,6 @@ class TraceDAOImpl implements TraceDAO {
 
             ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             template.add("limit", limit)
                     .add("stream", true);
@@ -3091,11 +3208,13 @@ class TraceDAOImpl implements TraceDAO {
                 .duration(row.get("duration", Double.class))
                 .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
                         .filter(it -> !it.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
+                                "first_message_truncated", row, value))
                         .orElse(null))
                 .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
                         .filter(it -> !it.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata,
+                                "last_message_truncated", row, value))
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
                 .usage(row.get("usage", Map.class))
@@ -3253,7 +3372,6 @@ class TraceDAOImpl implements TraceDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())

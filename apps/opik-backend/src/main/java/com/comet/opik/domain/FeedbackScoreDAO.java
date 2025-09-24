@@ -113,7 +113,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
-            <if(author)>AND author = :author<endif>
+            <if(author)>AND <author> = :author<endif>
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
@@ -136,7 +136,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
-            <if(author)>AND author = :author<endif>
+            <if(author)>AND <author> = :author<endif>
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
@@ -376,32 +376,33 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            Mono<Long> deleteNonAuthoredOperation;
+            // Delete from feedback_scores table
+            var deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "feedback_scores");
 
-            if (StringUtils.isBlank(score.author())) {
-                // Delete from feedback_scores table only if author is not available
-                String deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
-                        .add("table_name", "feedback_scores")
-                        .render();
-                var statement1 = connection.createStatement(deleteFeedbackScore);
-                statement1
-                        .bind("entity_id", id)
-                        .bind("entity_type", entityType.getType())
-                        .bind("name", score.name());
-
-                deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                        .flatMap(result -> Mono.from(result.getRowsUpdated()));
-            } else {
-                // Skip statement1 execution if author is not null
-                deleteNonAuthoredOperation = Mono.just(0L);
+            if (StringUtils.isNotBlank(score.author())) {
+                deleteFeedbackScore.add("author", "last_updated_by");
             }
 
-            // Always delete from authored_feedback_scores table
+            var statement1 = connection.createStatement(deleteFeedbackScore.render());
+            statement1
+                    .bind("entity_id", id)
+                    .bind("entity_type", entityType.getType())
+                    .bind("name", score.name());
+
+            if (StringUtils.isNotBlank(score.author())) {
+                statement1.bind("author", score.author());
+            }
+
+            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+
+            // Delete from authored_feedback_scores table
             var deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
                     .add("table_name", "authored_feedback_scores");
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
-                    .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", author));
+                    .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
@@ -452,33 +453,34 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            Mono<Long> deleteNonAuthoredOperation;
+            // Delete from feedback_scores table
+            ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template1.add("names", names);
+            template1.add("table_name", "feedback_scores");
 
-            if (StringUtils.isBlank(author)) {
-                // Delete from feedback_scores table only if author is not available
-                ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-                template1.add("names", names);
-                template1.add("table_name", "feedback_scores");
-
-                var statement1 = connection.createStatement(template1.render())
-                        .bind("entity_ids", Set.of(entityId))
-                        .bind("entity_type", entityType.getType())
-                        .bind("names", names);
-
-                deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                        .flatMap(result -> Mono.from(result.getRowsUpdated()));
-            } else {
-                // Skip statement1 execution if author is not null
-                deleteNonAuthoredOperation = Mono.just(0L);
+            if (StringUtils.isNotBlank(author)) {
+                template1.add("author", "last_updated_by");
             }
 
-            // Always delete from authored_feedback_scores table
+            var statement1 = connection.createStatement(template1.render())
+                    .bind("entity_ids", Set.of(entityId))
+                    .bind("entity_type", entityType.getType())
+                    .bind("names", names);
+
+            if (StringUtils.isNotBlank(author)) {
+                statement1.bind("author", author);
+            }
+
+            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+
+            // Delete from authored_feedback_scores table
             ST template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
-                    .ifPresent(a -> template2.add("author", a));
+                    .ifPresent(a -> template2.add("author", "author"));
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))

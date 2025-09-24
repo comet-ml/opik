@@ -8,7 +8,7 @@
 #   ./check_clickhouse_migrations_cluster.sh                    # Check all migration files
 #   ./check_clickhouse_migrations_cluster.sh file1.sql file2.sql # Check specific files
 
-set -euo pipefail
+set -uo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -68,6 +68,9 @@ validate_migration_file() {
     local file_errors=0
     
     echo "📋 Checking: $(basename "$file")"
+    echo "🔍 DEBUG: Full file path: $file"
+    echo "🔍 DEBUG: File exists: $(test -f "$file" && echo "YES" || echo "NO")"
+    echo "🔍 DEBUG: File readable: $(test -r "$file" && echo "YES" || echo "NO")"
     
     # Read file line by line
     local line_num=0
@@ -182,8 +185,12 @@ main() {
     # Validate each migration file
     for file in "${valid_files[@]}"; do
         ((total_files++))
+        echo "🔍 DEBUG: About to validate file: $file"
         
-        if ! validate_migration_file "$file"; then
+        if validate_migration_file "$file"; then
+            echo "🔍 DEBUG: File validation succeeded: $file"
+        else
+            echo "🔍 DEBUG: File validation failed: $file"
             ((total_errors++))
         fi
     done

@@ -348,6 +348,28 @@ evaluation = evaluate(
 Implementing your own dataset sampler is useful if you want to implement a custom sampling strategy. For instance,
 you can implement a dataset sampler that samples the dataset using some filtering criteria as in the example above.
 
+### Analyzing the evaluation results
+
+The `evaluate` function returns an `EvaluationResult` object that contains the evaluation results.
+You can create aggregated statistics for each metric by calling its `aggregate_evaluation_scores` method:
+
+```python
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+
+# Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
+scores = evaluation.aggregate_evaluation_scores()
+for metric_name, statistics in scores.aggregated_scores.items():
+    print(f"{metric_name}: {statistics}")
+
+```
+
+Aggregated statistics can help analyze evaluation results and are useful for comparing the performance of different models or different versions of the same model, for example.
+
 ### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
