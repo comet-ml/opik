@@ -79,7 +79,7 @@ def create_context_recall(name_input_col: str) -> Callable:
 
 
 def hallucination(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    return Hallucination().score(input=dataset_item["question"], output=llm_output)
+    return Hallucination(require_context=False).score(input=dataset_item["question"], output=llm_output)
 
 
 DATASET_CONFIG = {
