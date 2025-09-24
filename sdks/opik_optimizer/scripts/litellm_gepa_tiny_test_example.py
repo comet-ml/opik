@@ -14,6 +14,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import ChatPrompt, datasets
 from opik_optimizer.gepa_optimizer import GepaOptimizer
+from opik_optimizer.utils import search_wikipedia
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
@@ -26,9 +27,30 @@ def main() -> None:
 
     prompt = ChatPrompt(
         system=(
-            "You are a helpful assistant. Answer concisely with the exact answer string."
+            "You are a helpful assistant. Use the `search_wikipedia` tool when needed and "
+            "answer concisely with the exact answer string."
         ),
         user="{text}",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_wikipedia",
+                    "description": "This function searches Wikipedia abstracts.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The term or phrase to search for.",
+                            }
+                        },
+                        "required": ["query"],
+                    },
+                },
+            }
+        ],
+        function_map={"search_wikipedia": search_wikipedia},
     )
 
     optimizer = GepaOptimizer(

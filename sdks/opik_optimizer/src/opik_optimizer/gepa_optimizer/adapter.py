@@ -6,19 +6,50 @@ import os
 
 from ..optimization_config import chat_prompt
 from ..utils import create_litellm_agent_class
+from ..logging_config import setup_logging as _setup_logging
 
-logger = logging.getLogger(__name__)
+_setup_logging()
+
+logger = logging.getLogger("opik_optimizer.gepa_optimizer.adapter")
 _GEPA_DEBUG = bool(os.environ.get("OPIK_GEPA_DEBUG"))
 
-# Ensure adapter logs are visible when OPIK_GEPA_DEBUG is set
 if _GEPA_DEBUG:
-    if logger.level > logging.INFO:
-        logger.setLevel(logging.INFO)
-    if not logger.handlers:
-        _h = logging.StreamHandler()
-        _h.setLevel(logging.INFO)
-        _h.setFormatter(logging.Formatter("[GEPA_ADAPTER] %(message)s"))
-        logger.addHandler(_h)
+    logger.setLevel(logging.DEBUG)
+
+
+def extract_candidate_system_text(candidate: Any) -> str:
+    """Best-effort extraction of the system prompt text for a GEPA candidate."""
+    preferred_fields = ("system_prompt", "system", "prompt")
+
+    if candidate is None:
+        return ""
+
+    # Dict-like candidates expose prompt components under known keys
+    if isinstance(candidate, dict):
+        for key in preferred_fields:
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        for value in candidate.values():
+            if isinstance(value, str) and value.strip():
+                return value
+        if candidate:
+            try:
+                first_value = next(iter(candidate.values()))
+                return str(first_value)
+            except Exception:
+                return ""
+
+    # Object-style candidates may expose attributes directly
+    for key in preferred_fields:
+        try:
+            value = getattr(candidate, key)
+        except AttributeError:
+            value = None
+        if isinstance(value, str) and value.strip():
+            return value
+
+    return str(candidate)
 
 
 def make_opik_eval_fn(
@@ -34,9 +65,8 @@ def make_opik_eval_fn(
     def _eval_fn(candidate: Any, **_: Any) -> float:
         try:
             # candidate may be a dict {"system_prompt": text} or plain text
-            if isinstance(candidate, dict):
-                sys_text = next(iter(candidate.values()))
-            else:
+            sys_text = extract_candidate_system_text(candidate)
+            if not sys_text:
                 sys_text = str(candidate)
 
             cp = chat_prompt.ChatPrompt(
@@ -45,7 +75,7 @@ def make_opik_eval_fn(
                 model=optimizer.model,
                 **optimizer.model_kwargs,
             )
-            if getattr(optimizer, "verbose", 0) >= 1:
+            if _GEPA_DEBUG and getattr(optimizer, "verbose", 0) >= 1:
                 snippet = (sys_text or "").replace("\n", " ")[:140]
                 logger.debug(
                     f"[DBG][GEPA] Adapter eval (phase={phase_label}) — candidate system snippet: {snippet!r}"
@@ -75,13 +105,30 @@ def make_opik_eval_fn(
                     n_samples=n_samples,
                     verbose=0,
                 )
-            if getattr(optimizer, "verbose", 0) >= 1:
+            if hasattr(optimizer, "_record_gepa_candidate"):
+                try:
+                    candidate_map = {"system_prompt": sys_text}
+                    optimizer._record_gepa_candidate(
+                        candidate_map,
+                        scores=[float(s)],
+                        phase=str(phase_label or "eval_fn"),
+                        iteration=getattr(optimizer, "_gepa_current_iteration", None),
+                    )  # type: ignore[attr-defined]
+                    if _GEPA_DEBUG:
+                        logger.debug(
+                            "[GEPA_ADAPTER] eval_fn recorded candidate phase=%s score=%.4f",
+                            phase_label,
+                            float(s),
+                        )
+                except Exception:
+                    pass
+            if _GEPA_DEBUG and getattr(optimizer, "verbose", 0) >= 1:
                 logger.debug(
                     f"[DBG][GEPA] Adapter eval (phase={phase_label}) — score: {float(s):.4f}"
                 )
             return float(s)
         except Exception as e:
-            if getattr(optimizer, "verbose", 0) >= 1:
+            if _GEPA_DEBUG and getattr(optimizer, "verbose", 0) >= 1:
                 logger.debug(f"[DBG][GEPA] Adapter eval error: {e}")
             return 0.0
 
@@ -329,7 +376,8 @@ def build_protocol_adapter(
                         raw = self._agent.invoke(messages)
                         output = str(raw).strip()
                     except Exception as e:
-                        logger.debug(f"[GEPA Adapter] invoke error (trace mode): {e}")
+                        if _GEPA_DEBUG:
+                            logger.debug(f"[GEPA Adapter] invoke error (trace mode): {e}")
                         output = ""
                     try:
                         sr = metric(dataset_item, output)
@@ -345,7 +393,8 @@ def build_protocol_adapter(
                             except Exception:
                                 score = 0.0
                     except Exception as e:
-                        logger.debug(f"[GEPA Adapter] metric error (trace mode): {e}")
+                        if _GEPA_DEBUG:
+                            logger.debug(f"[GEPA Adapter] metric error (trace mode): {e}")
                         score = 0.0
                     # Mark live-metric usage
                     try:
@@ -366,6 +415,26 @@ def build_protocol_adapter(
                         )
                     except Exception:
                         pass
+                try:
+                    if isinstance(candidate, dict):
+                        candidate_map = {str(k): str(v) for k, v in candidate.items()}
+                    else:
+                        candidate_map = {"system_prompt": extract_candidate_system_text(candidate)}
+                    self._optimizer._record_gepa_candidate(  # type: ignore[attr-defined]
+                        candidate_map,
+                        scores,
+                        phase="adapter_evaluate_traced",
+                        iteration=getattr(self._optimizer, "_gepa_current_iteration", None),
+                    )
+                    if _GEPA_DEBUG:
+                        logger.debug(
+                            "[GEPA_ADAPTER] recorded candidate phase=adapter_evaluate_traced scores=%s",
+                            [f"{float(s):.4f}" for s in scores],
+                        )
+                except Exception as record_err:
+                    if _GEPA_DEBUG:
+                        print(f"[GEPA_ADAPTER] traced candidate record failed: {record_err}")
+
                 return EvaluationBatch(
                     outputs=outputs, scores=scores, trajectories=trajectories
                 )
@@ -387,7 +456,8 @@ def build_protocol_adapter(
                     raw = self._agent.invoke(messages)
                     output = str(raw).strip()
                 except Exception as e:
-                    logger.debug(f"[GEPA Adapter] invoke error: {e}")
+                    if _GEPA_DEBUG:
+                        logger.debug(f"[GEPA Adapter] invoke error: {e}")
                     output = ""
                 try:
                     sr = metric(dataset_item, output)
@@ -402,7 +472,8 @@ def build_protocol_adapter(
                         except Exception:
                             score = 0.0
                 except Exception as e:
-                    logger.debug(f"[GEPA Adapter] metric error: {e}")
+                    if _GEPA_DEBUG:
+                        logger.debug(f"[GEPA Adapter] metric error: {e}")
                     score = 0.0
                 # Mark live-metric usage even in non-traced mode
                 try:
@@ -436,6 +507,26 @@ def build_protocol_adapter(
                 setattr(batch_obj, "inputs", input_texts)
             except Exception:
                 pass
+            try:
+                if not capture_traces:
+                    if isinstance(candidate, dict):
+                        candidate_map = {str(k): str(v) for k, v in candidate.items()}
+                    else:
+                        candidate_map = {"system_prompt": extract_candidate_system_text(candidate)}
+                    self._optimizer._record_gepa_candidate(  # type: ignore[attr-defined]
+                        candidate_map,
+                        scores,
+                        phase="adapter_evaluate",
+                        iteration=getattr(self._optimizer, "_gepa_current_iteration", None),
+                    )
+                    if _GEPA_DEBUG:
+                        logger.debug(
+                            "[GEPA_ADAPTER] recorded candidate phase=adapter_evaluate scores=%s",
+                            [f"{float(s):.4f}" for s in scores],
+                        )
+            except Exception as record_err:
+                if _GEPA_DEBUG:
+                    print(f"[GEPA_ADAPTER] candidate record failed: {record_err}")
             return batch_obj
 
         def make_reflective_dataset(

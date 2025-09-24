@@ -145,11 +145,16 @@ class ChatPrompt:
 
     def copy(self) -> "ChatPrompt":
         return ChatPrompt(
+            name=self.name,
             system=self.system,
             user=self.user,
             messages=copy.deepcopy(self.messages),
-            tools=self.tools,
-            function_map=self.function_map,
+            tools=copy.deepcopy(self.tools) if self.tools is not None else None,
+            function_map={**self.function_map} if self.function_map else None,
+            model=self.model,
+            invoke=self.invoke,
+            project_name=self.project_name,
+            **self.model_kwargs,
         )
 
     def set_messages(self, messages: List[Dict[str, Any]]) -> None:

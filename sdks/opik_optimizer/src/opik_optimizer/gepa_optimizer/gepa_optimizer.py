@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple, Set, Sequence
 
 import opik
 from opik import Dataset
@@ -10,25 +10,23 @@ from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..utils import optimization_context, create_litellm_agent_class
+from ..logging_config import setup_logging as _setup_logging
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import (
     make_opik_eval_fn,
     build_adapter_if_available,
     build_protocol_adapter,
+    extract_candidate_system_text,
 )
 
+# Initialize logging using shared configuration
+_setup_logging()
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("opik_optimizer.gepa_optimizer")
 _GEPA_DEBUG = bool(os.environ.get("OPIK_GEPA_DEBUG"))
 if _GEPA_DEBUG:
-    if logger.level > logging.INFO:
-        logger.setLevel(logging.INFO)
-    if not logger.handlers:
-        _h = logging.StreamHandler()
-        _h.setLevel(logging.INFO)
-        _h.setFormatter(logging.Formatter("[GEPA] %(message)s"))
-        logger.addHandler(_h)
+    logger.setLevel(logging.DEBUG)
 
 
 class GepaOptimizer(BaseOptimizer):
@@ -55,6 +53,9 @@ class GepaOptimizer(BaseOptimizer):
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         # Debug counter: how many times live metric was invoked by GEPA
         self._gepa_live_metric_calls = 0
+        self._gepa_current_iteration: Optional[int] = None
+        self._gepa_candidate_records: List[Dict[str, Any]] = []
+        self._gepa_candidate_seen: Set[Tuple[Tuple[str, str], ...]] = set()
 
     def _to_gepa_default_datainst(
         self,
@@ -131,6 +132,7 @@ class GepaOptimizer(BaseOptimizer):
             max_metric_calls=max_metric_calls,
             display_progress_bar=False,
             track_best_outputs=False,
+            logger=gepa_reporting.RichGEPAOptimizerLogger(self, verbose=self.verbose),
         )
 
         # If the installed GEPA supports a custom scoring function, inject our Opik metric
@@ -138,9 +140,8 @@ class GepaOptimizer(BaseOptimizer):
             def _eval_fn(candidate: Any, **_: Any) -> float:
                 try:
                     # candidate can be dict {"system_prompt": text} or text
-                    if isinstance(candidate, dict):
-                        sys_text = next(iter(candidate.values()))
-                    else:
+                    sys_text = extract_candidate_system_text(candidate)
+                    if not sys_text:
                         sys_text = str(candidate)
                     cp = chat_prompt.ChatPrompt(
                         messages=[{"role": "system", "content": sys_text}],
@@ -163,6 +164,7 @@ class GepaOptimizer(BaseOptimizer):
             return _eval_fn
 
         # Preferred: Provide a custom adapter if supported
+        self._reset_candidate_records()
         adapter_obj = None
         if dataset is not None and metric is not None:
             # Preferred: Build protocol adapter using Opik prompt + metric
@@ -303,13 +305,10 @@ class GepaOptimizer(BaseOptimizer):
             )
             if _GEPA_DEBUG:
                 print("[GEPA] " + msg)
-            else:
-                logger.debug("[DBG][GEPA] " + msg)
             msg2 = f"Live metric used during GEPA optimize: {used_live_metric}"
             if _GEPA_DEBUG:
                 print("[GEPA] " + msg2)
-            else:
-                logger.debug("[DBG][GEPA] " + msg2)
+        self._gepa_current_iteration = 0
         result = gepa.optimize(**kwargs)
         # Attach a hint flag to result if possible
         try:
@@ -426,7 +425,7 @@ class GepaOptimizer(BaseOptimizer):
             n_samples=n_samples,
             verbose=verbose,
         )
-        if self.verbose >= 1:
+        if self.verbose >= 1 and _GEPA_DEBUG:
             phase = (extra_metadata or {}).get("phase") if extra_metadata else None
             sys_text = self._extract_system_text(prompt)
             snippet = (sys_text or "").replace("\n", " ")[:140]
@@ -563,8 +562,32 @@ class GepaOptimizer(BaseOptimizer):
         val_scores: List[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
 
         rescored: List[float] = []
+        recorded_lookup: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {
+            self._candidate_hash(entry["candidate"]): entry
+            for entry in getattr(self, "_gepa_candidate_records", [])
+        }
+
+        # Merge in any recorded proposals GEPA didn't accept
+        base_candidates = list(candidates)
+        base_val_scores = list(val_scores)
+        candidates = list(base_candidates)
+        val_scores = list(base_val_scores)
+
+        seen_hashes: Set[Tuple[Tuple[str, str], ...]] = {
+            self._candidate_hash(cand) for cand in candidates
+        }
+        for entry in getattr(self, "_gepa_candidate_records", []):
+            cand = entry["candidate"]
+            h = self._candidate_hash(cand)
+            if h in seen_hashes:
+                continue
+            agg_score = entry.get("aggregate_score")
+            candidates.append(cand)
+            val_scores.append(agg_score)
+            seen_hashes.add(h)
+
         for i, cand in enumerate(candidates):
-            cand_prompt_text = list(cand.values())[0] if cand else ""
+            cand_prompt_text = extract_candidate_system_text(cand) or seed_prompt_text
             # Preserve original user/tools and only swap system text
             cp = prompt.copy()
             cp.system = cand_prompt_text
@@ -585,7 +608,8 @@ class GepaOptimizer(BaseOptimizer):
                         verbose=0,
                     )
             except Exception as e:
-                logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
+                if _GEPA_DEBUG:
+                    logger.debug(f"[GEPA] Rescoring error for candidate {i}: {e}")
                 s = 0.0
             rescored.append(float(s))
 
@@ -603,8 +627,10 @@ class GepaOptimizer(BaseOptimizer):
             else getattr(gepa_result, "best_candidate", {})
         )
         best_prompt_text = (
-            list(best_candidate.values())[0] if best_candidate else seed_prompt_text
-        )
+            extract_candidate_system_text(best_candidate)
+            if best_candidate
+            else seed_prompt_text
+        ) or seed_prompt_text
 
         # Prepare final prompt and log one last evaluation to ensure Opik UI reflects the chosen result
         final_cp = prompt.copy()
@@ -629,11 +655,37 @@ class GepaOptimizer(BaseOptimizer):
             pass
 
         # Build history with both GEPA and Opik rescoring where available
+        candidate_rows: List[Dict[str, Any]] = []
         history: List[Dict[str, Any]] = []
         for i, cand in enumerate(candidates):
-            cand_prompt = list(cand.values())[0] if cand else ""
+            cand_prompt = extract_candidate_system_text(cand) if cand else ""
             gepa_s = val_scores[i] if i < len(val_scores) else None
             opik_s = rescored[i] if i < len(rescored) else None
+            cand_hash = self._candidate_hash(cand) if cand else None
+            proposal_meta = recorded_lookup.get(cand_hash) if cand_hash else None
+            source = (
+                "GEPA" if i < len(base_candidates) else proposal_meta.get("phase", "Recorded") if proposal_meta else "Recorded"
+            )
+            iter_meta = proposal_meta.get("iteration") if proposal_meta else None
+            if _GEPA_DEBUG:
+                snippet = (cand_prompt or "").replace("\n", " ")[:120]
+                logger.debug(
+                    "[GEPA] Candidate %s source=%s gepa=%s opik=%s prompt=%r",
+                    i + 1,
+                    source,
+                    f"{gepa_s:.4f}" if isinstance(gepa_s, (int, float)) else gepa_s,
+                    f"{opik_s:.4f}" if isinstance(opik_s, (int, float)) else opik_s,
+                    snippet,
+                )
+            candidate_rows.append(
+                {
+                    "iteration": iter_meta if iter_meta is not None else (self._gepa_current_iteration if source == "GEPA" else i + 1),
+                    "system_prompt": cand_prompt,
+                    "gepa_score": gepa_s,
+                    "opik_score": opik_s,
+                    "source": source,
+                }
+            )
             history.append(
                 {
                     "iteration": i + 1,
@@ -642,7 +694,20 @@ class GepaOptimizer(BaseOptimizer):
                         {"metric_name": f"GEPA-{metric.__name__}", "score": gepa_s},
                         {"metric_name": metric.__name__, "score": opik_s},
                     ],
+                    "metadata": proposal_meta or {},
                 }
+            )
+
+        if self.verbose >= 1:
+            gepa_reporting.display_candidate_scores(
+                candidate_rows,
+                verbose=self.verbose,
+            )
+        elif _GEPA_DEBUG:
+            logger.debug(
+                "[GEPA] Candidate summary (count=%d recorded=%d)",
+                len(candidate_rows),
+                len(getattr(self, "_gepa_candidate_records", [])),
             )
 
         # Determine whether live metric was used inside GEPA:
@@ -663,12 +728,32 @@ class GepaOptimizer(BaseOptimizer):
             "gepa_live_metric_call_count": int(
                 getattr(self, "_gepa_live_metric_calls", 0)
             ),
+            "recorded_candidate_count": len(getattr(self, "_gepa_candidate_records", [])),
+            "candidate_summary": candidate_rows,
+            "best_candidate_iteration": candidate_rows[best_idx]["iteration"],
         }
         if experiment_config:
             details.update({"experiment": experiment_config})
 
         # Use the full prompt messages (system + user/tools) for result display
         final_messages = final_cp.get_messages()
+
+        if self.verbose >= 1:
+            gepa_reporting.display_selected_candidate(
+                best_prompt_text,
+                score,
+                verbose=self.verbose,
+            )
+            if best_prompt_text.strip() == seed_prompt_text.strip():
+                gepa_reporting.console.print(
+                    "│   Selected prompt matches the seed prompt; improvement reflects rescoring statistics.",
+                )
+        elif _GEPA_DEBUG:
+            logger.debug(
+                "[GEPA] Selected candidate score=%.4f prompt_snippet=%r",
+                score,
+                (best_prompt_text or "").replace("\n", " ")[:160],
+            )
 
         result = OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -710,3 +795,60 @@ class GepaOptimizer(BaseOptimizer):
         excluded = set([output_key, "id", "metadata"])
         input_key = next((k for k in sample.keys() if k not in excluded), "text")
         return input_key, output_key
+
+    def _reset_candidate_records(self) -> None:
+        self._gepa_candidate_records = []
+        self._gepa_candidate_seen = set()
+
+    def _candidate_hash(self, candidate: Dict[str, Any]) -> Tuple[Tuple[str, str], ...]:
+        items: List[Tuple[str, str]] = []
+        for key, value in candidate.items():
+            items.append((str(key), str(value)))
+        return tuple(sorted(items))
+
+    def _record_gepa_candidate(
+        self,
+        candidate: Dict[str, Any],
+        scores: Sequence[float],
+        phase: str = "proposal",
+        iteration: Optional[int] = None,
+    ) -> None:
+        try:
+            normalized = {str(k): str(v) for k, v in candidate.items()}
+        except AttributeError:
+            return
+        key = self._candidate_hash(normalized)
+        if key in self._gepa_candidate_seen:
+            return
+        self._gepa_candidate_seen.add(key)
+        float_scores = [float(s) for s in scores if s is not None]
+        aggregate = (
+            sum(float_scores) / len(float_scores)
+            if float_scores
+            else None
+        )
+        record = {
+            "candidate": normalized,
+            "phase": phase,
+            "subsample_scores": float_scores,
+            "aggregate_score": aggregate,
+            "iteration": iteration,
+        }
+        self._gepa_candidate_records.append(record)
+        if self.verbose >= 1 and iteration is not None:
+            gepa_reporting.display_candidate_update(
+                iteration=iteration,
+                phase=phase,
+                aggregate=aggregate,
+                prompt_snippet=normalized.get("system_prompt", ""),
+                verbose=self.verbose,
+            )
+        if _GEPA_DEBUG:
+            snippet = (normalized.get("system_prompt") or "").replace("\n", " ")[:120]
+            logger.debug(
+                "[GEPA] Recorded candidate phase=%s agg=%s scores=%s prompt=%r",
+                phase,
+                f"{aggregate:.4f}" if isinstance(aggregate, (int, float)) else aggregate,
+                [f"{float(s):.4f}" for s in float_scores],
+                snippet,
+            )
