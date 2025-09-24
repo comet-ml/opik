@@ -49,24 +49,3 @@ def wrap_stream(
             generators_trace_to_end=trace_to_end,
             capture_output=capture_output,
         )
-
-
-# class _EventStream(wrapt.ObjectProxy):  # type: ignore[misc]
-#     __wrapped__: EventStream
-
-#     def __init__(
-#         self,
-#         obj: EventStream,
-#         callback: Optional[_CallbackT[_AnyT]] = None,
-#         context_manager_factory: Optional[Callable[[], ContextManager[Any]]] = None,
-#     ) -> None:
-#         super().__init__(obj)
-#         self._self_callback = callback
-#         self._self_context_manager_factory = context_manager_factory
-
-#     def __iter__(self) -> Iterator[Any]:
-#         return _Iterator(
-#             iter(self.__wrapped__),
-#             self._self_callback,
-#             self._self_context_manager_factory,
-#         )
