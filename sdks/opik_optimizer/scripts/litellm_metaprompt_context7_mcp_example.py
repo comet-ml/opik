@@ -6,123 +6,131 @@ import textwrap
 from pathlib import Path
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
-from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool
+from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool, MCPManifest
 from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 
 # ---------------------------------------------------------------------------
-# 1. Configure the Context7 MCP server manifest and tool name
+# CONTEXT7-SPECIFIC CONFIGURATION
 #
-# The manifest tells the SDK how to launch the MCP server that exposes the
-# documentation tools.  If `CONTEXT7_API_KEY` exists we pass it to the CLI,
-# otherwise the server runs in a public/demo mode.
-#
-# The tool name is the name of the tool that will be used to call the MCP server.
-# Some MCP servers may expose multiple tools, so we need to specify the tool name.
+# All Context7-specific settings are grouped here for easy modification.
+# To use with other MCP servers, replace these settings with your server's
+# configuration and adjust the helper components accordingly.
 # ---------------------------------------------------------------------------
-MCP_MANIFEST = mcp_flow.MCPManifest.from_dict(
-    {
-        "name": "context7-docs",
-        "command": "npx",
-        "args": [
-            "-y",
-            "@upstash/context7-mcp",
-            *(
-                ["--api-key", os.environ["CONTEXT7_API_KEY"]]
-                if os.getenv("CONTEXT7_API_KEY")
-                else []
-            ),
-        ],
-        "env": {},
-    }
-)
+
+# MCP Server Configuration
+MCP_SERVER_CONFIG = {
+    "name": "context7-docs",
+    "command": "npx",
+    "args": [
+        "-y",
+        "@upstash/context7-mcp",
+        *(
+            ["--api-key", os.environ["CONTEXT7_API_KEY"]]
+            if os.getenv("CONTEXT7_API_KEY")
+            else []
+        ),
+    ],
+    "env": {},
+}
+
+# Context7-specific dataset
+dataset = load_context7_dataset()
+
+# Context7-specific tool name
 TOOL_NAME = "get-library-docs"
 
-# ---------------------------------------------------------------------------
-# 2. Create helper components used by the tool invocation
-#
-# `ensure_argument_via_resolver` adds a pre-processing step to every tool call.
-# If the dataset item does not already specify `context7CompatibleLibraryID`
-# we automatically invoke the resolver MCP tool using the available natural-
-# language query fields and patch the arguments before hitting the main tool.
-# ---------------------------------------------------------------------------
-argument_adapter = mcp_flow.ensure_argument_via_resolver(
-    target_field="context7CompatibleLibraryID",
-    resolver_tool="resolve-library-id",
-    query_fields=("library_query", "context7LibraryQuery"),
-)
+# Context7-specific metric
+context7_metric = mcp_flow.make_similarity_metric("context7")
 
-# ---------------------------------------------------------------------------
-# 3. Create a summary builder for the tool output
-#
-# There are multiple passes between tools and llms
-# Dataset question → LLM (with MCP tool) → MCP call → LLM follow‑up → metric
-# This summary builder is used to capture the tool output and the arguments
-# used to call the tool. Summaries are aggregated between the first and
-# second model pass so the assistant can reference the snippet in its final
-# answer while keeping the prompt structured for evaluation.
-# ---------------------------------------------------------------------------
-summary_builder = mcp_flow.make_argument_summary_builder(
-    heading="CONTEXT7_DOC_RESULT",
-    instructions=(
+# Context7-specific argument adapter settings
+ARGUMENT_ADAPTER_CONFIG = {
+    "target_field": "context7CompatibleLibraryID",
+    "resolver_tool": "resolve-library-id",
+    "query_fields": ("library_query", "context7LibraryQuery"),
+}
+
+# Context7-specific summary builder settings
+SUMMARY_BUILDER_CONFIG = {
+    "heading": "CONTEXT7_DOC_RESULT",
+    "instructions": (
         "In your final reply, explicitly mention the library ID and key terms from the documentation snippet."
     ),
-    argument_labels={
+    "argument_labels": {
         "context7CompatibleLibraryID": "Library ID",
         "topic": "Topic",
     },
-    preview_chars=800,
-)
+    "preview_chars": 800,
+}
 
-# ---------------------------------------------------------------------------
-# 4. Create a second pass coordinator for the tool output
-#
-# The second pass instructs the model to answer the user question with the
-# captured snippet, ensuring the evaluation reflects tool usage instead of the
-# raw response returned by the MCP server.
-# ---------------------------------------------------------------------------
+# Context7-specific follow-up template
 FOLLOW_UP_TEMPLATE = (
     "Using the documentation snippet above, answer the user's question and mention important identifiers. "
     "Summary: {summary} Question: {user_query}"
 )
 
+# Context7-specific tool invocation settings
+TOOL_INVOCATION_CONFIG = {
+    "rate_limit_sleep": 5.0,
+    "preview_label": "context7/get-library-docs",
+    "summary_var_name": "context7_tool_summary",
+}
+
+# ---------------------------------------------------------------------------
+# MCP SERVER SETUP (Generic - works with any MCP server)
+# ---------------------------------------------------------------------------
+
+# Create the MCP manifest from the configuration
+MCP_MANIFEST = MCPManifest.from_dict(MCP_SERVER_CONFIG)
+
+# ---------------------------------------------------------------------------
+# CREATE HELPER COMPONENTS (Context7-specific)
+# ---------------------------------------------------------------------------
+
+# Create argument adapter
+argument_adapter = mcp_flow.ensure_argument_via_resolver(
+    target_field=ARGUMENT_ADAPTER_CONFIG["target_field"],
+    resolver_tool=ARGUMENT_ADAPTER_CONFIG["resolver_tool"],
+    query_fields=ARGUMENT_ADAPTER_CONFIG["query_fields"],
+)
+
+# Create summary builder
+summary_builder = mcp_flow.make_argument_summary_builder(
+    heading=SUMMARY_BUILDER_CONFIG["heading"],
+    instructions=SUMMARY_BUILDER_CONFIG["instructions"],
+    argument_labels=SUMMARY_BUILDER_CONFIG["argument_labels"],
+    preview_chars=SUMMARY_BUILDER_CONFIG["preview_chars"],
+)
+
+# Create second pass coordinator
 second_pass = mcp_flow.create_second_pass_coordinator(
     TOOL_NAME,
     FOLLOW_UP_TEMPLATE,
-    summary_var_name="context7_tool_summary",
+    summary_var_name=TOOL_INVOCATION_CONFIG["summary_var_name"],
 )
 
-# Wrap the MCP call in a helper that automatically tracks spans in Opik, applies
-# the resolver adapter, records summaries for the second pass, and sleeps 5s to
-# avoid rate limits when sampling the dataset.
+# Create tool invocation
 tool_invocation = mcp_flow.MCPToolInvocation(
     manifest=MCP_MANIFEST,
     tool_name=TOOL_NAME,
     summary_handler=second_pass,
     summary_builder=summary_builder,
     argument_adapter=argument_adapter,
-    rate_limit_sleep=5.0,
-    preview_label="context7/get-library-docs",
+    rate_limit_sleep=TOOL_INVOCATION_CONFIG["rate_limit_sleep"],
+    preview_label=TOOL_INVOCATION_CONFIG["preview_label"],
 )
 
 # ---------------------------------------------------------------------------
-# 5. Load the tool signature and dump it to a file
-#
-# The tool signature is used to build the system prompt and the tool entry is
-# used to build the chat prompt.
+# LOAD TOOL SIGNATURE AND PREVIEW
 # ---------------------------------------------------------------------------
+
+# Load the tool signature and dump it to a file
 mcp_flow.list_manifest_tools(MCP_MANIFEST)
 signature = mcp_flow.load_manifest_tool_signature(MCP_MANIFEST, TOOL_NAME)
 original_tool_entry = copy.deepcopy(signature.to_tool_entry())
 artifacts_dir = Path("artifacts")
-mcp_flow.dump_signature_artifact(
-    signature, artifacts_dir, "context7_original_signature.json"
-)
+mcp_flow.dump_signature_artifact(signature, artifacts_dir, "original_signature.json")
 
-# ---------------------------------------------------------------------------
-# 6. Execute a smoke-test call using the first dataset item so the operator can
-# confirm the resolver and MCP invocation succeed before running the optimizer.
-# ---------------------------------------------------------------------------
-dataset = load_context7_dataset()
+# Execute a smoke-test call using the first dataset item
 mcp_flow.preview_dataset_tool_invocation(
     manifest=MCP_MANIFEST,
     tool_name=TOOL_NAME,
@@ -131,11 +139,10 @@ mcp_flow.preview_dataset_tool_invocation(
 )
 
 # ---------------------------------------------------------------------------
-# 7. Build the system prompt and chat prompt
-#
-# The system prompt is used to build the chat prompt. The chat prompt is used to
-# optimize the tool invocation.
+# BUILD PROMPTS AND OPTIMIZE
 # ---------------------------------------------------------------------------
+
+# Build the system prompt and chat prompt
 system_prompt = textwrap.dedent(
     system_prompt_from_tool(signature, MCP_MANIFEST)
 ).strip()
@@ -146,12 +153,7 @@ prompt = ChatPrompt(
     function_map={TOOL_NAME: tool_invocation},
 )
 
-# ---------------------------------------------------------------------------
-# 8. Optimize the tool invocation
-#
-# The optimizer is used to optimize the tool invocation.
-# ---------------------------------------------------------------------------
-context7_metric = mcp_flow.make_similarity_metric("context7")
+# Optimize the tool invocation
 meta_optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
     max_rounds=2,
@@ -197,9 +199,7 @@ tuned_system_prompt = textwrap.dedent(
 ).strip()
 
 # ---------------------------------------------------------------------------
-# 9. Rebuild a `ChatPrompt` that contains the tuned system message, the updated
-# tool entry, and the optimized chat messages so users can re-run the winning
-# prompt directly or export it elsewhere.
+# SAVE OPTIMIZED RESULTS
 # ---------------------------------------------------------------------------
 optimized_prompt = ChatPrompt(
     system=tuned_system_prompt,
@@ -212,6 +212,6 @@ optimized_prompt.set_messages(meta_result.prompt)
 final_signature_path = mcp_flow.dump_signature_artifact(
     signature,
     artifacts_dir,
-    "context7_tuned_signature.json",
+    "tuned_signature.json",
 )
 print(f"Optimized signature written to {final_signature_path}")
