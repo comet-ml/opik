@@ -363,23 +363,22 @@ def search_wikipedia(query: str) -> list[str]:
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
     """
-    return _search_wikipedia_api(query)
-    # from .colbert import ColBERTv2
+    from .colbert import ColBERTv2
 
     # Try ColBERTv2 first with a short timeout
-    # try:
-    #     colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
-    #     # Use a shorter timeout by modifying the max_retries parameter
-    #     results = colbert(query, k=3, max_retries=1)
-    #     return [str(item.text) for item in results if hasattr(item, "text")]
-    # except Exception as e:
-    #     print(f"ColBERTv2 search failed: {e}")
-    #     # Fallback to Wikipedia API
-    #     try:
-    #         return _search_wikipedia_api(query)
-    #     except Exception as api_error:
-    #         print(f"Wikipedia API fallback also failed: {api_error}")
-    #         return [f"Wikipedia search unavailable. Query was: {query}"]
+    try:
+        colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
+        # Use a shorter timeout by modifying the max_retries parameter
+        results = colbert(query, k=3, max_retries=1)
+        return [str(item.text) for item in results if hasattr(item, "text")]
+    except Exception as e:
+        print(f"ColBERTv2 search failed: {e}")
+        # Fallback to Wikipedia API
+        try:
+            return _search_wikipedia_api(query)
+        except Exception as api_error:
+            print(f"Wikipedia API fallback also failed: {api_error}")
+            return [f"Wikipedia search unavailable. Query was: {query}"]
 
 
 def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
