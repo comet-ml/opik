@@ -1,10 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { processFilters } from "@/lib/filters";
-import { uniqueId } from "lodash";
-import { COLUMN_TYPE } from "@/types/shared";
-import { FilterOperator } from "@/types/filters";
+import { generateSearchByFieldFilters, processFilters } from "@/lib/filters";
 
 type UseDatasetItemsListParams = {
   datasetId: string;
@@ -30,24 +27,12 @@ const getDatasetItemsList = async (
     truncate = false,
   }: UseDatasetItemsListParams,
 ) => {
-  const searchFilter = search
-    ? [
-        {
-          id: uniqueId(),
-          type: COLUMN_TYPE.string,
-          field: "data",
-          operator: "contains" as FilterOperator,
-          value: search,
-        },
-      ]
-    : [];
-
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}${datasetId}/items`,
     {
       signal,
       params: {
-        ...processFilters([...searchFilter]),
+        ...processFilters(generateSearchByFieldFilters("data", search)),
         size,
         page,
         truncate,
