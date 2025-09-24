@@ -59,4 +59,6 @@ managed = false
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore::UserWarning:pydantic.main",
+    "ignore::pytest.PytestConfigWarning",
+    "ignore::RuntimeWarning:litellm.integrations.opik.opik",
 ]
