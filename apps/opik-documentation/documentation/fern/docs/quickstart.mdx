@@ -5,25 +5,12 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
   <img src="/img/home/traces_page_for_quickstart.png" />
 </Frame>
 
+## Logging your first LLM calls
+
+Opik makes it easy to integrate with your existing LLM application, here are some of our most
+popular integrations:
+
 <Tabs>
-  <Tab title="AI Wizard" value="ai-installation">
-    Get Opik integrated instantly using our AI wizard. If you are using Cursor, install the 
-    [Opik extension for Cursor](/tracing/integrations/cursor):
-
-    <Button intent="primary" href="cursor:extension/opik.opik">Install Cursor extension</Button>
-
-    Once it is installed, you can run the following prompt in the Cursor chat (make sure to run
-    in agent mode so tools can be called):
-
-    ```text
-    Integrate Opik with my project.
-    ```
-
-    If you are using another AI assistant, first install the Opik MCP server following the
-    instructions in the [MCP Server Integration](/prompt_engineering/mcp_server) documentation and
-    then run the prompt above.
-
-  </Tab>
   <Tab title="OpenAI (Python)" value="openai-python-sdk">
     If you are using the OpenAI Python SDK, you can integrate by:
 
@@ -109,42 +96,6 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
 
         All OpenAI calls made using the `trackedOpenAI` will now be logged to Opik.
 
-      </Step>
-    </Steps>
-
-  </Tab>
-  <Tab title="Function Decorators" value="python-function-decorator">
-    If you are using the Python function decorator, you can integrate by:
-
-    <Steps>
-      <Step>
-        Install the Opik Python SDK:
-
-        ```bash
-        pip install opik
-        ```
-      </Step>
-      <Step>
-        Configure the Opik Python SDK:
-
-        ```bash
-        opik configure
-        ```
-      </Step>
-      <Step>
-        Wrap your function with the `@track` decorator:
-
-        ```python
-        from opik import track
-
-        @track
-        def my_function(input: str) -> str:
-            return input
-        ```
-
-        All calls to the `my_function` will now be logged to Opik. This works well for any function
-        even nested ones and is also supported by most integrations (just wrap any parent function
-        with the `@track` decorator).
       </Step>
     </Steps>
 
@@ -279,6 +230,76 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
     </Steps>
 
   </Tab>
+  <Tab title="Function Decorators" value="python-function-decorator">
+    If you are using the Python function decorator, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your function with the `@track` decorator:
+
+        ```python
+        from opik import track
+
+        @track
+        def my_function(input: str) -> str:
+            return input
+        ```
+
+        All calls to the `my_function` will now be logged to Opik. This works well for any function
+        even nested ones and is also supported by most integrations (just wrap any parent function
+        with the `@track` decorator).
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="AI Wizard" value="ai-installation">
+    The AI integration wizard will get you setup with Opik in just a few minutes with just one
+    prompt !
+
+    <Steps>
+      <Step title="1. Install the Opik extension for Cursor">
+      We will first install the Opik extension for Cursor that will both setup the Opik MCP server
+      for you and also log your Cursor conversations to Opik. You can learn more about the extension
+      [here](/tracing/integrations/cursor):
+
+      <Button intent="primary" href="cursor:extension/opik.opik">Install Cursor extension</Button>
+
+      </Step>
+      <Step title="2. Run the following prompt in the Cursor chat">
+        Once it is installed, you can run the following prompt in the Cursor chat (make sure to run
+        in agent mode so tools can be called):
+
+        ```text
+        Integrate Opik with my project.
+        ```
+
+        Once the integration is complete, you will need to setup your Opik Cloud API key or point
+        to your self-hosted Opik server. You can learn more about the configuration
+        [here](/tracing/sdk_configuration).
+
+      </Step>
+      <Step title="3. (Optional) Manually install the Opik MCP server">
+            If you are using another AI assistant, first install the Opik MCP server following the
+      instructions in the [MCP Server Integration](/prompt_engineering/mcp_server) documentation and
+      then run the prompt above.
+      </Step>
+    </Steps>
+
+  </Tab>
   <Tab title="Other" value="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
     a full list of integrations [here](/tracing/integrations/overview). For example:
@@ -296,7 +317,10 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
 
 <Tip>
 Opik has over 30 integrations with the most popular frameworks and libraries and we couldn't list
-them all here, you can find a full list of integrations [here](/tracing/integrations/overview).
+them all here, you can find [a full list of integrations here](/tracing/integrations/overview).
+
+You can also instrument your code using our [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/),
+[Typescript SDK](/reference/typescript-sdk/overview) or [Rest API](/reference/rest-api/overview).
 
 Opik also has a playground which is perfect if you want to experiment with prompts and models but
 don't want to write any code, you can find more information about the playground
