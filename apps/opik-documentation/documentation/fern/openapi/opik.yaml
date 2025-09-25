@@ -1243,6 +1243,10 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: filters
+        in: query
+        schema:
+          type: string
       - name: truncate
         in: query
         schema:
@@ -2705,6 +2709,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PromptVersionPage_Public"
+  /v1/private/prompts/{promptId}/versions/{versionId}/restore:
+    post:
+      tags:
+      - Prompts
+      summary: Restore prompt version
+      description: Restore a prompt version by creating a new version with the content
+        from the specified version
+      operationId: restorePromptVersion
+      parameters:
+      - name: promptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/versions/retrieve:
     post:
       tags:
@@ -3284,14 +3328,15 @@ paths:
     put:
       tags:
       - Traces
-      summary: Close trace thread
-      description: Close trace thread
+      summary: Close trace thread(s)
+      description: Close one or multiple trace threads. Supports both single thread_id
+        and multiple thread_ids for batch operations.
       operationId: closeTraceThread
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TraceThreadIdentifier"
+              $ref: "#/components/schemas/TraceThreadBatchIdentifier"
       responses:
         "204":
           description: No Content
@@ -10146,9 +10191,7 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
-    TraceThreadIdentifier:
-      required:
-      - thread_id
+    TraceThreadBatchIdentifier:
       type: object
       properties:
         project_name:
@@ -10157,8 +10200,15 @@ components:
           type: string
           format: uuid
         thread_id:
-          minLength: 1
           type: string
+        thread_ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
     Trace_Write:
       required:
       - start_time
@@ -10457,6 +10507,19 @@ components:
         created_at:
           type: string
           format: date-time
+    TraceThreadIdentifier:
+      required:
+      - thread_id
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        thread_id:
+          minLength: 1
+          type: string
     TraceThreadPage:
       type: object
       properties:
