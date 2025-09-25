@@ -900,9 +900,6 @@ redirects:
   - source: "/docs/opik/tracing/integrations/openai-typescript"
     destination: "/docs/opik/integrations/openai-typescript"
     permanent: true
-  - source: "/docs/opik/tracing/integrations/aisuite"
-    destination: "/docs/opik/integrations/aisuite"
-    permanent: true
   - source: "/docs/opik/tracing/integrations/openai_agents"
     destination: "/docs/opik/integrations/openai_agents"
     permanent: true
@@ -961,6 +958,9 @@ redirects:
   # Cookbook redirects
   - source: "/docs/opik/cookbook/overview"
     destination: "/docs/opik/integrations/overview"
+    permanent: true
+  - source: "/docs/opik/cookbook/aisuite"
+    destination: "/docs/opik/integrations/aisuite"
     permanent: true
   - source: "/docs/opik/cookbook/openai"
     destination: "/docs/opik/integrations/openai"
