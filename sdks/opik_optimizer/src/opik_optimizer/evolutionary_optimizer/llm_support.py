@@ -42,6 +42,8 @@ class LlmSupport:
         frequency_penalty: float
         presence_penalty: float
 
+        def increment_llm_counter(self) -> None: ...
+
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,

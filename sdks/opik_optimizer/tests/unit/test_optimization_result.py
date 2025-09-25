@@ -146,7 +146,7 @@ class TestOptimizationResult:
         assert result.details == {"iterations": 5, "converged": True}
         assert len(result.history) == 2
         assert result.llm_calls == 15
-        assert len(result.demonstrations) == 1
+        assert result.demonstrations is not None and len(result.demonstrations) == 1
         assert result.mipro_prompt == "MIPRO optimized prompt"
         assert result.tool_prompts == {"tool1": "prompt1", "tool2": "prompt2"}
 

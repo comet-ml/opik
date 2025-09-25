@@ -16,6 +16,7 @@ Tests cover:
 import pytest
 from unittest.mock import Mock
 import inspect
+from typing import Any
 
 from opik import Dataset
 from opik_optimizer import (
@@ -26,6 +27,7 @@ from opik_optimizer import (
 )
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimization_config import chat_prompt
+from collections.abc import Callable
 
 
 class TestOptimizerAPICompliance:
@@ -61,14 +63,14 @@ class TestOptimizerAPICompliance:
     def mock_metric(self) -> Callable[[Any, Any], float]:
         """Create a mock metric function for testing."""
 
-        def metric(dataset_item, llm_output):
+        def metric(dataset_item: Any, llm_output: Any) -> float:
             return 0.8
 
         return metric
 
     def test_optimize_prompt_signature_consistency(self) -> None:
         """Test that all optimizers have identical optimize_prompt signatures."""
-        optimizers = [
+        optimizers: list[type[Any]] = [
             FewShotBayesianOptimizer,
             GepaOptimizer,
             MetaPromptOptimizer,
@@ -92,7 +94,7 @@ class TestOptimizerAPICompliance:
 
     def test_optimize_prompt_parameter_order(self) -> None:
         """Test that all optimizers have consistent parameter order."""
-        optimizers = [
+        optimizers: list[type[Any]] = [
             FewShotBayesianOptimizer,
             GepaOptimizer,
             MetaPromptOptimizer,
@@ -123,7 +125,7 @@ class TestOptimizerAPICompliance:
 
     def test_optimize_prompt_return_type_consistency(self) -> None:
         """Test that all optimizers return OptimizationResult."""
-        optimizers = [
+        optimizers: list[type[Any]] = [
             FewShotBayesianOptimizer,
             GepaOptimizer,
             MetaPromptOptimizer,
@@ -159,7 +161,7 @@ class TestOptimizerAPICompliance:
             # Test invalid prompt type
             with pytest.raises(ValueError, match="Prompt must be a ChatPrompt object"):
                 optimizer.optimize_prompt(
-                    prompt="invalid_prompt",
+                    prompt="invalid_prompt",  # type: ignore[arg-type]
                     dataset=Mock(spec=Dataset),
                     metric=lambda x, y: 0.8,
                 )
@@ -168,7 +170,7 @@ class TestOptimizerAPICompliance:
             with pytest.raises(ValueError, match="Dataset must be a Dataset object"):
                 optimizer.optimize_prompt(
                     prompt=Mock(spec=chat_prompt.ChatPrompt),
-                    dataset="invalid_dataset",
+                    dataset="invalid_dataset",  # type: ignore[arg-type]
                     metric=lambda x, y: 0.8,
                 )
 
@@ -177,7 +179,7 @@ class TestOptimizerAPICompliance:
                 optimizer.optimize_prompt(
                     prompt=Mock(spec=chat_prompt.ChatPrompt),
                     dataset=Mock(spec=Dataset),
-                    metric="invalid_metric",
+                    metric="invalid_metric",  # type: ignore[arg-type]
                 )
 
     def test_optimization_result_structure(self) -> None:
@@ -281,7 +283,7 @@ class TestOptimizerAPICompliance:
     def test_optimizer_chaining_compatibility(self) -> None:
         """Test that optimizers can be chained together."""
         # This test verifies that the API is compatible with chaining
-        optimizers = [
+        optimizers: list[type[Any]] = [
             FewShotBayesianOptimizer,
             GepaOptimizer,
             MetaPromptOptimizer,
@@ -307,7 +309,7 @@ class TestOptimizerAPICompliance:
 
     def test_api_specification_summary(self) -> None:
         """Test that summarizes the API specification compliance."""
-        optimizers = [
+        optimizers: list[type[Any]] = [
             FewShotBayesianOptimizer,
             GepaOptimizer,
             MetaPromptOptimizer,
