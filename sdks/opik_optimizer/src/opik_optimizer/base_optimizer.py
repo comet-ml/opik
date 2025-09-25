@@ -66,10 +66,24 @@ class BaseOptimizer:
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
+        self.tool_call_counter = 0
         self._opik_client = None  # Lazy initialization
 
         # Initialize shared cache
         initialize_cache()
+
+    def reset_counters(self) -> None:
+        """Reset all call counters for a new optimization run."""
+        self.llm_call_counter = 0
+        self.tool_call_counter = 0
+
+    def increment_llm_counter(self) -> None:
+        """Increment the LLM call counter."""
+        self.llm_call_counter += 1
+
+    def increment_tool_counter(self) -> None:
+        """Increment the tool call counter."""
+        self.tool_call_counter += 1
 
     @property
     def opik_client(self):
@@ -121,7 +135,7 @@ class BaseOptimizer:
             The agent class to use
         """
         if agent_class is None:
-            return create_litellm_agent_class(prompt)
+            return create_litellm_agent_class(prompt, optimizer=self)
         else:
             return agent_class
 
@@ -307,7 +321,7 @@ class BaseOptimizer:
         self.agent_class: type[OptimizableAgent]
 
         if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
+            self.agent_class = create_litellm_agent_class(prompt, optimizer=self)
         else:
             self.agent_class = agent_class
 

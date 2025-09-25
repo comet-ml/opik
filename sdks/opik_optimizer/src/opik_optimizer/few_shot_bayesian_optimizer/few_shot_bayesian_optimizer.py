@@ -132,7 +132,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             Dict containing the model's response
         """
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
 
         current_model_kwargs = self.model_kwargs.copy()
         current_model_kwargs.update(model_kwargs)
@@ -479,6 +479,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
         )

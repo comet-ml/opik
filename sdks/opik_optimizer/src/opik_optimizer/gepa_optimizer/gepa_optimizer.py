@@ -457,7 +457,7 @@ class GepaOptimizer(BaseOptimizer):
         per_item_scores: list[dict[str, Any]] = []
         try:
             analysis_prompt = final_prompt.copy()
-            agent_cls = create_litellm_agent_class(analysis_prompt)
+            agent_cls = create_litellm_agent_class(analysis_prompt, optimizer=self)
             agent = agent_cls(analysis_prompt)
             for item in items:
                 messages = analysis_prompt.get_messages(item)
@@ -586,7 +586,7 @@ class GepaOptimizer(BaseOptimizer):
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_kwargs
 
-        agent_class = create_litellm_agent_class(prompt)
+        agent_class = create_litellm_agent_class(prompt, optimizer=self)
         agent = agent_class(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:

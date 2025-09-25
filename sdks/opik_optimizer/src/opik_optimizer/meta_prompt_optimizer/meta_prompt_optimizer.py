@@ -189,7 +189,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
         # Note: Basic retry logic could be added here using tenacity
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
@@ -621,7 +621,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.prompt = prompt
-        self.llm_call_counter = 0  # Reset counter for run
+        self.reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
         current_prompt = prompt
@@ -875,6 +875,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric_name=getattr(metric, "__name__", str(metric)),
             details=details,
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
             tool_prompts=tool_prompts,
