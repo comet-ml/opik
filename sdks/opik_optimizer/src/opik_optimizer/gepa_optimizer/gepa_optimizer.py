@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from contextlib import nullcontext
 from typing import Any, ContextManager
@@ -12,6 +10,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
+from ..optimizable_agent import OptimizableAgent
 from ..utils import optimization_context, create_litellm_agent_class
 from ..logging_config import setup_logging as _setup_logging
 from .. import task_evaluator
@@ -32,13 +31,13 @@ class GepaOptimizer(BaseOptimizer):
         project_name: str | None = None,
         reflection_model: str | None = None,
         verbose: int = 1,
+        seed: int = 42,
         **model_kwargs: Any,
     ) -> None:
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.project_name = project_name
         self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
-        self.seed = self.model_kwargs.pop("seed", 42)
         self._gepa_live_metric_calls = 0
 
     # ------------------------------------------------------------------
@@ -105,21 +104,71 @@ class GepaOptimizer(BaseOptimizer):
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
-        dataset: str | Dataset,
-        metric: Callable[[dict[str, Any], str], ScoreResult],
-        experiment_config: dict[str, Any] | None = None,
+        dataset: Dataset,
+        metric: Callable,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
-        if isinstance(dataset, str):
-            client = opik.Opik(project_name=self.project_name)
-            dataset = client.get_dataset(dataset)
+        """
+        Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
+        
+        Args:
+            prompt: The prompt to optimize
+            dataset: Opik Dataset to optimize on
+            metric: Metric function to evaluate on
+            experiment_config: Optional configuration for the experiment
+            n_samples: Optional number of items to test in the dataset
+            auto_continue: Whether to auto-continue optimization
+            agent_class: Optional agent class to use
+            **kwargs: GEPA-specific parameters:
+                max_metric_calls (int | None): Maximum number of metric evaluations (default: 30)
+                reflection_minibatch_size (int): Size of reflection minibatches (default: 3)
+                candidate_selection_strategy (str): Strategy for candidate selection (default: "pareto")
+                skip_perfect_score (bool): Skip candidates with perfect scores (default: True)
+                perfect_score (float): Score considered perfect (default: 1.0)
+                use_merge (bool): Enable merge operations (default: False)
+                max_merge_invocations (int): Maximum merge invocations (default: 5)
+                run_dir (str | None): Directory for run outputs (default: None)
+                track_best_outputs (bool): Track best outputs during optimization (default: False)
+                display_progress_bar (bool): Display progress bar (default: False)
+                seed (int): Random seed for reproducibility (default: 42)
+                raise_on_exception (bool): Raise exceptions instead of continuing (default: True)
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+        
+        Returns:
+            OptimizationResult: Result of the optimization
+        """
+        # Validate inputs according to API specification
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+        
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not callable(metric):
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
 
-        max_metric_calls: int = int(kwargs.get("max_metric_calls", 30))
+        # Extract GEPA-specific parameters from kwargs
+        max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
         reflection_minibatch_size: int = int(kwargs.get("reflection_minibatch_size", 3))
         candidate_selection_strategy: str = str(
             kwargs.get("candidate_selection_strategy", "pareto")
         )
-        n_samples: int | None = kwargs.get("n_samples")
+        skip_perfect_score: bool = kwargs.get("skip_perfect_score", True)
+        perfect_score: float = float(kwargs.get("perfect_score", 1.0))
+        use_merge: bool = kwargs.get("use_merge", False)
+        max_merge_invocations: int = int(kwargs.get("max_merge_invocations", 5))
+        run_dir: str | None = kwargs.get("run_dir", None)
+        track_best_outputs: bool = kwargs.get("track_best_outputs", False)
+        display_progress_bar: bool = kwargs.get("display_progress_bar", False)
+        seed: int = int(kwargs.get("seed", 42))
+        raise_on_exception: bool = kwargs.get("raise_on_exception", True)
+        mcp_config = kwargs.pop("mcp_config", None)  # Added for MCP support
 
         prompt = prompt.copy()
         if self.project_name:
@@ -244,10 +293,17 @@ class GepaOptimizer(BaseOptimizer):
                 "task_lm": None,
                 "reflection_lm": self.reflection_model,
                 "candidate_selection_strategy": candidate_selection_strategy,
+                "skip_perfect_score": skip_perfect_score,
                 "reflection_minibatch_size": reflection_minibatch_size,
+                "perfect_score": perfect_score,
+                "use_merge": use_merge,
+                "max_merge_invocations": max_merge_invocations,
                 "max_metric_calls": max_metric_calls,
-                "display_progress_bar": False,
-                "track_best_outputs": False,
+                "run_dir": run_dir,
+                "track_best_outputs": track_best_outputs,
+                "display_progress_bar": display_progress_bar,
+                "seed": seed,
+                "raise_on_exception": raise_on_exception,
                 "logger": gepa_reporting.RichGEPAOptimizerLogger(
                     self, verbose=self.verbose
                 ),
