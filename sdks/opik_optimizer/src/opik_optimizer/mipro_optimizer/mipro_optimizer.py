@@ -272,6 +272,9 @@ class MiproOptimizer(BaseOptimizer):
         Raises:
             ValueError: If task_config is not provided
         """
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        
         # Extract MIPRO-specific parameters from kwargs
         task_config = kwargs.pop('task_config', None)
         if task_config is None:
@@ -281,13 +284,7 @@ class MiproOptimizer(BaseOptimizer):
         num_trials = kwargs.pop('num_trials', 3)
         auto = kwargs.pop('auto', 'light')
         
-        self._opik_client = opik.Opik()
-        with optimization_context(
-            client=self._opik_client,
-            dataset_name=dataset.name,
-            objective_name=metric.__name__,
-            metadata={"optimizer": self.__class__.__name__},
-        ) as optimization:
+        with self.create_optimization_context(dataset, metric) as optimization:
             result = self._optimize_prompt(
                 dataset=dataset,
                 metric=metric,

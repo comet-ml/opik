@@ -161,8 +161,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self.llm_call_counter = 0
-        self._opik_client = opik_client.get_client_cached()
         self._current_optimization_id: str | None = None
         self._current_generation = 0
         self._best_fitness_history: list[float] = []
@@ -499,36 +497,20 @@ class EvolutionaryOptimizer(BaseOptimizer):
             **kwargs: Additional keyword arguments including:
                 mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-
-        if not isinstance(dataset, opik.Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         # Extract MCP config from kwargs
         mcp_config = kwargs.pop("mcp_config", None)
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = utils.create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
 
         self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: optimization.Optimization | None = None
         try:
-            opik_optimization_run = self._opik_client.create_optimization(
+            opik_optimization_run = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
