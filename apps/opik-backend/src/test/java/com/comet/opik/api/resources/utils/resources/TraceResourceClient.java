@@ -548,7 +548,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void closeTraceThreads(List<String> threadIds, UUID projectId, String projectName, String apiKey,
+    public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")

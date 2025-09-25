@@ -10223,7 +10223,7 @@ class TracesResourceTest {
             });
 
             // When: Close multiple trace threads using the batch endpoint
-            traceResourceClient.closeTraceThreads(List.of(threadId1, threadId2, threadId3), projectId, projectName,
+            traceResourceClient.closeTraceThreads(Set.of(threadId1, threadId2, threadId3), projectId, projectName,
                     apiKey, workspaceName);
 
             // Then: Assert that all threads are closed using getTraceThreads API

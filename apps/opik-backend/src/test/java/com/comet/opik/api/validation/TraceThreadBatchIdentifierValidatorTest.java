@@ -12,7 +12,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -65,7 +64,7 @@ class TraceThreadBatchIdentifierValidatorTest {
         // Given
         var identifier = TraceThreadBatchIdentifier.builder()
                 .projectName("test-project")
-                .threadIds(List.of("thread-1", "thread-2", "thread-3"))
+                .threadIds(Set.of("thread-1", "thread-2", "thread-3"))
                 .build();
 
         // When
@@ -80,7 +79,7 @@ class TraceThreadBatchIdentifierValidatorTest {
         // Given
         var identifier = TraceThreadBatchIdentifier.builder()
                 .projectId(UUID.randomUUID())
-                .threadIds(List.of("thread-1", "thread-2", "thread-3"))
+                .threadIds(Set.of("thread-1", "thread-2", "thread-3"))
                 .build();
 
         // When
@@ -128,7 +127,7 @@ class TraceThreadBatchIdentifierValidatorTest {
         var identifier = TraceThreadBatchIdentifier.builder()
                 .projectName("test-project")
                 .threadId("thread-123")
-                .threadIds(List.of("thread-1", "thread-2"))
+                .threadIds(Set.of("thread-1", "thread-2"))
                 .build();
 
         // When
@@ -183,7 +182,7 @@ class TraceThreadBatchIdentifierValidatorTest {
 
     @ParameterizedTest
     @MethodSource("invalidThreadIdentifierCases")
-    void validateWhenInvalidThreadIdentifier(String threadId, List<String> threadIds, String expectedMessage) {
+    void validateWhenInvalidThreadIdentifier(String threadId, Set<String> threadIds, String expectedMessage) {
         // Given
         var identifier = TraceThreadBatchIdentifier.builder()
                 .projectName("test-project")
@@ -220,14 +219,14 @@ class TraceThreadBatchIdentifierValidatorTest {
         return Stream.of(
                 // Valid cases
                 Arguments.of("valid-thread", null, null),
-                Arguments.of(null, List.of("thread-1", "thread-2"), null),
+                Arguments.of(null, Set.of("thread-1", "thread-2"), null),
 
                 // Invalid cases
                 Arguments.of(null, null, "Either 'threadId' or 'threadIds' must be provided."),
                 Arguments.of("", null, "Either 'threadId' or 'threadIds' must be provided."),
                 Arguments.of("   ", null, "Either 'threadId' or 'threadIds' must be provided."),
-                Arguments.of(null, List.of(), "size must be between 1 and 1000"),
-                Arguments.of("thread-1", List.of("thread-2"),
+                Arguments.of(null, Set.of(), "size must be between 1 and 1000"),
+                Arguments.of("thread-1", Set.of("thread-2"),
                         "Cannot provide both 'threadId' and 'threadIds'. Use 'threadId' for single operations or 'threadIds' for batch operations."));
     }
 }
