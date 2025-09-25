@@ -81,6 +81,7 @@ import java.util.concurrent.TimeUnit;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.domain.FeedbackScoreMapper.EMPTY_REASON_PLACEHOLDER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -785,6 +786,46 @@ public class MultiValueFeedbackScoresE2ETest {
         var actualScore = actualTrace.feedbackScores().getFirst();
         assertThat(actualScore.categoryName()).isEqualTo(newScore.categoryName());
         assertThat(actualScore.value()).isEqualTo(newScore.value());
+    }
+
+    @Test
+    @DisplayName("test score trace with multiple empty reasons")
+    void testScoreTraceWithMultipleEmptyReasons() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        // score the trace
+        var score1 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .reason(null)
+                .build();
+        traceResourceClient.feedbackScore(traceId, score1, TEST_WORKSPACE, API_KEY1);
+
+        // assert feedback score reason is empty for backwards compatibility
+        var actualSingleScore = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getTraceScore(actualSingleScore).reason()).isNull();
+
+        var score2 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(score1.name())
+                .reason(null)
+                .build();
+        traceResourceClient.feedbackScore(traceId, score2, TEST_WORKSPACE, API_KEY2);
+
+        // assert feedback score reason has placeholders
+        var actualMultiScores = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getTraceScore(actualMultiScores).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+    }
+
+    private FeedbackScore getTraceScore(Trace trace) {
+        assertThat(trace.feedbackScores()).hasSize(1);
+        return trace.feedbackScores().getFirst();
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {

@@ -28,6 +28,8 @@ public interface FeedbackScoreMapper {
 
     FeedbackScoreMapper INSTANCE = Mappers.getMapper(FeedbackScoreMapper.class);
 
+    String EMPTY_REASON_PLACEHOLDER = "<no reason>";
+
     @Mapping(target = "categoryName", expression = "java(item.categoryName())")
     @Mapping(target = "name", expression = "java(item.name())")
     @Mapping(target = "value", expression = "java(item.value())")
