@@ -11,7 +11,7 @@ from opik_optimizer.optimization_config import chat_prompt
 class TestMiproOptimizerValidation:
     """Test MiproOptimizer parameter validation."""
 
-    def test_auto_parameter_validation(self, mock_dataset, mock_metric):
+    def test_auto_parameter_validation(self, mock_dataset, mock_metric) -> None:
         """Test that auto parameter accepts valid values."""
         optimizer = MiproOptimizer(model="openai/gpt-4")
 
@@ -44,7 +44,7 @@ class TestMiproOptimizerValidation:
                 except ValueError as e:
                     pytest.fail(f"Valid auto value '{auto_value}' was rejected: {e}")
 
-    def test_auto_parameter_invalid_values(self, mock_dataset, mock_metric):
+    def test_auto_parameter_invalid_values(self, mock_dataset, mock_metric) -> None:
         """Test that auto parameter rejects invalid values."""
         optimizer = MiproOptimizer(model="openai/gpt-4")
 
@@ -82,7 +82,7 @@ class TestMiproOptimizerValidation:
                     # If our code rejects it, that's also fine
                     assert "auto" in str(e).lower() or "invalid" in str(e).lower()
 
-    def test_missing_task_config_raises_error(self, mock_dataset, mock_metric):
+    def test_missing_task_config_raises_error(self, mock_dataset, mock_metric) -> None:
         """Test that missing task_config raises ValueError."""
         optimizer = MiproOptimizer(model="openai/gpt-4")
 
@@ -100,7 +100,7 @@ class TestMiproOptimizerValidation:
                 # task_config is missing
             )
 
-    def test_kwargs_parameter_extraction(self, mock_dataset, mock_metric):
+    def test_kwargs_parameter_extraction(self, mock_dataset, mock_metric) -> None:
         """Test that kwargs parameters are correctly extracted."""
         optimizer = MiproOptimizer(model="openai/gpt-4")
 
