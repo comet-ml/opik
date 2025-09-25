@@ -105,6 +105,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         Response:
         """
+
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
@@ -115,6 +116,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         """
         # Construct the prompt based on the output of the LLM
         prompt = self.prompt_template.format(output=output)
+
         # Generate and parse the response from the LLM
         response = self.llm_client.chat.completions.create(
             model=self.model_name,
@@ -158,7 +160,9 @@ from opik.evaluation import models
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         super().__init__(name)
+
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
+
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
         and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate.
@@ -174,6 +178,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         Response:
         """
+
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
@@ -239,7 +244,7 @@ class MultiScoreCustomMetric(base_metric.BaseMetric):
 
 In the examples above, we ask the LLM to respond with a JSON object. However as this is not enforced, it is possible that the LLM returns a non-structured response. In order to avoid this, you can use the `litellm` library to enforce a structured output. This will make our custom metric more robust and less prone to failure.
 
-For this we define the format of the response we expect from the LLM in the `LLMJudgeResult` class and pass it to the LiteLLM client:
+For this we define the format of the response we expect from the LLM in the `LLMJudgeBinaryResult` class and pass it to the LiteLLM client:
 
 ```python
 import json
@@ -248,10 +253,6 @@ from typing import Any
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
-
-class LLMJudgeResult(BaseModel):
-    score: int
-    reason: str
 
 class LLMJudgeBinaryResult(BaseModel):
     score: bool
