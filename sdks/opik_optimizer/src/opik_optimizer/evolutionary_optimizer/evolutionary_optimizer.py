@@ -501,8 +501,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.configure_prompt_model(prompt)
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
-        # Extract MCP config from kwargs
-        mcp_config = kwargs.pop("mcp_config", None)
+        # Extract MCP config from kwargs (for future use)
+        kwargs.pop("mcp_config", None)
 
         self.project_name = self.agent_class.project_name
 
