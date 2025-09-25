@@ -50,11 +50,10 @@ def test_mipro_optimizer() -> None:
 
     # Create a dummy prompt for the standardized API
     from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-
     dummy_prompt = ChatPrompt(
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Complete the task using the provided tools."},
+            {"role": "user", "content": "Complete the task using the provided tools."}
         ]
     )
 
