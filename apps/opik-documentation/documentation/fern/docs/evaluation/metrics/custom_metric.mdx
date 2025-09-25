@@ -122,7 +122,9 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         )
         response_dict = json.loads(response.choices[0].message.content)
 
-        response_score = bool(response_dict["score"])
+        # Parse the response using the binary result model
+        binary_result = LLMJudgeBinaryResult(**response_dict)
+        response_score = binary_result.score
 
         return score_result.ScoreResult(
             name=self.name,
@@ -248,6 +250,10 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
 
 class LLMJudgeResult(BaseModel):
+    score: int
+    reason: str
+
+class LLMJudgeBinaryResult(BaseModel):
     score: bool
     reason: str
 
@@ -282,7 +288,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         prompt = self.prompt_template.format(output=output)
 
         # Generate and parse the response from the LLM
-        response = self.llm_client.generate_string(input=prompt, response_format=LLMJudgeResult)
+        response = self.llm_client.generate_string(input=prompt, response_format=LLMJudgeBinaryResult)
         response_dict = json.loads(response)
 
         return score_result.ScoreResult(
