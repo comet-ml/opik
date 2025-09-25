@@ -81,7 +81,7 @@ It is also possible to define LLM as a Judge and Custome Python metrics that run
 We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
 1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
 2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
-3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric.
+3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric. By default, this template uses binary scoring (true/false) following best practices.
 
 For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
 
