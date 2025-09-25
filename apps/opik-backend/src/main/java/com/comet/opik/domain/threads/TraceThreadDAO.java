@@ -27,6 +27,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
@@ -50,7 +51,7 @@ public interface TraceThreadDAO {
 
     Mono<Long> openThread(UUID projectId, String threadId);
 
-    Mono<Long> closeThread(UUID projectId, List<String> threadId);
+    Mono<Long> closeThread(UUID projectId, Set<String> threadId);
 
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 
@@ -383,7 +384,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
         if (CollectionUtils.isEmpty(threadIds)) {
             return Mono.just(0L);
         }
@@ -567,15 +568,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private void bindStatementParam(TraceThreadCriteria criteria, Statement statement) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
-            statement.bind("ids", criteria.ids());
+            statement.bind("ids", criteria.ids().toArray(UUID[]::new));
         }
 
         if (CollectionUtils.isNotEmpty(criteria.threadIds())) {
-            statement.bind("thread_ids", criteria.threadIds());
+            statement.bind("thread_ids", criteria.threadIds().toArray(String[]::new));
         }
 
         if (criteria.projectId() != null) {
-            statement.bind("project_ids", List.of(criteria.projectId()));
+            statement.bind("project_ids", List.of(criteria.projectId()).toArray(UUID[]::new));
         }
 
         if (criteria.status() != null) {
