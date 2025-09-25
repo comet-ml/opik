@@ -19,16 +19,16 @@ from opik_optimizer.optimization_config import chat_prompt
 class TestCounterFunctionality:
     """Test that counters work correctly across all optimizers."""
 
-    def test_base_optimizer_counters_initialized(self):
+    def test_base_optimizer_counters_initialized(self) -> None:
         """Test that base optimizer initializes counters correctly."""
         from opik_optimizer.base_optimizer import BaseOptimizer
 
         # Create a mock optimizer that inherits from BaseOptimizer
         class MockOptimizer(BaseOptimizer):
-            def optimize_prompt(self, *args, **kwargs):
+            def optimize_prompt(self, *args: object, **kwargs: object) -> object:
                 pass
 
-            def optimize_mcp(self, *args, **kwargs):
+            def optimize_mcp(self, *args: object, **kwargs: object) -> object:
                 pass
 
         optimizer = MockOptimizer(model="gpt-4o-mini")
@@ -48,7 +48,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
 
-    def test_gepa_optimizer_counters(self):
+    def test_gepa_optimizer_counters(self) -> None:
         """Test that GepaOptimizer has proper counters."""
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 
@@ -62,7 +62,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
 
-    def test_meta_prompt_optimizer_counters(self):
+    def test_meta_prompt_optimizer_counters(self) -> None:
         """Test that MetaPromptOptimizer has proper counters."""
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini")
 
@@ -76,7 +76,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
 
-    def test_few_shot_bayesian_optimizer_counters(self):
+    def test_few_shot_bayesian_optimizer_counters(self) -> None:
         """Test that FewShotBayesianOptimizer has proper counters."""
         optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini")
 
@@ -90,7 +90,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
 
-    def test_evolutionary_optimizer_counters(self):
+    def test_evolutionary_optimizer_counters(self) -> None:
         """Test that EvolutionaryOptimizer has proper counters."""
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini")
 
@@ -104,7 +104,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
 
-    def test_mipro_optimizer_counters(self):
+    def test_mipro_optimizer_counters(self) -> None:
         """Test that MiproOptimizer has proper counters."""
         optimizer = MiproOptimizer(model="gpt-4o-mini")
 
@@ -118,7 +118,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
 
-    def test_reset_counters_method(self):
+    def test_reset_counters_method(self) -> None:
         """Test that reset_counters method works correctly."""
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 
@@ -136,7 +136,7 @@ class TestCounterFunctionality:
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
 
-    def test_agent_has_optimizer_reference(self):
+    def test_agent_has_optimizer_reference(self) -> None:
         """Test that agents created by optimizers have access to the optimizer."""
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 

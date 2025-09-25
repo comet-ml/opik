@@ -14,7 +14,7 @@ from opik_optimizer.optimization_result import OptimizationResult
 class TestOptimizationResult:
     """Test OptimizationResult model functionality."""
 
-    def test_optimization_result_creation(self):
+    def test_optimization_result_creation(self) -> None:
         """Test creating a valid OptimizationResult."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -29,7 +29,7 @@ class TestOptimizationResult:
         assert result.metric_name == "accuracy"
         assert result.history == [{"iteration": 1, "score": 0.8}]
 
-    def test_optimization_result_required_fields(self):
+    def test_optimization_result_required_fields(self) -> None:
         """Test that all required fields are present."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -44,7 +44,7 @@ class TestOptimizationResult:
         assert hasattr(result, "score")
         assert hasattr(result, "metric_name")
 
-    def test_optimization_result_missing_required_field(self):
+    def test_optimization_result_missing_required_field(self) -> None:
         """Test that missing required fields raise ValidationError."""
         # Missing metric_name field
         with pytest.raises(ValidationError) as exc_info:
@@ -56,7 +56,7 @@ class TestOptimizationResult:
 
         assert "metric_name" in str(exc_info.value)
 
-    def test_optimization_result_field_types(self):
+    def test_optimization_result_field_types(self) -> None:
         """Test that field types are validated correctly."""
         # Valid types
         result = OptimizationResult(
@@ -82,7 +82,7 @@ class TestOptimizationResult:
         assert isinstance(result.metric_name, str)
         assert isinstance(result.history, list)
 
-    def test_optimization_result_serialization(self):
+    def test_optimization_result_serialization(self) -> None:
         """Test that OptimizationResult can be serialized."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -99,7 +99,7 @@ class TestOptimizationResult:
         assert result_dict["score"] == 0.85
         assert result_dict["metric_name"] == "accuracy"
 
-    def test_optimization_result_default_values(self):
+    def test_optimization_result_default_values(self) -> None:
         """Test OptimizationResult with default values."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -120,7 +120,7 @@ class TestOptimizationResult:
         assert result.mipro_prompt is None
         assert result.tool_prompts is None
 
-    def test_optimization_result_with_optional_fields(self):
+    def test_optimization_result_with_optional_fields(self) -> None:
         """Test OptimizationResult with optional fields populated."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -150,7 +150,7 @@ class TestOptimizationResult:
         assert result.mipro_prompt == "MIPRO optimized prompt"
         assert result.tool_prompts == {"tool1": "prompt1", "tool2": "prompt2"}
 
-    def test_optimization_result_prompt_format(self):
+    def test_optimization_result_prompt_format(self) -> None:
         """Test that prompt field accepts correct format."""
         # Valid prompt format
         result = OptimizationResult(
@@ -167,7 +167,7 @@ class TestOptimizationResult:
         assert result.prompt[0]["role"] == "system"
         assert result.prompt[1]["role"] == "user"
 
-    def test_optimization_result_invalid_prompt_format(self):
+    def test_optimization_result_invalid_prompt_format(self) -> None:
         """Test that invalid prompt format raises ValidationError."""
         # Invalid prompt format - should be list[dict[str, str]]
         with pytest.raises(ValidationError):

@@ -273,7 +273,6 @@ class MiproOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
-        
 
         # Extract MIPRO-specific parameters from kwargs
         task_config = kwargs.pop("task_config", None)
@@ -350,24 +349,12 @@ class MiproOptimizer(BaseOptimizer):
         output_key = task_config.output_dataset_field
         self.tools = task_config.tools
         self.num_candidates = num_candidates
+        self.auto = auto
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
         self.num_trials = num_trials
         self.n_samples = n_samples
-
-    def cleanup(self) -> None:
-        """
-        Clean up MIPRO-specific resources.
-        """
-        # Call parent cleanup
-        super().cleanup()
-        
-        # Clear MIPRO-specific resources
-        self.tools = None
-        self.prompt = None
-        
-        logger.debug("Cleaned up MIPRO-specific resources")
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
@@ -435,6 +422,19 @@ class MiproOptimizer(BaseOptimizer):
         logger.debug("Created DSPy training set.")
         logger.debug(f"Using DSPy module: {type(self.module).__name__}")
         logger.debug(f"Using metric function: {self.metric_function.__name__}")
+
+    def cleanup(self) -> None:
+        """
+        Clean up MIPRO-specific resources.
+        """
+        # Call parent cleanup
+        super().cleanup()
+
+        # Clear MIPRO-specific resources
+        self.tools = None
+        self.prompt = None
+
+        logger.debug("Cleaned up MIPRO-specific resources")
 
     def load_from_checkpoint(self, filename):
         """
