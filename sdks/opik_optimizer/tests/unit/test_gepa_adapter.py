@@ -18,14 +18,14 @@ class DummyOptimizer:
         self._gepa_live_metric_calls = 0
         self.llm_call_counter = 0
         self.tool_call_counter = 0
-
-    def increment_llm_counter(self) -> None:
+    
+    def increment_llm_counter(self):
         self.llm_call_counter += 1
-
-    def increment_tool_counter(self) -> None:
+    
+    def increment_tool_counter(self):
         self.tool_call_counter += 1
-
-    def reset_counters(self) -> None:
+    
+    def reset_counters(self):
         self.llm_call_counter = 0
         self.tool_call_counter = 0
 
