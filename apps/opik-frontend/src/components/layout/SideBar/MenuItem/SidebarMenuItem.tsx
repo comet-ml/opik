@@ -6,6 +6,8 @@ import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 export enum MENU_ITEM_TYPE {
   link = "link",
@@ -20,6 +22,7 @@ export type MenuItem = {
   icon: LucideIcon;
   label: string;
   count?: string;
+  featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
 
@@ -93,6 +96,11 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
 }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const hasCount = item.count && isNumber(count);
+  const isFeatureEnabled = useIsFeatureEnabled(item.featureFlag!);
+
+  if (item.featureFlag && !isFeatureEnabled) {
+    return null;
+  }
 
   const content = (
     <>
