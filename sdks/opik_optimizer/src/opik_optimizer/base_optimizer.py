@@ -112,7 +112,7 @@ class BaseOptimizer:
             pass
 
     @property
-    def opik_client(self):
+    def opik_client(self) -> Any:
         """Lazy initialization of Opik client."""
         if self._opik_client is None:
             import opik
@@ -179,7 +179,7 @@ class BaseOptimizer:
 
     def create_optimization_context(
         self, dataset: "Dataset", metric: Callable, metadata: dict | None = None
-    ):
+    ) -> Any:
         """
         Create optimization context for tracking.
 
