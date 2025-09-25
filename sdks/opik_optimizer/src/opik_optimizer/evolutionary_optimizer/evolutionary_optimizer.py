@@ -13,7 +13,7 @@ import opik
 # DEAP imports
 from deap import base, tools
 from deap import creator as _creator
-from opik.api_objects import optimization
+from opik.api_objects import opik_client, optimization
 from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
@@ -21,6 +21,7 @@ from opik_optimizer.optimization_config import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimizable_agent import OptimizableAgent
 
+from .. import utils
 from . import reporting
 from .llm_support import LlmSupport
 from .mutation_ops import MutationOps
@@ -134,11 +135,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 RuntimeWarning,
             )
         if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
             )
             del model_kwargs["project_name"]
 
@@ -149,25 +147,22 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
         if num_threads is not None:
-            warnings.warn(
-                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
-                "Use 'n_threads' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            print("num_threads is deprecated; use n_threads instead")
             n_threads = num_threads
         self.num_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
-        self.seed = seed if seed is not None else self.DEFAULT_SEED
+        self.seed = seed
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
+        self.llm_call_counter = 0
+        self._opik_client = opik_client.get_client_cached()
         self._current_optimization_id: str | None = None
         self._current_generation = 0
         self._best_fitness_history: list[float] = []
@@ -504,20 +499,36 @@ class EvolutionaryOptimizer(BaseOptimizer):
             **kwargs: Additional keyword arguments including:
                 mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
         """
-        # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
 
-        # Extract MCP config from kwargs (for future use)
-        kwargs.pop("mcp_config", None)
+        if not isinstance(dataset, opik.Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+
+        if not callable(metric):
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
+
+        # Extract MCP config from kwargs
+        mcp_config = kwargs.pop("mcp_config", None)
+
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        if agent_class is None:
+            self.agent_class = utils.create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
 
         self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: optimization.Optimization | None = None
         try:
-            opik_optimization_run = self.opik_client.create_optimization(
+            opik_optimization_run = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
@@ -548,7 +559,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Step 1. Step variables and define fitness function
-        self.reset_counters()  # Reset counters for run
+        self.llm_call_counter = 0
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -943,7 +954,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             details=final_details,
             history=[x.model_dump() for x in self.get_history()],
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=self._current_optimization_id,
         )
