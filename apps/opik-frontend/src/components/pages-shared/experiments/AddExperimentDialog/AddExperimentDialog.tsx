@@ -202,6 +202,8 @@ const AddExperimentDialog: React.FunctionComponent<
 from opik import Opik
 from opik.evaluation import evaluate
 
+# os.environ["OPENAI_API_KEY"] = "OpenAI API key goes here"
+
 # INJECT_OPIK_CONFIGURATION
 
 ${importString}
