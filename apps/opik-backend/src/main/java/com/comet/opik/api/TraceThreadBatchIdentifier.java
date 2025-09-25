@@ -27,7 +27,7 @@ import java.util.UUID;
  * @param projectName The name of the project (mutually exclusive with projectId)
  * @param projectId The UUID of the project (mutually exclusive with projectName)
  * @param threadId Single thread ID for backward compatibility (mutually exclusive with threadIds)
- * @param threadIds List of thread IDs for batch operations (mutually exclusive with threadId, max 1000 items)
+ * @param threadIds Set of thread IDs for batch operations (mutually exclusive with threadId, max 1000 items)
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
