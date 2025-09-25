@@ -46,6 +46,7 @@ class BaseOptimizer:
         self,
         model: str,
         verbose: int = 1,
+        seed: int = 42,
         **model_kwargs: Any,
     ) -> None:
         """
@@ -54,12 +55,14 @@ class BaseOptimizer:
         Args:
            model: LiteLLM model name
            verbose: Controls internal logging/progress bars (0=off, 1=on).
+           seed: Random seed for reproducibility (default: 42)
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.verbose = verbose
+        self.seed = seed
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -74,6 +77,9 @@ class BaseOptimizer:
         dataset: Dataset,
         metric: Callable,
         experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: str | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -100,9 +106,43 @@ class BaseOptimizer:
         tool_name: str,
         second_pass: Any,
         experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: str | None = None,
+        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+        allow_tool_use_on_second_pass: bool = False,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
-        """Optimize prompts that rely on MCP tooling."""
+        """
+        Optimize prompts that rely on MCP (Model Context Protocol) tooling.
+        
+        This method provides a standardized interface for optimizing prompts that use
+        external tools through the MCP protocol. It handles tool invocation, second-pass
+        coordination, and fallback mechanisms.
+        
+        Args:
+            prompt: The chat prompt to optimize, must include tools
+            dataset: Opik dataset containing evaluation data
+            metric: Evaluation function that takes (dataset_item, llm_output) and returns a score
+            tool_name: Name of the MCP tool to use for optimization
+            second_pass: MCPSecondPassCoordinator for handling second-pass tool calls
+            experiment_config: Optional configuration for the experiment
+            n_samples: Number of samples to use for optimization (default: None)
+            auto_continue: Whether to auto-continue optimization (default: False)
+            agent_class: Custom agent class to use (default: None)
+            fallback_invoker: Fallback function for tool invocation (default: None)
+            fallback_arguments: Function to extract tool arguments (default: None)
+            allow_tool_use_on_second_pass: Whether to allow tool use on second pass (default: False)
+            **kwargs: Additional arguments for optimization
+            
+        Returns:
+            OptimizationResult: The optimization result containing the optimized prompt and metrics
+            
+        Raises:
+            NotImplementedError: If the optimizer doesn't implement MCP optimization
+            ValueError: If the prompt doesn't include required tools
+        """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement optimize_mcp yet."
         )
