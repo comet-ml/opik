@@ -143,6 +143,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
+        seed: int = 42,
         **model_kwargs: Any,
     ) -> None:
         """
@@ -162,7 +163,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             del model_kwargs["project_name"]
 
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.reasoning_model = reasoning_model if reasoning_model is not None else model
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
@@ -357,7 +358,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
                     raw_model_output = agent.llm_invoke(
                         messages=messages,
-                        seed=None,
+                        seed=self.seed,
                         allow_tool_use=True,
                     )
                 except Exception as exc:
@@ -391,7 +392,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
                     final_response = agent.llm_invoke(
                         messages=second_pass_messages,
-                        seed=None,
+                        seed=self.seed,
                         allow_tool_use=mcp_config.allow_tool_use_on_second_pass,
                     )
                 else:
@@ -459,12 +460,17 @@ class MetaPromptOptimizer(BaseOptimizer):
         Optimize a prompt using meta-reasoning.
 
         Args:
+            prompt: The prompt to optimize
             dataset: The dataset to evaluate against
             metric: The metric to use for evaluation
             experiment_config: A dictionary to log with the experiments
             n_samples: The number of dataset items to use for evaluation
             auto_continue: If True, the algorithm may continue if goal not met
-            **kwargs: Additional arguments for evaluation
+            agent_class: Optional agent class to use
+            **kwargs: Additional arguments for evaluation, including:
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+                candidate_generator: Optional candidate generator
+                candidate_generator_kwargs: Optional kwargs for candidate generator
 
         Returns:
             OptimizationResult: Structured result containing optimization details
