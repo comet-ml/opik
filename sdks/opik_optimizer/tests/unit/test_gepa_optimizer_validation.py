@@ -30,7 +30,7 @@ class TestGepaOptimizerValidation:
         with pytest.raises(
             ValueError, match="model parameter is required and cannot be None"
         ):
-            GepaOptimizer(model=None)
+            GepaOptimizer(model=None)  # type: ignore[arg-type]
 
         # Test empty string model
         with pytest.raises(
@@ -46,7 +46,7 @@ class TestGepaOptimizerValidation:
 
         # Test non-string model
         with pytest.raises(ValueError, match="model must be a string, got int"):
-            GepaOptimizer(model=123)
+            GepaOptimizer(model=123)  # type: ignore[arg-type]
 
     def test_project_name_validation(self) -> None:
         """Test project_name parameter validation."""
@@ -62,7 +62,7 @@ class TestGepaOptimizerValidation:
         with pytest.raises(
             ValueError, match="project_name must be a string or None, got int"
         ):
-            GepaOptimizer(model="openai/gpt-4", project_name=123)
+            GepaOptimizer(model="openai/gpt-4", project_name=123)  # type: ignore[arg-type]
 
     def test_reflection_model_validation(self) -> None:
         """Test reflection_model parameter validation."""
@@ -80,7 +80,7 @@ class TestGepaOptimizerValidation:
         with pytest.raises(
             ValueError, match="reflection_model must be a string or None, got int"
         ):
-            GepaOptimizer(model="openai/gpt-4", reflection_model=123)
+            GepaOptimizer(model="openai/gpt-4", reflection_model=123)  # type: ignore[arg-type]
 
     def test_verbose_validation(self) -> None:
         """Test verbose parameter validation."""
@@ -96,7 +96,7 @@ class TestGepaOptimizerValidation:
 
         # Test invalid verbose type
         with pytest.raises(ValueError, match="verbose must be an integer, got str"):
-            GepaOptimizer(model="openai/gpt-4", verbose="invalid")
+            GepaOptimizer(model="openai/gpt-4", verbose="invalid")  # type: ignore[arg-type]
 
         # Test negative verbose
         with pytest.raises(ValueError, match="verbose must be non-negative"):
@@ -116,9 +116,9 @@ class TestGepaOptimizerValidation:
 
         # Test invalid seed type
         with pytest.raises(ValueError, match="seed must be an integer, got str"):
-            GepaOptimizer(model="openai/gpt-4", seed="invalid")
+            GepaOptimizer(model="openai/gpt-4", seed="invalid")  # type: ignore[arg-type]
 
-    def test_model_kwargs_passthrough(self):
+    def test_model_kwargs_passthrough(self) -> None:
         """Test that model_kwargs are passed through correctly."""
         optimizer = GepaOptimizer(
             model="openai/gpt-4", temperature=0.7, max_tokens=100, num_threads=8

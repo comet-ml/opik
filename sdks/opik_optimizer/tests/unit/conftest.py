@@ -150,7 +150,7 @@ def all_optimizer_classes() -> list[type]:
 
 
 @pytest.fixture
-def optimizer_instances() -> list[Any]:
+def optimizer_instances() -> dict[str, Any]:
     """Create instances of all optimizers for testing."""
     from opik_optimizer import (
         MetaPromptOptimizer,
@@ -216,7 +216,7 @@ VALID_OPTIMIZER_PARAMS = {
 }
 
 
-INVALID_OPTIMIZER_PARAMS = {
+INVALID_OPTIMIZER_PARAMS: dict[str, list[dict[str, Any]]] = {
     "MetaPromptOptimizer": [
         {"model": "openai/gpt-4", "rounds": 0},  # Invalid rounds
         {"model": "openai/gpt-4", "rounds": -1},  # Invalid rounds

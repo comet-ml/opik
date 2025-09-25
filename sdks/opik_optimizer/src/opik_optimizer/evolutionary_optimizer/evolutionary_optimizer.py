@@ -153,7 +153,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
-        self.seed = seed
+        self.seed = seed if seed is not None else self.DEFAULT_SEED
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
