@@ -1,7 +1,6 @@
 ---
 description: Describes how to create your own metric to use with Opik's evaluation platform
 toc_max_heading_level: 4
-pytest_codeblocks_execute_previous: true
 ---
 
 # Custom Metric
@@ -65,7 +64,7 @@ The `score` method should return a `ScoreResult` object. The `ascore` method is 
 
 Now you can use the custom metric to score LLM outputs:
 
-```python {pytest_codeblocks_skip=true}
+```python
 metric = MyCustomMetric()
 
 metric.score(input="What is the capital of France?", output="Paris")
@@ -139,7 +138,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python {pytest_codeblocks_skip=true}
+```python
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
@@ -208,7 +207,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python {pytest_codeblocks_skip=true}
+```python
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")

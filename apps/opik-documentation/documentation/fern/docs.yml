@@ -115,10 +115,10 @@ navigation:
           - page: Concepts
             path: docs/tracing/concepts.mdx
             slug: concepts
-          - page: 🕵️ Log traces
+          - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
-          - page: ✨ Opik Assist
+          - page: Opik Assist
             path: docs/tracing/opik_assist.mdx
             slug: opik_assist
           - page: Debug Mode & Environment Variables

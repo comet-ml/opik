@@ -38,7 +38,7 @@ In order to configure [INTEGRATION_NAME], you will need to have your [INTEGRATIO
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export [INTEGRATION_API_KEY_NAME]="YOUR_API_KEY"
 ```
 
@@ -194,6 +194,7 @@ Once you have [INTEGRATION_NAME] integrated with Opik, you can:
 Replace these placeholders in templates:
 
 **Code Integrations:**
+
 - `[INTEGRATION_NAME]` → Actual integration name (e.g., "OpenAI")
 - `[integration_name]` → Lowercase version (e.g., "openai")
 - `[integration_module]` → Python module name (e.g., "openai")

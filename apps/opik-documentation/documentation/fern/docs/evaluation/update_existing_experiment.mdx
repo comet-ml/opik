@@ -6,7 +6,7 @@ Sometimes you may want to update an existing experiment with new scores, or upda
 
 This function will re-run the scoring metrics on the existing experiment items and update the scores:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik.evaluation import evaluate_experiment
 from opik.evaluation.metrics import Hallucination
 
@@ -86,7 +86,7 @@ print(f"Experiment name: {experiment_name}")
 
 Once the first experiment is created, you realise that you also want to compute a moderation score for each example. You could re-run the experiment with new scoring metrics but this means re-running the output. Instead, you can simply update the experiment with the new scoring metrics:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik.evaluation import evaluate_experiment
 from opik.evaluation.metrics import Moderation
 

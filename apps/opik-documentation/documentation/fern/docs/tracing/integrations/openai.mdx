@@ -41,7 +41,7 @@ In order to configure OpenAI, you will need to have your OpenAI API Key. You can
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
@@ -136,7 +136,7 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
 
 The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik.integrations.openai import track_openai
 from openai import AzureOpenAI
 

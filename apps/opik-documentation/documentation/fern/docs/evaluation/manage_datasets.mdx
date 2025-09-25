@@ -92,7 +92,7 @@ Once the items have been inserted, you can view them in the Opik UI:
 
 You can also insert items from a JSONL file:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 ```
 
@@ -107,13 +107,13 @@ The format of the JSONL file should be a JSON object per line. For example:
 
 You can also insert items from a Pandas DataFrame:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.insert_from_pandas(dataframe=df)
 ```
 
 The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, this can be useful if you want to rename columns before inserting them into the dataset:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
 
@@ -121,7 +121,7 @@ dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expec
 
 You can delete items in a dataset by using the `delete` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 # Get or create a dataset
@@ -134,7 +134,7 @@ dataset.delete(items_ids=["123", "456"])
 <Tip>
 You can also remove all the items in a dataset by using the `clear` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 # Get or create a dataset
@@ -150,7 +150,7 @@ dataset.clear()
 
 You can download a dataset from Opik using the `get_dataset` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 client = Opik()
@@ -159,7 +159,7 @@ dataset = client.get_dataset(name="My dataset")
 
 Once the dataset has been retrieved, you can access its items using the `to_pandas()` or `to_json` methods:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 client = Opik()

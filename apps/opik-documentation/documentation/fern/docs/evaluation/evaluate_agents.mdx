@@ -167,7 +167,7 @@ For every Experiment we want to run, the most important elements we need to crea
 
 Here’s the full example:
 
-```python {pytest_codeblocks_skip=true}
+```python
 
 import os
 from opik import Opik
@@ -327,27 +327,32 @@ Here’s how you can use this workflow:
   </Step>
 
 {" "}
+
 <Step title="Analyze the results in Opik">
   Look at the most common errors and read the reasoning behind low scores.
 </Step>
 
 {" "}
+
 <Step title="Make improvements to your agent">
   Update the <strong>system prompt</strong> to improve instructions, refine <strong>tool descriptions</strong>, and
   adjust <strong>tool names or input formats</strong> to be more intuitive.
 </Step>
 
 {" "}
+
 <Step title="Re-run the evaluation experiment">
   Use the same dataset to measure how your changes affected tool selection quality.
 </Step>
 
 {" "}
+
 <Step title="Compare the results">
   Review improvements in score, spot reductions in errors, and identify new patterns or regressions.
 </Step>
 
 {" "}
+
 <Frame caption="Comparing results between experiments">
   <img
     src="/img/evaluation/evaluation_agents_compare_experiments.png"
@@ -381,7 +386,7 @@ But this is just the beginning.
 
 From here, you might want to:
 
-- Optimize your prompts to drive better agent behavior with **[Prompt Optimization](/prompt_engineering/prompt_optimization)**.
+- Optimize your prompts to drive better agent behavior with **[Prompt Optimization](/agent_optimization/overview)**.
 - Monitor agents in production to catch regressions, errors, and drift in real-time with **[Production Monitoring](/production/production_monitoring)**.
 - Add **[Guardrails](/production/guardrails)** for security, content safety, and sensitive data leakage prevention, ensuring your agents behave responsibly even in dynamic environments.
 

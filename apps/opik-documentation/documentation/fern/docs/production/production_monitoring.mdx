@@ -75,7 +75,7 @@ The `search_traces` method allows you to fetch traces based on any of trace attr
 
 Once you have fetched the traces you want to annotate, you can update the feedback scores using the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method.
 
-```python {pytest_codeblocks_skip=true}
+```python
 for trace in traces:
     opik_client.log_traces_feedback_scores(
         project_name="Default Project",
@@ -91,10 +91,10 @@ You will now be able to see the feedback scores in the Opik dashboard and track 
 
 You can view the content of your traces using [`Opik.get_trace_content(id: str)`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_trace_content), to look up your trace by id. Trace ids can be found using the [`Opik.search_traces()`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) method or by looking at the ID column within the Projects > 'My-project' view.
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
-TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier 
+TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier
 
 opik_client = Opik()
 trace_content = opik_client.get_trace_content(id = TRACE_ID)
@@ -106,10 +106,10 @@ This will return a [`TracePublic`](https://www.comet.com/docs/opik/python-sdk-re
 
 You can update a given trace by first re-instantiating the trace using [`opik.Opik.trace()`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.trace) and then updating any one of the trace attributes using [`Trace.update()`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.update). See above section for guidance on how to retrieve trace ids.
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
-TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier 
+TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier
 
 opik_client = Opik()
 trace = opik_client.trace(id = TRACE_ID)
@@ -117,6 +117,7 @@ trace.update(output = updated_output)
 ```
 
 The trace attributes that can be used as parameters are as follows:
+
 - end_time: The end time of the trace.
 - metadata: Additional metadata to be associated with the trace.
 - input: The input data for the trace.

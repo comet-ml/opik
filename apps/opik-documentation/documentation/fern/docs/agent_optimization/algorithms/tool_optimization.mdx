@@ -2,7 +2,6 @@
 title: "Tool Optimization (MCP & Function Calling)"
 subtitle: "Optimize prompts that use external tools and function calls"
 description: "Learn how to optimize prompts that leverage MCP (Model Context Protocol) tools and function calling capabilities using the MetaPrompt Optimizer."
-pytest_codeblocks_skip: true
 ---
 
 Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is currently **exclusively supported by the MetaPrompt Optimizer** and is **currently in Beta**.
@@ -10,26 +9,31 @@ Tool optimization is a specialized feature that allows you to optimize prompts t
 ## What is Tool Optimization?
 
 Tool optimization extends traditional prompt optimization to handle prompts that include:
+
 - **MCP tools** - Model Context Protocol tools for external integrations (Beta)
 - **Tool schemas** - Structured tool definitions and parameters
 - **Multi-step workflows** - Complex agent workflows involving multiple tools
 
 <Note>
-  **Important Distinction:**
-  
-  Many optimizers (including GEPA, MetaPrompt, etc.) can optimize **agents that use tools** - this means optimizing prompts for agents that have access to function calling or external tools. However, **true tool optimization** (optimizing the tools themselves, their schemas, or MCP integrations) is currently only available through MetaPrompt Optimizer and is in Beta.
+  **Important Distinction:** Many optimizers (including GEPA, MetaPrompt, etc.) can optimize **agents that use tools** -
+  this means optimizing prompts for agents that have access to function calling or external tools. However, **true tool
+  optimization** (optimizing the tools themselves, their schemas, or MCP integrations) is currently only available
+  through MetaPrompt Optimizer and is in Beta.
 </Note>
 
 <Note>
-  **Why Tool Optimization Matters:**
-  
-  Traditional prompt optimization focuses on text-based prompts, but modern AI applications often require:
-  - Integration with external APIs and services
-  - Structured data processing through function calls
-  - Complex multi-step reasoning with tool usage
-  - Dynamic tool selection based on context
-  
-  Tool optimization ensures these sophisticated prompts can be improved just like simple text prompts.
+
+**Why Tool Optimization Matters:**
+
+Traditional prompt optimization focuses on text-based prompts, but modern AI applications often
+require:
+
+- Integration with external APIs and services
+- Structured data processing through function calls
+- Complex multi-step reasoning with tool usage
+- Dynamic tool selection based on context Tool optimization ensures these sophisticated prompts
+  can be improved just like simple text prompts.
+
 </Note>
 
 ## Supported Tool Types
@@ -75,7 +79,8 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 ```
 
 <Note>
-  This is **agent optimization** (optimizing prompts for agents that use tools), not **tool optimization** (optimizing the tools themselves).
+  This is **agent optimization** (optimizing prompts for agents that use tools), not **tool optimization** (optimizing
+  the tools themselves).
 </Note>
 
 ### 2. MCP (Model Context Protocol) Tools - Beta
@@ -97,12 +102,13 @@ optimizer = MetaPromptOptimizer(model="gpt-4")
 ```
 
 <Note>
-  **MCP Tool Optimization Status:**
-  
-  - Currently in **Beta** 
-  - Only supported by **MetaPrompt Optimizer**
-  - See [PR #3341](https://github.com/comet-ml/opik/pull/3341) for implementation details
-  - Working examples available in `scripts/litellm_metaprompt_context7_mcp_example.py`
+MCP Tool Optimization Status:
+
+    - Currently in **Beta**
+    - Only supported by **MetaPrompt Optimizer**
+    - See [PR#3341](https://github.com/comet-ml/opik/pull/3341) for implementation detail
+    - Working examples available in `scripts/litellm_metaprompt_context7_mcp_example.py`
+
 </Note>
 
 ## How Tool Optimization Works
@@ -112,6 +118,7 @@ The MetaPrompt Optimizer handles tool-enabled prompts through a specialized opti
 ### 1. Tool-Aware Analysis
 
 The optimizer analyzes:
+
 - **Tool schemas** - Understanding available functions and their parameters
 - **Tool usage patterns** - How tools are typically invoked in the prompt
 - **Tool dependencies** - Relationships between different tools
@@ -120,6 +127,7 @@ The optimizer analyzes:
 ### 2. Prompt-Tool Integration Optimization
 
 The optimizer can improve:
+
 - **Tool selection logic** - Better instructions for when to use which tools
 - **Parameter formatting** - Clearer guidance on how to structure tool inputs
 - **Error handling** - Instructions for handling tool failures or edge cases
@@ -128,6 +136,7 @@ The optimizer can improve:
 ### 3. Context Enhancement
 
 Tool optimization also improves:
+
 - **Input validation** - Better prompts for validating tool inputs
 - **Output processing** - Instructions for handling tool outputs
 - **Fallback strategies** - Alternative approaches when tools are unavailable
@@ -147,7 +156,7 @@ research_prompt = ChatPrompt(
             "role": "system",
             "content": """You are a research assistant. When given a research question:
 1. Search for relevant information using the search tool
-2. Analyze the results using the analysis tool  
+2. Analyze the results using the analysis tool
 3. Provide a comprehensive answer based on your findings
 
 Always cite your sources and be thorough in your research."""
@@ -164,7 +173,7 @@ Always cite your sources and be thorough in your research."""
                 "name": "search_academic_database",
                 "description": "Search academic papers and research",
                 "parameters": {
-                    "type": "object", 
+                    "type": "object",
                     "properties": {
                         "query": {"type": "string"},
                         "year_range": {"type": "string"},
@@ -199,7 +208,7 @@ optimizer = MetaPromptOptimizer(
 # Define evaluation metric
 def research_quality_metric(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item['expected_answer'], 
+        reference=dataset_item['expected_answer'],
         output=llm_output
     )
 
@@ -273,9 +282,12 @@ To start optimizing tool-enabled prompts:
 5. **Run optimization** - Use the standard optimization process with tool-enabled prompts
 
 <Info>
-  **Need Help?**
-  
-  For questions about tool optimization or to request support for additional optimizers, please reach out on [GitHub](https://github.com/comet-ml/opik/issues) or check the [MetaPrompt Optimizer documentation](/agent_optimization/algorithms/metaprompt_optimizer) for detailed configuration options.
+**Need Help?**
+
+For questions about tool optimization or to request support for additional optimizers, please reach out
+on [GitHub](https://github.com/comet-ml/opik/issues) or check the [MetaPrompt Optimizer
+documentation](/agent_optimization/algorithms/metaprompt_optimizer) for detailed configuration options.
+
 </Info>
 
 ## References
