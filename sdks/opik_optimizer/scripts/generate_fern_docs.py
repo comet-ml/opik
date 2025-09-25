@@ -252,6 +252,7 @@ classes_to_document = [
 res = """---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
+pytest_codeblocks_skip: true
 ---
 
 The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
@@ -263,8 +264,6 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 - **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
-- **Backward Compatibility**: All original parameters preserved through kwargs extraction
-- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 ## Core Classes
 
@@ -314,37 +313,6 @@ def optimize_mcp(
     allow_tool_use_on_second_pass: bool = False,
     **kwargs: Any,
 ) -> OptimizationResult
-```
-
-## Deprecation Warnings
-
-The following parameters are deprecated and will be removed in future versions:
-
-### Constructor Parameters
-
-- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
-- **`num_threads`** in optimizer constructors: Use `n_threads` instead
-
-### Example Migration
-
-```python
-# ❌ Deprecated
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    project_name="my-project",  # Deprecated
-    num_threads=16,             # Deprecated
-)
-
-# ✅ Correct
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    n_threads=16,  # Use n_threads instead
-)
-
-prompt = ChatPrompt(
-    project_name="my-project",  # Set here instead
-    messages=[...]
-)
 ```
 
 """
