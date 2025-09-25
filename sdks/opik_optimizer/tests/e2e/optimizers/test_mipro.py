@@ -48,8 +48,18 @@ def test_mipro_optimizer() -> None:
         tools=[search, calculator],
     )
 
+    # Create a dummy prompt for the standardized API
+    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+    dummy_prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Complete the task using the provided tools."}
+        ]
+    )
+
     # Run optimization with reduced parameters for faster testing
     results = optimizer.optimize_prompt(
+        prompt=dummy_prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
         task_config=task_config,
