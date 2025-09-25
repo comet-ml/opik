@@ -58,7 +58,7 @@ public interface TraceThreadService {
 
     Mono<Void> openThread(UUID projectId, String threadId);
 
-    Mono<Void> closeThreads(UUID projectId, List<String> threadIds);
+    Mono<Void> closeThreads(UUID projectId, Set<String> threadIds);
 
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
@@ -305,9 +305,9 @@ class TraceThreadServiceImpl implements TraceThreadService {
                         return Mono.just((long) threads.size());
                     }
 
-                    List<String> threadIds = threads.stream()
+                    Set<String> threadIds = threads.stream()
                             .map(TraceThreadModel::threadId)
-                            .toList();
+                            .collect(Collectors.toSet());
 
                     return traceThreadDAO.closeThread(projectId, threadIds)
                             .doOnSuccess(count -> log.info(
@@ -370,15 +370,12 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
-    public Mono<Void> closeThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+    public Mono<Void> closeThreads(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
         if (CollectionUtils.isEmpty(threadIds)) {
             return Mono.empty();
         }
 
-        // For batch operations, we need to verify and create each thread if needed
-        return Flux.fromIterable(threadIds)
-                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId))
-                .collectList()
+        return verifyAndCreateThreadsIfNeeded(projectId, threadIds)
                 .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                         Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadIds))
@@ -392,6 +389,20 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                                 .build())))
                                 .flatMap(threadModels -> checkAndTriggerOnlineScoring(projectId, threadModels)),
                         LOCK_DURATION)));
+    }
+
+    /**
+     * Batch version of verifyAndCreateThreadIfNeed to improve performance by avoiding collectList().
+     * Verifies and creates multiple threads in a single operation.
+     */
+    private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.empty();
+        }
+
+        return Flux.fromIterable(threadIds)
+                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId), Math.min(threadIds.size(), 5)) // Limit the concurrency to 10
+                .then();
     }
 
     private Mono<UUID> verifyAndCreateThreadIfNeed(UUID projectId, String threadId) {
