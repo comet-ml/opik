@@ -148,6 +148,10 @@ class LM(BaseLM):
         self.increment_llm_counter()
         return results
 
+    def increment_llm_counter(self) -> None:
+        """Increment the LLM call counter."""
+        self.llm_call_counter += 1
+
     def launch(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.launch(self, launch_kwargs)
 
