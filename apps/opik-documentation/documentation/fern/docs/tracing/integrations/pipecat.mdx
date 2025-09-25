@@ -44,7 +44,7 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 
 In order to configure Pipecat, you will need to have your API keys for the services you're using (OpenAI, Deepgram, etc.). You can set them as environment variables:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 export DEEPGRAM_API_KEY="YOUR_DEEPGRAM_API_KEY"
 ```
@@ -120,21 +120,21 @@ def setup_tracing(service_name="pipecat-demo"):
         "service.name": service_name,
         "service.version": "1.0.0",
     })
-    
+
     # Create tracer provider
     tracer_provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer_provider)
-    
+
     # Create OTLP exporter
     exporter = OTLPSpanExporter(
         endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
         headers=os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
     )
-    
+
     # Add span processor
     span_processor = BatchSpanProcessor(exporter)
     tracer_provider.add_span_processor(span_processor)
-    
+
     return tracer_provider
 
 # Configure tracing
@@ -144,23 +144,23 @@ setup_tracing("pipecat-voice-agent")
 async def main():
     # Create transport
     transport = WebSocketTransport("ws://localhost:8765")
-    
+
     # Create services
     llm = OpenAILLMService(
         api_key=os.getenv("OPENAI_API_KEY"),
         model="gpt-4o-mini"
     )
-    
+
     stt = DeepgramSTTService(
         api_key=os.getenv("DEEPGRAM_API_KEY"),
         model="nova-2"
     )
-    
+
     tts = CartesiTTSService(
         api_key=os.getenv("CARTESI_API_KEY"),
         voice="samantha"
     )
-    
+
     # Create pipeline
     pipeline = Pipeline([
         stt,
@@ -168,7 +168,7 @@ async def main():
         tts,
         transport.output()
     ])
-    
+
     # Enable tracing in your PipelineTask
     task = PipelineTask(
         pipeline,
@@ -179,7 +179,7 @@ async def main():
         enable_tracing=True,  # Enables both turn and conversation tracing
         conversation_id="customer-123",  # Optional - will auto-generate if not provided
     )
-    
+
     # Run the pipeline
     runner = PipelineRunner()
     await runner.run(task)
@@ -219,10 +219,10 @@ from opik import track
 @track
 def process_voice_input(transcription: str, conversation_id: str):
     """Process voice input and generate response."""
-    
+
     # Your custom logic here
     response = f"Hello! I heard you say: {transcription}"
-    
+
     return {
         "transcription": transcription,
         "response": response,
@@ -258,12 +258,13 @@ Once your Pipecat voice agents are traced with Opik, you can view them in the Op
 - Audio processing metrics for TTS and STT services
 - Real-time conversation monitoring
 
-{/* <Frame>
+{/\* <Frame>
+
   <img src="/img/tracing/pipecat_integration.png" />
 </Frame>
 
 Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/pipecat_integration.png
-Documentation reference path: /img/tracing/pipecat_integration.png */}
+Documentation reference path: /img/tracing/pipecat_integration.png \*/}
 
 ## Feedback Scores and Evaluation
 
@@ -312,12 +313,12 @@ class CustomVoiceService:
             # Your custom processing logic
             span.set_attribute("audio.duration", len(audio_data))
             span.set_attribute("audio.format", "wav")
-            
+
             result = await self.analyze_audio(audio_data)
-            
+
             span.set_attribute("analysis.confidence", result.confidence)
             span.set_status(Status(StatusCode.OK))
-            
+
             return result
 ```
 
@@ -331,14 +332,14 @@ from opik import track
 @track
 def maintain_conversation_context(transcription: str, context: dict):
     """Maintain conversation context across turns."""
-    
+
     # Update context with new information
     context["last_user_input"] = transcription
     context["turn_count"] = context.get("turn_count", 0) + 1
-    
+
     # Generate contextual response
     response = generate_contextual_response(transcription, context)
-    
+
     return {
         "response": response,
         "updated_context": context,

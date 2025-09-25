@@ -2,7 +2,6 @@
 description: Describes how to use a custom model for Opik's built-in LLM as a Judge metrics
 
 toc_max_heading_level: 4
-pytest_codeblocks_execute_previous: true
 ---
 
 Opik provides a set of LLM as a Judge metrics that are designed to be model-agnostic and can be used with any LLM. In order to achieve this, we use the [LiteLLM library](https://github.com/BerriAI/litellm) to abstract the LLM calls.
@@ -47,7 +46,7 @@ Opik's LLM-as-a-Judge metrics, such as [`Hallucination`](https://www.comet.com/d
 2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
     Simplified interface to generate a string output from the model.
 3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
-     Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+    Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
 
 ### Implementing a Custom Model for an OpenAI-like API
 
@@ -102,13 +101,13 @@ class CustomOpenAICompatibleModel(OpikBaseModel):
 
 **Key considerations for the implementation:**
 
-- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's 
-requirements if they deviate from the common OpenAI structure.
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's
+  requirements if they deviate from the common OpenAI structure.
 - **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
 
 ### Using the Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) Metric
 
-In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric, 
+In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric,
 you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) class.
 The evaluation can then be kicked off by calling the [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html)` method.
 
@@ -143,4 +142,5 @@ print(f"Reason: {evaluation.reason}")
 ```
 
 **Key considerations for the implementation:**
+
 - **ScoreResult Output**: [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) returns a ScoreResult object containing the metric name (`name`), score value (`value`), optional explanation (`reason`), metadata (`metadata`), and a failure flag (`scoring_failed`).

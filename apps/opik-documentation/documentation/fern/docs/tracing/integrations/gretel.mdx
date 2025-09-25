@@ -38,7 +38,7 @@ In order to configure Gretel, you will need to have your Gretel API Key. You can
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export GRETEL_API_KEY="YOUR_API_KEY"
 ```
 
@@ -85,7 +85,7 @@ dd.add_column(
         type=P.SamplerType.CATEGORY,
         params=P.CategorySamplerParams(
             values=[
-                "neural networks", "deep learning", "machine learning", "NLP", 
+                "neural networks", "deep learning", "machine learning", "NLP",
                 "computer vision", "reinforcement learning", "AI ethics", "data science"
             ]
         )
@@ -142,7 +142,7 @@ Convert the Gretel-generated data to Opik's expected format:
 def convert_to_opik_format(df):
     """Convert Gretel Q&A data to Opik dataset format"""
     opik_items = []
-    
+
     for _, row in df.iterrows():
         # Create Opik dataset item
         item = {
@@ -157,7 +157,7 @@ def convert_to_opik_format(df):
             }
         }
         opik_items.append(item)
-    
+
     return opik_items
 
 # Convert to Opik format
@@ -275,7 +275,7 @@ from opik import track
 def evaluate_qa_model(dataset_item):
     """Evaluate a Q&A model using Gretel-generated data."""
     question = dataset_item["input"]["question"]
-    
+
     # Your model logic here (replace with actual model)
     if 'neural network' in question.lower():
         response = "A neural network is a computational model inspired by biological neural networks."
@@ -283,7 +283,7 @@ def evaluate_qa_model(dataset_item):
         response = "Machine learning is a subset of AI that enables systems to learn from data."
     else:
         response = "This is a complex AI/ML topic that requires detailed explanation."
-    
+
     return {
         "question": question,
         "response": response,
@@ -307,12 +307,13 @@ Once your Gretel-generated datasets are uploaded to Opik, you can view them in t
 - Source information (Data Designer or Safe Synthetics)
 - Quality metrics and evaluation results
 
-{/* <Frame>
+{/\* <Frame>
+
   <img src="/img/tracing/gretel_integration.png" />
 </Frame>
 
 Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/gretel_integration.png
-Documentation reference path: /img/tracing/gretel_integration.png */}
+Documentation reference path: /img/tracing/gretel_integration.png \*/}
 
 ## Feedback Scores and Evaluation
 
@@ -344,20 +345,20 @@ evaluation_results = evaluate(
 
 ## Dataset Size Requirements
 
-| Dataset Size | Holdout Setting | Example |
-|--------------|----------------|---------|
-| **< 200 records** | `holdout=None` | `from_data_source(df, holdout=None)` |
-| **200+ records** | Default (5%) or custom | `from_data_source(df)` or `from_data_source(df, holdout=0.1)` |
-| **Large datasets** | Custom percentage/count | `from_data_source(df, holdout=250)` |
+| Dataset Size       | Holdout Setting         | Example                                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- |
+| **< 200 records**  | `holdout=None`          | `from_data_source(df, holdout=None)`                          |
+| **200+ records**   | Default (5%) or custom  | `from_data_source(df)` or `from_data_source(df, holdout=0.1)` |
+| **Large datasets** | Custom percentage/count | `from_data_source(df, holdout=250)`                           |
 
 ## When to Use Which Approach?
 
-| Use Case | Recommended Approach | Why |
-|----------|---------------------|-----|
-| **Creating new datasets from scratch** | **Data Designer** | More control, custom column types, guided generation |
-| **Synthesizing existing datasets** | **Safe Synthetics** | Preserves statistical relationships, privacy-safe |
-| **Custom data structures** | **Data Designer** | Flexible column definitions, template system |
-| **Production data replication** | **Safe Synthetics** | Maintains data utility while ensuring privacy |
+| Use Case                               | Recommended Approach | Why                                                  |
+| -------------------------------------- | -------------------- | ---------------------------------------------------- |
+| **Creating new datasets from scratch** | **Data Designer**    | More control, custom column types, guided generation |
+| **Synthesizing existing datasets**     | **Safe Synthetics**  | Preserves statistical relationships, privacy-safe    |
+| **Custom data structures**             | **Data Designer**    | Flexible column definitions, template system         |
+| **Production data replication**        | **Safe Synthetics**  | Maintains data utility while ensuring privacy        |
 
 ## Environment Variables
 

@@ -2,7 +2,6 @@
 title: "GEPA Optimizer"
 subtitle: "Single-turn system prompt optimization with reflection"
 description: "Use the external GEPA package through Opik's `GepaOptimizer` to optimize a single system prompt for single-turn tasks with a reflection model."
-pytest_codeblocks_skip: true
 ---
 
 `GepaOptimizer` wraps the external [GEPA](https://github.com/gepa-ai/gepa) package to optimize a
@@ -11,19 +10,20 @@ format, runs GEPA’s optimization using a task model and a reflection model, an
 `OptimizationResult` compatible with the Opik SDK.
 
 <Warning>
-  GEPA integration is currently in <strong>Beta</strong>. APIs and defaults may evolve, and performance
-  characteristics can change as we iterate. Please report issues or feedback on GitHub.
+  GEPA integration is currently in <strong>Beta</strong>. APIs and defaults may evolve, and performance characteristics
+  can change as we iterate. Please report issues or feedback on GitHub.
 </Warning>
 
 <Note>
   When to use: Choose `GepaOptimizer` when you have a single-turn task (one user input → one model
   response) and you want to optimize the system prompt using a reflection-driven search.
 
-  Key trade-offs:
-  - GEPA (DefaultAdapter) focuses on a single system prompt; multi-turn or tool-heavy flows are not the target.
-  - Requires both a task model and a reflection model (can be the same; often the reflection model is stronger).
-  - GEPA runs additional reflection passes; expect extra LLM calls compared to simple optimizers.
-</Note>
+Key trade-offs:
+
+- GEPA (DefaultAdapter) focuses on a single system prompt; multi-turn or tool-heavy flows are not the target.
+- Requires both a task model and a reflection model (can be the same; often the reflection model is stronger).
+- GEPA runs additional reflection passes; expect extra LLM calls compared to simple optimizers.
+  </Note>
 
 ## Requirements
 
