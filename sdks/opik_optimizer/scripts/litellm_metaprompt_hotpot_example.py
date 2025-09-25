@@ -1,15 +1,17 @@
 from typing import Any
 
-from opik_optimizer import EvolutionaryOptimizer
-
-from opik.evaluation.metrics.score_result import ScoreResult
-from opik.evaluation.metrics import LevenshteinRatio
-
-from opik_optimizer import ChatPrompt
+from opik_optimizer import (
+    ChatPrompt,
+    MetaPromptOptimizer,
+)
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 
 # NOTE: functions are automatically tracked in the ChatPrompt
+
+from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
+
 
 dataset = hotpot_300()
 
@@ -50,20 +52,18 @@ prompt = ChatPrompt(
     function_map={"search_wikipedia": search_wikipedia},
 )
 
-# Initialize the optimizer with custom parameters
-optimizer = EvolutionaryOptimizer(
-    model="gpt-4o-mini",
-    population_size=10,
-    num_generations=3,
-    enable_moo=False,
-    enable_llm_crossover=True,
-    infer_output_style=True,
-    verbose=1,
+
+# Optimize it:
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
+    max_rounds=3,  # Number of optimization rounds
+    num_prompts_per_round=4,  # Number of prompts to generate per round
+    improvement_threshold=0.01,  # Minimum improvement required to continue
+    temperature=0.1,  # Lower temperature for more focused responses
+    max_completion_tokens=5000,  # Maximum tokens for model completion
+    n_threads=1,  # Number of threads for parallel evaluation
+    subsample_size=10,  # Fixed subsample size of 10 items
 )
-
-# Create the optimization configuration
-
-# Optimize the prompt using the optimization config
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
@@ -71,5 +71,4 @@ optimization_result = optimizer.optimize_prompt(
     experiment_config={"task": "hotpot", "model": "gpt-4o-mini"},
     n_samples=10,
 )
-
 optimization_result.display()

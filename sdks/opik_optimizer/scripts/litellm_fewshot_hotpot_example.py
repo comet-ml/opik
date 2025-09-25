@@ -1,23 +1,32 @@
 from typing import Any
 
-from opik_optimizer import EvolutionaryOptimizer
-
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import ChatPrompt
+from opik_optimizer import (
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+)
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 
 # NOTE: functions are automatically tracked in the ChatPrompt
-
-dataset = hotpot_300()
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
+
+dataset = hotpot_300()
+
+optimizer = FewShotBayesianOptimizer(
+    model="openai/gpt-4o-mini",
+    min_examples=3,
+    max_examples=8,
+    n_threads=4,
+    seed=42,
+)
 
 system_prompt = """
 Answer the question with a direct phrase. Use the tool `search_wikipedia`
@@ -28,6 +37,7 @@ question.
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
+    # Values for the ChatPrompt LLM
     tools=[
         {
             "type": "function",
@@ -50,26 +60,12 @@ prompt = ChatPrompt(
     function_map={"search_wikipedia": search_wikipedia},
 )
 
-# Initialize the optimizer with custom parameters
-optimizer = EvolutionaryOptimizer(
-    model="gpt-4o-mini",
-    population_size=10,
-    num_generations=3,
-    enable_moo=False,
-    enable_llm_crossover=True,
-    infer_output_style=True,
-    verbose=1,
-)
-
-# Create the optimization configuration
-
-# Optimize the prompt using the optimization config
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     experiment_config={"task": "hotpot", "model": "gpt-4o-mini"},
-    n_samples=10,
+    n_samples=50,
+    n_trials=10,
 )
-
 optimization_result.display()
