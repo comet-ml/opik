@@ -15,6 +15,11 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 
+import { PencilLine } from "lucide-react";
+import { MessageSquarePlus } from "lucide-react";
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
+import BatchCommentDialog from "@/components/pages-shared/traces/BatchCommentDialog/BatchCommentDialog";
+
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
   rows: Array<Trace | Span>;
@@ -43,13 +48,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       projectId,
       ids: rows.map((row) => row.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, rows]);
 
   const mapRowData = useCallback(() => {
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse feedback_scores into correct structure
         const keys = column.split(".");
         const keyPrefix = first(keys) as string;
 
@@ -108,6 +111,23 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
+      <BatchAnnotateDialog
+        key={`annotate-${resetKeyRef.current}`}
+        rows={rows as Trace[]}
+        open={open === 4}
+        setOpen={setOpen}
+        projectId={projectId}
+        onSuccess={onClearSelection}
+      />
+      <BatchCommentDialog
+        key={`comment-${resetKeyRef.current}`}
+        rows={rows}
+        type={type}
+        projectId={projectId}
+        open={open === 5}
+        setOpen={setOpen}
+        onSuccess={onClearSelection}
+      />
       <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
@@ -134,6 +154,35 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         >
           <Tag className="mr-2 size-4" />
           Add tags
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Annotate">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(4);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <PencilLine className="mr-2 size-4" />
+          Annotate
+        </Button>
+      </TooltipWrapper>
+
+      <TooltipWrapper content={type === TRACE_DATA_TYPE.traces ? "Comment" : "Batch comments supported for traces only"}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled || type !== TRACE_DATA_TYPE.traces}
+        >
+          <MessageSquarePlus className="mr-2 size-4" />
+          Comment
         </Button>
       </TooltipWrapper>
       <ExportToButton
